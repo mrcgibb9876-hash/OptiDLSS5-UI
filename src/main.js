@@ -335,27 +335,40 @@ function patchIniDefaults(iniPath, edits) {
 // redistributable straight from NVIDIA-RTX/Streamline's own GitHub releases, so it can be fetched
 // automatically instead of asking the user to run the repo's Streamlined_fetcher_windows.bat by
 // hand for every game.
-
-const STREAMLINE_RELEASES_API = 'https://api.github.com/repos/NVIDIA-RTX/Streamline/releases/latest';
+//
+// Pinned to the exact version, NOT "latest": the OptiScaler build this app installs compiles
+// against external/streamline's headers, currently SL_VERSION 2.11.1. Deploying the newest
+// release (2.12.0, at the time this was pinned) crashed Witcher 3 hard -- Windows Error Reporting
+// pointed straight at OptiScaler\streamline\sl.reflex.dll, access violation, during DLSS-G init.
+// An ABI-mismatched runtime DLL talking to an interposer built against older headers reproduces
+// exactly like that. Bump this only in lockstep with a rebuild against newer streamline headers.
+const STREAMLINE_SDK_VERSION = 'v2.11.1';
+const STREAMLINE_RELEASE_API = `https://api.github.com/repos/NVIDIA-RTX/Streamline/releases/tags/${STREAMLINE_SDK_VERSION}`;
 
 function streamlineSdkCacheDir() {
   return path.join(userDataDir(), 'streamline-sdk');
 }
 
-// Downloads and caches once per app install -- subsequent calls are a no-op if sl.interposer.dll
-// is already there. Returns the cache directory, or null if the fetch failed (offline, GitHub
-// rate limit, etc.) -- callers treat that as non-fatal and just skip deploying it this time.
+// Downloads and caches once per app install -- subsequent calls are a no-op if the cache already
+// matches STREAMLINE_SDK_VERSION (a version marker file, not just file presence, so a cache left
+// over from before this version was pinned gets replaced rather than silently reused). Returns
+// the cache directory, or null if the fetch failed (offline, GitHub rate limit, etc.) -- callers
+// treat that as non-fatal and just skip deploying it this time.
 async function ensureStreamlineSdkCache() {
   const cacheDir = streamlineSdkCacheDir();
-  if (fs.existsSync(path.join(cacheDir, 'sl.interposer.dll'))) return cacheDir;
+  const versionMarker = path.join(cacheDir, '.version');
+  const cachedVersion = fs.existsSync(versionMarker) ? fs.readFileSync(versionMarker, 'utf-8').trim() : null;
+  if (cachedVersion === STREAMLINE_SDK_VERSION && fs.existsSync(path.join(cacheDir, 'sl.interposer.dll'))) {
+    return cacheDir;
+  }
 
   let tmpZip;
   try {
-    const res = await fetch(STREAMLINE_RELEASES_API, { headers: GITHUB_HEADERS });
+    const res = await fetch(STREAMLINE_RELEASE_API, { headers: GITHUB_HEADERS });
     if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
     const data = await res.json();
     const zipAsset = (data.assets || []).find((a) => a.name.toLowerCase().endsWith('.zip'));
-    if (!zipAsset) throw new Error('No .zip asset in latest Streamline release');
+    if (!zipAsset) throw new Error(`No .zip asset in Streamline release ${STREAMLINE_SDK_VERSION}`);
 
     const dlRes = await fetch(zipAsset.browser_download_url, { headers: GITHUB_HEADERS });
     if (!dlRes.ok) throw new Error(`Download failed: HTTP ${dlRes.status}`);
@@ -393,7 +406,9 @@ async function ensureStreamlineSdkCache() {
     }
     await fsp.rm(tmpExtract, { recursive: true, force: true }).catch(() => {});
 
-    return fs.existsSync(path.join(cacheDir, 'sl.interposer.dll')) ? cacheDir : null;
+    if (!fs.existsSync(path.join(cacheDir, 'sl.interposer.dll'))) return null;
+    await fsp.writeFile(versionMarker, STREAMLINE_SDK_VERSION, 'utf-8');
+    return cacheDir;
   } catch {
     return null; // Offline, rate-limited, etc. -- non-fatal, just try again next sync.
   } finally {
