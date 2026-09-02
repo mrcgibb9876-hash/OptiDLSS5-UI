@@ -225,9 +225,9 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath 
     // Auto-detect the game's rendering API and switch its upscaler/DLSS-NR/Frame-Gen settings on,
     // so it works without the user having to do this by hand -- the overlay no longer has a menu
     // section to do it from in-game. Only fills in values still left at "auto"; see patchIniDefaults.
-    const { api, applied } = await autoConfigureGame(dir, exePath);
+    const { api, applied, streamline } = await autoConfigureGame(dir, exePath);
 
-    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, api, autoConfigured: applied };
+    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, api, autoConfigured: applied, streamline };
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -328,6 +328,101 @@ function patchIniDefaults(iniPath, edits) {
   return applied;
 }
 
+// ---------- Streamline SDK (needed for FGOutput=dlssg) ----------
+// FGOutput::DLSSG needs sl.interposer.dll/sl.common.dll/nvngx_dlssg.dll in a "streamline"
+// subfolder next to the proxy DLL, or it fails at runtime with "Can't init DLSSG Output -- Are
+// you missing the streamline folder?". Unlike the DLSS NR model file, this one IS freely
+// redistributable straight from NVIDIA-RTX/Streamline's own GitHub releases, so it can be fetched
+// automatically instead of asking the user to run the repo's Streamlined_fetcher_windows.bat by
+// hand for every game.
+
+const STREAMLINE_RELEASES_API = 'https://api.github.com/repos/NVIDIA-RTX/Streamline/releases/latest';
+
+function streamlineSdkCacheDir() {
+  return path.join(userDataDir(), 'streamline-sdk');
+}
+
+// Downloads and caches once per app install -- subsequent calls are a no-op if sl.interposer.dll
+// is already there. Returns the cache directory, or null if the fetch failed (offline, GitHub
+// rate limit, etc.) -- callers treat that as non-fatal and just skip deploying it this time.
+async function ensureStreamlineSdkCache() {
+  const cacheDir = streamlineSdkCacheDir();
+  if (fs.existsSync(path.join(cacheDir, 'sl.interposer.dll'))) return cacheDir;
+
+  let tmpZip;
+  try {
+    const res = await fetch(STREAMLINE_RELEASES_API, { headers: GITHUB_HEADERS });
+    if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
+    const data = await res.json();
+    const zipAsset = (data.assets || []).find((a) => a.name.toLowerCase().endsWith('.zip'));
+    if (!zipAsset) throw new Error('No .zip asset in latest Streamline release');
+
+    const dlRes = await fetch(zipAsset.browser_download_url, { headers: GITHUB_HEADERS });
+    if (!dlRes.ok) throw new Error(`Download failed: HTTP ${dlRes.status}`);
+    const buf = Buffer.from(await dlRes.arrayBuffer());
+
+    tmpZip = path.join(os.tmpdir(), `streamline-sdk-${Date.now()}.zip`);
+    await fsp.writeFile(tmpZip, buf);
+
+    const tmpExtract = path.join(os.tmpdir(), `streamline-sdk-extract-${Date.now()}`);
+    await execFileAsync('powershell.exe', [
+      '-NoProfile', '-NonInteractive', '-Command',
+      'Expand-Archive -LiteralPath $env:OSM_ZIP -DestinationPath $env:OSM_DEST -Force'
+    ], { env: { ...process.env, OSM_ZIP: tmpZip, OSM_DEST: tmpExtract } });
+
+    // The SDK zip nests the real (non-development) DLLs under bin/x64 -- find it rather than
+    // hardcoding the path, in case a future SDK release reshuffles the layout.
+    let binDir = null;
+    const stack = [tmpExtract];
+    while (stack.length > 0 && !binDir) {
+      const cur = stack.pop();
+      const entries = await fsp.readdir(cur, { withFileTypes: true });
+      if (entries.some((e) => e.isFile() && e.name.toLowerCase() === 'sl.interposer.dll')) {
+        binDir = cur;
+        break;
+      }
+      for (const e of entries) if (e.isDirectory()) stack.push(path.join(cur, e.name));
+    }
+    if (!binDir) throw new Error('sl.interposer.dll not found anywhere in the downloaded SDK');
+
+    await fsp.mkdir(cacheDir, { recursive: true });
+    for (const entry of await fsp.readdir(binDir, { withFileTypes: true })) {
+      if (entry.isFile() && entry.name.toLowerCase().endsWith('.dll')) {
+        await fsp.copyFile(path.join(binDir, entry.name), path.join(cacheDir, entry.name));
+      }
+    }
+    await fsp.rm(tmpExtract, { recursive: true, force: true }).catch(() => {});
+
+    return fs.existsSync(path.join(cacheDir, 'sl.interposer.dll')) ? cacheDir : null;
+  } catch {
+    return null; // Offline, rate-limited, etc. -- non-fatal, just try again next sync.
+  } finally {
+    if (tmpZip) fsp.rm(tmpZip, { force: true }).catch(() => {});
+  }
+}
+
+// Copy-if-missing, not force-overwrite: a game folder may already have a hand-populated
+// streamline folder (e.g. NR-specific sl.dlss_nr.dll/nvngx_dlssnr.dll plugins sourced from a
+// driver package, which this SDK download doesn't carry), and this only needs to fill gaps.
+async function deployStreamlineFolder(dir) {
+  const dest = path.join(dir, 'streamline');
+  if (fs.existsSync(path.join(dest, 'sl.interposer.dll'))) return { deployed: false, reason: 'already present' };
+
+  const cacheDir = await ensureStreamlineSdkCache();
+  if (!cacheDir) return { deployed: false, reason: 'could not fetch Streamline SDK' };
+
+  await fsp.mkdir(dest, { recursive: true });
+  const copied = [];
+  for (const entry of await fsp.readdir(cacheDir, { withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    const destFile = path.join(dest, entry.name);
+    if (fs.existsSync(destFile)) continue;
+    await fsp.copyFile(path.join(cacheDir, entry.name), destFile);
+    copied.push(entry.name);
+  }
+  return { deployed: copied.length > 0, files: copied };
+}
+
 // Frame Gen output/input are only wired up for Dx11/Dx12 in this build -- the menu's own
 // Vulkan-disables everything gate (see upstream RenderFrameGenerationSelection) no longer runs
 // at all, since the overlay was stripped down to just the DLSS NR panel, so nothing resets an
@@ -351,14 +446,16 @@ async function autoConfigureGame(dir, exePath) {
   // either would leave it stuck reading "NVIDIA DLSS Frame Generation is not the active output
   // right now." Needs an RTX 40-series+ card, same tier this app's core DLSS NR feature already
   // requires an RTX 50-series card for.
+  let streamline = null;
   if (api === 'dx11' || api === 'dx12') {
     edits.push({ section: 'FrameGen', key: 'Enabled', value: 'true' });
     edits.push({ section: 'FrameGen', key: 'FGInput', value: 'upscaler' });
     edits.push({ section: 'FrameGen', key: 'FGOutput', value: 'dlssg' });
+    streamline = await deployStreamlineFolder(dir);
   }
 
   const applied = patchIniDefaults(iniPath, edits);
-  return { api, applied };
+  return { api, applied, streamline };
 }
 
 // ---------- stale-install detection / auto-update ----------
@@ -416,30 +513,30 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
 
     // Fill in any still-"auto" upscaler/DlssNr/FrameGen settings every sync, not just on install --
     // covers games that were already installed before this feature existed.
-    const { api, applied: autoConfigured } = await autoConfigureGame(dir, exePath);
+    const { api, applied: autoConfigured, streamline } = await autoConfigureGame(dir, exePath);
 
     const releaseDll = releaseFolder ? path.join(releaseFolder, 'OptiScaler.dll') : null;
     if (!releaseDll || !fs.existsSync(releaseDll)) {
-      return { ok: true, updated: autoConfigured.length > 0, reason: 'no release set', api, autoConfigured };
+      return { ok: true, updated: autoConfigured.length > 0, reason: 'no release set', api, autoConfigured, streamline };
     }
 
     const active = await findActiveOptiScalerFile(dir);
     if (!active) {
       return {
         ok: true, updated: autoConfigured.length > 0,
-        reason: 'could not identify the active OptiScaler file (ambiguous proxy candidates)', api, autoConfigured
+        reason: 'could not identify the active OptiScaler file (ambiguous proxy candidates)', api, autoConfigured, streamline
       };
     }
 
     if (sha256File(releaseDll) === sha256File(active.file)) {
-      return { ok: true, updated: autoConfigured.length > 0, reason: 'up to date', api, autoConfigured };
+      return { ok: true, updated: autoConfigured.length > 0, reason: 'up to date', api, autoConfigured, streamline };
     }
 
     await fsp.copyFile(releaseDll, active.file);
     const plain = path.join(dir, 'OptiScaler.dll');
     if (active.file !== plain) await fsp.copyFile(releaseDll, plain).catch(() => {});
 
-    return { ok: true, updated: true, file: path.basename(active.file), api, autoConfigured };
+    return { ok: true, updated: true, file: path.basename(active.file), api, autoConfigured, streamline };
   } catch (err) {
     // Most common cause: the game is currently running and has the DLL locked.
     return { ok: false, error: err.message };

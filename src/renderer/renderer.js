@@ -158,7 +158,8 @@ async function installGame(game) {
     const configNote = res.autoConfigured && res.autoConfigured.length > 0
       ? ` Auto-configured for ${res.api || 'detected API'}: ${res.autoConfigured.map((e) => e.key).join(', ')}.`
       : '';
-    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}${configNote}`);
+    const streamlineNote = res.streamline && res.streamline.deployed ? ' Deployed the Streamline SDK for DLSS Frame Gen.' : '';
+    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}${configNote}${streamlineNote}`);
   } else {
     toast(`Install failed: ${res.error}`);
   }
@@ -380,6 +381,7 @@ async function autoSyncStaleGames() {
 
   const updated = [];
   const configured = [];
+  const streamlined = [];
   const failed = [];
   for (const game of games) {
     const res = await window.api.syncGameIfStale({ exePath: game.exePath, releaseFolder: settings.releaseFolder });
@@ -391,6 +393,7 @@ async function autoSyncStaleGames() {
     if (res.autoConfigured && res.autoConfigured.length > 0) {
       configured.push(`${game.name} (${res.api || 'detected'}: ${res.autoConfigured.map((e) => e.key).join(', ')})`);
     }
+    if (res.streamline && res.streamline.deployed) streamlined.push(game.name);
   }
 
   if (updated.length > 0) {
@@ -398,6 +401,9 @@ async function autoSyncStaleGames() {
   }
   if (configured.length > 0) {
     toast(`Auto-configured: ${configured.join('; ')}`);
+  }
+  if (streamlined.length > 0) {
+    toast(`Deployed the Streamline SDK (needed for DLSS Frame Gen) to: ${streamlined.join(', ')}`);
   }
   if (failed.length > 0) {
     toast(`Could not auto-update: ${failed.join(', ')} — close the game and retry.`);
