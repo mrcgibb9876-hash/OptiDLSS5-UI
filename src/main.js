@@ -346,10 +346,15 @@ async function autoConfigureGame(dir, exePath) {
 
   edits.push({ section: 'DlssNr', key: 'Enabled', value: 'true' });
 
+  // FGOutput=dlssg, not fsrfg: the overlay's Frame Generation section is wired specifically to
+  // FGOutput::DLSSG (real NVIDIA DLSS-G) -- fsrfg/xefg are deliberately left out of that panel, so
+  // either would leave it stuck reading "NVIDIA DLSS Frame Generation is not the active output
+  // right now." Needs an RTX 40-series+ card, same tier this app's core DLSS NR feature already
+  // requires an RTX 50-series card for.
   if (api === 'dx11' || api === 'dx12') {
     edits.push({ section: 'FrameGen', key: 'Enabled', value: 'true' });
     edits.push({ section: 'FrameGen', key: 'FGInput', value: 'upscaler' });
-    edits.push({ section: 'FrameGen', key: 'FGOutput', value: 'fsrfg' });
+    edits.push({ section: 'FrameGen', key: 'FGOutput', value: 'dlssg' });
   }
 
   const applied = patchIniDefaults(iniPath, edits);
