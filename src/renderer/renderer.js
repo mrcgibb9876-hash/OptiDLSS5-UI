@@ -154,7 +154,8 @@ async function installGame(game) {
   });
   if (res.ok) {
     const mb = (res.nrDllBytes / 1024 / 1024).toFixed(0);
-    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}`);
+    const proxyNote = res.proxyUpdated ? ` Also refreshed the active ${res.proxyUpdated}.` : '';
+    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}`);
   } else {
     toast(`Install failed: ${res.error}`);
   }
@@ -336,6 +337,7 @@ async function persistReleaseFolder(p) {
   await window.api.saveSettings(settings);
   checkReleaseStatus();
   refreshBannerVisibility();
+  autoSyncStaleGames();
 }
 
 async function persistNrDll(p) {
@@ -362,6 +364,32 @@ $('#btn-close-settings').addEventListener('click', async () => {
   settingsModal.classList.add('hidden');
   renderGrid();
 });
+
+// ---------- auto-sync stale installs ----------
+// setup_windows.bat renames OptiScaler.dll to a per-game proxy file (dxgi.dll etc.) and deletes
+// itself, so pointing Settings at a newer release does nothing for games already set up -- the
+// proxy actually loaded by the game keeps running whatever version it was last renamed from.
+// This finds and refreshes it directly, without needing setup_windows.bat re-run.
+async function autoSyncStaleGames() {
+  if (!settings.releaseFolder || games.length === 0) return;
+  const valid = await window.api.validateRelease(settings.releaseFolder);
+  if (!valid.valid) return;
+
+  const updated = [];
+  const failed = [];
+  for (const game of games) {
+    const res = await window.api.syncGameIfStale({ exePath: game.exePath, releaseFolder: settings.releaseFolder });
+    if (res.ok && res.updated) updated.push(game.name);
+    else if (!res.ok) failed.push(`${game.name} (${res.error})`);
+  }
+
+  if (updated.length > 0) {
+    toast(`Auto-updated OptiScaler in ${updated.length} game${updated.length > 1 ? 's' : ''}: ${updated.join(', ')}`);
+  }
+  if (failed.length > 0) {
+    toast(`Could not auto-update: ${failed.join(', ')} — close the game and retry.`);
+  }
+}
 
 // ---------- Check for updates ----------
 
@@ -428,6 +456,7 @@ $('#btn-install-update').addEventListener('click', async () => {
   checkReleaseStatus();
   refreshBannerVisibility();
   toast(`OptiScaler updated to ${res.tag}`);
+  autoSyncStaleGames();
 });
 
 // ---------- init ----------
@@ -438,4 +467,5 @@ $('#btn-install-update').addEventListener('click', async () => {
   settings = data.settings || { releaseFolder: '', nrDllPath: '', installedVersion: '' };
   await refreshBannerVisibility();
   await renderGrid();
+  autoSyncStaleGames();
 })();

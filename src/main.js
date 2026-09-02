@@ -5,6 +5,7 @@ const fsp = require('node:fs/promises');
 const os = require('node:os');
 const { spawn, execFile } = require('node:child_process');
 const { promisify } = require('node:util');
+const crypto = require('node:crypto');
 const execFileAsync = promisify(execFile);
 
 const RELEASES_API = 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest';
@@ -206,7 +207,22 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath 
     const nrCopied = destStat.size === srcStat.size;
     if (!nrCopied) throw new Error('nvngx_dlssnr.dll copy size mismatch — copy may have failed, try again');
 
-    return { ok: true, dir, nrDllBytes: destStat.size };
+    // If this game was already set up before, setup_windows.bat previously renamed OptiScaler.dll
+    // to a proxy name (dxgi.dll etc.) and deleted itself -- the fresh OptiScaler.dll just copied
+    // above sits inert next to it. Refresh the actual proxy in place so an update takes effect
+    // without re-running the interactive setup script.
+    let proxyUpdated = null;
+    try {
+      const active = await findActiveOptiScalerFile(dir);
+      if (active && active.renamed && sha256File(path.join(releaseFolder, 'OptiScaler.dll')) !== sha256File(active.file)) {
+        await fsp.copyFile(path.join(releaseFolder, 'OptiScaler.dll'), active.file);
+        proxyUpdated = path.basename(active.file);
+      }
+    } catch {
+      // Non-fatal -- the plain OptiScaler.dll copy above still succeeded either way.
+    }
+
+    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated };
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -242,6 +258,78 @@ ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
 
 ipcMain.handle('game:open-folder', (_evt, exePath) => {
   shell.openPath(gameDir(exePath));
+});
+
+// ---------- stale-install detection / auto-update ----------
+// setup_windows.bat renames OptiScaler.dll to a proxy name (dxgi.dll, winmm.dll, ...) and deletes
+// itself, so re-copying the release folder into a game only refreshes the inert, never-loaded
+// OptiScaler.dll -- the proxy actually being loaded by the game stays on whatever version it was
+// last renamed from. This finds that real, currently-loaded file and refreshes it directly.
+
+const PROXY_CANDIDATES = ['dxgi.dll', 'winmm.dll', 'version.dll', 'dbghelp.dll', 'd3d12.dll', 'wininet.dll', 'winhttp.dll', 'OptiScaler.asi'];
+
+function sha256File(filePath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+// Same technique setup_windows.bat itself uses to spot leftover OptiScaler files: the PE
+// OriginalFilename in the version resource survives a plain rename, so it still reads
+// "OptiScaler.dll" no matter what the file on disk is actually called.
+async function findActiveOptiScalerFile(dir) {
+  const present = PROXY_CANDIDATES.filter((name) => fs.existsSync(path.join(dir, name)));
+  if (present.length === 0) {
+    const plain = path.join(dir, 'OptiScaler.dll');
+    return fs.existsSync(plain) ? { file: plain, renamed: false } : null;
+  }
+  try {
+    const psScript = `
+      $names = @(${present.map((n) => `'${n.replace(/'/g, "''")}'`).join(',')})
+      $out = foreach ($n in $names) {
+        $p = Join-Path $env:OSM_DIR $n
+        $vi = (Get-Item -LiteralPath $p).VersionInfo
+        [PSCustomObject]@{ Name = $n; Orig = $vi.OriginalFilename }
+      }
+      ConvertTo-Json -InputObject $out -Compress
+    `;
+    const { stdout } = await execFileAsync('powershell.exe', [
+      '-NoProfile', '-NonInteractive', '-Command', psScript
+    ], { env: { ...process.env, OSM_DIR: dir } });
+    let parsed = JSON.parse(stdout || 'null');
+    if (parsed && !Array.isArray(parsed)) parsed = [parsed];
+    const match = (parsed || []).find((e) => (e.Orig || '').toLowerCase() === 'optiscaler.dll');
+    if (match) return { file: path.join(dir, match.Name), renamed: true };
+  } catch {
+    // fall through to the single-candidate fallback below
+  }
+  // Version-info lookup failed. Only safe to guess when exactly one candidate is present --
+  // with several, guessing wrong would overwrite an unrelated DLL (e.g. a real ReShade dxgi.dll).
+  if (present.length === 1) return { file: path.join(dir, present[0]), renamed: true };
+  return null;
+}
+
+ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) return { ok: true, updated: false, reason: 'exe missing' };
+    const dir = gameDir(exePath);
+    if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: true, updated: false, reason: 'not installed' };
+
+    const releaseDll = releaseFolder ? path.join(releaseFolder, 'OptiScaler.dll') : null;
+    if (!releaseDll || !fs.existsSync(releaseDll)) return { ok: true, updated: false, reason: 'no release set' };
+
+    const active = await findActiveOptiScalerFile(dir);
+    if (!active) return { ok: true, updated: false, reason: 'could not identify the active OptiScaler file (ambiguous proxy candidates)' };
+
+    if (sha256File(releaseDll) === sha256File(active.file)) return { ok: true, updated: false, reason: 'up to date' };
+
+    await fsp.copyFile(releaseDll, active.file);
+    const plain = path.join(dir, 'OptiScaler.dll');
+    if (active.file !== plain) await fsp.copyFile(releaseDll, plain).catch(() => {});
+
+    return { ok: true, updated: true, file: path.basename(active.file) };
+  } catch (err) {
+    // Most common cause: the game is currently running and has the DLL locked.
+    return { ok: false, error: err.message };
+  }
 });
 
 // ---------- banner caching ----------
