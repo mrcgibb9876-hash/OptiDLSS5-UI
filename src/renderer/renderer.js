@@ -155,7 +155,10 @@ async function installGame(game) {
   if (res.ok) {
     const mb = (res.nrDllBytes / 1024 / 1024).toFixed(0);
     const proxyNote = res.proxyUpdated ? ` Also refreshed the active ${res.proxyUpdated}.` : '';
-    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}`);
+    const configNote = res.autoConfigured && res.autoConfigured.length > 0
+      ? ` Auto-configured for ${res.api || 'detected API'}: ${res.autoConfigured.map((e) => e.key).join(', ')}.`
+      : '';
+    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}${configNote}`);
   } else {
     toast(`Install failed: ${res.error}`);
   }
@@ -376,15 +379,25 @@ async function autoSyncStaleGames() {
   if (!valid.valid) return;
 
   const updated = [];
+  const configured = [];
   const failed = [];
   for (const game of games) {
     const res = await window.api.syncGameIfStale({ exePath: game.exePath, releaseFolder: settings.releaseFolder });
-    if (res.ok && res.updated) updated.push(game.name);
-    else if (!res.ok) failed.push(`${game.name} (${res.error})`);
+    if (!res.ok) {
+      failed.push(`${game.name} (${res.error})`);
+      continue;
+    }
+    if (res.updated) updated.push(game.name);
+    if (res.autoConfigured && res.autoConfigured.length > 0) {
+      configured.push(`${game.name} (${res.api || 'detected'}: ${res.autoConfigured.map((e) => e.key).join(', ')})`);
+    }
   }
 
   if (updated.length > 0) {
     toast(`Auto-updated OptiScaler in ${updated.length} game${updated.length > 1 ? 's' : ''}: ${updated.join(', ')}`);
+  }
+  if (configured.length > 0) {
+    toast(`Auto-configured: ${configured.join('; ')}`);
   }
   if (failed.length > 0) {
     toast(`Could not auto-update: ${failed.join(', ')} — close the game and retry.`);

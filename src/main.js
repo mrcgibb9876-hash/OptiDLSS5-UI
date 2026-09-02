@@ -222,7 +222,12 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath 
       // Non-fatal -- the plain OptiScaler.dll copy above still succeeded either way.
     }
 
-    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated };
+    // Auto-detect the game's rendering API and switch its upscaler/DLSS-NR/Frame-Gen settings on,
+    // so it works without the user having to do this by hand -- the overlay no longer has a menu
+    // section to do it from in-game. Only fills in values still left at "auto"; see patchIniDefaults.
+    const { api, applied } = await autoConfigureGame(dir, exePath);
+
+    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, api, autoConfigured: applied };
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -259,6 +264,97 @@ ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
 ipcMain.handle('game:open-folder', (_evt, exePath) => {
   shell.openPath(gameDir(exePath));
 });
+
+// ---------- render API detection / auto-configuration ----------
+// The overlay no longer has a menu section to turn any of this on from in-game (see the
+// [FrameGen] handling below), so a fresh install needs to already be configured correctly for
+// the game's actual rendering API. This is best-effort: an exe importing d3d12.dll may still
+// render in Dx11 in some hybrid engines, so it never overrides a value the user (or a previous
+// run of this same logic) already changed away from "auto" -- see patchIniDefaults.
+
+async function detectRenderApi(dir, exePath) {
+  try {
+    const entries = await fsp.readdir(dir);
+    if (entries.some((f) => /^vulkan-1\.dll$/i.test(f) || /_vk(ulkan)?\.dll$/i.test(f))) return 'vulkan';
+  } catch {
+    // fall through to the exe scan below
+  }
+  try {
+    const buf = await fsp.readFile(exePath);
+    const has = (name) => buf.includes(Buffer.from(name.toLowerCase(), 'ascii')) ||
+      buf.includes(Buffer.from(name.toUpperCase(), 'ascii'));
+    if (has('vulkan-1.dll')) return 'vulkan';
+    if (has('d3d12.dll')) return 'dx12';
+    if (has('d3d11.dll')) return 'dx11';
+  } catch {
+    // exe unreadable/too large/locked -- fall through to "unknown"
+  }
+  return null;
+}
+
+// Text-preserving ini patch: only fills in a key when its current value is still the shipped
+// "auto" placeholder, so it never clobbers a value the user (or a prior run) deliberately set.
+// Rewrites just the matched value lines -- every comment, blank line and unrelated setting in the
+// file is left byte-for-byte alone.
+function patchIniDefaults(iniPath, edits) {
+  const original = fs.readFileSync(iniPath, 'utf-8');
+  const eol = original.includes('\r\n') ? '\r\n' : '\n';
+  const lines = original.split(/\r\n|\n/);
+  const remaining = new Map(edits.map((e) => [`${e.section.toLowerCase()}::${e.key.toLowerCase()}`, e]));
+  const applied = [];
+  let currentSection = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const sectionMatch = lines[i].match(/^\s*\[([^\]]+)\]\s*$/);
+    if (sectionMatch) {
+      currentSection = sectionMatch[1];
+      continue;
+    }
+    if (!currentSection) continue;
+    const kvMatch = lines[i].match(/^(\s*)([^;#=\s][^=]*?)(\s*=\s*)(.*)$/);
+    if (!kvMatch) continue;
+    const [, indent, key, sep, value] = kvMatch;
+    const mapKey = `${currentSection.toLowerCase()}::${key.trim().toLowerCase()}`;
+    const edit = remaining.get(mapKey);
+    if (!edit) continue;
+    remaining.delete(mapKey);
+    if (value.trim().toLowerCase() === 'auto') {
+      lines[i] = `${indent}${key}${sep}${edit.value}`;
+      applied.push(edit);
+    }
+  }
+
+  if (applied.length > 0) fs.writeFileSync(iniPath, lines.join(eol), 'utf-8');
+  return applied;
+}
+
+// Frame Gen output/input are only wired up for Dx11/Dx12 in this build -- the menu's own
+// Vulkan-disables everything gate (see upstream RenderFrameGenerationSelection) no longer runs
+// at all, since the overlay was stripped down to just the DLSS NR panel, so nothing resets an
+// unsupported choice at runtime any more. Leaving Frame Gen untouched on Vulkan avoids silently
+// switching on something the game has no working path for and no in-game control to undo.
+async function autoConfigureGame(dir, exePath) {
+  const iniPath = path.join(dir, 'OptiScaler.ini');
+  if (!fs.existsSync(iniPath)) return { api: null, applied: [] };
+
+  const api = await detectRenderApi(dir, exePath);
+  const edits = [];
+
+  if (api === 'dx12') edits.push({ section: 'Upscalers', key: 'Dx12Upscaler', value: 'dlss' });
+  else if (api === 'dx11') edits.push({ section: 'Upscalers', key: 'Dx11Upscaler', value: 'dlss' });
+  else if (api === 'vulkan') edits.push({ section: 'Upscalers', key: 'VulkanUpscaler', value: 'dlss' });
+
+  edits.push({ section: 'DlssNr', key: 'Enabled', value: 'true' });
+
+  if (api === 'dx11' || api === 'dx12') {
+    edits.push({ section: 'FrameGen', key: 'Enabled', value: 'true' });
+    edits.push({ section: 'FrameGen', key: 'FGInput', value: 'upscaler' });
+    edits.push({ section: 'FrameGen', key: 'FGOutput', value: 'fsrfg' });
+  }
+
+  const applied = patchIniDefaults(iniPath, edits);
+  return { api, applied };
+}
 
 // ---------- stale-install detection / auto-update ----------
 // setup_windows.bat renames OptiScaler.dll to a proxy name (dxgi.dll, winmm.dll, ...) and deletes
@@ -313,19 +409,32 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
     const dir = gameDir(exePath);
     if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: true, updated: false, reason: 'not installed' };
 
+    // Fill in any still-"auto" upscaler/DlssNr/FrameGen settings every sync, not just on install --
+    // covers games that were already installed before this feature existed.
+    const { api, applied: autoConfigured } = await autoConfigureGame(dir, exePath);
+
     const releaseDll = releaseFolder ? path.join(releaseFolder, 'OptiScaler.dll') : null;
-    if (!releaseDll || !fs.existsSync(releaseDll)) return { ok: true, updated: false, reason: 'no release set' };
+    if (!releaseDll || !fs.existsSync(releaseDll)) {
+      return { ok: true, updated: autoConfigured.length > 0, reason: 'no release set', api, autoConfigured };
+    }
 
     const active = await findActiveOptiScalerFile(dir);
-    if (!active) return { ok: true, updated: false, reason: 'could not identify the active OptiScaler file (ambiguous proxy candidates)' };
+    if (!active) {
+      return {
+        ok: true, updated: autoConfigured.length > 0,
+        reason: 'could not identify the active OptiScaler file (ambiguous proxy candidates)', api, autoConfigured
+      };
+    }
 
-    if (sha256File(releaseDll) === sha256File(active.file)) return { ok: true, updated: false, reason: 'up to date' };
+    if (sha256File(releaseDll) === sha256File(active.file)) {
+      return { ok: true, updated: autoConfigured.length > 0, reason: 'up to date', api, autoConfigured };
+    }
 
     await fsp.copyFile(releaseDll, active.file);
     const plain = path.join(dir, 'OptiScaler.dll');
     if (active.file !== plain) await fsp.copyFile(releaseDll, plain).catch(() => {});
 
-    return { ok: true, updated: true, file: path.basename(active.file) };
+    return { ok: true, updated: true, file: path.basename(active.file), api, autoConfigured };
   } catch (err) {
     // Most common cause: the game is currently running and has the DLL locked.
     return { ok: false, error: err.message };
