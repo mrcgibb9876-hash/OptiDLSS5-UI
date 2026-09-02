@@ -463,13 +463,21 @@ async function autoConfigureGame(dir, exePath) {
 
   edits.push({ section: 'DlssNr', key: 'Enabled', value: 'true' });
 
-  // FGOutput=dlssg, not fsrfg: the overlay's Frame Generation section is wired specifically to
-  // FGOutput::DLSSG (real NVIDIA DLSS-G) -- fsrfg/xefg are deliberately left out of that panel, so
-  // either would leave it stuck reading "NVIDIA DLSS Frame Generation is not the active output
-  // right now." Needs an RTX 40-series+ card, same tier this app's core DLSS NR feature already
-  // requires an RTX 50-series card for.
+  // FGOutput=dlssg (real NVIDIA DLSS-G, the only backend the overlay's Frame Generation section
+  // is wired to -- fsrfg/xefg are deliberately left out of that panel) needs OptiScaler to load
+  // its own private Streamline/Reflex instance from OptiScaler/streamline. On a game that already
+  // ships its own native Streamline integration -- most current DLSS titles do -- that collides
+  // with the game's own already-active Reflex instance: reproduced live as a hard crash (Windows
+  // Error Reporting: access violation in OptiScaler\streamline\sl.reflex.dll) on The Witcher 3,
+  // with both Streamline SDK v2.12.0 and the header-matched v2.11.1, so it isn't a version
+  // mismatch. Detect that case the same way dllmain.cpp's own already-in-memory check does --
+  // a top-level sl.interposer.dll (or .original, if OptiScaler already renamed it on a prior
+  // run) -- and leave Frame Gen alone there. Only turn it on for a game with no native Streamline
+  // of its own to conflict with.
   let streamline = null;
-  if (api === 'dx11' || api === 'dx12') {
+  const hasNativeStreamline = fs.existsSync(path.join(dir, 'sl.interposer.dll')) ||
+    fs.existsSync(path.join(dir, 'sl.interposer.dll.original'));
+  if ((api === 'dx11' || api === 'dx12') && !hasNativeStreamline) {
     edits.push({ section: 'FrameGen', key: 'Enabled', value: 'true' });
     edits.push({ section: 'FrameGen', key: 'FGInput', value: 'upscaler' });
     edits.push({ section: 'FrameGen', key: 'FGOutput', value: 'dlssg' });
