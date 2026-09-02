@@ -404,8 +404,15 @@ async function ensureStreamlineSdkCache() {
 // Copy-if-missing, not force-overwrite: a game folder may already have a hand-populated
 // streamline folder (e.g. NR-specific sl.dlss_nr.dll/nvngx_dlssnr.dll plugins sourced from a
 // driver package, which this SDK download doesn't carry), and this only needs to fill gaps.
+//
+// Goes under <gamedir>/OptiScaler/streamline, not <gamedir>/streamline: dllmain.cpp resolves
+// MainDllPath (the base LoadStreamline() builds "streamline" onto) to the game's OptiScaler/
+// subfolder whenever it exists -- which it always does once the release's own OptiScaler/
+// subfolder has been copied in -- falling back to the game root only if that subfolder is
+// missing.
 async function deployStreamlineFolder(dir) {
-  const dest = path.join(dir, 'streamline');
+  const base = fs.existsSync(path.join(dir, 'OptiScaler')) ? path.join(dir, 'OptiScaler') : dir;
+  const dest = path.join(base, 'streamline');
   if (fs.existsSync(path.join(dest, 'sl.interposer.dll'))) return { deployed: false, reason: 'already present' };
 
   const cacheDir = await ensureStreamlineSdkCache();
