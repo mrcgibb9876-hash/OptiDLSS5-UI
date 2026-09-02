@@ -1,0 +1,57 @@
+{
+  "name": "optiscaler-manager",
+  "productName": "OptiScaler Manager",
+  "version": "1.0.0",
+  "description": "Per-game OptiScaler / DLSS Ray Reconstruction install manager",
+  "main": "src/main.js",
+  "private": true,
+  "author": "OptiScaler Manager",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis portable --publish=never"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "local.optiscalermanager.app",
+    "productName": "OptiScaler Manager",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "README-END-USER.txt",
+        "to": "README.txt"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}

@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>OptiScaler Manager</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">OS</span>
+      <span class="brand-name">OptiScaler Manager</span>
+    </div>
+    <div class="topbar-actions">
+      <button id="btn-settings" class="btn btn-ghost">Settings</button>
+      <button id="btn-add-game" class="btn btn-primary">+ Add Game</button>
+    </div>
+  </header>
+
+  <div id="settings-banner" class="settings-banner hidden">
+    Set your OptiScaler release folder and DLSS NR file in
+    <a id="settings-banner-link" href="#">Settings</a> before installing to games.
+  </div>
+
+  <main id="game-grid" class="game-grid"></main>
+
+  <div id="empty-state" class="empty-state hidden">
+    <p>No games added yet.</p>
+    <button id="btn-add-game-empty" class="btn btn-primary">+ Add your first game</button>
+  </div>
+
+  <!-- Add / Edit Game Modal -->
+  <div id="game-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2 id="game-modal-title">Add Game</h2>
+
+      <label class="field-label">Game .exe</label>
+      <div class="field-row">
+        <input id="game-exe" type="text" placeholder="Browse for the game's .exe, or paste a path..." />
+        <button id="btn-browse-exe" class="btn btn-ghost">Browse</button>
+      </div>
+
+      <label class="field-label">Display name</label>
+      <input id="game-name" type="text" placeholder="Game name" />
+
+      <label class="field-label">Banner</label>
+      <div class="banner-picker">
+        <div class="banner-preview-wrap">
+          <img id="banner-preview" class="banner-preview hidden" alt="" />
+          <span id="banner-preview-fallback" class="banner-preview-fallback hidden"></span>
+        </div>
+        <div class="banner-actions">
+          <div class="field-row">
+            <input id="steam-search-term" type="text" placeholder="Search Steam for banner art..." />
+            <button id="btn-steam-search" class="btn btn-ghost">Search</button>
+          </div>
+          <div id="steam-results" class="steam-results"></div>
+          <button id="btn-browse-image" class="btn btn-ghost btn-small">Use local image instead</button>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="btn-cancel-game" class="btn btn-ghost">Cancel</button>
+        <button id="btn-save-game" class="btn btn-primary">Save Game</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2>Settings</h2>
+
+      <label class="field-label">OptiScaler (DLSSNR) release folder</label>
+      <p class="field-hint">Point this at the folder where you extracted the OptiScaler_DLSSNR release zip (the one containing setup_windows.bat).</p>
+      <div class="field-row">
+        <input id="settings-release-folder" type="text" placeholder="Not set — browse or paste a path" />
+        <button id="btn-browse-release" class="btn btn-ghost">Browse</button>
+      </div>
+      <div id="release-status" class="status-line"></div>
+
+      <div class="field-row" style="margin-top: 12px;">
+        <button id="btn-check-updates" class="btn btn-ghost">Check for Updates</button>
+        <span id="update-status" class="status-line" style="align-self: center;"></span>
+      </div>
+      <button id="btn-install-update" class="btn btn-primary btn-small hidden" style="margin-top: 8px;">Update Now</button>
+
+      <label class="field-label">Nvidia DLSS NR model file (nvngx_dlssnr.dll)</label>
+      <p class="field-hint">This comes from an NVIDIA driver package, not the OptiScaler release. One copy gets placed in each game's folder.</p>
+      <div class="field-row">
+        <input id="settings-nr-dll" type="text" placeholder="Not set — browse or paste a path" />
+        <button id="btn-browse-nr-dll" class="btn btn-ghost">Browse</button>
+      </div>
+      <div id="nr-dll-status" class="status-line"></div>
+
+      <div class="modal-actions">
+        <button id="btn-close-settings" class="btn btn-primary">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
