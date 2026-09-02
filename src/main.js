@@ -464,24 +464,24 @@ async function autoConfigureGame(dir, exePath) {
   edits.push({ section: 'DlssNr', key: 'Enabled', value: 'true' });
 
   // FGOutput=dlssg (real NVIDIA DLSS-G, the only backend the overlay's Frame Generation section
-  // is wired to -- fsrfg/xefg are deliberately left out of that panel) needs OptiScaler to load
-  // its own private Streamline/Reflex instance from OptiScaler/streamline. On a game that already
-  // ships its own native Streamline integration -- most current DLSS titles do -- that collides
-  // with the game's own already-active Reflex instance: reproduced live as a hard crash (Windows
-  // Error Reporting: access violation in OptiScaler\streamline\sl.reflex.dll) on The Witcher 3,
-  // with both Streamline SDK v2.12.0 and the header-matched v2.11.1, so it isn't a version
-  // mismatch. Detect that case the same way dllmain.cpp's own already-in-memory check does --
-  // a top-level sl.interposer.dll (or .original, if OptiScaler already renamed it on a prior
-  // run) -- and leave Frame Gen alone there. Only turn it on for a game with no native Streamline
-  // of its own to conflict with.
+  // is wired to -- fsrfg/xefg are deliberately left out of that panel). OptiScaler's own
+  // StreamlineProxy::LoadStreamline() reuses the game's already-loaded native sl.interposer.dll
+  // when one exists (the same "already in memory" detection dllmain.cpp's startup scan does) and
+  // only falls back to loading OptiScaler's own bundled copy from OptiScaler/streamline for a
+  // game with no native Streamline of its own -- so this is safe to default on either way. (An
+  // earlier version of LoadStreamline() always loaded its own separate copy regardless, which on
+  // a game with native Streamline gave the driver two independent Reflex instances fighting over
+  // its single global Reflex state -- reproduced live as a hard crash on The Witcher 3. Fixed at
+  // the source level; this app only needs to keep the OptiScaler/streamline SDK folder deployed
+  // for the no-native-Streamline case that still needs it.)
   let streamline = null;
   const hasNativeStreamline = fs.existsSync(path.join(dir, 'sl.interposer.dll')) ||
     fs.existsSync(path.join(dir, 'sl.interposer.dll.original'));
-  if ((api === 'dx11' || api === 'dx12') && !hasNativeStreamline) {
+  if (api === 'dx11' || api === 'dx12') {
     edits.push({ section: 'FrameGen', key: 'Enabled', value: 'true' });
     edits.push({ section: 'FrameGen', key: 'FGInput', value: 'upscaler' });
     edits.push({ section: 'FrameGen', key: 'FGOutput', value: 'dlssg' });
-    streamline = await deployStreamlineFolder(dir);
+    if (!hasNativeStreamline) streamline = await deployStreamlineFolder(dir);
   }
 
   const applied = patchIniDefaults(iniPath, edits);
