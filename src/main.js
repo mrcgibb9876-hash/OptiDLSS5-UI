@@ -349,20 +349,34 @@ ipcMain.handle('game:prepare-dlss5-feeder', async (_evt, { exePath, renoDxAddonP
       if (dlssNr) parts.push('-DlssNrDll', `"${dlssNr}"`);
       if (dlss) parts.push('-DlssDll', `"${dlss}"`);
       runtimeNote = dlssNr || dlss
-        ? ' Extracted the DLSS/DLSSNR runtime from the configured zip, so the command below uses ' +
-          'those instead of the script\'s own (expiring) Discord links.'
+        ? ' Extracted the DLSS/DLSSNR runtime from the configured zip, so the launcher uses those ' +
+          'instead of the script\'s own (expiring) Discord links.'
         : '';
     }
+
+    const command = `powershell.exe -ExecutionPolicy Bypass -File ${parts.join(' ')}`;
+
+    // A double-click launcher instead of a paste-into-terminal step: classic cmd.exe windows
+    // don't reliably support Ctrl+V, and this needs Install-DLSS5Feeder.ps1 to exist here first
+    // anyway (that part is left to the user -- see the note below -- since fetching and running a
+    // third-party script from this app's own code is exactly the shape sandboxed dev environments
+    // block on sight). Writing this .bat is just a text file, no different from setup_windows.bat
+    // writing Remove_OptiScaler.bat.
+    const launcherPath = path.join(dir, 'Run-DLSS5-Feeder-Install.bat');
+    const launcherContent = `@echo off\r\ncd /d "%~dp0"\r\n${command}\r\npause\r\n`;
+    await fsp.writeFile(launcherPath, launcherContent, 'utf-8');
 
     shell.openPath(dir);
 
     return {
       ok: true,
       dir,
-      command: `powershell.exe -ExecutionPolicy Bypass -File ${parts.join(' ')}`,
-      note: `Opened the game folder.${runtimeNote} Download Install-DLSS5Feeder.ps1 from ` +
-        'github.com/jlrouzies-fr/DLSS5-Feeder (tools/Install-DLSS5Feeder.ps1) into that folder, ' +
-        'then paste the command into a terminal opened there.'
+      launcherPath,
+      command,
+      note: `Opened the game folder and wrote Run-DLSS5-Feeder-Install.bat there.${runtimeNote} ` +
+        'Download Install-DLSS5Feeder.ps1 from github.com/jlrouzies-fr/DLSS5-Feeder ' +
+        '(tools/Install-DLSS5Feeder.ps1) into that same folder, then double-click the .bat ' +
+        '-- no pasting needed.'
     };
   } catch (err) {
     return { ok: false, error: err.message };

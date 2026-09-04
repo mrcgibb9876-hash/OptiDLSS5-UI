@@ -193,12 +193,10 @@ async function prepareDlss5Feeder(game) {
     toast(`Could not prepare: ${res.error}`);
     return;
   }
-  try {
-    await navigator.clipboard.writeText(res.command);
-    toast(`${res.note} Command copied to clipboard — paste it into a terminal opened in that folder.`);
-  } catch {
-    window.alert(`${res.note}\n\nRun this command in a terminal opened in that folder:\n\n${res.command}`);
-  }
+  // Command is also copied to the clipboard as a fallback, in case double-clicking the .bat
+  // is inconvenient for some reason (e.g. it needs editing first).
+  navigator.clipboard.writeText(res.command).catch(() => {});
+  toast(res.note);
 }
 
 async function removeGame(game) {
