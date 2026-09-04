@@ -60,7 +60,13 @@ app.on('window-all-closed', () => {
 
 ipcMain.handle('data:load', () => {
   const games = readJson(gamesFile(), []);
-  const settings = readJson(settingsFile(), { releaseFolder: '', nrDllPath: '', installedVersion: '' });
+  const settings = readJson(settingsFile(), {
+    releaseFolder: '',
+    nrDllPath: '',
+    installedVersion: '',
+    renoDxAddonPath: '',
+    streamlineZipPath: ''
+  });
   return { games, settings };
 });
 
@@ -100,6 +106,26 @@ ipcMain.handle('pick:dll', async () => {
     title: 'Select nvngx_dlssnr.dll (from an extracted NVIDIA driver package)',
     properties: ['openFile'],
     filters: [{ name: 'DLL', extensions: ['dll'] }]
+  });
+  if (res.canceled || res.filePaths.length === 0) return null;
+  return res.filePaths[0];
+});
+
+ipcMain.handle('pick:addon', async () => {
+  const res = await dialog.showOpenDialog({
+    title: 'Select renodx-dlss5.addon64',
+    properties: ['openFile'],
+    filters: [{ name: 'ReShade add-on', extensions: ['addon64', 'addon32', 'addon'] }]
+  });
+  if (res.canceled || res.filePaths.length === 0) return null;
+  return res.filePaths[0];
+});
+
+ipcMain.handle('pick:zip', async (_evt, title) => {
+  const res = await dialog.showOpenDialog({
+    title: title || 'Select a .zip file',
+    properties: ['openFile'],
+    filters: [{ name: 'Zip archive', extensions: ['zip'] }]
   });
   if (res.canceled || res.filePaths.length === 0) return null;
   return res.filePaths[0];
@@ -174,7 +200,8 @@ ipcMain.handle('game:status', (_evt, exePath) => {
   const dir = gameDir(exePath);
   const hasIni = fs.existsSync(path.join(dir, 'OptiScaler.ini'));
   const hasNr = fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'));
-  const hasUninstaller = fs.existsSync(path.join(dir, 'uninstall_optiscaler.bat')) ||
+  const hasUninstaller = fs.existsSync(path.join(dir, 'Remove_OptiScaler.bat')) ||
+    fs.existsSync(path.join(dir, 'uninstall_optiscaler.bat')) ||
     fs.existsSync(path.join(dir, 'uninstaller.bat'));
   return { exeMissing: false, hasIni, hasNr, hasUninstaller, dir };
 });
@@ -249,7 +276,9 @@ ipcMain.handle('game:run-setup', async (_evt, exePath) => {
 
 ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
   const dir = gameDir(exePath);
-  const candidates = ['uninstall_optiscaler.bat', 'uninstaller.bat'];
+  // Remove_OptiScaler.bat is what setup_windows.bat actually generates; the other two names are
+  // kept in case a future release renames it, so this doesn't silently break again.
+  const candidates = ['Remove_OptiScaler.bat', 'uninstall_optiscaler.bat', 'uninstaller.bat'];
   const found = candidates.find((c) => fs.existsSync(path.join(dir, c)));
   if (!found) return { ok: false, error: 'No uninstaller script found in game folder.' };
   spawn('cmd.exe', ['/c', 'start', '""', 'cmd.exe', '/k', found], {
@@ -259,6 +288,104 @@ ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
     shell: false
   }).unref();
   return { ok: true };
+});
+
+// ---------- DLSS5-Feeder / RenoDX (a separate ReShade-addon toolchain from OptiScaler's own
+// embedded DLSS-NR hook -- installs ReShade itself, the feeder addon, LumeniteFX and the chosen
+// neural consumer via jlrouzies-fr/DLSS5-Feeder's own installer script). This app prepares the
+// local files and hands back the command to run; it does not download or execute the third-party
+// script itself. ----------
+
+// The zip is a flat dump of NVIDIA driver-package DLLs, not just Streamline's own bin/x64 layout
+// (it also carries nvngx_dlss.dll/nvngx_dlssnr.dll), so this searches for the two by name rather
+// than assuming a path, the same way ensureStreamlineSdkCache locates sl.interposer.dll.
+async function extractDlssRuntimeDlls(zipPath) {
+  const tmpExtract = path.join(os.tmpdir(), `dlss5-feeder-runtime-${Date.now()}`);
+  await execFileAsync('powershell.exe', [
+    '-NoProfile', '-NonInteractive', '-Command',
+    'Expand-Archive -LiteralPath $env:OSM_ZIP -DestinationPath $env:OSM_DEST -Force'
+  ], { env: { ...process.env, OSM_ZIP: zipPath, OSM_DEST: tmpExtract } });
+
+  const found = {};
+  const stack = [tmpExtract];
+  while (stack.length > 0 && !(found.dlssNr && found.dlss)) {
+    const cur = stack.pop();
+    for (const entry of await fsp.readdir(cur, { withFileTypes: true })) {
+      const full = path.join(cur, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(full);
+      } else if (entry.name.toLowerCase() === 'nvngx_dlssnr.dll') {
+        found.dlssNr = full;
+      } else if (entry.name.toLowerCase() === 'nvngx_dlss.dll') {
+        found.dlss = full;
+      }
+    }
+  }
+  return found;
+}
+
+// Prepares local inputs and returns the command line for the user to run themselves -- this app
+// does not fetch or execute jlrouzies-fr/DLSS5-Feeder's installer script. (It also does not need
+// to: the script downloads everything else itself. This only extracts the two runtime DLLs from
+// the locally supplied zip, since the script's own Discord CDN links for them expire.)
+ipcMain.handle('game:prepare-dlss5-feeder', async (_evt, { exePath, renoDxAddonPath, streamlineZipPath }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    if (!renoDxAddonPath || !fs.existsSync(renoDxAddonPath)) {
+      throw new Error(`renodx-dlss5.addon64 not found at "${renoDxAddonPath || '(not set)'}" — set it in Settings`);
+    }
+
+    const dir = gameDir(exePath);
+    const parts = [
+      '.\\Install-DLSS5Feeder.ps1',
+      '-GameExe', `"${exePath}"`,
+      '-Consumer', 'RenoDX',
+      '-RenoDxAddon', `"${renoDxAddonPath}"`
+    ];
+
+    let runtimeNote = '';
+    if (streamlineZipPath && fs.existsSync(streamlineZipPath)) {
+      const { dlssNr, dlss } = await extractDlssRuntimeDlls(streamlineZipPath);
+      if (dlssNr) parts.push('-DlssNrDll', `"${dlssNr}"`);
+      if (dlss) parts.push('-DlssDll', `"${dlss}"`);
+      runtimeNote = dlssNr || dlss
+        ? ' Extracted the DLSS/DLSSNR runtime from the configured zip, so the command below uses ' +
+          'those instead of the script\'s own (expiring) Discord links.'
+        : '';
+    }
+
+    shell.openPath(dir);
+
+    return {
+      ok: true,
+      dir,
+      command: `powershell.exe -ExecutionPolicy Bypass -File ${parts.join(' ')}`,
+      note: `Opened the game folder.${runtimeNote} Download Install-DLSS5Feeder.ps1 from ` +
+        'github.com/jlrouzies-fr/DLSS5-Feeder (tools/Install-DLSS5Feeder.ps1) into that folder, ' +
+        'then paste the command into a terminal opened there.'
+    };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// "Remove" in this app previously only forgot the game (deleted its games.json entry) without
+// touching any installed files, which reads as "delete" but silently leaves OptiScaler (and,
+// separately, any DLSS5-Feeder toolchain) still active in the game's folder. Ask what the user
+// actually wants instead of guessing.
+ipcMain.handle('game:confirm-remove', async (_evt, gameName) => {
+  const res = await dialog.showMessageBox({
+    type: 'question',
+    buttons: ['Remove OptiScaler + forget game', 'Just forget game (keep files)', 'Cancel'],
+    defaultId: 0,
+    cancelId: 2,
+    title: 'Remove game',
+    message: `Remove "${gameName}" from OptiScaler Manager?`,
+    detail: 'Removing OptiScaler runs its uninstaller in a terminal you confirm yourself (same as ' +
+      'Run Setup) -- it does not touch a separately installed DLSS5-Feeder/ReShade toolchain, if ' +
+      'you set that up for this game; use its own uninstall steps for that.'
+  });
+  return ['remove-and-forget', 'forget-only', 'cancel'][res.response] || 'cancel';
 });
 
 ipcMain.handle('game:open-folder', (_evt, exePath) => {
@@ -349,33 +476,48 @@ function streamlineSdkCacheDir() {
   return path.join(userDataDir(), 'streamline-sdk');
 }
 
+function streamlineSdkLocalCacheDir() {
+  return path.join(userDataDir(), 'streamline-sdk-local');
+}
+
 // Downloads and caches once per app install -- subsequent calls are a no-op if the cache already
 // matches STREAMLINE_SDK_VERSION (a version marker file, not just file presence, so a cache left
 // over from before this version was pinned gets replaced rather than silently reused). Returns
 // the cache directory, or null if the fetch failed (offline, GitHub rate limit, etc.) -- callers
 // treat that as non-fatal and just skip deploying it this time.
-async function ensureStreamlineSdkCache() {
-  const cacheDir = streamlineSdkCacheDir();
+// A configured local zip (Settings > Streamline SDK zip) takes priority over the pinned
+// auto-download -- it's how a version newer than STREAMLINE_SDK_VERSION gets used without
+// waiting on this file to be re-pinned and rebuilt against. Cached separately by content hash
+// (not the pinned version string), so pointing Settings at a different zip later is picked up
+// without deleting anything by hand.
+async function ensureStreamlineSdkCache(localZipPath) {
+  const usingLocal = !!(localZipPath && fs.existsSync(localZipPath));
+  const cacheDir = usingLocal ? streamlineSdkLocalCacheDir() : streamlineSdkCacheDir();
   const versionMarker = path.join(cacheDir, '.version');
+  const wantVersion = usingLocal ? `local:${sha256File(localZipPath)}` : STREAMLINE_SDK_VERSION;
   const cachedVersion = fs.existsSync(versionMarker) ? fs.readFileSync(versionMarker, 'utf-8').trim() : null;
-  if (cachedVersion === STREAMLINE_SDK_VERSION && fs.existsSync(path.join(cacheDir, 'sl.interposer.dll'))) {
+  if (cachedVersion === wantVersion && fs.existsSync(path.join(cacheDir, 'sl.interposer.dll'))) {
     return cacheDir;
   }
 
   let tmpZip;
   try {
-    const res = await fetch(STREAMLINE_RELEASE_API, { headers: GITHUB_HEADERS });
-    if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
-    const data = await res.json();
-    const zipAsset = (data.assets || []).find((a) => a.name.toLowerCase().endsWith('.zip'));
-    if (!zipAsset) throw new Error(`No .zip asset in Streamline release ${STREAMLINE_SDK_VERSION}`);
+    if (usingLocal) {
+      tmpZip = localZipPath;
+    } else {
+      const res = await fetch(STREAMLINE_RELEASE_API, { headers: GITHUB_HEADERS });
+      if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
+      const data = await res.json();
+      const zipAsset = (data.assets || []).find((a) => a.name.toLowerCase().endsWith('.zip'));
+      if (!zipAsset) throw new Error(`No .zip asset in Streamline release ${STREAMLINE_SDK_VERSION}`);
 
-    const dlRes = await fetch(zipAsset.browser_download_url, { headers: GITHUB_HEADERS });
-    if (!dlRes.ok) throw new Error(`Download failed: HTTP ${dlRes.status}`);
-    const buf = Buffer.from(await dlRes.arrayBuffer());
+      const dlRes = await fetch(zipAsset.browser_download_url, { headers: GITHUB_HEADERS });
+      if (!dlRes.ok) throw new Error(`Download failed: HTTP ${dlRes.status}`);
+      const buf = Buffer.from(await dlRes.arrayBuffer());
 
-    tmpZip = path.join(os.tmpdir(), `streamline-sdk-${Date.now()}.zip`);
-    await fsp.writeFile(tmpZip, buf);
+      tmpZip = path.join(os.tmpdir(), `streamline-sdk-${Date.now()}.zip`);
+      await fsp.writeFile(tmpZip, buf);
+    }
 
     const tmpExtract = path.join(os.tmpdir(), `streamline-sdk-extract-${Date.now()}`);
     await execFileAsync('powershell.exe', [
@@ -407,12 +549,12 @@ async function ensureStreamlineSdkCache() {
     await fsp.rm(tmpExtract, { recursive: true, force: true }).catch(() => {});
 
     if (!fs.existsSync(path.join(cacheDir, 'sl.interposer.dll'))) return null;
-    await fsp.writeFile(versionMarker, STREAMLINE_SDK_VERSION, 'utf-8');
+    await fsp.writeFile(versionMarker, wantVersion, 'utf-8');
     return cacheDir;
   } catch {
-    return null; // Offline, rate-limited, etc. -- non-fatal, just try again next sync.
+    return null; // Offline, rate-limited, bad zip, etc. -- non-fatal, just try again next sync.
   } finally {
-    if (tmpZip) fsp.rm(tmpZip, { force: true }).catch(() => {});
+    if (tmpZip && !usingLocal) fsp.rm(tmpZip, { force: true }).catch(() => {});
   }
 }
 
@@ -430,7 +572,8 @@ async function deployStreamlineFolder(dir) {
   const dest = path.join(base, 'streamline');
   if (fs.existsSync(path.join(dest, 'sl.interposer.dll'))) return { deployed: false, reason: 'already present' };
 
-  const cacheDir = await ensureStreamlineSdkCache();
+  const streamlineZipPath = readJson(settingsFile(), {}).streamlineZipPath || '';
+  const cacheDir = await ensureStreamlineSdkCache(streamlineZipPath);
   if (!cacheDir) return { deployed: false, reason: 'could not fetch Streamline SDK' };
 
   await fsp.mkdir(dest, { recursive: true });

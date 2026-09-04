@@ -93,6 +93,22 @@
       </div>
       <div id="nr-dll-status" class="status-line"></div>
 
+      <label class="field-label">DLSS5-Feeder: RenoDX add-on (renodx-dlss5.addon64)</label>
+      <p class="field-hint">Separate toolchain from OptiScaler's own DLSS-NR hook (see jlrouzies-fr/DLSS5-Feeder). Optional — only needed for "Prepare DLSS5-Feeder" on a game.</p>
+      <div class="field-row">
+        <input id="settings-renodx-addon" type="text" placeholder="Not set — browse or paste a path" />
+        <button id="btn-browse-renodx-addon" class="btn btn-ghost">Browse</button>
+      </div>
+      <div id="renodx-addon-status" class="status-line"></div>
+
+      <label class="field-label">DLSS5-Feeder: Streamline/DLSS runtime zip (optional)</label>
+      <p class="field-hint">A zip containing nvngx_dlss.dll and nvngx_dlssnr.dll (e.g. extracted from an NVIDIA driver package). Used in place of the feeder script's own expiring Discord links, and to fill in Streamline for OptiScaler's own DLSS-G Frame Gen when a game doesn't already have it.</p>
+      <div class="field-row">
+        <input id="settings-streamline-zip" type="text" placeholder="Not set — browse or paste a path" />
+        <button id="btn-browse-streamline-zip" class="btn btn-ghost">Browse</button>
+      </div>
+      <div id="streamline-zip-status" class="status-line"></div>
+
       <div class="modal-actions">
         <button id="btn-close-settings" class="btn btn-primary">Done</button>
       </div>

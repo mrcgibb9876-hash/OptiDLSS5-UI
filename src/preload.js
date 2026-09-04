@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('api', {
   pickExe: () => ipcRenderer.invoke('pick:exe'),
   pickFolder: (title) => ipcRenderer.invoke('pick:folder', title),
   pickDll: () => ipcRenderer.invoke('pick:dll'),
+  pickAddon: () => ipcRenderer.invoke('pick:addon'),
+  pickZip: (title) => ipcRenderer.invoke('pick:zip', title),
   pickImage: () => ipcRenderer.invoke('pick:image'),
 
   steamSearch: (term) => ipcRenderer.invoke('steam:search', term),
@@ -20,6 +22,8 @@ contextBridge.exposeInMainWorld('api', {
   runSetup: (exePath) => ipcRenderer.invoke('game:run-setup', exePath),
   runUninstall: (exePath) => ipcRenderer.invoke('game:run-uninstall', exePath),
   openFolder: (exePath) => ipcRenderer.invoke('game:open-folder', exePath),
+  prepareDlss5Feeder: (payload) => ipcRenderer.invoke('game:prepare-dlss5-feeder', payload),
+  confirmRemove: (gameName) => ipcRenderer.invoke('game:confirm-remove', gameName),
 
   cacheSteamBanner: (appid, fallbackImageUrl) => ipcRenderer.invoke('banner:cache-steam', { appid, fallbackImageUrl }),
   importLocalBanner: (sourcePath) => ipcRenderer.invoke('banner:import-local', sourcePath),

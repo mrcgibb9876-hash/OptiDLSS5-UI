@@ -1,5 +1,5 @@
 let games = [];
-let settings = { releaseFolder: '', nrDllPath: '', installedVersion: '' };
+let settings = { releaseFolder: '', nrDllPath: '', installedVersion: '', renoDxAddonPath: '', streamlineZipPath: '' };
 let editingGameId = null;
 let pendingBanner = { appid: null, localPath: null };
 let pendingUpdate = null;
@@ -101,6 +101,9 @@ async function renderGrid() {
           <button class="btn btn-ghost btn-edit">Edit</button>
           <button class="btn btn-ghost btn-danger btn-remove">Remove</button>
         </div>
+        <div class="card-actions-row2">
+          <button class="btn btn-ghost btn-feeder">Prepare DLSS5-Feeder</button>
+        </div>
       </div>
     `;
 
@@ -119,6 +122,7 @@ async function renderGrid() {
 
     card.querySelector('.btn-install').addEventListener('click', () => installGame(game));
     card.querySelector('.btn-setup').addEventListener('click', () => runSetup(game));
+    card.querySelector('.btn-feeder').addEventListener('click', () => prepareDlss5Feeder(game));
     card.querySelector('.btn-open').addEventListener('click', () => window.api.openFolder(game.exePath));
     card.querySelector('.btn-edit').addEventListener('click', () => openGameModal(game));
     card.querySelector('.btn-remove').addEventListener('click', () => removeGame(game));
@@ -171,7 +175,45 @@ async function runSetup(game) {
   if (!res.ok) toast(res.error);
 }
 
-function removeGame(game) {
+// Prepares local inputs for jlrouzies-fr/DLSS5-Feeder's own installer (a separate ReShade-addon
+// toolchain from OptiScaler's own DLSS-NR hook) and copies the command to run it, rather than
+// downloading or running the third-party script from this app.
+async function prepareDlss5Feeder(game) {
+  if (!settings.renoDxAddonPath) {
+    toast('Set the RenoDX add-on path in Settings first.');
+    openSettingsModal();
+    return;
+  }
+  const res = await window.api.prepareDlss5Feeder({
+    exePath: game.exePath,
+    renoDxAddonPath: settings.renoDxAddonPath,
+    streamlineZipPath: settings.streamlineZipPath
+  });
+  if (!res.ok) {
+    toast(`Could not prepare: ${res.error}`);
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(res.command);
+    toast(`${res.note} Command copied to clipboard — paste it into a terminal opened in that folder.`);
+  } catch {
+    window.alert(`${res.note}\n\nRun this command in a terminal opened in that folder:\n\n${res.command}`);
+  }
+}
+
+async function removeGame(game) {
+  const choice = await window.api.confirmRemove(game.name);
+  if (choice === 'cancel') return;
+
+  if (choice === 'remove-and-forget') {
+    const res = await window.api.runUninstall(game.exePath);
+    if (!res.ok) {
+      toast(`Couldn't start the uninstaller: ${res.error}. Removed from the list anyway.`);
+    } else {
+      toast('Uninstaller opened in a terminal -- confirm there to actually remove the files.');
+    }
+  }
+
   games = games.filter((g) => g.id !== game.id);
   window.api.saveGames(games);
   renderGrid();
@@ -298,13 +340,29 @@ const settingsModal = $('#settings-modal');
 function openSettingsModal() {
   $('#settings-release-folder').value = settings.releaseFolder || '';
   $('#settings-nr-dll').value = settings.nrDllPath || '';
+  $('#settings-renodx-addon').value = settings.renoDxAddonPath || '';
+  $('#settings-streamline-zip').value = settings.streamlineZipPath || '';
   $('#update-status').textContent = settings.installedVersion ? `Installed: ${settings.installedVersion}` : '';
   $('#update-status').className = 'status-line';
   $('#btn-install-update').classList.add('hidden');
   pendingUpdate = null;
   checkReleaseStatus();
   checkNrDllStatus();
+  checkRenoDxAddonStatus();
+  checkStreamlineZipStatus();
   settingsModal.classList.remove('hidden');
+}
+
+function checkRenoDxAddonStatus() {
+  const el = $('#renodx-addon-status');
+  el.textContent = settings.renoDxAddonPath ? 'Set.' : '';
+  el.className = 'status-line status-ok';
+}
+
+function checkStreamlineZipStatus() {
+  const el = $('#streamline-zip-status');
+  el.textContent = settings.streamlineZipPath ? 'Set.' : '';
+  el.className = 'status-line status-ok';
 }
 
 async function checkReleaseStatus() {
@@ -363,6 +421,32 @@ $('#btn-browse-nr-dll').addEventListener('click', async () => {
   if (p) persistNrDll(p);
 });
 $('#settings-nr-dll').addEventListener('change', (e) => persistNrDll(e.target.value.trim()));
+
+async function persistRenoDxAddon(p) {
+  settings.renoDxAddonPath = p;
+  $('#settings-renodx-addon').value = p;
+  await window.api.saveSettings(settings);
+  checkRenoDxAddonStatus();
+}
+
+async function persistStreamlineZip(p) {
+  settings.streamlineZipPath = p;
+  $('#settings-streamline-zip').value = p;
+  await window.api.saveSettings(settings);
+  checkStreamlineZipStatus();
+}
+
+$('#btn-browse-renodx-addon').addEventListener('click', async () => {
+  const p = await window.api.pickAddon();
+  if (p) persistRenoDxAddon(p);
+});
+$('#settings-renodx-addon').addEventListener('change', (e) => persistRenoDxAddon(e.target.value.trim()));
+
+$('#btn-browse-streamline-zip').addEventListener('click', async () => {
+  const p = await window.api.pickZip('Select a zip with nvngx_dlss.dll / nvngx_dlssnr.dll (and optionally Streamline sl.*.dll files)');
+  if (p) persistStreamlineZip(p);
+});
+$('#settings-streamline-zip').addEventListener('change', (e) => persistStreamlineZip(e.target.value.trim()));
 
 $('#btn-close-settings').addEventListener('click', async () => {
   settingsModal.classList.add('hidden');
@@ -483,7 +567,7 @@ $('#btn-install-update').addEventListener('click', async () => {
 (async function init() {
   const data = await window.api.loadData();
   games = data.games || [];
-  settings = data.settings || { releaseFolder: '', nrDllPath: '', installedVersion: '' };
+  settings = data.settings || { releaseFolder: '', nrDllPath: '', installedVersion: '', renoDxAddonPath: '', streamlineZipPath: '' };
   await refreshBannerVisibility();
   await renderGrid();
   autoSyncStaleGames();
