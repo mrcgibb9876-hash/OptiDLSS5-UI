@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld('api', {
   validateNrDll: (filePath) => ipcRenderer.invoke('nrdll:validate', filePath),
 
   gameStatus: (exePath) => ipcRenderer.invoke('game:status', exePath),
+
+  // Which install path this game wants -- OptiScaler, the Feeder, or "could not tell". Cached on
+  // the game record by the renderer, since it reads the whole exe.
+  detectPath: (exePath) => ipcRenderer.invoke('game:detect-path', exePath),
   installGame: (payload) => ipcRenderer.invoke('game:install', payload),
   syncGameIfStale: (payload) => ipcRenderer.invoke('game:sync-if-stale', payload),
   runSetup: (exePath) => ipcRenderer.invoke('game:run-setup', exePath),

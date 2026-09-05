@@ -525,6 +525,58 @@ async function detectRenderApi(dir, exePath) {
   return null;
 }
 
+// Which of the two install paths a game should take, and why.
+//
+// detectRenderApi above answers only the three APIs OptiScaler can configure, because that is all
+// the ini needs. Choosing a path needs to tell "an API OptiScaler cannot reach" apart from "could
+// not tell", which are very different answers: the first means use the Feeder, the second means
+// say so and let the user decide. So this looks for the older APIs too.
+const OLD_API_MARKERS = [
+    ['dx9', ['d3d9.dll', 'd3d8.dll']],
+    ['dx10', ['d3d10.dll', 'd3d10core.dll']],
+    ['opengl', ['opengl32.dll']]
+];
+
+async function detectInstallPath(dir, exePath) {
+  const api = await detectRenderApi(dir, exePath);
+
+  // OptiScaler intercepts the game's own upscaler, so it needs one of these three.
+  if (api === 'vulkan' || api === 'dx12' || api === 'dx11') {
+    return { api, recommend: 'optiscaler', reason: `${api.toUpperCase()} — OptiScaler hooks this directly` };
+  }
+
+  // Nothing modern found. Look for something old before concluding anything: a D3D9 game is a
+  // Feeder job, whereas an exe we simply could not read is not a conclusion at all.
+  let buf = null;
+  try {
+    buf = await fsp.readFile(exePath);
+  } catch {
+    return { api: null, recommend: 'unknown', reason: 'could not read the executable' };
+  }
+
+  const has = (name) =>
+    buf.includes(Buffer.from(name.toLowerCase(), 'ascii')) || buf.includes(Buffer.from(name.toUpperCase(), 'ascii'));
+
+  for (const [old, markers] of OLD_API_MARKERS) {
+    if (markers.some(has)) {
+      return { api: old, recommend: 'feeder', reason: `${old.toUpperCase()} — OptiScaler has no hook here` };
+    }
+  }
+
+  // Read it fine, recognised nothing. Packed or bundled exes land here, and guessing at this point
+  // would be worse than saying so.
+  return { api: null, recommend: 'unknown', reason: 'could not tell which graphics API this uses' };
+}
+
+ipcMain.handle('game:detect-path', async (_evt, exePath) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) return { recommend: 'unknown', reason: 'executable not found' };
+    return await detectInstallPath(gameDir(exePath), exePath);
+  } catch (error) {
+    return { recommend: 'unknown', reason: String(error && error.message ? error.message : error) };
+  }
+});
+
 // Text-preserving ini patch: only fills in a key when its current value is still the shipped
 // "auto" placeholder, so it never clobbers a value the user (or a prior run) deliberately set.
 // Rewrites just the matched value lines -- every comment, blank line and unrelated setting in the
