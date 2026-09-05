@@ -12,6 +12,10 @@ contextBridge.exposeInMainWorld('api', {
   pickZip: (title) => ipcRenderer.invoke('pick:zip', title),
   pickImage: () => ipcRenderer.invoke('pick:image'),
 
+  // Finds installed games. scanDrives walks every fixed drive and is slow, so the UI keeps it
+  // behind a checkbox that is off by default.
+  scanLibrary: (options) => ipcRenderer.invoke('library:scan', options),
+
   steamSearch: (term) => ipcRenderer.invoke('steam:search', term),
   validateRelease: (folder) => ipcRenderer.invoke('release:validate', folder),
   validateNrDll: (filePath) => ipcRenderer.invoke('nrdll:validate', filePath),
@@ -23,6 +27,16 @@ contextBridge.exposeInMainWorld('api', {
   runUninstall: (exePath) => ipcRenderer.invoke('game:run-uninstall', exePath),
   openFolder: (exePath) => ipcRenderer.invoke('game:open-folder', exePath),
   prepareDlss5Feeder: (payload) => ipcRenderer.invoke('game:prepare-dlss5-feeder', payload),
+
+  // Runs the Feeder's own installer unattended. onProgress gets a line at a time; the returned
+  // function unsubscribes, so a re-render does not stack listeners on the same channel.
+  installFeeder: (payload) => ipcRenderer.invoke('feeder:install', payload),
+  onFeederProgress: (handler) => {
+    const listener = (_evt, update) => handler(update);
+    ipcRenderer.on('feeder:progress', listener);
+    return () => ipcRenderer.removeListener('feeder:progress', listener);
+  },
+
   confirmRemove: (gameName) => ipcRenderer.invoke('game:confirm-remove', gameName),
 
   cacheSteamBanner: (appid, fallbackImageUrl) => ipcRenderer.invoke('banner:cache-steam', { appid, fallbackImageUrl }),

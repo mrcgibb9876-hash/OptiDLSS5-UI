@@ -6,6 +6,12 @@ const os = require('node:os');
 const { spawn, execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const crypto = require('node:crypto');
+
+// Game-library discovery. library.js is lifted verbatim from DLSS5-Swapper (MIT, see
+// LICENSE-DLSS5-Swapper.txt) so it can be refreshed from upstream without a merge; discover.js is
+// ours, and turns the folders it finds into the executables this app installs against.
+const { scanForGames } = require('./discover');
+const feeder = require('./feeder');
 const execFileAsync = promisify(execFile);
 
 const RELEASES_API = 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest';
@@ -78,6 +84,31 @@ ipcMain.handle('data:save-games', (_evt, games) => {
 ipcMain.handle('data:save-settings', (_evt, settings) => {
   writeJson(settingsFile(), settings);
   return true;
+});
+
+// ---------- library discovery ----------
+
+// Finds installed games rather than making the user point at each executable by hand.
+//
+// Steam, Epic and GOG are cheap: they are read from libraryfolders.vdf and the registry, so this
+// covers every Steam library on every drive without touching the disks themselves.
+//
+// scanDrives is the expensive one -- it walks all fixed drives looking for game-shaped folders --
+// so it is opt-in and must stay that way. On a large library over a spinning disk it takes real
+// time, and running it unasked on first launch would make the app feel broken.
+//
+// Nothing here writes anything or touches the network; it is a pure read of the local filesystem.
+ipcMain.handle('library:scan', async (_evt, options) => {
+  const { extraFolders = [], scanDrives = false, excludedRoots = [], knownExePaths = [] } = options || {};
+
+  try {
+    return { ok: true, ...scanForGames({ extraFolders, scanDrives, excludedRoots, knownExePaths }) };
+  } catch (error) {
+    // A scan that throws must not take the window with it. An unreadable drive, a permission-denied
+    // folder or a launcher that is not installed are all normal, and the user should be told rather
+    // than left with a spinner.
+    return { ok: false, error: String(error && error.message ? error.message : error), games: [], roots: [] };
+  }
 });
 
 // ---------- file/folder pickers ----------
@@ -306,7 +337,7 @@ async function extractDlssRuntimeDlls(zipPath) {
     'Expand-Archive -LiteralPath $env:OSM_ZIP -DestinationPath $env:OSM_DEST -Force'
   ], { env: { ...process.env, OSM_ZIP: zipPath, OSM_DEST: tmpExtract } });
 
-  const found = {};
+  const found = { dir: tmpExtract };
   const stack = [tmpExtract];
   while (stack.length > 0 && !(found.dlssNr && found.dlss)) {
     const cur = stack.pop();
@@ -324,10 +355,10 @@ async function extractDlssRuntimeDlls(zipPath) {
   return found;
 }
 
-// Prepares local inputs and returns the command line for the user to run themselves -- this app
-// does not fetch or execute jlrouzies-fr/DLSS5-Feeder's installer script. (It also does not need
-// to: the script downloads everything else itself. This only extracts the two runtime DLLs from
-// the locally supplied zip, since the script's own Discord CDN links for them expire.)
+// The manual path, kept as a fallback: prepares local inputs and writes a launcher the user runs
+// themselves. 'feeder:install' below does the same thing unattended and is what the UI reaches for
+// first; this one is for a machine where running a downloaded script from inside the app is not
+// wanted, or where that run failed and the user wants to drive it by hand.
 ipcMain.handle('game:prepare-dlss5-feeder', async (_evt, { exePath, renoDxAddonPath, streamlineZipPath }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
@@ -378,6 +409,67 @@ ipcMain.handle('game:prepare-dlss5-feeder', async (_evt, { exePath, renoDxAddonP
         '(tools/Install-DLSS5Feeder.ps1) into that same folder, then double-click the .bat ' +
         '-- no pasting needed.'
     };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+// The same install, run for the user instead of handed to them.
+//
+// This resolves the two NVIDIA runtime DLLs from what the user has already supplied -- the path in
+// Settings, or the Streamline zip -- and passes them to the script explicitly. That is the whole
+// point of doing it here: given local paths the script uses them and never reaches for its own
+// Discord CDN copies of files that are NVIDIA's and not redistributable. If the user has not
+// supplied nvngx_dlssnr.dll, this refuses rather than quietly fetching one for them.
+//
+// Everything else -- ReShade, the feeder add-on, LumeniteFX, dgVoodoo2 for Direct3D 8/9, and the
+// .ini wiring -- the script fetches from its real sources, and that is fine to automate.
+ipcMain.handle('feeder:install', async (evt, payload) => {
+  const { exePath, api, consumer, mvProvider, nrDllPath, streamlineZipPath, renoDxAddonPath } = payload || {};
+
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+
+    let resolvedNr = nrDllPath && fs.existsSync(nrDllPath) ? nrDllPath : '';
+    let resolvedDlss = '';
+    let extractedTo = '';
+
+    // The zip is the more common way in: Streamline ships both runtimes, and someone who already
+    // configured it should not have to point at either DLL a second time. An explicitly set
+    // nrDllPath still wins -- it is the more deliberate of the two.
+    if (streamlineZipPath && fs.existsSync(streamlineZipPath)) {
+      const { dlssNr, dlss, dir } = await extractDlssRuntimeDlls(streamlineZipPath);
+      extractedTo = dir;
+      resolvedNr = resolvedNr || dlssNr || '';
+      resolvedDlss = dlss || '';
+    }
+
+    // Progress goes back over the same channel the renderer is already listening on, so a long
+    // install shows its work rather than sitting behind a spinner for two minutes.
+    const send = (update) => {
+      if (!evt.sender.isDestroyed()) evt.sender.send('feeder:progress', { exePath, ...update });
+    };
+
+    try {
+      return await feeder.installForGame(
+        {
+          exePath,
+          api,
+          consumer,
+          mvProvider,
+          nrDllPath: resolvedNr,
+          dlssDllPath: resolvedDlss,
+          renoDxAddonPath: renoDxAddonPath && fs.existsSync(renoDxAddonPath) ? renoDxAddonPath : '',
+          cacheDir: path.join(userDataDir(), 'feeder-cache')
+        },
+        send
+      );
+    } finally {
+      // The unpacked zip is hundreds of megabytes and the DLL paths inside it have to stay valid
+      // until PowerShell has copied them, so this cannot live inside extractDlssRuntimeDlls.
+      // Without it every install leaves another full copy in %TEMP%.
+      if (extractedTo) await fsp.rm(extractedTo, { recursive: true, force: true }).catch(() => {});
+    }
   } catch (err) {
     return { ok: false, error: err.message };
   }
