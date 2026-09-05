@@ -81,8 +81,20 @@ and browse to it.
 ------------------------------------------
 STEP 4 — Add your games
 ------------------------------------------
-Click "+ Add Game", browse to the game's .exe, give it a name, and either
-search Steam for matching cover art or use a local image. Click Save.
+Easiest: click "Scan for Games". The app reads your Steam libraries (all of
+them, on every drive), plus Epic and GOG, and works out which .exe in each
+game folder is the one that actually renders — skipping launchers, crash
+reporters and anti-cheat wrappers. Tick everything you want and click Add.
+
+If a game lives somewhere it can't see, "Add a folder" points it at that
+folder, and there's a "also scan my other drives" checkbox for a full sweep.
+That one is off by default because on a big library it takes a while.
+
+It suggests; you confirm. If it picks the wrong .exe for a game, the card
+lets you switch to another one it found.
+
+Still there if you prefer it: "+ Add Game", browse to the .exe yourself,
+name it, and pick cover art (search Steam, or use a local image).
 
 ------------------------------------------
 STEP 5 — Install into a game
@@ -101,9 +113,44 @@ directly in that window; answer them there. It will also tell you whether
 Neural Rendering can actually run on your system.
 
 By default, DLSS Neural Rendering is OFF even after install. Turn it on
-either in the OptiScaler in-game overlay ("DLSS Neural Rendering" toggle)
-or by setting Enabled=true under the [DlssNr] section of the game's
-OptiScaler.ini.
+either in the in-game panel or by setting Enabled=true under the [DlssNr]
+section of the game's OptiScaler.ini.
+
+Two panels, two keys, and both can be open at once:
+
+  Insert     OptiScaler's own overlay
+  Alt+Home   the DLSS 5 Developer Controls panel
+
+(The DLSS 5 panel used to be on plain Home. It moved because Home is a key
+too many games already use. Both are rebindable in the panel itself.)
+
+------------------------------------------
+STEP 6 — Games OptiScaler can't reach
+------------------------------------------
+OptiScaler works by intercepting the game's own upscaler, so it needs the
+game to have one: it covers DirectX 12, Vulkan, and DirectX 11. Older games
+have nothing for it to hook.
+
+For those, the card has "Install DLSS 5 Feeder". It runs the DLSS5-Feeder
+project's own installer for you and fetches what that needs — ReShade, the
+feeder add-on, LumeniteFX, the neural consumer, dgVoodoo2 for the really old
+APIs — and writes the settings files in the right order. Progress appears in
+the app as it goes.
+
+What it will NOT download is nvngx_dlssnr.dll. That file is NVIDIA's and is
+not ours to hand out, so the app passes it the copy YOU supplied in Step 3
+and refuses to run if you haven't set one. Same for the RenoDX add-on: point
+the app at a copy and it will use it; it won't go and get one.
+
+Coverage this way is DirectX 8, 9, 10, 11, 12, Vulkan and OpenGL — but it is
+DLAA only, and the image quality is a step below the OptiScaler path, which
+gets real depth and motion data from the game instead of estimating it. Use
+OptiScaler where it works and this where it doesn't.
+
+IMPORTANT: never both in the same game. If OptiScaler starts up and finds
+the Feeder's add-on already loaded, it refuses to run and tells you so in
+the panel, because otherwise both would be applying the model to the same
+frame.
 
 ------------------------------------------
 UPDATING OPTISCALER LATER
