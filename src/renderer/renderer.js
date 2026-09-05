@@ -119,6 +119,24 @@ async function renderGrid() {
           setBannerWithFallback(game, card.querySelector('.card-banner'), card.querySelector('.card-banner-fallback'));
         }
       });
+    } else if (!game.bannerLocalPath && !game.bannerAppId && !game.bannerSearchAttempted) {
+      // No appid at all -- a manually-added game (nobody opened the search box), or a scanned
+      // Epic/GOG title (only Steam scan results carry an appid). Auto-search Steam by name so art
+      // shows up without the user having to open Edit and search by hand. Marked as attempted
+      // either way so a title with no Steam listing does not re-hit the network on every render.
+      game.bannerSearchAttempted = true;
+      window.api.steamSearch(game.name).then(async (items) => {
+        if (!items || items.length === 0) {
+          window.api.saveGames(games);
+          return;
+        }
+        const best = items[0];
+        const localPath = await window.api.cacheSteamBanner(best.appid, best.tinyImage);
+        game.bannerAppId = String(best.appid);
+        if (localPath) game.bannerLocalPath = localPath;
+        window.api.saveGames(games);
+        setBannerWithFallback(game, card.querySelector('.card-banner'), card.querySelector('.card-banner-fallback'));
+      });
     }
 
     card.querySelector('.btn-install').addEventListener('click', () => installGame(game));
@@ -644,6 +662,145 @@ $('#btn-install-update').addEventListener('click', async () => {
   refreshBannerVisibility();
   toast(`OptiScaler updated to ${res.tag}`);
   autoSyncStaleGames();
+});
+
+// ---------- Scan for Games ----------
+// discover.js/library.js do the actual filesystem/registry work; this just drives the modal --
+// show what was found, let the user drop anything they don't want or pick a different exe than
+// the one auto-chosen, and only write to the game list once they hit "Add Selected".
+
+const scanModal = $('#scan-modal');
+let scanResults = [];
+// exePath actually selected for each result, keyed by its index in scanResults -- starts as the
+// auto-chosen one but changes if the user picks a runner-up from the dropdown.
+let scanSelections = {};
+
+function openScanModal() {
+  scanResults = [];
+  scanSelections = {};
+  $('#scan-results').innerHTML = '';
+  $('#scan-status').textContent = '';
+  $('#scan-status').className = 'status-line';
+  $('#btn-add-scanned').classList.add('hidden');
+  $('#scan-drives').checked = false;
+  scanModal.classList.remove('hidden');
+}
+
+function closeScanModal() {
+  scanModal.classList.add('hidden');
+}
+
+$('#btn-scan-games').addEventListener('click', openScanModal);
+$('#btn-cancel-scan').addEventListener('click', closeScanModal);
+
+$('#btn-run-scan').addEventListener('click', async () => {
+  const btn = $('#btn-run-scan');
+  const statusEl = $('#scan-status');
+  const resultsEl = $('#scan-results');
+  const scanDrives = $('#scan-drives').checked;
+
+  btn.disabled = true;
+  statusEl.className = 'status-line';
+  statusEl.textContent = scanDrives ? 'Scanning every drive -- this can take a while…' : 'Scanning…';
+  resultsEl.innerHTML = '';
+  $('#btn-add-scanned').classList.add('hidden');
+
+  const res = await window.api.scanLibrary({
+    scanDrives,
+    knownExePaths: games.map((g) => g.exePath)
+  });
+
+  btn.disabled = false;
+
+  if (!res.ok) {
+    statusEl.className = 'status-line status-bad';
+    statusEl.textContent = `Scan failed: ${res.error}`;
+    return;
+  }
+
+  scanResults = res.games || [];
+  scanSelections = {};
+  scanResults.forEach((g, i) => { scanSelections[i] = g.exePath; });
+
+  if (scanResults.length === 0) {
+    statusEl.className = 'status-line';
+    statusEl.textContent = 'No new games found.';
+    return;
+  }
+
+  statusEl.className = 'status-line status-ok';
+  statusEl.textContent = `Found ${scanResults.length} game${scanResults.length > 1 ? 's' : ''}.`;
+
+  scanResults.forEach((game, i) => {
+    const row = document.createElement('div');
+    row.className = 'scan-result-row';
+
+    const altOptions = [game.exePath, ...(game.alternatives || [])];
+    const altSelect = altOptions.length > 1
+      ? `<select class="scan-result-alt">${altOptions.map((p) => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('')}</select>`
+      : '';
+
+    row.innerHTML = `
+      <input type="checkbox" checked />
+      <div class="scan-result-info">
+        <div class="scan-result-name">${escapeHtml(game.name)}</div>
+        <div class="scan-result-source">${escapeHtml(game.launcher)}</div>
+        <div class="scan-result-path">${escapeHtml(game.exePath)}</div>
+        ${altOptions.length > 1 ? '<p class="field-hint" style="margin: 4px 0 0;">Picked wrong exe? Choose another below.</p>' : ''}
+        ${altSelect}
+      </div>
+    `;
+
+    const pathEl = row.querySelector('.scan-result-path');
+    const altSelectEl = row.querySelector('.scan-result-alt');
+    if (altSelectEl) {
+      altSelectEl.addEventListener('change', (e) => {
+        scanSelections[i] = e.target.value;
+        pathEl.textContent = e.target.value;
+      });
+    }
+
+    const checkboxEl = row.querySelector('input[type="checkbox"]');
+    checkboxEl.addEventListener('change', () => {
+      row.style.opacity = checkboxEl.checked ? '1' : '0.5';
+    });
+    row.dataset.index = String(i);
+
+    resultsEl.appendChild(row);
+  });
+
+  $('#btn-add-scanned').classList.remove('hidden');
+});
+
+$('#btn-add-scanned').addEventListener('click', async () => {
+  const rows = $('#scan-results').querySelectorAll('.scan-result-row');
+  let added = 0;
+
+  rows.forEach((row) => {
+    const checkbox = row.querySelector('input[type="checkbox"]');
+    if (!checkbox.checked) return;
+
+    const i = Number(row.dataset.index);
+    const game = scanResults[i];
+    const exePath = scanSelections[i] || game.exePath;
+
+    games.push({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      exePath,
+      name: game.name,
+      bannerAppId: game.bannerAppId || null,
+      bannerLocalPath: null
+    });
+    added++;
+  });
+
+  if (added > 0) {
+    await window.api.saveGames(games);
+    toast(`Added ${added} game${added > 1 ? 's' : ''}.`);
+    renderGrid();
+  }
+
+  closeScanModal();
 });
 
 // ---------- init ----------

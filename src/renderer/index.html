@@ -13,6 +13,7 @@
     </div>
     <div class="topbar-actions">
       <button id="btn-settings" class="btn btn-ghost">Settings</button>
+      <button id="btn-scan-games" class="btn btn-ghost">Scan for Games</button>
       <button id="btn-add-game" class="btn btn-primary">+ Add Game</button>
     </div>
   </header>
@@ -62,6 +63,31 @@
       <div class="modal-actions">
         <button id="btn-cancel-game" class="btn btn-ghost">Cancel</button>
         <button id="btn-save-game" class="btn btn-primary">Save Game</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scan for Games Modal -->
+  <div id="scan-modal" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <h2>Scan for Games</h2>
+      <p class="field-hint">Reads Steam's library folders (every drive), plus Epic and GOG. Proposes an exe for each game it finds -- you confirm before anything is added.</p>
+
+      <label class="scan-checkbox-row">
+        <input id="scan-drives" type="checkbox" />
+        Also sweep every fixed drive for games outside those libraries (slower)
+      </label>
+
+      <div class="modal-actions" style="margin-top: 12px;">
+        <button id="btn-run-scan" class="btn btn-primary">Scan</button>
+        <span id="scan-status" class="status-line" style="align-self: center;"></span>
+      </div>
+
+      <div id="scan-results" class="scan-results"></div>
+
+      <div class="modal-actions">
+        <button id="btn-cancel-scan" class="btn btn-ghost">Close</button>
+        <button id="btn-add-scanned" class="btn btn-primary hidden">Add Selected</button>
       </div>
     </div>
   </div>
