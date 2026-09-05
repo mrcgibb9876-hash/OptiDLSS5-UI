@@ -44,10 +44,10 @@ OpenGL**.
 
 So: OptiScaler where it fits, the Feeder where it doesn't.
 
-**Never both in the same game.** OptiScaler now refuses to start if `renodx-dlss5.addon64` or
-`dlss5-feed.addon64` is loaded in the same process, because both would apply the model to the same
-frame. If you install both into one game you'll get a refusal message in the panel rather than a
-mess on screen.
+**Never both in the same game.** If OptiScaler and the Feeder are both active in one process, both
+apply the model to the same frame. Nothing currently stops you doing it — the guard that refuses to
+start when `renodx-dlss5.addon64` or `dlss5-feed.addon64` is already loaded is written but not yet
+merged upstream of here — so for now it is on you to pick one per game.
 
 ## Dependencies: what the app fetches, and the one thing it won't
 

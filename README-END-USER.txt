@@ -147,10 +147,10 @@ DLAA only, and the image quality is a step below the OptiScaler path, which
 gets real depth and motion data from the game instead of estimating it. Use
 OptiScaler where it works and this where it doesn't.
 
-IMPORTANT: never both in the same game. If OptiScaler starts up and finds
-the Feeder's add-on already loaded, it refuses to run and tells you so in
-the panel, because otherwise both would be applying the model to the same
-frame.
+IMPORTANT: never both in the same game. Nothing stops you installing both,
+and if you do, both will be applying the model to the same frame and the
+picture will be wrong. Pick one per game: OptiScaler if the game is DX11,
+DX12 or Vulkan, the Feeder otherwise.
 
 ------------------------------------------
 UPDATING OPTISCALER LATER
