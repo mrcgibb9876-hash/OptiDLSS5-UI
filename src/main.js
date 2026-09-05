@@ -12,6 +12,8 @@ const crypto = require('node:crypto');
 // ours, and turns the folders it finds into the executables this app installs against.
 const { scanForGames } = require('./discover');
 const feeder = require('./feeder');
+const { installFeederNative } = require('./native-feeder/install');
+const { getBitness } = require('./native-feeder/pe');
 const execFileAsync = promisify(execFile);
 
 const RELEASES_API = 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest';
@@ -71,7 +73,8 @@ ipcMain.handle('data:load', () => {
     nrDllPath: '',
     installedVersion: '',
     renoDxAddonPath: '',
-    streamlineZipPath: ''
+    streamlineZipPath: '',
+    dfcZipPath: ''
   });
   return { games, settings };
 });
@@ -425,7 +428,7 @@ ipcMain.handle('game:prepare-dlss5-feeder', async (_evt, { exePath, renoDxAddonP
 // Everything else -- ReShade, the feeder add-on, LumeniteFX, dgVoodoo2 for Direct3D 8/9, and the
 // .ini wiring -- the script fetches from its real sources, and that is fine to automate.
 ipcMain.handle('feeder:install', async (evt, payload) => {
-  const { exePath, api, consumer, mvProvider, nrDllPath, streamlineZipPath, renoDxAddonPath } = payload || {};
+  const { exePath, consumer, mvProvider, nrDllPath, streamlineZipPath, renoDxAddonPath, dfcZipPath } = payload || {};
 
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
@@ -451,23 +454,42 @@ ipcMain.handle('feeder:install', async (evt, payload) => {
     };
 
     try {
-      return await feeder.installForGame(
-        {
-          exePath,
-          api,
-          consumer,
-          mvProvider,
-          nrDllPath: resolvedNr,
-          dlssDllPath: resolvedDlss,
-          renoDxAddonPath: renoDxAddonPath && fs.existsSync(renoDxAddonPath) ? renoDxAddonPath : '',
-          cacheDir: path.join(userDataDir(), 'feeder-cache')
-        },
-        send
-      );
+      const detected = await detectInstallPath(gameDir(exePath), exePath);
+      const bits = getBitness(exePath);
+      const nativeSupported = consumer !== 'RenoDX' && bits === 64 && ['dx11', 'dx12', 'dx10', 'opengl'].includes(detected.api);
+
+      if (nativeSupported) {
+        send({ kind: 'info', line: `${detected.api.toUpperCase()}, 64-bit: installing natively (no PowerShell involved).` });
+        return await installFeederNative(
+          {
+            exePath,
+            api: detected.api,
+            mvProvider,
+            nrDllPath: resolvedNr,
+            dlssDllPath: resolvedDlss,
+            dfcZipPath: dfcZipPath && fs.existsSync(dfcZipPath) ? dfcZipPath : '',
+            cacheDir: path.join(userDataDir(), 'feeder-cache-native')
+          },
+          send
+        );
+      }
+
+      // Vulkan, 32-bit, Direct3D 8/9 (dgVoodoo2) and the RenoDX consumer aren't ported to the
+      // native installer yet -- rather than attempt the automatic path and fail into the manual
+      // one, say so up front.
+      const why = consumer === 'RenoDX' ? 'the RenoDX consumer'
+        : bits !== 64 ? '32-bit games'
+        : detected.api === 'vulkan' ? 'Vulkan games'
+        : (detected.api === 'dx9' || detected.api === 'dx8') ? 'Direct3D 8/9 games (dgVoodoo2)'
+        : 'this game';
+      return {
+        ok: false,
+        error: `Automatic install isn't available yet for ${why} -- use "Prepare DLSS5-Feeder for manual run" instead.`
+      };
     } finally {
       // The unpacked zip is hundreds of megabytes and the DLL paths inside it have to stay valid
-      // until PowerShell has copied them, so this cannot live inside extractDlssRuntimeDlls.
-      // Without it every install leaves another full copy in %TEMP%.
+      // until it has been copied, so this cannot live inside extractDlssRuntimeDlls. Without it
+      // every install leaves another full copy in %TEMP%.
       if (extractedTo) await fsp.rm(extractedTo, { recursive: true, force: true }).catch(() => {});
     }
   } catch (err) {

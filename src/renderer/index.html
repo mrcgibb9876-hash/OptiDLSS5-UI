@@ -119,6 +119,14 @@
       </div>
       <div id="nr-dll-status" class="status-line"></div>
 
+      <label class="field-label">DLSS5-Feeder: Deep Fried Chicken zip</label>
+      <p class="field-hint">The neural consumer for the automatic (non-RenoDX) Feeder install. Its real source is a Discord CDN link that expires and isn't ours to redistribute, so point this at a zip you already have (see jlrouzies-fr/DLSS5-Feeder's README for where to get one).</p>
+      <div class="field-row">
+        <input id="settings-dfc-zip" type="text" placeholder="Not set — browse or paste a path" />
+        <button id="btn-browse-dfc-zip" class="btn btn-ghost">Browse</button>
+      </div>
+      <div id="dfc-zip-status" class="status-line"></div>
+
       <label class="field-label">DLSS5-Feeder: RenoDX add-on (renodx-dlss5.addon64)</label>
       <p class="field-hint">Separate toolchain from OptiScaler's own DLSS-NR hook (see jlrouzies-fr/DLSS5-Feeder). Optional — only needed for "Prepare DLSS5-Feeder" on a game.</p>
       <div class="field-row">

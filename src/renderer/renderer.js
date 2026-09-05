@@ -1,5 +1,5 @@
 let games = [];
-let settings = { releaseFolder: '', nrDllPath: '', installedVersion: '', renoDxAddonPath: '', streamlineZipPath: '' };
+let settings = { releaseFolder: '', nrDllPath: '', installedVersion: '', renoDxAddonPath: '', streamlineZipPath: '', dfcZipPath: '' };
 let editingGameId = null;
 let pendingBanner = { appid: null, localPath: null };
 let pendingUpdate = null;
@@ -260,6 +260,7 @@ async function installFeeder(game) {
       nrDllPath: settings.nrDllPath,
       streamlineZipPath: settings.streamlineZipPath,
       renoDxAddonPath: settings.renoDxAddonPath,
+      dfcZipPath: settings.dfcZipPath,
       consumer: settings.renoDxAddonPath ? 'RenoDX' : 'DFC'
     });
 
@@ -442,6 +443,7 @@ const settingsModal = $('#settings-modal');
 function openSettingsModal() {
   $('#settings-release-folder').value = settings.releaseFolder || '';
   $('#settings-nr-dll').value = settings.nrDllPath || '';
+  $('#settings-dfc-zip').value = settings.dfcZipPath || '';
   $('#settings-renodx-addon').value = settings.renoDxAddonPath || '';
   $('#settings-streamline-zip').value = settings.streamlineZipPath || '';
   $('#update-status').textContent = settings.installedVersion ? `Installed: ${settings.installedVersion}` : '';
@@ -450,9 +452,16 @@ function openSettingsModal() {
   pendingUpdate = null;
   checkReleaseStatus();
   checkNrDllStatus();
+  checkDfcZipStatus();
   checkRenoDxAddonStatus();
   checkStreamlineZipStatus();
   settingsModal.classList.remove('hidden');
+}
+
+function checkDfcZipStatus() {
+  const el = $('#dfc-zip-status');
+  el.textContent = settings.dfcZipPath ? 'Set.' : '';
+  el.className = 'status-line status-ok';
 }
 
 function checkRenoDxAddonStatus() {
@@ -523,6 +532,19 @@ $('#btn-browse-nr-dll').addEventListener('click', async () => {
   if (p) persistNrDll(p);
 });
 $('#settings-nr-dll').addEventListener('change', (e) => persistNrDll(e.target.value.trim()));
+
+async function persistDfcZip(p) {
+  settings.dfcZipPath = p;
+  $('#settings-dfc-zip').value = p;
+  await window.api.saveSettings(settings);
+  checkDfcZipStatus();
+}
+
+$('#btn-browse-dfc-zip').addEventListener('click', async () => {
+  const p = await window.api.pickZip('Select the Deep Fried Chicken zip');
+  if (p) persistDfcZip(p);
+});
+$('#settings-dfc-zip').addEventListener('change', (e) => persistDfcZip(e.target.value.trim()));
 
 async function persistRenoDxAddon(p) {
   settings.renoDxAddonPath = p;
@@ -808,7 +830,7 @@ $('#btn-add-scanned').addEventListener('click', async () => {
 (async function init() {
   const data = await window.api.loadData();
   games = data.games || [];
-  settings = data.settings || { releaseFolder: '', nrDllPath: '', installedVersion: '', renoDxAddonPath: '', streamlineZipPath: '' };
+  settings = data.settings || { releaseFolder: '', nrDllPath: '', installedVersion: '', renoDxAddonPath: '', streamlineZipPath: '', dfcZipPath: '' };
   await refreshBannerVisibility();
   await renderGrid();
   autoSyncStaleGames();
