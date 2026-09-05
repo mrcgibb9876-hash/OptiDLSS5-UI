@@ -92,6 +92,7 @@ async function renderGrid() {
       <div class="card-body">
         <div class="card-title">${escapeHtml(game.name)}</div>
         <div class="card-path" title="${escapeHtml(game.exePath)}">${escapeHtml(game.exePath)}</div>
+        <div class="card-path card-recommend" title="Which install path suits this game">Checking graphics API…</div>
         <div class="card-actions">
           <button class="btn btn-primary btn-install">Install / Update</button>
           <button class="btn btn-ghost btn-setup">Run Setup</button>
@@ -102,7 +103,7 @@ async function renderGrid() {
           <button class="btn btn-ghost btn-danger btn-remove">Remove</button>
         </div>
         <div class="card-actions-row2">
-          <button class="btn btn-ghost btn-feeder">Prepare DLSS5-Feeder</button>
+          <button class="btn btn-ghost btn-feeder">Install DLSS 5 Feeder</button>
         </div>
       </div>
     `;
@@ -122,12 +123,52 @@ async function renderGrid() {
 
     card.querySelector('.btn-install').addEventListener('click', () => installGame(game));
     card.querySelector('.btn-setup').addEventListener('click', () => runSetup(game));
-    card.querySelector('.btn-feeder').addEventListener('click', () => prepareDlss5Feeder(game));
+    card.querySelector('.btn-feeder').addEventListener('click', () => installFeeder(game));
     card.querySelector('.btn-open').addEventListener('click', () => window.api.openFolder(game.exePath));
     card.querySelector('.btn-edit').addEventListener('click', () => openGameModal(game));
     card.querySelector('.btn-remove').addEventListener('click', () => removeGame(game));
 
+    applyRecommendation(game, card);
+
     grid.appendChild(card);
+  }
+}
+
+// Say which of the two paths this game wants, and make the other one the quieter option.
+//
+// This is a recommendation, never a lock: the detection reads the exe's imports, and a bundled or
+// packed game can hide them, so both buttons stay clickable. What changes is which one looks like
+// the answer -- and when nothing could be determined, neither does, because a confident-looking
+// wrong answer is worse than an honest "could not tell".
+async function applyRecommendation(game, card) {
+  const line = card.querySelector('.card-recommend');
+  const install = card.querySelector('.btn-install');
+  const feeder = card.querySelector('.btn-feeder');
+
+  // Reading a multi-hundred-megabyte exe is not something to repeat on every render, so the answer
+  // is kept on the game record.
+  let detected = game.detectedPath;
+
+  if (!detected) {
+    detected = await window.api.detectPath(game.exePath);
+    game.detectedPath = detected;
+    window.api.saveGames(games);
+  }
+
+  if (!line) return;
+
+  if (detected.recommend === 'optiscaler') {
+    line.textContent = `OptiScaler — ${detected.reason}`;
+    install.classList.add('btn-primary');
+    feeder.classList.remove('btn-primary');
+  } else if (detected.recommend === 'feeder') {
+    line.textContent = `DLSS 5 Feeder — ${detected.reason}`;
+    install.classList.remove('btn-primary');
+    feeder.classList.add('btn-primary');
+  } else {
+    line.textContent = `Not sure — ${detected.reason}. Try OptiScaler first; use the Feeder if it does nothing.`;
+    install.classList.add('btn-primary');
+    feeder.classList.remove('btn-primary');
   }
 }
 
@@ -178,6 +219,51 @@ async function runSetup(game) {
 // Prepares local inputs for jlrouzies-fr/DLSS5-Feeder's own installer (a separate ReShade-addon
 // toolchain from OptiScaler's own DLSS-NR hook) and copies the command to run it, rather than
 // downloading or running the third-party script from this app.
+// Runs the Feeder's own installer for this game and shows its output as it goes.
+//
+// The install takes a couple of minutes and elevates partway through, so a spinner with nothing
+// behind it would read as a hang. Every line the script prints goes straight to the toast.
+async function installFeeder(game) {
+  if (!settings.nrDllPath && !settings.streamlineZipPath) {
+    toast('Set your nvngx_dlssnr.dll (or a Streamline zip that contains it) in Settings first — this app will not download NVIDIA\'s DLL for you.');
+    openSettingsModal();
+    return;
+  }
+
+  const stop = window.api.onFeederProgress((update) => {
+    if (update.exePath === game.exePath) toast(update.line);
+  });
+
+  toast(`Installing the DLSS 5 Feeder toolchain into ${game.name}…`);
+
+  try {
+    const res = await window.api.installFeeder({
+      exePath: game.exePath,
+      nrDllPath: settings.nrDllPath,
+      streamlineZipPath: settings.streamlineZipPath,
+      renoDxAddonPath: settings.renoDxAddonPath,
+      consumer: settings.renoDxAddonPath ? 'RenoDX' : 'DFC'
+    });
+
+    if (res.ok) {
+      toast(`${game.name}: Feeder toolchain installed.`);
+      return;
+    }
+
+    // Falling back rather than just reporting: a failure here is often a declined UAC prompt or a
+    // machine that will not run a downloaded script, and in both cases the manual route still
+    // works. This writes the launcher into the game folder and opens it.
+    toast(`Feeder install failed: ${res.error} — setting it up for you to run by hand instead.`);
+    await prepareDlss5Feeder(game);
+  } finally {
+    // Without this every install leaves another listener on the channel, and the fifth install
+    // would print every line five times.
+    stop();
+  }
+}
+
+// The manual route, still here for a machine where running a downloaded script from inside the app
+// is not wanted, or where the automatic one failed and the user wants to drive it by hand.
 async function prepareDlss5Feeder(game) {
   if (!settings.renoDxAddonPath) {
     toast('Set the RenoDX add-on path in Settings first.');
