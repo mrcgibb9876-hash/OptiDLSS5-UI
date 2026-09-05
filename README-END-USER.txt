@@ -118,11 +118,11 @@ section of the game's OptiScaler.ini.
 
 Two panels, two keys, and both can be open at once:
 
-  Insert     OptiScaler's own overlay
-  Alt+Home   the DLSS 5 Developer Controls panel
+  Insert   OptiScaler's own overlay
+  Home     the DLSS 5 Developer Controls panel
 
-(The DLSS 5 panel used to be on plain Home. It moved because Home is a key
-too many games already use. Both are rebindable in the panel itself.)
+Both are rebindable from the panel itself, which is worth doing if a game
+already uses one of them for something.
 
 ------------------------------------------
 STEP 6 — Games OptiScaler can't reach

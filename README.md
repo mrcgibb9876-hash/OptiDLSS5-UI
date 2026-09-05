@@ -92,10 +92,9 @@ not happen by accident.
 | | |
 |---|---|
 | **Insert** | OptiScaler's own overlay |
-| **Alt+Home** | the DLSS 5 Developer Controls panel |
+| **Home** | the DLSS 5 Developer Controls panel |
 
-Both are rebindable, and both panels can be open at once. The DLSS 5 panel moved off bare Home
-because Home collides with too many games.
+Both are rebindable, and both panels can be open at once.
 
 ## Building
 
