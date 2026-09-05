@@ -206,11 +206,32 @@ function findSetupBat(folder) {
   }
 }
 
+// setup_windows.bat ships in upstream OptiScaler too, so its presence alone doesn't tell this
+// fork's DLSS-NR build apart from a plain OptiScaler zip someone grabbed from the real upstream
+// project -- both install fine and neither errors, which is exactly how a wrong build goes
+// unnoticed until the in-game DLSS-NR settings simply aren't there. [DlssNr] in the release's own
+// OptiScaler.ini template is this fork's actual differentiator (confirmed against a real release).
+function hasDlssNrSection(folder) {
+  try {
+    const ini = fs.readFileSync(path.join(folder, 'OptiScaler.ini'), 'utf8');
+    return /^\[DlssNr\]/im.test(ini);
+  } catch {
+    return false;
+  }
+}
+
 ipcMain.handle('release:validate', (_evt, folder) => {
   if (!folder) return { valid: false, reason: 'No folder set' };
   if (!fs.existsSync(folder)) return { valid: false, reason: 'Folder does not exist' };
   const bat = findSetupBat(folder);
   if (!bat) return { valid: false, reason: 'setup_windows.bat not found in this folder' };
+  if (!hasDlssNrSection(folder)) {
+    return {
+      valid: false,
+      reason: 'This looks like standard OptiScaler, not the DLSS-NR fork -- OptiScaler.ini has no [DlssNr] section. ' +
+        'Use "Check for Updates" in Settings to fetch the right build from OptiScaler_DLSSNR rather than a manual download.'
+    };
+  }
   return { valid: true };
 });
 
@@ -247,6 +268,9 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath 
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     if (!releaseFolder || !fs.existsSync(releaseFolder)) throw new Error('OptiScaler release folder not set');
     if (!findSetupBat(releaseFolder)) throw new Error('setup_windows.bat not found in release folder');
+    if (!hasDlssNrSection(releaseFolder)) {
+      throw new Error('The release folder is standard OptiScaler, not the DLSS-NR fork -- no [DlssNr] section in its OptiScaler.ini. Fix it in Settings before installing.');
+    }
     if (!nrDllPath || !fs.existsSync(nrDllPath)) {
       throw new Error(`DLSS NR file not found at "${nrDllPath || '(not set)'}" — re-check the path in Settings`);
     }
@@ -267,6 +291,19 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath 
     const destStat = await fsp.stat(nrDest);
     const nrCopied = destStat.size === srcStat.size;
     if (!nrCopied) throw new Error('nvngx_dlssnr.dll copy size mismatch — copy may have failed, try again');
+
+    // nvngx.dll_dlssnr.dll (a small shim, not the model itself -- easy to mistake for nvngx_dlssnr.dll
+    // above at a glance) ships inside the release folder and is supposed to land via the copy-everything
+    // loop above, but setup_windows.bat never copies it itself (it only prints a reminder that it "ships
+    // in this package"), and an incomplete/older release folder can genuinely be missing it. Left
+    // unnoticed, the game shows "nvngx.dll_dlssnr.dll is missing" in its own DLSS-NR panel later, which
+    // reads as a driver problem rather than an install one. Catch it here instead.
+    if (!fs.existsSync(path.join(dir, 'nvngx.dll_dlssnr.dll')) && fs.existsSync(path.join(releaseFolder, 'nvngx.dll_dlssnr.dll'))) {
+      throw new Error('nvngx.dll_dlssnr.dll did not copy from the release folder -- copy may have failed, try again');
+    }
+    if (!fs.existsSync(path.join(releaseFolder, 'nvngx.dll_dlssnr.dll'))) {
+      throw new Error('The release folder itself is missing nvngx.dll_dlssnr.dll -- it looks incomplete. Re-download it via "Check for Updates" in Settings.');
+    }
 
     // If this game was already set up before, setup_windows.bat previously renamed OptiScaler.dll
     // to a proxy name (dxgi.dll etc.) and deleted itself -- the fresh OptiScaler.dll just copied
@@ -871,6 +908,17 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
     const releaseDll = releaseFolder ? path.join(releaseFolder, 'OptiScaler.dll') : null;
     if (!releaseDll || !fs.existsSync(releaseDll)) {
       return { ok: true, updated: autoConfigured.length > 0, reason: 'no release set', api, autoConfigured, streamline };
+    }
+
+    // This runs unattended on every launch and every Settings change (autoSyncStaleGames), silently
+    // overwriting an already-working game install -- so if the release folder has ever pointed at
+    // plain upstream OptiScaler (same setup_windows.bat, no error, no [DlssNr] section), every game
+    // would get quietly downgraded to it without the install button ever being touched again.
+    if (!hasDlssNrSection(releaseFolder)) {
+      return {
+        ok: true, updated: autoConfigured.length > 0,
+        reason: 'release folder is not the DLSS-NR fork (no [DlssNr] section) -- refusing to sync', api, autoConfigured, streamline
+      };
     }
 
     const active = await findActiveOptiScalerFile(dir);

@@ -1,7 +1,7 @@
 {
   "name": "optiscaler-manager",
   "productName": "OptiScaler Manager",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Per-game OptiScaler / DLSS Ray Reconstruction install manager",
   "main": "src/main.js",
   "private": true,
