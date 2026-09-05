@@ -45,9 +45,9 @@ OpenGL**.
 So: OptiScaler where it fits, the Feeder where it doesn't.
 
 **Never both in the same game.** If OptiScaler and the Feeder are both active in one process, both
-apply the model to the same frame. Nothing currently stops you doing it — the guard that refuses to
-start when `renodx-dlss5.addon64` or `dlss5-feed.addon64` is already loaded is written but not yet
-merged upstream of here — so for now it is on you to pick one per game.
+apply the model to the same frame. Since OptiScaler v1.0.1 it refuses to start when it finds
+`renodx-dlss5.addon64` or `dlss5-feed.addon64` already loaded, and says so in the panel — but that
+is a backstop, not permission: pick one path per game and the app now tells you which.
 
 ## Dependencies: what the app fetches, and the one thing it won't
 
@@ -92,9 +92,10 @@ not happen by accident.
 | | |
 |---|---|
 | **Insert** | OptiScaler's own overlay |
-| **Home** | the DLSS 5 Developer Controls panel |
+| **Alt+Home** | the DLSS 5 Developer Controls panel |
 
-Both are rebindable, and both panels can be open at once.
+Both are rebindable, and both panels can be open at once. The panel moved off bare `Home` in
+v1.0.1 because `Home` collided with too many games; v1.0.0 still uses it.
 
 ## Building
 

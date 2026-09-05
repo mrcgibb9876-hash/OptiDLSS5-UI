@@ -118,11 +118,14 @@ section of the game's OptiScaler.ini.
 
 Two panels, two keys, and both can be open at once:
 
-  Insert   OptiScaler's own overlay
-  Home     the DLSS 5 Developer Controls panel
+  Insert     OptiScaler's own overlay
+  Alt+Home   the DLSS 5 Developer Controls panel
 
 Both are rebindable from the panel itself, which is worth doing if a game
 already uses one of them for something.
+
+(If you are on v1.0.0, the panel is on plain Home. It moved in v1.0.1
+because Home is a key too many games already use.)
 
 ------------------------------------------
 STEP 6 — Games OptiScaler can't reach
@@ -147,10 +150,11 @@ DLAA only, and the image quality is a step below the OptiScaler path, which
 gets real depth and motion data from the game instead of estimating it. Use
 OptiScaler where it works and this where it doesn't.
 
-IMPORTANT: never both in the same game. Nothing stops you installing both,
-and if you do, both will be applying the model to the same frame and the
-picture will be wrong. Pick one per game: OptiScaler if the game is DX11,
-DX12 or Vulkan, the Feeder otherwise.
+IMPORTANT: never both in the same game -- both would apply the model to the
+same frame and the picture will be wrong. From v1.0.1 OptiScaler refuses to
+start if it finds the Feeder's add-on already loaded and tells you so in the
+panel, but don't rely on that: pick one per game. The app now says which one
+each game wants, based on the graphics API it detected.
 
 ------------------------------------------
 UPDATING OPTISCALER LATER
