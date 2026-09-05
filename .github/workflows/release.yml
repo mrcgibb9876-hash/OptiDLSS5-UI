@@ -1,0 +1,99 @@
+# Build the app and publish the installers as a release.
+#
+# Until now the .exe assets on a release were built on someone's desktop and uploaded by hand,
+# which means nobody can say for certain which commit a given installer came from. This builds
+# from the tagged commit on a clean runner, so the answer is always "that one".
+#
+# electron-builder is left to its own devices apart from --publish=never: the upload is done here
+# instead, so the release is assembled the same way as OptiScaler_DLSSNR's.
+
+name: Publish a release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to create or update (e.g. v1.1.0). Must match the version in package.json."
+        required: true
+        default: "v1.1.0"
+      title:
+        description: "Release title"
+        required: true
+        default: "OptiScaler Manager v1.1.0"
+      prerelease:
+        description: "Mark as a pre-release"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: npm
+
+    # The tag and package.json have to agree, because package.json is what names the .exe files.
+    # Tagging v1.1.0 while package.json still says 1.0.0 produces a v1.1.0 release full of assets
+    # called 1.0.0, and the mismatch is the kind of thing nobody notices until someone reports a
+    # bug against a version that was never built.
+    - name: Check the tag matches package.json
+      shell: pwsh
+      run: |
+        $pkg = (Get-Content package.json -Raw | ConvertFrom-Json).version
+        $tag = "${{ inputs.tag }}" -replace '^v', ''
+
+        if ($pkg -ne $tag) {
+          Write-Error "package.json is $pkg but the tag is ${{ inputs.tag }}. Bump one to match the other."
+          exit 1
+        }
+
+        Write-Output "package.json $pkg matches tag ${{ inputs.tag }}."
+
+    - name: Install
+      run: npm ci
+
+    - name: Build
+      run: npm run dist
+
+    - name: Check the installers are there
+      shell: pwsh
+      run: |
+        $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+
+        # Both targets, named the way electron-builder names them. An empty dist, or one target
+        # silently missing, would otherwise publish as a release with nothing useful in it.
+        $expected = @(
+          "dist\OptiScaler Manager Setup $version.exe",
+          "dist\OptiScaler Manager $version.exe"
+        )
+
+        foreach ($file in $expected) {
+          if (-Not (Test-Path $file)) {
+            Write-Output "dist contains:"
+            Get-ChildItem dist | Select-Object -ExpandProperty Name
+            Write-Error "Missing: $file"
+            exit 1
+          }
+
+          $mb = [math]::Round((Get-Item $file).Length / 1MB, 1)
+          Write-Output "$file  ($mb MB)"
+        }
+
+    - name: Publish
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ inputs.tag }}
+        name: ${{ inputs.title }}
+        prerelease: ${{ inputs.prerelease }}
+        files: |
+          dist/*.exe
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
