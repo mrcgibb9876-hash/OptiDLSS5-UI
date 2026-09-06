@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('api', {
   syncFeederIfStale: (exePath) => ipcRenderer.invoke('feeder:sync-if-stale', exePath),
   runSetup: (exePath) => ipcRenderer.invoke('game:run-setup', exePath),
   runUninstall: (exePath) => ipcRenderer.invoke('game:run-uninstall', exePath),
+  uninstallFeeder: (exePath) => ipcRenderer.invoke('feeder:uninstall', exePath),
   openFolder: (exePath) => ipcRenderer.invoke('game:open-folder', exePath),
   prepareDlss5Feeder: (payload) => ipcRenderer.invoke('game:prepare-dlss5-feeder', payload),
 

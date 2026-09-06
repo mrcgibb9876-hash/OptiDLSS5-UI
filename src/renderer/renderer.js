@@ -70,24 +70,34 @@ async function renderGrid() {
     const card = document.createElement('div');
     card.className = 'card';
 
-    // Which actual program is running DLSS-5 for this game, by name -- OptiScaler, RenoDX and Deep
-    // Fried Chicken are three different pieces of software with three different tuning surfaces, so
-    // a badge that just says "Installed" leaves the user guessing which one applies to them.
+    // Which actual program(s) are running DLSS-5 for this game, by name -- OptiScaler, RenoDX and
+    // Deep Fried Chicken are three different pieces of software with three different tuning
+    // surfaces, so a badge that just says "Installed" leaves the user guessing which one applies.
+    // Both can be active on the same game at once (OptiScaler hosts a RenoDX/DFC .addon64 already
+    // in the folder rather than conflicting with it), so this names both when that's the case.
+    const backends = status.backends || { optiscaler: false, feeder: { active: false, label: null } };
     let badgeClass = 'badge-none';
     let badgeText = 'Not installed';
-    const activeRoute = status.activeRoute || { route: 'none', label: null };
     if (status.exeMissing) {
       badgeClass = 'badge-missing';
       badgeText = 'Exe missing';
-    } else if (activeRoute.route !== 'none') {
+    } else if (backends.optiscaler && backends.feeder.active) {
       badgeClass = 'badge-installed';
-      badgeText = activeRoute.label;
+      badgeText = `OptiScaler + ${backends.feeder.label}`;
+    } else if (backends.optiscaler) {
+      badgeClass = 'badge-installed';
+      badgeText = 'OptiScaler';
+    } else if (backends.feeder.active) {
+      badgeClass = 'badge-installed';
+      badgeText = backends.feeder.label;
     } else if (status.hasIni || status.hasNr) {
       badgeClass = 'badge-partial';
       badgeText = status.hasNr ? 'Missing OptiScaler files' : 'Missing NR file';
     }
 
     card.innerHTML = `
+      <div class="card-flipper">
+      <div class="card-face card-face-front">
       <div class="card-banner-wrap">
         <img class="card-banner hidden" alt="${escapeHtml(game.name)}" />
         <span class="card-banner-fallback hidden"></span>
@@ -98,7 +108,7 @@ async function renderGrid() {
         <div class="card-path" title="${escapeHtml(game.exePath)}">${escapeHtml(game.exePath)}</div>
         <div class="card-path card-recommend" title="Which install path suits this game">Checking graphics API…</div>
         <div class="card-actions">
-          <button class="btn btn-primary btn-install">Install OptiScaler</button>
+          <button class="btn ${backends.optiscaler ? 'btn-danger' : 'btn-primary'} btn-install">${backends.optiscaler ? 'Remove OptiScaler' : 'Install OptiScaler'}</button>
           <button class="btn btn-ghost btn-setup">Run Setup</button>
         </div>
         <div class="card-actions-row2">
@@ -107,8 +117,18 @@ async function renderGrid() {
           <button class="btn btn-ghost btn-danger btn-remove">Remove</button>
         </div>
         <div class="card-actions-row2">
-          <button class="btn btn-ghost btn-feeder">Install ${escapeHtml(feederConsumerLabel())}</button>
+          <button class="btn ${backends.feeder.active ? 'btn-danger' : 'btn-ghost'} btn-feeder">${backends.feeder.active ? 'Remove ' + escapeHtml(backends.feeder.label) : 'Install ' + escapeHtml(feederConsumerLabel())}</button>
         </div>
+      </div>
+      </div>
+      <div class="card-face card-face-back">
+        <div class="card-remove-title"></div>
+        <div class="card-remove-detail"></div>
+        <div class="card-remove-actions">
+          <button class="btn btn-ghost btn-flip-cancel">Cancel</button>
+          <button class="btn btn-danger btn-flip-confirm">Remove</button>
+        </div>
+      </div>
       </div>
     `;
 
@@ -143,14 +163,47 @@ async function renderGrid() {
       });
     }
 
-    card.querySelector('.btn-install').addEventListener('click', () => installGame(game));
+    card.querySelector('.btn-install').addEventListener('click', () => {
+      if (backends.optiscaler) {
+        flipToConfirm(card, {
+          title: 'Remove OptiScaler?',
+          detail: `Opens this game's own uninstaller in a terminal you confirm there -- same as ` +
+            `"Run Setup", just removing instead of installing. Does not touch ${backends.feeder.active ? backends.feeder.label : 'any Feeder/RenoDX'} files.`,
+          onConfirm: async () => {
+            const res = await window.api.runUninstall(game.exePath);
+            toast(res.ok ? 'Uninstaller opened in a terminal -- confirm there to finish removing OptiScaler.' : `Couldn't start the uninstaller: ${res.error}`);
+          }
+        });
+      } else {
+        installGame(game);
+      }
+    });
     card.querySelector('.btn-setup').addEventListener('click', () => runSetup(game));
-    card.querySelector('.btn-feeder').addEventListener('click', () => installFeeder(game));
+    card.querySelector('.btn-feeder').addEventListener('click', () => {
+      if (backends.feeder.active) {
+        flipToConfirm(card, {
+          title: `Remove ${backends.feeder.label}?`,
+          detail: `Deletes its add-on/consumer files for this game right away (no confirmation terminal). ${backends.optiscaler ? 'OptiScaler is left untouched.' : 'If nothing else set up ReShade here, its proxy DLL is removed too.'}`,
+          onConfirm: async () => {
+            const res = await window.api.uninstallFeeder(game.exePath);
+            toast(res.ok ? `${backends.feeder.label} removed.` : `Couldn't remove it: ${res.error}`);
+            renderGrid();
+          }
+        });
+      } else {
+        installFeeder(game);
+      }
+    });
     card.querySelector('.btn-open').addEventListener('click', () => window.api.openFolder(game.exePath));
     card.querySelector('.btn-edit').addEventListener('click', () => openGameModal(game));
     card.querySelector('.btn-remove').addEventListener('click', () => removeGame(game));
+    card.querySelector('.btn-flip-cancel').addEventListener('click', () => card.classList.remove('flipped'));
+    card.querySelector('.btn-flip-confirm').addEventListener('click', () => {
+      card.classList.remove('flipped');
+      card._onFlipConfirm?.();
+    });
 
-    applyRecommendation(game, card);
+    applyRecommendation(game, card, backends);
 
     grid.appendChild(card);
   }
@@ -170,7 +223,7 @@ function feederConsumerLabel() {
 // packed game can hide them, so both buttons stay clickable. What changes is which one looks like
 // the answer -- and when nothing could be determined, neither does, because a confident-looking
 // wrong answer is worse than an honest "could not tell".
-async function applyRecommendation(game, card) {
+async function applyRecommendation(game, card, backends) {
   const line = card.querySelector('.card-recommend');
   const install = card.querySelector('.btn-install');
   const feeder = card.querySelector('.btn-feeder');
@@ -187,19 +240,35 @@ async function applyRecommendation(game, card) {
 
   if (!line) return;
 
+  // A button already showing "Remove X" (btn-danger, because X is installed) never also gets
+  // "recommended" styling -- recommending an install once that backend is already there would be
+  // a contradictory two-tone button.
+  const canRecommendInstall = !backends.optiscaler;
+  const canRecommendFeeder = !backends.feeder.active;
+
   if (detected.recommend === 'optiscaler') {
     line.textContent = `OptiScaler — ${detected.reason}`;
-    install.classList.add('btn-primary');
+    if (canRecommendInstall) install.classList.add('btn-primary');
     feeder.classList.remove('btn-primary');
   } else if (detected.recommend === 'feeder') {
     line.textContent = `${feederConsumerLabel()} — ${detected.reason}`;
     install.classList.remove('btn-primary');
-    feeder.classList.add('btn-primary');
+    if (canRecommendFeeder) feeder.classList.add('btn-primary');
   } else {
     line.textContent = `Not sure — ${detected.reason}. Try OptiScaler first; use ${feederConsumerLabel()} if it does nothing.`;
-    install.classList.add('btn-primary');
+    if (canRecommendInstall) install.classList.add('btn-primary');
     feeder.classList.remove('btn-primary');
   }
+}
+
+// Flips a card to its back face to ask "remove this?" instead of a native confirm() popup --
+// the confirmation stays visually anchored to the specific game/program it's about, rather than a
+// modal dialog that could be mistaken for belonging to a different card entirely.
+function flipToConfirm(card, { title, detail, onConfirm }) {
+  card.querySelector('.card-remove-title').textContent = title;
+  card.querySelector('.card-remove-detail').textContent = detail;
+  card._onFlipConfirm = onConfirm;
+  card.classList.add('flipped');
 }
 
 function escapeHtml(str) {

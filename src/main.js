@@ -13,7 +13,7 @@ const crypto = require('node:crypto');
 const { scanForGames } = require('./discover');
 const feeder = require('./feeder');
 const { installFeederNative } = require('./native-feeder/install');
-const { getBitness } = require('./native-feeder/pe');
+const { getBitness, findMarkers } = require('./native-feeder/pe');
 const { resolveGithubAsset, downloadToCache } = require('./native-feeder/download');
 const { openZip, findEntry, extractEntryTo } = require('./native-feeder/zip');
 const { FEEDER_RELEASES_API, FEEDER_ASSET_PATTERN } = require('./native-feeder/sources');
@@ -253,19 +253,33 @@ function gameDir(exePath) {
   return path.dirname(exePath);
 }
 
-// Which DLSS-5 backend is actually active in a game folder, by real file names rather than the
-// generic "DLSS 5 Feeder" umbrella term the UI used to show -- OptiScaler, RenoDX and Deep Fried
-// Chicken are three different pieces of software with three different DLSS-NR sections and
-// tuning surfaces, and a card that just says "Installed" leaves the user guessing which one they
-// are actually running (and which of this app's two tuning UIs, official-vs-dev, applies).
-// installFeederNative disables a conflicting consumer by renaming it to *.disabled-by-installer,
-// so an exact-name check here already treats a disabled leftover as not active.
-function detectActiveRoute(dir) {
+// Which DLSS-5 backend(s) are actually active in a game folder, by real file names rather than
+// the generic "DLSS 5 Feeder" umbrella term the UI used to show -- OptiScaler, RenoDX and Deep
+// Fried Chicken are three different pieces of software with three different DLSS-NR sections and
+// tuning surfaces, and a card that just says "Installed" leaves the user guessing which one is
+// actually running. Both halves are independent, not mutually exclusive: OptiScaler_DLSSNR hosts
+// ReShade's own add-on-loading API once it owns the proxy DLL, so a RenoDX/DFC .addon64 already in
+// the folder keeps loading and running alongside it -- confirmed live in a real game's ReShade.log.
+// installFeederNative disables a conflicting consumer (RenoDX vs DFC, never OptiScaler) by
+// renaming it to *.disabled-by-installer, so an exact-name check here already treats a disabled
+// leftover as not active.
+function detectInstalledBackends(dir) {
   const has = (name) => fs.existsSync(path.join(dir, name));
-  if (has('OptiScaler.ini') && has('nvngx_dlssnr.dll')) return { route: 'optiscaler', label: 'OptiScaler' };
-  if (has('renodx-dlss5.addon64')) return { route: 'renodx', label: 'RenoDX' };
-  if (has('deep-fried-chicken.addon64') || has('dlss5-feed.addon64')) return { route: 'dfc', label: 'Deep Fried Chicken' };
-  return { route: 'none', label: null };
+  const optiscaler = has('OptiScaler.ini') && has('nvngx_dlssnr.dll');
+  const feeder = has('renodx-dlss5.addon64') ? { active: true, route: 'renodx', label: 'RenoDX' }
+    : (has('deep-fried-chicken.addon64') || has('dlss5-feed.addon64')) ? { active: true, route: 'dfc', label: 'Deep Fried Chicken' }
+    : { active: false, route: null, label: null };
+  return { optiscaler, feeder };
+}
+
+// Kept for the one place that still wants a single "what's the headline backend" answer (game
+// cards' badge) -- OptiScaler wins the headline when both are active, since it's the one whose
+// install/uninstall this app fully owns.
+function detectActiveRoute(dir) {
+  const backends = detectInstalledBackends(dir);
+  if (backends.optiscaler) return { route: 'optiscaler', label: 'OptiScaler', both: backends.feeder.active };
+  if (backends.feeder.active) return { route: backends.feeder.route, label: backends.feeder.label, both: false };
+  return { route: 'none', label: null, both: false };
 }
 
 ipcMain.handle('game:status', (_evt, exePath) => {
@@ -276,27 +290,31 @@ ipcMain.handle('game:status', (_evt, exePath) => {
   const hasUninstaller = fs.existsSync(path.join(dir, 'Remove_OptiScaler.bat')) ||
     fs.existsSync(path.join(dir, 'uninstall_optiscaler.bat')) ||
     fs.existsSync(path.join(dir, 'uninstaller.bat'));
-  return { exeMissing: false, hasIni, hasNr, hasUninstaller, dir, activeRoute: detectActiveRoute(dir) };
+  return {
+    exeMissing: false, hasIni, hasNr, hasUninstaller, dir,
+    activeRoute: detectActiveRoute(dir), backends: detectInstalledBackends(dir)
+  };
 });
 
 // ---------- install / uninstall ----------
 
-// Renames away the files belonging to a ReShade-based route (RenoDX or Deep Fried Chicken) so it
-// stops processing DLSS-5 for this game -- same rename-not-delete technique
-// native-feeder/install.js#disableConflict already uses between DFC/RenoDX/the DX11 bridge, just
-// pointed at "install OptiScaler over this" instead of "install this over that". Never touches the
-// ReShade proxy DLL (dxgi.dll etc.) itself: with its DLSS-5 addon disabled it just becomes an inert
-// ReShade install, which is harmless to leave in place and not something this app installed.
-const FEEDER_ROUTE_FILES = [
-  'renodx-dlss5.addon64', 'dlss5-feed.addon64', 'deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll'
-];
+// CORRECTION (this app previously disabled a game's RenoDX/DFC add-on files whenever OptiScaler
+// was installed over them, on the assumption the two routes fight over the same proxy DLL and
+// can't coexist). OptiScaler_DLSSNR's own reshade_addon/README.md says otherwise: OptiScaler hosts
+// ReShade's add-on-loading API itself once it owns the proxy DLL, so a RenoDX/DFC .addon64 already
+// sitting in the game folder just keeps loading and running -- confirmed live in ReShade.log on a
+// real install (RenoDX and DLSS 5 Feed both loaded and ran after OptiScaler took the dxgi.dll
+// slot). Disabling those files was actively counterproductive, not a safety net. Left as a no-op
+// wrapper (rather than deleting the call site) so a future real conflict case has somewhere to go;
+// nothing currently populates FILES.
+const FEEDER_ROUTE_FILES = [];
 async function disableFeederRoute(dir, onProgress = () => {}) {
   for (const name of FEEDER_ROUTE_FILES) {
     const file = path.join(dir, name);
     if (!fs.existsSync(file)) continue;
     try {
       await fsp.rename(file, `${file}.disabled-by-installer`);
-      onProgress({ kind: 'info', line: `${name} renamed to .disabled-by-installer (switching this game to OptiScaler).` });
+      onProgress({ kind: 'info', line: `${name} renamed to .disabled-by-installer.` });
     } catch (err) {
       onProgress({ kind: 'warn', line: `Could not disable ${name}: ${err.message}` });
     }
@@ -317,24 +335,9 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath 
 
     const dir = gameDir(exePath);
 
-    // Per-game exclusivity: OptiScaler and a ReShade-based route (RenoDX / Deep Fried Chicken) are
-    // two different DLSS-5 paths for the same game, and running both invites double-processing and
-    // config confusion. Ask rather than silently stacking them or silently refusing.
-    const active = detectActiveRoute(dir);
-    if (active.route === 'renodx' || active.route === 'dfc') {
-      const choice = await dialog.showMessageBox({
-        type: 'question',
-        buttons: [`Disable ${active.label} and install OptiScaler`, 'Cancel'],
-        defaultId: 0,
-        cancelId: 1,
-        title: 'Switch DLSS-5 backend?',
-        message: `This game currently runs DLSS-5 through ${active.label}.`,
-        detail: 'Installing OptiScaler alongside it can double-process the frame. Disabling it first ' +
-          `(renamed, not deleted -- reversible) keeps only one backend active for this game.`
-      });
-      if (choice.response !== 0) throw new Error('Cancelled -- another DLSS-5 backend is active for this game');
-      await disableFeederRoute(dir);
-    }
+    // A RenoDX/DFC .addon64 already in this folder is left exactly as-is -- OptiScaler hosts
+    // ReShade's own add-on-loading API once it owns the proxy DLL, so it keeps loading and running.
+    // See the note on disableFeederRoute above for why this used to (wrongly) disable it first.
 
     // Copy every file from the extracted release into the game folder (async: avoids blocking the app on large files).
     for (const entry of await fsp.readdir(releaseFolder, { withFileTypes: true })) {
@@ -418,6 +421,65 @@ ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
     shell: false
   }).unref();
   return { ok: true };
+});
+
+// Removes whichever ReShade-based backend (RenoDX or Deep Fried Chicken) is active for a game.
+// Unlike OptiScaler, this route has no generated uninstaller script of its own to run, so this app
+// removes its own files directly rather than leaving "no uninstall RenoDX" as a real gap.
+//
+// Deletes rather than renames-to-.disabled: unlike installFeederNative's conflict guard (which
+// disables a file this app might reinstall moments later in the same flow), this is the user
+// explicitly asking to remove it, and a renamed-not-deleted file left lying around would just
+// confuse the next install attempt or a future scan.
+//
+// Only removes the ReShade proxy DLL itself (dxgi.dll/opengl32.dll/etc.) when OptiScaler is not
+// also active in this folder -- OptiScaler hosts these add-ons through its own proxy once it owns
+// one (see the note on detectInstalledBackends above), so touching the proxy would break OptiScaler
+// too. Verified via a raw byte scan for the "ReShade" version string, the cheapest reliable way to
+// tell "this dxgi.dll is ReShade" from "this dxgi.dll is OptiScaler" without a full PE version
+// resource parser.
+const RESHADE_PROXY_CANDIDATES = ['dxgi.dll', 'opengl32.dll', 'winmm.dll', 'version.dll', 'dbghelp.dll'];
+const FEEDER_CONSUMER_FILES = [
+  'renodx-dlss5.addon64', 'renodx-dlss5.addon64.disabled-by-installer',
+  'dlss5-feed.addon64', 'dlss5-feed.addon64.disabled-by-installer',
+  'deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg'
+];
+ipcMain.handle('feeder:uninstall', async (_evt, exePath) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const backends = detectInstalledBackends(dir);
+    if (!backends.feeder.active) return { ok: false, error: 'No RenoDX/Deep Fried Chicken install found for this game.' };
+
+    const removed = [];
+    for (const name of FEEDER_CONSUMER_FILES) {
+      const file = path.join(dir, name);
+      if (fs.existsSync(file)) { await fsp.rm(file); removed.push(name); }
+    }
+    const fxFile = path.join(dir, 'reshade-shaders', 'Shaders', 'DLSS5_Feed.fx');
+    if (fs.existsSync(fxFile)) { await fsp.rm(fxFile); removed.push('reshade-shaders/Shaders/DLSS5_Feed.fx'); }
+
+    if (!backends.optiscaler) {
+      for (const name of RESHADE_PROXY_CANDIDATES) {
+        const file = path.join(dir, name);
+        if (!fs.existsSync(file)) continue;
+        if (findMarkers(file, ['ReShade']).size === 0) continue; // not ReShade -- leave it alone
+        const original = `${file}.original`;
+        if (fs.existsSync(original)) {
+          await fsp.rm(file);
+          await fsp.rename(original, file);
+          removed.push(`${name} (restored original)`);
+        } else {
+          await fsp.rm(file);
+          removed.push(name);
+        }
+      }
+    }
+
+    return { ok: true, removed };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 });
 
 // ---------- DLSS5-Feeder / RenoDX (a separate ReShade-addon toolchain from OptiScaler's own
@@ -529,25 +591,10 @@ ipcMain.handle('feeder:install', async (evt, payload) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
 
-    // Reverse direction of the same exclusivity check in game:install. Unlike a Feeder route,
-    // OptiScaler's proxy DLL is only put in place by its own interactive setup_windows.bat (Run
-    // Setup), which this app does not drive -- so there is nothing here it is safe to auto-disable.
-    // Say so and let the user decide, rather than either silently stacking both or silently refusing.
-    const activeForFeeder = detectActiveRoute(gameDir(exePath));
-    if (activeForFeeder.route === 'optiscaler') {
-      const choice = await dialog.showMessageBox({
-        type: 'question',
-        buttons: ['Continue anyway', 'Cancel'],
-        defaultId: 1,
-        cancelId: 1,
-        title: 'Switch DLSS-5 backend?',
-        message: 'This game currently runs DLSS-5 through OptiScaler.',
-        detail: 'Installing a ReShade-based backend alongside it can conflict. For a clean switch, use ' +
-          '"Remove" on this game\'s card first ("Remove OptiScaler + forget game"), then add it back ' +
-          'and install this instead.'
-      });
-      if (choice.response !== 0) throw new Error('Cancelled -- OptiScaler is active for this game');
-    }
+    // No exclusivity check here: an active OptiScaler install hosts a RenoDX/DFC .addon64 sitting
+    // in the same folder rather than fighting it for the proxy DLL -- see the note on
+    // disableFeederRoute above. Installing this route alongside OptiScaler is a supported
+    // combination, not a conflict to warn about.
 
     let resolvedNr = nrDllPath && fs.existsSync(nrDllPath) ? nrDllPath : '';
     let resolvedDlss = '';
