@@ -4,7 +4,7 @@ const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
 
-const GITHUB_HEADERS = { 'User-Agent': 'OptiScaler-Manager', Accept: 'application/vnd.github+json' };
+const GITHUB_HEADERS = { 'User-Agent': 'OptoRenoDXlss5', Accept: 'application/vnd.github+json' };
 
 async function downloadToCache(url, cacheDir, fileName, { headers } = {}) {
   const dest = path.join(cacheDir, fileName);

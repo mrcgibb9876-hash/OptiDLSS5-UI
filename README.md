@@ -1,7 +1,10 @@
-# OptiScaler Manager
+# OptoRenoDXlss5
 
-A Windows desktop app for getting NVIDIA's DLSS 5 Neural Rendering into your games, using the
-[OptiScaler_DLSSNR](https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR) build of OptiScaler.
+A Windows desktop app for getting NVIDIA's DLSS 5 Neural Rendering into your games, through
+whichever of two backends a given game actually needs: the
+[OptiScaler_DLSSNR](https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR) build of OptiScaler for
+games it hooks directly, or a ReShade-based route (RenoDX, or Deep Fried Chicken via the
+DLSS5-Feeder toolchain) for everything else.
 
 Instead of copying files into every game folder by hand and running a setup script in each one, you
 point the app at your games once and click Install.

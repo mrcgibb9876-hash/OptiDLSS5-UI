@@ -1,14 +1,17 @@
 ===========================================
- OptiScaler Manager — Setup Guide
+ OptoRenoDXlss5 — Setup Guide
 ===========================================
 
 WHAT THIS IS
 ------------
-A desktop app for installing OptiScaler (the DLSS Neural Rendering / DLSSNR
-build, with our DLSS 5 Developer Controls UI, from
-github.com/mrcgibb9876-hash/OptiScaler_DLSSNR) into your games. Instead
-of manually copying files into every game folder, you point the app at your
-games once and click Install per game.
+A desktop app for getting NVIDIA DLSS 5 Neural Rendering into your games
+through whichever backend a game actually needs: OptiScaler (the DLSS
+Neural Rendering / DLSSNR build, with our DLSS 5 Developer Controls UI,
+from github.com/mrcgibb9876-hash/OptiScaler_DLSSNR) for games it hooks
+directly, or a ReShade-based route (RenoDX, or Deep Fried Chicken via the
+DLSS5-Feeder toolchain) for everything else. Instead of manually copying
+files into every game folder, you point the app at your games once and
+click Install per game.
 
 REQUIREMENTS
 ------------
@@ -22,8 +25,8 @@ REQUIREMENTS
 ------------------------------------------
 STEP 1 — Install the app
 ------------------------------------------
-Run "OptiScaler Manager Setup.exe" and follow the prompts. This installs the
-app and adds a shortcut to your Desktop and Start Menu.
+Run the "OptoRenoDXlss5 Setup" installer and follow the prompts. This
+installs the app and adds a shortcut to your Desktop and Start Menu.
 
 (A "portable" .exe is also provided if you'd rather not install anything —
 just run it directly from wherever you saved it. It stores its data in the
@@ -172,6 +175,6 @@ uninstaller batch file that OptiScaler's own setup generated there.
 ------------------------------------------
 UNINSTALLING THE APP ITSELF
 ------------------------------------------
-Windows Settings > Apps > "OptiScaler Manager" > Uninstall (or use the
+Windows Settings > Apps > "OptoRenoDXlss5" > Uninstall (or use the
 uninstaller shortcut in its Start Menu folder). This only removes the
 manager app — it does not touch any files already copied into your games.

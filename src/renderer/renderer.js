@@ -70,14 +70,18 @@ async function renderGrid() {
     const card = document.createElement('div');
     card.className = 'card';
 
+    // Which actual program is running DLSS-5 for this game, by name -- OptiScaler, RenoDX and Deep
+    // Fried Chicken are three different pieces of software with three different tuning surfaces, so
+    // a badge that just says "Installed" leaves the user guessing which one applies to them.
     let badgeClass = 'badge-none';
     let badgeText = 'Not installed';
+    const activeRoute = status.activeRoute || { route: 'none', label: null };
     if (status.exeMissing) {
       badgeClass = 'badge-missing';
       badgeText = 'Exe missing';
-    } else if (status.hasIni && status.hasNr) {
+    } else if (activeRoute.route !== 'none') {
       badgeClass = 'badge-installed';
-      badgeText = 'Installed';
+      badgeText = activeRoute.label;
     } else if (status.hasIni || status.hasNr) {
       badgeClass = 'badge-partial';
       badgeText = status.hasNr ? 'Missing OptiScaler files' : 'Missing NR file';
@@ -94,7 +98,7 @@ async function renderGrid() {
         <div class="card-path" title="${escapeHtml(game.exePath)}">${escapeHtml(game.exePath)}</div>
         <div class="card-path card-recommend" title="Which install path suits this game">Checking graphics API…</div>
         <div class="card-actions">
-          <button class="btn btn-primary btn-install">Install / Update</button>
+          <button class="btn btn-primary btn-install">Install OptiScaler</button>
           <button class="btn btn-ghost btn-setup">Run Setup</button>
         </div>
         <div class="card-actions-row2">
@@ -103,7 +107,7 @@ async function renderGrid() {
           <button class="btn btn-ghost btn-danger btn-remove">Remove</button>
         </div>
         <div class="card-actions-row2">
-          <button class="btn btn-ghost btn-feeder">Install DLSS 5 Feeder</button>
+          <button class="btn btn-ghost btn-feeder">Install ${escapeHtml(feederConsumerLabel())}</button>
         </div>
       </div>
     `;
@@ -152,6 +156,14 @@ async function renderGrid() {
   }
 }
 
+// The actual name of whichever consumer the Feeder toolchain installs for this user, so buttons
+// and recommendations say "RenoDX" or "Deep Fried Chicken" -- the real programs -- instead of the
+// generic "DLSS 5 Feeder" (that name belongs to the installer/toolchain, not the DLSS-NR consumer
+// it sets up).
+function feederConsumerLabel() {
+  return settings.renoDxAddonPath ? 'RenoDX' : 'Deep Fried Chicken';
+}
+
 // Say which of the two paths this game wants, and make the other one the quieter option.
 //
 // This is a recommendation, never a lock: the detection reads the exe's imports, and a bundled or
@@ -180,11 +192,11 @@ async function applyRecommendation(game, card) {
     install.classList.add('btn-primary');
     feeder.classList.remove('btn-primary');
   } else if (detected.recommend === 'feeder') {
-    line.textContent = `DLSS 5 Feeder — ${detected.reason}`;
+    line.textContent = `${feederConsumerLabel()} — ${detected.reason}`;
     install.classList.remove('btn-primary');
     feeder.classList.add('btn-primary');
   } else {
-    line.textContent = `Not sure — ${detected.reason}. Try OptiScaler first; use the Feeder if it does nothing.`;
+    line.textContent = `Not sure — ${detected.reason}. Try OptiScaler first; use ${feederConsumerLabel()} if it does nothing.`;
     install.classList.add('btn-primary');
     feeder.classList.remove('btn-primary');
   }
@@ -583,15 +595,16 @@ $('#btn-close-settings').addEventListener('click', async () => {
 // proxy actually loaded by the game keeps running whatever version it was last renamed from.
 // This finds and refreshes it directly, without needing setup_windows.bat re-run.
 async function autoSyncStaleGames() {
-  if (!settings.releaseFolder || games.length === 0) return;
-  const valid = await window.api.validateRelease(settings.releaseFolder);
-  if (!valid.valid) return;
+  if (games.length === 0) return;
 
   const updated = [];
   const configured = [];
   const streamlined = [];
   const failed = [];
+
+  const releaseValid = settings.releaseFolder && (await window.api.validateRelease(settings.releaseFolder)).valid;
   for (const game of games) {
+    if (!releaseValid) break;
     const res = await window.api.syncGameIfStale({ exePath: game.exePath, releaseFolder: settings.releaseFolder });
     if (!res.ok) {
       failed.push(`${game.name} (${res.error})`);
@@ -602,6 +615,17 @@ async function autoSyncStaleGames() {
       configured.push(`${game.name} (${res.api || 'detected'}: ${res.autoConfigured.map((e) => e.key).join(', ')})`);
     }
     if (res.streamline && res.streamline.deployed) streamlined.push(game.name);
+  }
+
+  // Feeder-toolchain (Deep Fried Chicken route) staleness check -- independent of whether an
+  // OptiScaler release folder is even configured, since a user may only use this route.
+  const feederUpdated = [];
+  for (const game of games) {
+    const res = await window.api.syncFeederIfStale(game.exePath);
+    if (res.ok && res.updated) feederUpdated.push(game.name);
+  }
+  if (feederUpdated.length > 0) {
+    toast(`Auto-updated the DLSS5-Feeder add-on in ${feederUpdated.length} game${feederUpdated.length > 1 ? 's' : ''}: ${feederUpdated.join(', ')}`);
   }
 
   if (updated.length > 0) {
@@ -616,6 +640,39 @@ async function autoSyncStaleGames() {
   if (failed.length > 0) {
     toast(`Could not auto-update: ${failed.join(', ')} — close the game and retry.`);
   }
+}
+
+// ---------- Automatic OptiScaler_DLSSNR updates ----------
+// The engine (OptiScaler_DLSSNR) and this manager are two separate GitHub repos, but the user
+// should never have to know or care about that -- so on every launch this does automatically
+// what "Check for Updates" in Settings does by hand: fetch the engine's latest release and apply
+// it. First run included, so a fresh install has a working release folder before the user ever
+// opens Settings. Silent when already current or when the check fails (offline, GitHub rate
+// limit) -- neither is worth interrupting startup for, and installGame's own validation still
+// catches a genuinely missing/bad release folder at install time.
+async function autoUpdateOptiScalerRelease() {
+  const res = await window.api.checkUpdate();
+  if (!res.ok || settings.installedVersion === res.tag) return;
+
+  const installRes = await window.api.installUpdate({
+    downloadUrl: res.downloadUrl,
+    assetName: res.assetName,
+    tag: res.tag,
+    targetFolder: settings.releaseFolder
+  });
+  if (!installRes.ok) {
+    toast(`Auto-update to ${res.tag} failed: ${installRes.error}`);
+    return;
+  }
+
+  const hadRelease = !!settings.releaseFolder;
+  settings.releaseFolder = installRes.folder;
+  settings.installedVersion = res.tag;
+  await window.api.saveSettings(settings);
+  refreshBannerVisibility();
+  checkReleaseStatus();
+  toast(hadRelease ? `OptiScaler engine auto-updated to ${res.tag}.` : `Fetched the OptiScaler engine (${res.tag}) automatically.`);
+  autoSyncStaleGames();
 }
 
 // ---------- Check for updates ----------
@@ -833,5 +890,6 @@ $('#btn-add-scanned').addEventListener('click', async () => {
   settings = data.settings || { releaseFolder: '', nrDllPath: '', installedVersion: '', renoDxAddonPath: '', streamlineZipPath: '', dfcZipPath: '' };
   await refreshBannerVisibility();
   await renderGrid();
+  await autoUpdateOptiScalerRelease();
   autoSyncStaleGames();
 })();

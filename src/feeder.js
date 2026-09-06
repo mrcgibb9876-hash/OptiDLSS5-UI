@@ -76,7 +76,7 @@ async function fetchInstaller(cacheRoot) {
     const { ref, pinned, why } = await resolveRef();
 
     const res = await fetch(rawUrl(ref), {
-        headers: { 'User-Agent': 'OptiScaler-Manager' },
+        headers: { 'User-Agent': 'OptoRenoDXlss5' },
 
         // Node's fetch has no timeout of its own. A proxy that accepts the connection and then says
         // nothing would otherwise leave the IPC call pending forever, which the user sees as a
@@ -119,7 +119,7 @@ async function fetchInstaller(cacheRoot) {
 async function resolveRef() {
     try {
         const res = await fetch(`https://api.github.com/repos/${INSTALLER_REPO}/releases?per_page=30`, {
-            headers: { 'User-Agent': 'OptiScaler-Manager', Accept: 'application/vnd.github+json' },
+            headers: { 'User-Agent': 'OptoRenoDXlss5', Accept: 'application/vnd.github+json' },
             signal: AbortSignal.timeout(15000)
         });
 
@@ -329,7 +329,7 @@ async function installForGame(options, onProgress = () => {}) {
                 'copy of it on your behalf.'
         );
 
-    const cacheRoot = options.cacheDir || path.join(os.tmpdir(), 'optiscaler-manager-feeder');
+    const cacheRoot = options.cacheDir || path.join(os.tmpdir(), 'optorenodxlss5-feeder');
     const installer = await fetchInstaller(cacheRoot);
 
     onProgress({
