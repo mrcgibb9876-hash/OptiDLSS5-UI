@@ -148,6 +148,7 @@ async function renderGrid() {
             const res = await window.api.runUninstall(game.exePath);
             const nrNote = res.nrDllRemoved ? ' Also removed the now-unused nvngx_dlssnr.dll.' : '';
             toast(res.ok ? `Uninstaller opened in a terminal -- confirm there to finish removing OptiScaler.${nrNote}` : `Couldn't start the uninstaller: ${res.error}`);
+            renderGrid();
           }
         });
       } else {
@@ -726,6 +727,11 @@ $('#btn-add-scanned').addEventListener('click', async () => {
 
   closeScanModal();
 });
+
+window.addEventListener('focus', () => {
+  renderGrid();
+});
+
 (async function init() {
   const data = await window.api.loadData();
   games = data.games || [];
