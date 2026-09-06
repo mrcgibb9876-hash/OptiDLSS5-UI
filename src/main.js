@@ -262,9 +262,9 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath 
     } catch {
     }
 
-    const { api, applied, streamline, reEngine } = await autoConfigureGame(dir, exePath);
+    const { api, applied, streamline, reEngine, reframework } = await autoConfigureGame(dir, exePath);
 
-    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, api, autoConfigured: applied, streamline, reEngine };
+    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, api, autoConfigured: applied, streamline, reEngine, reframework };
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -422,8 +422,21 @@ function patchIniDefaults(iniPath, edits) {
   return applied;
 }
 
-const STREAMLINE_SDK_VERSION = 'v2.11.1';
-const STREAMLINE_RELEASE_API = `https://api.github.com/repos/NVIDIA-RTX/Streamline/releases/tags/${STREAMLINE_SDK_VERSION}`;
+// Pinned to 2.11.1 -- 2.12.0+ hard-crashed Witcher 3. Fetched from RHI's own pre-packaged,
+// DLLs-only zip (the same one RHI itself downloads for its Streamline staging) rather than
+// NVIDIA-RTX/Streamline's official release, which bundles the full SDK (headers, samples, docs,
+// every platform) and needs a recursive search for where the DLLs actually landed. RHI's manifest
+// (raw.githubusercontent.com/RankFTW/RHI/main/dlss_manifest.json) lists these same per-version
+// zips; this hardcodes the URL for the one pinned version rather than fetching that manifest.
+const STREAMLINE_SDK_VERSION = '2.11.1';
+const STREAMLINE_DIRECT_ZIP_URL =
+  `https://github.com/RankFTW/rhi-repo/releases/download/streamline-${STREAMLINE_SDK_VERSION}/streamline_${STREAMLINE_SDK_VERSION}.zip`;
+
+const KNOWN_STREAMLINE_DLLS = new Set([
+  'sl.common.dll', 'sl.deepdvc.dll', 'sl.directsr.dll', 'sl.dlss.dll',
+  'sl.dlss_d.dll', 'sl.dlss_g.dll', 'sl.interposer.dll', 'sl.nis.dll',
+  'sl.nvperf.dll', 'sl.pcl.dll', 'sl.reflex.dll',
+]);
 
 function streamlineSdkCacheDir() {
   return path.join(userDataDir(), 'streamline-sdk');
@@ -448,13 +461,7 @@ async function ensureStreamlineSdkCache(localZipPath) {
     if (usingLocal) {
       tmpZip = localZipPath;
     } else {
-      const res = await fetch(STREAMLINE_RELEASE_API, { headers: GITHUB_HEADERS });
-      if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
-      const data = await res.json();
-      const zipAsset = (data.assets || []).find((a) => a.name.toLowerCase().endsWith('.zip'));
-      if (!zipAsset) throw new Error(`No .zip asset in Streamline release ${STREAMLINE_SDK_VERSION}`);
-
-      const dlRes = await fetch(zipAsset.browser_download_url, { headers: GITHUB_HEADERS });
+      const dlRes = await fetch(STREAMLINE_DIRECT_ZIP_URL, { headers: GITHUB_HEADERS });
       if (!dlRes.ok) throw new Error(`Download failed: HTTP ${dlRes.status}`);
       const buf = Buffer.from(await dlRes.arrayBuffer());
 
@@ -468,28 +475,28 @@ async function ensureStreamlineSdkCache(localZipPath) {
       'Expand-Archive -LiteralPath $env:OSM_ZIP -DestinationPath $env:OSM_DEST -Force'
     ], { env: { ...process.env, OSM_ZIP: tmpZip, OSM_DEST: tmpExtract } });
 
-    let binDir = null;
+    // Walk the extracted tree and pull out every known sl.*.dll by name, wherever it landed --
+    // more robust than assuming a single flat bin folder, and matches RHI's own filter-by-name
+    // extraction rather than searching for one anchor file's containing directory.
+    await fsp.mkdir(cacheDir, { recursive: true });
+    let foundAny = false;
     const stack = [tmpExtract];
-    while (stack.length > 0 && !binDir) {
+    while (stack.length > 0) {
       const cur = stack.pop();
       const entries = await fsp.readdir(cur, { withFileTypes: true });
-      if (entries.some((e) => e.isFile() && e.name.toLowerCase() === 'sl.interposer.dll')) {
-        binDir = cur;
-        break;
-      }
-      for (const e of entries) if (e.isDirectory()) stack.push(path.join(cur, e.name));
-    }
-    if (!binDir) throw new Error('sl.interposer.dll not found anywhere in the downloaded SDK');
-
-    await fsp.mkdir(cacheDir, { recursive: true });
-    for (const entry of await fsp.readdir(binDir, { withFileTypes: true })) {
-      if (entry.isFile() && entry.name.toLowerCase().endsWith('.dll')) {
-        await fsp.copyFile(path.join(binDir, entry.name), path.join(cacheDir, entry.name));
+      for (const entry of entries) {
+        const fullPath = path.join(cur, entry.name);
+        if (entry.isDirectory()) {
+          stack.push(fullPath);
+        } else if (entry.isFile() && KNOWN_STREAMLINE_DLLS.has(entry.name.toLowerCase())) {
+          await fsp.copyFile(fullPath, path.join(cacheDir, entry.name));
+          foundAny = true;
+        }
       }
     }
     await fsp.rm(tmpExtract, { recursive: true, force: true }).catch(() => {});
 
-    if (!fs.existsSync(path.join(cacheDir, 'sl.interposer.dll'))) return null;
+    if (!foundAny || !fs.existsSync(path.join(cacheDir, 'sl.interposer.dll'))) return null;
     await fsp.writeFile(versionMarker, wantVersion, 'utf-8');
     return cacheDir;
   } catch {
@@ -528,6 +535,117 @@ function isReEngineGame(dir) {
   }
 }
 
+// ── RE Framework (dinput8.dll) ────────────────────────────────────────────────
+// Capcom RE Engine games need RE Framework present for OptiScaler to work at all --
+// not an OptiScaler setting, a separate injector DLL that has to already be there.
+// Mirrors RHI's REFrameworkService.cs: same monolithic nightly build (one zip now covers
+// every RE Engine title), same source repo. RHI additionally has a per-game "pd-upscaler"
+// branch build for a few older titles (RE2/3/4/7/8) via a server-controlled manifest --
+// skipped here since none of the games this app manages need it (Dragon's Dogma 2 isn't in
+// that list either), and adding it would mean carrying a remote manifest just for that.
+const REFRAMEWORK_ZIP_URL = 'https://github.com/praydog/REFramework-nightly/releases/latest/download/REFramework.zip';
+const REFRAMEWORK_RELEASES_API = 'https://api.github.com/repos/praydog/REFramework-nightly/releases';
+const REFRAMEWORK_DLL_NAME = 'dinput8.dll';
+
+function reframeworkCacheDir() {
+  return path.join(userDataDir(), 'reframework-cache');
+}
+
+async function getLatestREFrameworkVersion() {
+  try {
+    const res = await fetch(REFRAMEWORK_RELEASES_API, { headers: GITHUB_HEADERS });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const first = Array.isArray(data) ? data[0] : null;
+    const tag = first && first.tag_name;
+    if (!tag) return null;
+    // Tags look like "nightly-01302-abcdef1" -- the numeric build number is the useful part.
+    for (const part of tag.split('-')) {
+      if (part.length > 0 && [...part].every((c) => c >= '0' && c <= '9')) return part;
+    }
+    return tag;
+  } catch {
+    return null;
+  }
+}
+
+async function ensureREFrameworkCache() {
+  const cacheDir = reframeworkCacheDir();
+  const versionMarker = path.join(cacheDir, '.version');
+  const cachedDll = path.join(cacheDir, REFRAMEWORK_DLL_NAME);
+  const latestVersion = await getLatestREFrameworkVersion();
+  const cachedVersion = fs.existsSync(versionMarker) ? fs.readFileSync(versionMarker, 'utf-8').trim() : null;
+
+  if (fs.existsSync(cachedDll) && latestVersion && cachedVersion === latestVersion) {
+    return cachedDll;
+  }
+  if (fs.existsSync(cachedDll) && !latestVersion) {
+    // Offline or rate-limited -- use whatever is already cached rather than failing outright.
+    return cachedDll;
+  }
+
+  let tmpZip;
+  try {
+    const dlRes = await fetch(REFRAMEWORK_ZIP_URL, { headers: GITHUB_HEADERS });
+    if (!dlRes.ok) throw new Error(`Download failed: HTTP ${dlRes.status}`);
+    const buf = Buffer.from(await dlRes.arrayBuffer());
+
+    tmpZip = path.join(os.tmpdir(), `reframework-${Date.now()}.zip`);
+    await fsp.writeFile(tmpZip, buf);
+
+    const tmpExtract = path.join(os.tmpdir(), `reframework-extract-${Date.now()}`);
+    await execFileAsync('powershell.exe', [
+      '-NoProfile', '-NonInteractive', '-Command',
+      'Expand-Archive -LiteralPath $env:OSM_ZIP -DestinationPath $env:OSM_DEST -Force'
+    ], { env: { ...process.env, OSM_ZIP: tmpZip, OSM_DEST: tmpExtract } });
+
+    let foundDll = null;
+    const stack = [tmpExtract];
+    while (stack.length > 0 && !foundDll) {
+      const cur = stack.pop();
+      const entries = await fsp.readdir(cur, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(cur, entry.name);
+        if (entry.isFile() && entry.name.toLowerCase() === REFRAMEWORK_DLL_NAME) {
+          foundDll = fullPath;
+          break;
+        }
+        if (entry.isDirectory()) stack.push(fullPath);
+      }
+    }
+    if (!foundDll) throw new Error(`${REFRAMEWORK_DLL_NAME} not found in downloaded REFramework.zip`);
+
+    await fsp.mkdir(cacheDir, { recursive: true });
+    await fsp.copyFile(foundDll, cachedDll);
+    await fsp.rm(tmpExtract, { recursive: true, force: true }).catch(() => {});
+
+    if (latestVersion) await fsp.writeFile(versionMarker, latestVersion, 'utf-8');
+    return cachedDll;
+  } catch {
+    // Fall back to a stale cache rather than leaving the game with no REFramework at all.
+    return fs.existsSync(cachedDll) ? cachedDll : null;
+  } finally {
+    if (tmpZip) fsp.rm(tmpZip, { force: true }).catch(() => {});
+  }
+}
+
+/// Ensures REFramework is present for an RE Engine game. Never overwrites an existing
+/// dinput8.dll that this function didn't itself place there -- OptiScaler needs *a* working
+/// REFramework present, not necessarily the latest one, and a manually-supplied build may be
+/// there for a reason. Returns null for non-RE-Engine games or when a dll is already present.
+async function ensureREFrameworkForGame(dir) {
+  if (!isReEngineGame(dir)) return null;
+  const destPath = path.join(dir, REFRAMEWORK_DLL_NAME);
+  if (fs.existsSync(destPath)) return { installed: false, alreadyPresent: true };
+
+  const cachedDll = await ensureREFrameworkCache();
+  if (!cachedDll) return { installed: false, error: 'could not fetch REFramework' };
+
+  await fsp.copyFile(cachedDll, destPath);
+  return { installed: true, version: fs.existsSync(path.join(reframeworkCacheDir(), '.version'))
+    ? fs.readFileSync(path.join(reframeworkCacheDir(), '.version'), 'utf-8').trim() : 'unknown' };
+}
+
 async function autoConfigureGame(dir, exePath) {
   const iniPath = path.join(dir, 'OptiScaler.ini');
   if (!fs.existsSync(iniPath)) return { api: null, applied: [] };
@@ -539,12 +657,21 @@ async function autoConfigureGame(dir, exePath) {
   else if (api === 'dx11') edits.push({ section: 'Upscalers', key: 'Dx11Upscaler', value: 'dlss' });
   else if (api === 'vulkan') edits.push({ section: 'Upscalers', key: 'VulkanUpscaler', value: 'dlss' });
 
-  edits.push({ section: 'DlssNr', key: 'Enabled', value: 'true' });
+  // Only force DlssNr on when the actual model file is present -- forcing it on every game
+  // regardless (including ones where NR was never installed) risks the pass trying to initialize
+  // with nothing to run, which crashed launches. See the "won't launch" report.
+  if (fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'))) {
+    edits.push({ section: 'DlssNr', key: 'Enabled', value: 'true' });
+  }
 
   const reEngine = isReEngineGame(dir);
+  let reframework = null;
   if (reEngine) {
     edits.push({ section: 'Hotfix', key: 'RestoreComputeSignature', value: 'true' });
     edits.push({ section: 'Hotfix', key: 'RestoreGraphicSignature', value: 'true' });
+    // OptiScaler doesn't work on RE Engine without REFramework already present -- ensure it's
+    // there before anything else here matters.
+    reframework = await ensureREFrameworkForGame(dir);
   }
 
   let streamline = null;
@@ -558,7 +685,7 @@ async function autoConfigureGame(dir, exePath) {
   }
 
   const applied = patchIniDefaults(iniPath, edits);
-  return { api, applied, streamline, reEngine };
+  return { api, applied, streamline, reEngine, reframework };
 }
 
 const PROXY_CANDIDATES = ['dxgi.dll', 'winmm.dll', 'version.dll', 'dbghelp.dll', 'd3d12.dll', 'wininet.dll', 'winhttp.dll', 'OptiScaler.asi'];
@@ -602,17 +729,17 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
     const dir = gameDir(exePath);
     if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: true, updated: false, reason: 'not installed' };
 
-    const { api, applied: autoConfigured, streamline, reEngine } = await autoConfigureGame(dir, exePath);
+    const { api, applied: autoConfigured, streamline, reEngine, reframework } = await autoConfigureGame(dir, exePath);
 
     const releaseDll = releaseFolder ? path.join(releaseFolder, 'OptiScaler.dll') : null;
     if (!releaseDll || !fs.existsSync(releaseDll)) {
-      return { ok: true, updated: autoConfigured.length > 0, reason: 'no release set', api, autoConfigured, streamline, reEngine };
+      return { ok: true, updated: autoConfigured.length > 0, reason: 'no release set', api, autoConfigured, streamline, reEngine, reframework };
     }
 
     if (!hasDlssNrSection(releaseFolder)) {
       return {
         ok: true, updated: autoConfigured.length > 0,
-        reason: 'release folder is not the DLSS-NR fork (no [DlssNr] section) -- refusing to sync', api, autoConfigured, streamline, reEngine
+        reason: 'release folder is not the DLSS-NR fork (no [DlssNr] section) -- refusing to sync', api, autoConfigured, streamline, reEngine, reframework
       };
     }
 
@@ -620,19 +747,19 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
     if (!active) {
       return {
         ok: true, updated: autoConfigured.length > 0,
-        reason: 'could not identify the active OptiScaler file (ambiguous proxy candidates)', api, autoConfigured, streamline, reEngine
+        reason: 'could not identify the active OptiScaler file (ambiguous proxy candidates)', api, autoConfigured, streamline, reEngine, reframework
       };
     }
 
     if (sha256File(releaseDll) === sha256File(active.file)) {
-      return { ok: true, updated: autoConfigured.length > 0, reason: 'up to date', api, autoConfigured, streamline, reEngine };
+      return { ok: true, updated: autoConfigured.length > 0, reason: 'up to date', api, autoConfigured, streamline, reEngine, reframework };
     }
 
     await fsp.copyFile(releaseDll, active.file);
     const plain = path.join(dir, 'OptiScaler.dll');
     if (active.file !== plain) await fsp.copyFile(releaseDll, plain).catch(() => {});
 
-    return { ok: true, updated: true, file: path.basename(active.file), api, autoConfigured, streamline, reEngine };
+    return { ok: true, updated: true, file: path.basename(active.file), api, autoConfigured, streamline, reEngine, reframework };
   } catch (err) {
     return { ok: false, error: err.message };
   }

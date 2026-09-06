@@ -235,7 +235,10 @@ async function installGame(game) {
       : '';
     const streamlineNote = res.streamline && res.streamline.deployed ? ' Deployed the Streamline SDK for DLSS Frame Gen.' : '';
     const reEngineNote = res.reEngine ? ' Detected RE Engine (Capcom) -- applied the RestoreComputeSignature/RestoreGraphicSignature fix for DLSS crashes.' : '';
-    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}${configNote}${streamlineNote}${reEngineNote}`);
+    const reframeworkNote = res.reframework && res.reframework.installed ? ' Installed REFramework (required for OptiScaler on RE Engine).'
+      : res.reframework && res.reframework.error ? ` REFramework install failed (${res.reframework.error}) -- OptiScaler will not work until it's installed.`
+      : '';
+    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}${configNote}${streamlineNote}${reEngineNote}${reframeworkNote}`);
   } else {
     toast(`Install failed: ${res.error}`);
   }
