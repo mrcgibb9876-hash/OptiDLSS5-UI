@@ -351,6 +351,7 @@ async function installFeeder(game) {
       streamlineZipPath: settings.streamlineZipPath,
       renoDxAddonPath: settings.renoDxAddonPath,
       dfcZipPath: settings.dfcZipPath,
+      releaseFolder: settings.releaseFolder,
       consumer: settings.renoDxAddonPath ? 'RenoDX' : 'DFC'
     });
 
@@ -388,7 +389,8 @@ async function prepareDlss5Feeder(game) {
   const res = await window.api.prepareDlss5Feeder({
     exePath: game.exePath,
     renoDxAddonPath: settings.renoDxAddonPath,
-    streamlineZipPath: settings.streamlineZipPath
+    streamlineZipPath: settings.streamlineZipPath,
+    releaseFolder: settings.releaseFolder
   });
   if (!res.ok) {
     toast(`Could not prepare: ${res.error}`);

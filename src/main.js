@@ -634,7 +634,7 @@ async function extractDlssRuntimeDlls(zipPath) {
 // themselves. 'feeder:install' below does the same thing unattended and is what the UI reaches for
 // first; this one is for a machine where running a downloaded script from inside the app is not
 // wanted, or where that run failed and the user wants to drive it by hand.
-ipcMain.handle('game:prepare-dlss5-feeder', async (_evt, { exePath, renoDxAddonPath, streamlineZipPath }) => {
+ipcMain.handle('game:prepare-dlss5-feeder', async (_evt, { exePath, renoDxAddonPath, streamlineZipPath, releaseFolder }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     if (!renoDxAddonPath || !fs.existsSync(renoDxAddonPath)) {
@@ -642,6 +642,13 @@ ipcMain.handle('game:prepare-dlss5-feeder', async (_evt, { exePath, renoDxAddonP
     }
 
     const dir = gameDir(exePath);
+
+    // Dropped in now rather than after the launcher runs: this handler never sees the install
+    // actually happen (the user runs the .bat by hand, outside this process), so there is no
+    // "it succeeded" moment to hook. It just needs to be sitting in the folder by the time ReShade
+    // next loads, which auto-loads any .addon64 present regardless of arrival order.
+    await installTuningAddonForFeederRoute(dir, releaseFolder, () => {});
+
     const parts = [
       '.\\Install-DLSS5Feeder.ps1',
       '-GameExe', `"${exePath}"`,
@@ -704,7 +711,7 @@ ipcMain.handle('game:prepare-dlss5-feeder', async (_evt, { exePath, renoDxAddonP
 // Everything else -- ReShade, the feeder add-on, LumeniteFX, dgVoodoo2 for Direct3D 8/9, and the
 // .ini wiring -- the script fetches from its real sources, and that is fine to automate.
 ipcMain.handle('feeder:install', async (evt, payload) => {
-  const { exePath, consumer, mvProvider, nrDllPath, streamlineZipPath, renoDxAddonPath, dfcZipPath } = payload || {};
+  const { exePath, consumer, mvProvider, nrDllPath, streamlineZipPath, renoDxAddonPath, dfcZipPath, releaseFolder } = payload || {};
 
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
@@ -765,6 +772,7 @@ ipcMain.handle('feeder:install', async (evt, payload) => {
           },
           send
         );
+        if (nativeResult.ok) await installTuningAddonForFeederRoute(gameDir(exePath), releaseFolder, send);
         return nativeResult;
       }
 
@@ -806,8 +814,10 @@ ipcMain.handle('feeder:install', async (evt, payload) => {
       // fallback for a "failure" that already did its job.
       if (!result.ok && ownedByOptiScaler && detectInstalledBackends(gameDir(exePath)).feeder.active) {
         send({ kind: 'info', line: 'Add-on/shader files are in place despite the script\'s own report -- OptiScaler will host them. Treating this as installed.' });
+        await installTuningAddonForFeederRoute(gameDir(exePath), releaseFolder, send);
         return { ok: true, recoveredFromScriptFailure: true, scriptError: result.error };
       }
+      if (result.ok) await installTuningAddonForFeederRoute(gameDir(exePath), releaseFolder, send);
       return result;
     } finally {
       // The unpacked zip is hundreds of megabytes and the DLL paths inside it have to stay valid
@@ -1134,27 +1144,33 @@ async function ensureReShadeCoexistence(dir) {
   }
 }
 
-// Deliberately NOT dropping OptiScaler_DlssNr.addon64 into a Feeder-only install (no OptiScaler.ini
-// at all). A prior version of this file did exactly that, and it was wrong on two counts, confirmed
-// on a real install (Batman Arkham Knight, RenoDX consumer):
+// Drops OptiScaler_DlssNr.addon64 into a Feeder-only install too (no OptiScaler.ini at all).
 //
-// 1. OptiScaler_DlssNr.addon64 is a remote control for OptiScaler's own DLSS-NR pass, not a
-//    standalone feature -- its own embedded strings say so plainly ("OptiScaler is not loaded in
-//    this game. Its DLSS 5 controls need it running." / "this add-on only draws its controls -- it
-//    cannot run the pass on its own."). Without OptiScaler actually running, it has nothing to
-//    drive.
-// 2. It registers a ReShade add-on named "DLSS 5 Neural Rendering" -- the exact same name
-//    renodx-dlss5.addon64 registers for RenoDX's own equivalent tuning tab. ReShade only allows one
-//    add-on per name; whichever loads first wins, and the other fails outright
-//    ("Failed to register add-on, because another one with the same name... was already
-//    registered!", error 1114). Dropping our addon in alongside RenoDX's silently broke RenoDX's own
-//    tuning UI from loading at all -- worse than the "it never shows up" symptom this was meant to
-//    fix, since RenoDX already ships the equivalent tab for this route ("RenoDX" tab -> "Enable DLSS
-//    Neural Rendering").
+// This used to be actively wrong: the addon only drove OptiScaler's own pass and did nothing
+// without it, AND it registered under the exact ReShade add-on name RenoDX's own add-on uses
+// ("DLSS 5 Neural Rendering") -- ReShade allows one add-on per name, so ours loading first made
+// RenoDX's own add-on fail to load at all ("Failed to register add-on... already registered",
+// error 1114), confirmed on a real install (Batman Arkham Knight, RenoDX consumer).
 //
-// OptiScaler_DlssNr.addon64 only belongs in a folder where OptiScaler itself is actually installed
-// and driving the pass -- game:install (via ensureReShadeCoexistence above) already handles that
-// case correctly. Leave the Feeder/RenoDX/DFC route to its own tuning UI.
+// Both are fixed at the source now (OptiScaler_DLSSNR's reshade_addon): it drives RenoDX directly
+// through ReShade's own config API when OptiScaler isn't present, detected live each frame, and it
+// registers as "OptiScaler DLSS 5 Neural Rendering" so it can never collide with RenoDX's own add-on
+// again. So dropping it in here is now safe and does something real on both routes.
+async function installTuningAddonForFeederRoute(dir, releaseFolder, onProgress) {
+  if (!releaseFolder || !fs.existsSync(releaseFolder)) return null;
+  const src = path.join(releaseFolder, 'OptiScaler_DlssNr.addon64');
+  if (!fs.existsSync(src)) return null;
+
+  const dest = path.join(dir, 'OptiScaler_DlssNr.addon64');
+  if (fs.existsSync(dest) && sha256File(dest) === sha256File(src)) return { installed: false, reason: 'already present' };
+
+  await fsp.copyFile(src, dest);
+  onProgress({
+    kind: 'info',
+    line: 'OptiScaler_DlssNr.addon64 (DLSS 5 tuning panel) installed alongside the Feeder ReShade addon -- Alt+Home should show it now.'
+  });
+  return { installed: true };
+}
 
 async function autoConfigureGame(dir, exePath) {
   const iniPath = path.join(dir, 'OptiScaler.ini');
