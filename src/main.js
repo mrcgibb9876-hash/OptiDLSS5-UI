@@ -262,9 +262,9 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath 
     } catch {
     }
 
-    const { api, applied, streamline } = await autoConfigureGame(dir, exePath);
+    const { api, applied, streamline, reEngine } = await autoConfigureGame(dir, exePath);
 
-    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, api, autoConfigured: applied, streamline };
+    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, api, autoConfigured: applied, streamline, reEngine };
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -520,6 +520,14 @@ async function deployStreamlineFolder(dir) {
   return { deployed: copied.length > 0, files: copied };
 }
 
+function isReEngineGame(dir) {
+  try {
+    return fs.readdirSync(dir).some((f) => /^re_chunk_000\.pak$/i.test(f));
+  } catch {
+    return false;
+  }
+}
+
 async function autoConfigureGame(dir, exePath) {
   const iniPath = path.join(dir, 'OptiScaler.ini');
   if (!fs.existsSync(iniPath)) return { api: null, applied: [] };
@@ -533,6 +541,12 @@ async function autoConfigureGame(dir, exePath) {
 
   edits.push({ section: 'DlssNr', key: 'Enabled', value: 'true' });
 
+  const reEngine = isReEngineGame(dir);
+  if (reEngine) {
+    edits.push({ section: 'Hotfix', key: 'RestoreComputeSignature', value: 'true' });
+    edits.push({ section: 'Hotfix', key: 'RestoreGraphicSignature', value: 'true' });
+  }
+
   let streamline = null;
   const hasNativeStreamline = fs.existsSync(path.join(dir, 'sl.interposer.dll')) ||
     fs.existsSync(path.join(dir, 'sl.interposer.dll.original'));
@@ -544,7 +558,7 @@ async function autoConfigureGame(dir, exePath) {
   }
 
   const applied = patchIniDefaults(iniPath, edits);
-  return { api, applied, streamline };
+  return { api, applied, streamline, reEngine };
 }
 
 const PROXY_CANDIDATES = ['dxgi.dll', 'winmm.dll', 'version.dll', 'dbghelp.dll', 'd3d12.dll', 'wininet.dll', 'winhttp.dll', 'OptiScaler.asi'];
@@ -588,17 +602,17 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
     const dir = gameDir(exePath);
     if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: true, updated: false, reason: 'not installed' };
 
-    const { api, applied: autoConfigured, streamline } = await autoConfigureGame(dir, exePath);
+    const { api, applied: autoConfigured, streamline, reEngine } = await autoConfigureGame(dir, exePath);
 
     const releaseDll = releaseFolder ? path.join(releaseFolder, 'OptiScaler.dll') : null;
     if (!releaseDll || !fs.existsSync(releaseDll)) {
-      return { ok: true, updated: autoConfigured.length > 0, reason: 'no release set', api, autoConfigured, streamline };
+      return { ok: true, updated: autoConfigured.length > 0, reason: 'no release set', api, autoConfigured, streamline, reEngine };
     }
 
     if (!hasDlssNrSection(releaseFolder)) {
       return {
         ok: true, updated: autoConfigured.length > 0,
-        reason: 'release folder is not the DLSS-NR fork (no [DlssNr] section) -- refusing to sync', api, autoConfigured, streamline
+        reason: 'release folder is not the DLSS-NR fork (no [DlssNr] section) -- refusing to sync', api, autoConfigured, streamline, reEngine
       };
     }
 
@@ -606,19 +620,19 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
     if (!active) {
       return {
         ok: true, updated: autoConfigured.length > 0,
-        reason: 'could not identify the active OptiScaler file (ambiguous proxy candidates)', api, autoConfigured, streamline
+        reason: 'could not identify the active OptiScaler file (ambiguous proxy candidates)', api, autoConfigured, streamline, reEngine
       };
     }
 
     if (sha256File(releaseDll) === sha256File(active.file)) {
-      return { ok: true, updated: autoConfigured.length > 0, reason: 'up to date', api, autoConfigured, streamline };
+      return { ok: true, updated: autoConfigured.length > 0, reason: 'up to date', api, autoConfigured, streamline, reEngine };
     }
 
     await fsp.copyFile(releaseDll, active.file);
     const plain = path.join(dir, 'OptiScaler.dll');
     if (active.file !== plain) await fsp.copyFile(releaseDll, plain).catch(() => {});
 
-    return { ok: true, updated: true, file: path.basename(active.file), api, autoConfigured, streamline };
+    return { ok: true, updated: true, file: path.basename(active.file), api, autoConfigured, streamline, reEngine };
   } catch (err) {
     return { ok: false, error: err.message };
   }

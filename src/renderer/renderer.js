@@ -29,7 +29,8 @@ function initials(name) {
     .slice(0, 2)
     .map((w) => w[0].toUpperCase())
     .join('');
-}function setBannerWithFallback(game, imgEl, fallbackEl) {
+}
+function setBannerWithFallback(game, imgEl, fallbackEl) {
   if (game.bannerLocalPath) {
     imgEl.classList.remove('hidden');
     if (fallbackEl) fallbackEl.classList.add('hidden');
@@ -113,7 +114,8 @@ async function renderGrid() {
       </div>
     `;
 
-    setBannerWithFallback(game, card.querySelector('.card-banner'), card.querySelector('.card-banner-fallback'));    if (!game.bannerLocalPath && game.bannerAppId) {
+    setBannerWithFallback(game, card.querySelector('.card-banner'), card.querySelector('.card-banner-fallback'));
+    if (!game.bannerLocalPath && game.bannerAppId) {
       window.api.cacheSteamBanner(game.bannerAppId).then((localPath) => {
         if (localPath) {
           game.bannerLocalPath = localPath;
@@ -121,7 +123,8 @@ async function renderGrid() {
           setBannerWithFallback(game, card.querySelector('.card-banner'), card.querySelector('.card-banner-fallback'));
         }
       });
-    } else if (!game.bannerLocalPath && !game.bannerAppId && !game.bannerSearchAttempted) {      game.bannerSearchAttempted = true;
+    } else if (!game.bannerLocalPath && !game.bannerAppId && !game.bannerSearchAttempted) {
+      game.bannerSearchAttempted = true;
       window.api.steamSearch(game.name).then(async (items) => {
         if (!items || items.length === 0) {
           window.api.saveGames(games);
@@ -165,9 +168,11 @@ async function renderGrid() {
 
     grid.appendChild(card);
   }
-}async function applyRecommendation(game, card, backends) {
+}
+async function applyRecommendation(game, card, backends) {
   const line = card.querySelector('.card-recommend');
-  const install = card.querySelector('.btn-install');  let detected = game.detectedPath;
+  const install = card.querySelector('.btn-install');
+  let detected = game.detectedPath;
 
   if (!detected) {
     detected = await window.api.detectPath(game.exePath);
@@ -175,7 +180,8 @@ async function renderGrid() {
     window.api.saveGames(games);
   }
 
-  if (!line) return;  const canRecommendInstall = !backends.optiscaler;
+  if (!line) return;
+  const canRecommendInstall = !backends.optiscaler;
 
   if (detected.recommend === 'optiscaler') {
     line.textContent = `OptiScaler — ${detected.reason}`;
@@ -187,7 +193,8 @@ async function renderGrid() {
     line.textContent = `Not sure — ${detected.reason}. Try Install and see if it works.`;
     if (canRecommendInstall) install.classList.add('btn-primary');
   }
-}function flipToConfirm(card, { title, detail, onConfirm }) {
+}
+function flipToConfirm(card, { title, detail, onConfirm }) {
   card.querySelector('.card-remove-title').textContent = title;
   card.querySelector('.card-remove-detail').textContent = detail;
   card._onFlipConfirm = onConfirm;
@@ -226,7 +233,8 @@ async function installGame(game) {
       ? ` Auto-configured for ${res.api || 'detected API'}: ${res.autoConfigured.map((e) => e.key).join(', ')}.`
       : '';
     const streamlineNote = res.streamline && res.streamline.deployed ? ' Deployed the Streamline SDK for DLSS Frame Gen.' : '';
-    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}${configNote}${streamlineNote}`);
+    const reEngineNote = res.reEngine ? ' Detected RE Engine (Capcom) -- applied the RestoreComputeSignature/RestoreGraphicSignature fix for DLSS crashes.' : '';
+    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}${configNote}${streamlineNote}${reEngineNote}`);
   } else {
     toast(`Install failed: ${res.error}`);
   }
@@ -254,7 +262,7 @@ async function removeGame(game) {
   games = games.filter((g) => g.id !== game.id);
   window.api.saveGames(games);
   renderGrid();
-}
+}
 const gameModal = $('#game-modal');
 
 function openGameModal(game) {
@@ -365,7 +373,7 @@ $('#btn-save-game').addEventListener('click', async () => {
   await window.api.saveGames(games);
   closeGameModal();
   renderGrid();
-});
+});
 const settingsModal = $('#settings-modal');
 
 function openSettingsModal() {
@@ -461,7 +469,8 @@ $('#settings-streamline-zip').addEventListener('change', (e) => persistStreamlin
 $('#btn-close-settings').addEventListener('click', async () => {
   settingsModal.classList.add('hidden');
   renderGrid();
-});async function autoSyncStaleGames() {
+});
+async function autoSyncStaleGames() {
   if (games.length === 0) return;
 
   const updated = [];
@@ -496,7 +505,8 @@ $('#btn-close-settings').addEventListener('click', async () => {
   if (failed.length > 0) {
     toast(`Could not auto-update: ${failed.join(', ')} — close the game and retry.`);
   }
-}async function autoUpdateOptiScalerRelease() {
+}
+async function autoUpdateOptiScalerRelease() {
   const res = await window.api.checkUpdate();
   if (!res.ok || settings.installedVersion === res.tag) return;
 
@@ -519,7 +529,7 @@ $('#btn-close-settings').addEventListener('click', async () => {
   checkReleaseStatus();
   toast(hadRelease ? `OptiScaler engine auto-updated to ${res.tag}.` : `Fetched the OptiScaler engine (${res.tag}) automatically.`);
   autoSyncStaleGames();
-}
+}
 $('#btn-check-updates').addEventListener('click', async () => {
   const btn = $('#btn-check-updates');
   const statusEl = $('#update-status');
@@ -584,9 +594,10 @@ $('#btn-install-update').addEventListener('click', async () => {
   refreshBannerVisibility();
   toast(`OptiScaler updated to ${res.tag}`);
   autoSyncStaleGames();
-});
+});
 const scanModal = $('#scan-modal');
-let scanResults = [];let scanSelections = {};
+let scanResults = [];
+let scanSelections = {};
 
 function openScanModal() {
   scanResults = [];
@@ -714,7 +725,7 @@ $('#btn-add-scanned').addEventListener('click', async () => {
   }
 
   closeScanModal();
-});
+});
 (async function init() {
   const data = await window.api.loadData();
   games = data.games || [];
