@@ -634,7 +634,7 @@ async function extractDlssRuntimeDlls(zipPath) {
 // themselves. 'feeder:install' below does the same thing unattended and is what the UI reaches for
 // first; this one is for a machine where running a downloaded script from inside the app is not
 // wanted, or where that run failed and the user wants to drive it by hand.
-ipcMain.handle('game:prepare-dlss5-feeder', async (_evt, { exePath, renoDxAddonPath, streamlineZipPath }) => {
+ipcMain.handle('game:prepare-dlss5-feeder', async (_evt, { exePath, renoDxAddonPath, streamlineZipPath, releaseFolder }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     if (!renoDxAddonPath || !fs.existsSync(renoDxAddonPath)) {
@@ -642,6 +642,13 @@ ipcMain.handle('game:prepare-dlss5-feeder', async (_evt, { exePath, renoDxAddonP
     }
 
     const dir = gameDir(exePath);
+
+    // Dropped in now rather than after the launcher runs: this handler never sees the install
+    // actually happen (the user runs the .bat by hand, outside this process), so there is no
+    // "it succeeded" moment to hook. ReShade auto-loads any .addon64 sitting in its folder
+    // regardless of when it arrived relative to ReShade itself landing, so doing it here is
+    // enough -- same helper feeder:install uses after its own automatic run.
+    await installTuningAddonForFeederRoute(dir, releaseFolder, () => {});
     const parts = [
       '.\\Install-DLSS5Feeder.ps1',
       '-GameExe', `"${exePath}"`,
