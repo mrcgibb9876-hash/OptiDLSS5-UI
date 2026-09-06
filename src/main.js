@@ -704,7 +704,7 @@ ipcMain.handle('game:prepare-dlss5-feeder', async (_evt, { exePath, renoDxAddonP
 // Everything else -- ReShade, the feeder add-on, LumeniteFX, dgVoodoo2 for Direct3D 8/9, and the
 // .ini wiring -- the script fetches from its real sources, and that is fine to automate.
 ipcMain.handle('feeder:install', async (evt, payload) => {
-  const { exePath, consumer, mvProvider, nrDllPath, streamlineZipPath, renoDxAddonPath, dfcZipPath } = payload || {};
+  const { exePath, consumer, mvProvider, nrDllPath, streamlineZipPath, renoDxAddonPath, dfcZipPath, releaseFolder } = payload || {};
 
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
@@ -753,7 +753,7 @@ ipcMain.handle('feeder:install', async (evt, payload) => {
 
       if (nativeSupported) {
         send({ kind: 'info', line: `${detected.api.toUpperCase()}, 64-bit: installing natively (no PowerShell involved).` });
-        return await installFeederNative(
+        const nativeResult = await installFeederNative(
           {
             exePath,
             api: detected.api,
@@ -765,6 +765,8 @@ ipcMain.handle('feeder:install', async (evt, payload) => {
           },
           send
         );
+        if (nativeResult.ok) await installTuningAddonForFeederRoute(gameDir(exePath), releaseFolder, send);
+        return nativeResult;
       }
 
       // Everything the native installer above doesn't cover -- RenoDX (any bitness), Vulkan,
@@ -805,8 +807,10 @@ ipcMain.handle('feeder:install', async (evt, payload) => {
       // fallback for a "failure" that already did its job.
       if (!result.ok && ownedByOptiScaler && detectInstalledBackends(gameDir(exePath)).feeder.active) {
         send({ kind: 'info', line: 'Add-on/shader files are in place despite the script\'s own report -- OptiScaler will host them. Treating this as installed.' });
+        await installTuningAddonForFeederRoute(gameDir(exePath), releaseFolder, send);
         return { ok: true, recoveredFromScriptFailure: true, scriptError: result.error };
       }
+      if (result.ok) await installTuningAddonForFeederRoute(gameDir(exePath), releaseFolder, send);
       return result;
     } finally {
       // The unpacked zip is hundreds of megabytes and the DLL paths inside it have to stay valid
@@ -1131,6 +1135,29 @@ async function ensureReShadeCoexistence(dir) {
   } catch (err) {
     return { deployed: false, reason: `could not fetch ReShade: ${err.message}` };
   }
+}
+
+// The Feeder/ReShade-only route (no OptiScaler.ini at all) never gets OptiScaler_DlssNr.addon64 --
+// game:install is the only code path that copies it in, and it copies it from the OptiScaler-DLSSNR
+// release folder, not from anything the Feeder toolchain itself ships. But ReShade auto-loads every
+// .addon64 sitting next to its own proxy DLL regardless of who put it there or why, so dropping the
+// file in here is enough on its own -- unlike ensureReShadeCoexistence above, this needs no
+// OptiScaler.ini/LoadReShade wiring, because that machinery exists specifically for OptiScaler
+// hosting add-ons through its own proxy, not for a plain ReShade install.
+async function installTuningAddonForFeederRoute(dir, releaseFolder, onProgress) {
+  if (!releaseFolder || !fs.existsSync(releaseFolder)) return null;
+  const src = path.join(releaseFolder, 'OptiScaler_DlssNr.addon64');
+  if (!fs.existsSync(src)) return null;
+
+  const dest = path.join(dir, 'OptiScaler_DlssNr.addon64');
+  if (fs.existsSync(dest) && sha256File(dest) === sha256File(src)) return { installed: false, reason: 'already present' };
+
+  await fsp.copyFile(src, dest);
+  onProgress({
+    kind: 'info',
+    line: 'OptiScaler_DlssNr.addon64 (DLSS 5 tuning panel) installed alongside the Feeder ReShade addon -- Alt+Home should show it now.'
+  });
+  return { installed: true };
 }
 
 async function autoConfigureGame(dir, exePath) {

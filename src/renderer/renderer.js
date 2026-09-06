@@ -351,6 +351,7 @@ async function installFeeder(game) {
       streamlineZipPath: settings.streamlineZipPath,
       renoDxAddonPath: settings.renoDxAddonPath,
       dfcZipPath: settings.dfcZipPath,
+      releaseFolder: settings.releaseFolder,
       consumer: settings.renoDxAddonPath ? 'RenoDX' : 'DFC'
     });
 
