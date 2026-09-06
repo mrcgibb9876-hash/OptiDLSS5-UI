@@ -12,6 +12,17 @@ point the app at your games once and click Install.
 > **Users:** [README-END-USER.txt](README-END-USER.txt) is the step-by-step setup guide, and it
 > ships inside the installer as `README.txt`. This file is about how the app works and why.
 
+## Screenshots
+
+**The manager itself** — each card names the actual backend(s) active on that game (not a generic
+"Installed"), Install buttons become Remove once a backend is there, and known trouble conditions
+(like a game-local `nvngx_dlss.dll` sitting next to RenoDX) surface right on the card:
+
+![Game grid, showing per-game OptiScaler/RenoDX status and a live warning](docs/screenshots/manager-game-grid.png)
+
+**In-game tuning** — the DLSS 5 tab drawn inside ReShade's own overlay by `OptiScaler_DlssNr.addon64`
+is still pending a screenshot from a live game session; check back here once one's captured.
+
 ## What it does
 
 **Finds your games.** Reads Steam's `libraryfolders.vdf` (so every Steam library on every drive),
