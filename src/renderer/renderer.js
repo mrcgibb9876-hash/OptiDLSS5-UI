@@ -172,7 +172,12 @@ async function renderGrid() {
             `"Run Setup", just removing instead of installing. Does not touch ${backends.feeder.active ? backends.feeder.label : 'any Feeder/RenoDX'} files.`,
           onConfirm: async () => {
             const res = await window.api.runUninstall(game.exePath);
-            toast(res.ok ? 'Uninstaller opened in a terminal -- confirm there to finish removing OptiScaler.' : `Couldn't start the uninstaller: ${res.error}`);
+            const extras = [
+              res.nrDllRemoved ? 'nvngx_dlssnr.dll' : null,
+              ...(res.tuningExtrasRemoved || [])
+            ].filter(Boolean);
+            const nrNote = extras.length ? ` Also removed the now-unused ${extras.join(', ')}.` : '';
+            toast(res.ok ? `Uninstaller opened in a terminal -- confirm there to finish removing OptiScaler.${nrNote}` : `Couldn't start the uninstaller: ${res.error}`);
           }
         });
       } else {
@@ -187,7 +192,7 @@ async function renderGrid() {
           detail: `Deletes its add-on/consumer files for this game right away (no confirmation terminal). ${backends.optiscaler ? 'OptiScaler is left untouched.' : 'If nothing else set up ReShade here, its proxy DLL is removed too.'}`,
           onConfirm: async () => {
             const res = await window.api.uninstallFeeder(game.exePath);
-            toast(res.ok ? `${backends.feeder.label} removed.` : `Couldn't remove it: ${res.error}`);
+            toast(res.ok ? `${backends.feeder.label} removed (${(res.removed || []).join(', ') || 'nothing found'}).` : `Couldn't remove it: ${res.error}`);
             renderGrid();
           }
         });
@@ -304,7 +309,10 @@ async function installGame(game) {
       ? ` Auto-configured for ${res.api || 'detected API'}: ${res.autoConfigured.map((e) => e.key).join(', ')}.`
       : '';
     const streamlineNote = res.streamline && res.streamline.deployed ? ' Deployed the Streamline SDK for DLSS Frame Gen.' : '';
-    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}${configNote}${streamlineNote}`);
+    const tuningNote = res.reshadeCoexistence && res.reshadeCoexistence.deployed
+      ? ` Set up the in-game DLSS 5 tuning tab (ReShade64.dll ${res.reshadeCoexistence.reason}).`
+      : '';
+    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}${configNote}${streamlineNote}${tuningNote}`);
   } else {
     toast(`Install failed: ${res.error}`);
   }

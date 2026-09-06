@@ -18,6 +18,7 @@ const { resolveGithubAsset, downloadToCache } = require('./native-feeder/downloa
 const { openZip, findEntry, extractEntryTo } = require('./native-feeder/zip');
 const { FEEDER_RELEASES_API, FEEDER_ASSET_PATTERN } = require('./native-feeder/sources');
 const { getIniKey } = require('./native-feeder/ini-merge');
+const { extractReShadeDll } = require('./native-feeder/reshade');
 const execFileAsync = promisify(execFile);
 
 const RELEASES_API = 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest';
@@ -427,9 +428,9 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath 
     // Auto-detect the game's rendering API and switch its upscaler/DLSS-NR/Frame-Gen settings on,
     // so it works without the user having to do this by hand -- the overlay no longer has a menu
     // section to do it from in-game. Only fills in values still left at "auto"; see patchIniDefaults.
-    const { api, applied, streamline } = await autoConfigureGame(dir, exePath);
+    const { api, applied, streamline, reshadeCoexistence } = await autoConfigureGame(dir, exePath);
 
-    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, api, autoConfigured: applied, streamline };
+    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, api, autoConfigured: applied, streamline, reshadeCoexistence };
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -449,6 +450,40 @@ ipcMain.handle('game:run-setup', async (_evt, exePath) => {
   return { ok: true };
 });
 
+// nvngx_dlssnr.dll is NVIDIA's ~165 MB model file -- neither route's own uninstaller (the
+// generated Remove_OptiScaler.bat, or feeder:uninstall below) ever removed it, since this app is
+// the one that copies it in (from the user's own supplied file, never the game's), not either
+// upstream project. Left behind, it's dead weight in the game folder after every uninstall. Safe
+// to remove unconditionally when NO backend needs it any more; if the other backend is still
+// active, it still needs this same file, so it's left alone.
+async function removeSharedNrDllIfUnneeded(dir, exclude) {
+  const backends = detectInstalledBackends(dir);
+  const stillNeeded = exclude === 'optiscaler' ? backends.feeder.active : backends.optiscaler;
+  if (stillNeeded) return false;
+  const file = path.join(dir, 'nvngx_dlssnr.dll');
+  if (!fs.existsSync(file)) return false;
+  await fsp.rm(file);
+  return true;
+}
+
+// The DLSS 5 tuning add-on (OptiScaler_DlssNr.addon64) and the ReShade64.dll ensureReShadeCoexistence
+// deployed for it are OptiScaler-only additions this app makes -- Remove_OptiScaler.bat doesn't
+// know about either, so they're left behind after an OptiScaler removal same as nvngx_dlssnr.dll
+// was. Only removes ReShade64.dll if the Feeder route isn't also relying on it (it never is today --
+// that route uses dxgi.dll/opengl32.dll directly -- but this stays a real check rather than an
+// assumption in case that changes).
+async function removeOptiScalerTuningExtras(dir) {
+  const removed = [];
+  const addon = path.join(dir, 'OptiScaler_DlssNr.addon64');
+  if (fs.existsSync(addon)) { await fsp.rm(addon); removed.push('OptiScaler_DlssNr.addon64'); }
+  const reshade64 = path.join(dir, 'ReShade64.dll');
+  if (fs.existsSync(reshade64) && findMarkers(reshade64, ['ReShade']).size > 0) {
+    await fsp.rm(reshade64);
+    removed.push('ReShade64.dll');
+  }
+  return removed;
+}
+
 ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
   const dir = gameDir(exePath);
   // Remove_OptiScaler.bat is what setup_windows.bat actually generates; the other two names are
@@ -462,7 +497,11 @@ ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
     stdio: 'ignore',
     shell: false
   }).unref();
-  return { ok: true };
+  // Independent of the spawned script above (which only knows upstream OptiScaler's own files) --
+  // removable right away since it doesn't depend on the interactive uninstaller finishing.
+  const nrDllRemoved = await removeSharedNrDllIfUnneeded(dir, 'optiscaler');
+  const tuningExtrasRemoved = await removeOptiScalerTuningExtras(dir);
+  return { ok: true, nrDllRemoved, tuningExtrasRemoved };
 });
 
 // Removes whichever ReShade-based backend (RenoDX or Deep Fried Chicken) is active for a game.
@@ -517,6 +556,8 @@ ipcMain.handle('feeder:uninstall', async (_evt, exePath) => {
         }
       }
     }
+
+    if (await removeSharedNrDllIfUnneeded(dir, 'feeder')) removed.push('nvngx_dlssnr.dll');
 
     return { ok: true, removed };
   } catch (err) {
@@ -990,12 +1031,44 @@ async function deployStreamlineFolder(dir) {
 // at all, since the overlay was stripped down to just the DLSS NR panel, so nothing resets an
 // unsupported choice at runtime any more. Leaving Frame Gen untouched on Vulkan avoids silently
 // switching on something the game has no working path for and no in-game control to undo.
+// OptiScaler_DlssNr.addon64 (the DLSS 5 tuning panel that draws inside ReShade's own overlay --
+// see OptiScaler/dlssnr/reshade_addon/README.md in the engine repo) only shows up if a real
+// ReShade is actually loaded alongside OptiScaler: its own docs say to rename ReShade's DLL to
+// ReShade64.dll and set LoadReShade=true under [Plugins] in OptiScaler.ini. Copying the addon file
+// alone (which the plain release-folder copy in game:install already does) isn't enough on its
+// own -- without this, the addon sits in the folder with nothing to load it. Reuses a Feeder
+// route's own ReShade proxy already in the folder rather than fetching a second copy where one
+// already exists.
+async function ensureReShadeCoexistence(dir) {
+  if (!fs.existsSync(path.join(dir, 'OptiScaler_DlssNr.addon64'))) return null; // engine build predates this addon
+  const reshade64 = path.join(dir, 'ReShade64.dll');
+  if (fs.existsSync(reshade64)) return { deployed: false, reason: 'already present' };
+
+  let source = null;
+  for (const name of RESHADE_PROXY_CANDIDATES) {
+    const candidate = path.join(dir, name);
+    if (fs.existsSync(candidate) && findMarkers(candidate, ['ReShade']).size > 0) { source = candidate; break; }
+  }
+  if (source) {
+    await fsp.copyFile(source, reshade64);
+    return { deployed: true, reason: `copied from ${path.basename(source)}` };
+  }
+  try {
+    await extractReShadeDll({ cacheDir: path.join(userDataDir(), 'feeder-cache-native'), bits: 64, destPath: reshade64 });
+    return { deployed: true, reason: 'fetched fresh' };
+  } catch (err) {
+    return { deployed: false, reason: `could not fetch ReShade: ${err.message}` };
+  }
+}
+
 async function autoConfigureGame(dir, exePath) {
   const iniPath = path.join(dir, 'OptiScaler.ini');
   if (!fs.existsSync(iniPath)) return { api: null, applied: [] };
 
   const api = await detectRenderApi(dir, exePath);
   const edits = [];
+  const reshadeCoexistence = await ensureReShadeCoexistence(dir);
+  if (reshadeCoexistence) edits.push({ section: 'Plugins', key: 'LoadReShade', value: 'true' });
 
   if (api === 'dx12') edits.push({ section: 'Upscalers', key: 'Dx12Upscaler', value: 'dlss' });
   else if (api === 'dx11') edits.push({ section: 'Upscalers', key: 'Dx11Upscaler', value: 'dlss' });
@@ -1025,7 +1098,7 @@ async function autoConfigureGame(dir, exePath) {
   }
 
   const applied = patchIniDefaults(iniPath, edits);
-  return { api, applied, streamline };
+  return { api, applied, streamline, reshadeCoexistence };
 }
 
 // ---------- stale-install detection / auto-update ----------
@@ -1083,11 +1156,11 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
 
     // Fill in any still-"auto" upscaler/DlssNr/FrameGen settings every sync, not just on install --
     // covers games that were already installed before this feature existed.
-    const { api, applied: autoConfigured, streamline } = await autoConfigureGame(dir, exePath);
+    const { api, applied: autoConfigured, streamline, reshadeCoexistence } = await autoConfigureGame(dir, exePath);
 
     const releaseDll = releaseFolder ? path.join(releaseFolder, 'OptiScaler.dll') : null;
     if (!releaseDll || !fs.existsSync(releaseDll)) {
-      return { ok: true, updated: autoConfigured.length > 0, reason: 'no release set', api, autoConfigured, streamline };
+      return { ok: true, updated: autoConfigured.length > 0, reason: 'no release set', api, autoConfigured, streamline, reshadeCoexistence };
     }
 
     // This runs unattended on every launch and every Settings change (autoSyncStaleGames), silently
@@ -1097,7 +1170,7 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
     if (!hasDlssNrSection(releaseFolder)) {
       return {
         ok: true, updated: autoConfigured.length > 0,
-        reason: 'release folder is not the DLSS-NR fork (no [DlssNr] section) -- refusing to sync', api, autoConfigured, streamline
+        reason: 'release folder is not the DLSS-NR fork (no [DlssNr] section) -- refusing to sync', api, autoConfigured, streamline, reshadeCoexistence
       };
     }
 
@@ -1105,19 +1178,19 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
     if (!active) {
       return {
         ok: true, updated: autoConfigured.length > 0,
-        reason: 'could not identify the active OptiScaler file (ambiguous proxy candidates)', api, autoConfigured, streamline
+        reason: 'could not identify the active OptiScaler file (ambiguous proxy candidates)', api, autoConfigured, streamline, reshadeCoexistence
       };
     }
 
     if (sha256File(releaseDll) === sha256File(active.file)) {
-      return { ok: true, updated: autoConfigured.length > 0, reason: 'up to date', api, autoConfigured, streamline };
+      return { ok: true, updated: autoConfigured.length > 0, reason: 'up to date', api, autoConfigured, streamline, reshadeCoexistence };
     }
 
     await fsp.copyFile(releaseDll, active.file);
     const plain = path.join(dir, 'OptiScaler.dll');
     if (active.file !== plain) await fsp.copyFile(releaseDll, plain).catch(() => {});
 
-    return { ok: true, updated: true, file: path.basename(active.file), api, autoConfigured, streamline };
+    return { ok: true, updated: true, file: path.basename(active.file), api, autoConfigured, streamline, reshadeCoexistence };
   } catch (err) {
     // Most common cause: the game is currently running and has the DLL locked.
     return { ok: false, error: err.message };
