@@ -17,8 +17,13 @@ surface right on the card:
 
 ![Game grid, showing per-game OptiScaler status and a live warning](docs/screenshots/manager-game-grid.png)
 
-**In-game tuning** is OptiScaler's own native panel (`Alt+Home`) — see
-[README-END-USER.txt](README-END-USER.txt).
+**In-game tuning** is OptiScaler's own native panel (`Alt+Home`), the DLSS 5 Developer Controls
+overlay — global model controls, per-model style/intensity, Frame Generation, and the colour/HDR
+pipeline, all live over the running game:
+
+![DLSS 5 Developer Controls overlay, open over a running game](docs/screenshots/dlss5-developer-controls.png)
+
+See [README-END-USER.txt](README-END-USER.txt) for the full key list and setup steps.
 
 ## What it does
 
