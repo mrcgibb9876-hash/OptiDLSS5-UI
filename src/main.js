@@ -13,7 +13,7 @@ const crypto = require('node:crypto');
 const { scanForGames } = require('./discover');
 const feeder = require('./feeder');
 const { installFeederNative } = require('./native-feeder/install');
-const { getBitness, findMarkers } = require('./native-feeder/pe');
+const { getBitness } = require('./native-feeder/pe');
 const { resolveGithubAsset, downloadToCache } = require('./native-feeder/download');
 const { openZip, findEntry, extractEntryTo } = require('./native-feeder/zip');
 const { FEEDER_RELEASES_API, FEEDER_ASSET_PATTERN } = require('./native-feeder/sources');
@@ -477,7 +477,7 @@ async function removeOptiScalerTuningExtras(dir) {
   const addon = path.join(dir, 'OptiScaler_DlssNr.addon64');
   if (fs.existsSync(addon)) { await fsp.rm(addon); removed.push('OptiScaler_DlssNr.addon64'); }
   const reshade64 = path.join(dir, 'ReShade64.dll');
-  if (fs.existsSync(reshade64) && findMarkers(reshade64, ['ReShade']).size > 0) {
+  if (fs.existsSync(reshade64) && await isRealReShade(reshade64)) {
     await fsp.rm(reshade64);
     removed.push('ReShade64.dll');
   }
@@ -490,19 +490,50 @@ ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
   // kept in case a future release renames it, so this doesn't silently break again.
   const candidates = ['Remove_OptiScaler.bat', 'uninstall_optiscaler.bat', 'uninstaller.bat'];
   const found = candidates.find((c) => fs.existsSync(path.join(dir, c)));
-  if (!found) return { ok: false, error: 'No uninstaller script found in game folder.' };
+  // This script only exists once "Run Setup" (setup_windows.bat) has actually been completed for
+  // this game -- game:install alone just copies files in, it never renames OptiScaler.dll to a
+  // proxy name or generates an uninstaller. Rather than a bare failure, still clean up what this
+  // app itself knows it added (independent of upstream OptiScaler's own files either way) and say
+  // plainly why OptiScaler.dll/dxgi.dll and OptiScaler.ini are being left in place.
+  const nrDllRemoved = await removeSharedNrDllIfUnneeded(dir, 'optiscaler');
+  const tuningExtrasRemoved = await removeOptiScalerTuningExtras(dir);
+  if (!found) {
+    return {
+      ok: false,
+      error: 'No generated uninstaller found -- "Run Setup" was never completed for this game, so ' +
+        'OptiScaler was never fully set up here. Removed what this app added directly ' +
+        `(${[nrDllRemoved && 'nvngx_dlssnr.dll', ...tuningExtrasRemoved].filter(Boolean).join(', ') || 'nothing found'}); ` +
+        'the plain OptiScaler.dll/OptiScaler.ini copy is still in the folder, remove those by hand or via "Remove" below.',
+      nrDllRemoved, tuningExtrasRemoved
+    };
+  }
   spawn('cmd.exe', ['/c', 'start', '""', 'cmd.exe', '/k', found], {
     cwd: dir,
     detached: true,
     stdio: 'ignore',
     shell: false
   }).unref();
-  // Independent of the spawned script above (which only knows upstream OptiScaler's own files) --
-  // removable right away since it doesn't depend on the interactive uninstaller finishing.
-  const nrDllRemoved = await removeSharedNrDllIfUnneeded(dir, 'optiscaler');
-  const tuningExtrasRemoved = await removeOptiScalerTuningExtras(dir);
   return { ok: true, nrDllRemoved, tuningExtrasRemoved };
 });
+
+// Whether a file is genuinely a ReShade build, by its PE version resource -- NOT a raw byte scan
+// for the string "ReShade" (findMarkers), which false-positives on OptiScaler.dll itself: this
+// engine's build embeds its own ReShade-add-on-hosting code, so the literal text "ReShade" appears
+// inside OptiScaler.dll too. That false positive was a real, shipped bug -- ensureReShadeCoexistence
+// below copied dxgi.dll (actually OptiScaler, renamed) to ReShade64.dll thinking it had found a
+// real ReShade to reuse, which left OptiScaler_DlssNr.addon64 with nothing that could actually host
+// it (confirmed on a real game: ReShade.log's own add-on scan never even attempted to load it).
+async function isRealReShade(file) {
+  try {
+    const { stdout } = await execFileAsync('powershell.exe', [
+      '-NoProfile', '-NonInteractive', '-Command',
+      '(Get-Item -LiteralPath $env:OSM_FILE).VersionInfo.ProductName'
+    ], { env: { ...process.env, OSM_FILE: file } });
+    return stdout.trim().toLowerCase() === 'reshade';
+  } catch {
+    return false;
+  }
+}
 
 // Removes whichever ReShade-based backend (RenoDX or Deep Fried Chicken) is active for a game.
 // Unlike OptiScaler, this route has no generated uninstaller script of its own to run, so this app
@@ -544,7 +575,7 @@ ipcMain.handle('feeder:uninstall', async (_evt, exePath) => {
       for (const name of RESHADE_PROXY_CANDIDATES) {
         const file = path.join(dir, name);
         if (!fs.existsSync(file)) continue;
-        if (findMarkers(file, ['ReShade']).size === 0) continue; // not ReShade -- leave it alone
+        if (!await isRealReShade(file)) continue; // not ReShade (could be OptiScaler under this name) -- leave it alone
         const original = `${file}.original`;
         if (fs.existsSync(original)) {
           await fsp.rm(file);
@@ -744,6 +775,10 @@ ipcMain.handle('feeder:install', async (evt, payload) => {
       // and the same download-integrity checks (pinned release, sha256 re-check right before
       // exec). This used to dead-end here with "use manual instead" even though that code already
       // existed and was tested -- it just was never called.
+      const ownedByOptiScaler = detectInstalledBackends(gameDir(exePath)).optiscaler;
+      if (ownedByOptiScaler) {
+        send({ kind: 'info', line: 'OptiScaler already owns dxgi.dll here -- the script will report a "not ReShade" failure for that (it has no idea OptiScaler hosts add-ons directly), but still drops the actual add-on/shader files first. Verifying those landed regardless of its own exit code.' });
+      }
       send({ kind: 'info', line: `${detected.api ? detected.api.toUpperCase() : 'Unknown API'}${consumer === 'RenoDX' ? ', RenoDX' : ''}: running DLSS5-Feeder's own installer unattended.` });
       const feederApi = { dx11: 'D3D', dx12: 'D3D', dx10: 'D3D', vulkan: 'Vulkan', opengl: 'OpenGL', dx9: 'D3D9', dx8: 'D3D8' }[detected.api] || 'Auto';
       const result = await feeder.installForGame(
@@ -759,6 +794,19 @@ ipcMain.handle('feeder:install', async (evt, payload) => {
         },
         send
       );
+
+      // The script's own proxy-identity check can never pass when OptiScaler already owns
+      // dxgi.dll for this game (confirmed against the real script -- it has no coexistence
+      // awareness at all, and -Force does not override this specific check). That check running
+      // first doesn't stop it from still copying the actual add-on and shader files before it
+      // reports overall failure, and OptiScaler hosts those directly once they're in the folder
+      // (see detectInstalledBackends). So: if it reported failure but the backend is now actually
+      // active, this succeeded in every way that matters -- don't send the user to the manual
+      // fallback for a "failure" that already did its job.
+      if (!result.ok && ownedByOptiScaler && detectInstalledBackends(gameDir(exePath)).feeder.active) {
+        send({ kind: 'info', line: 'Add-on/shader files are in place despite the script\'s own report -- OptiScaler will host them. Treating this as installed.' });
+        return { ok: true, recoveredFromScriptFailure: true, scriptError: result.error };
+      }
       return result;
     } finally {
       // The unpacked zip is hundreds of megabytes and the DLL paths inside it have to stay valid
@@ -1058,12 +1106,20 @@ async function deployStreamlineFolder(dir) {
 async function ensureReShadeCoexistence(dir) {
   if (!fs.existsSync(path.join(dir, 'OptiScaler_DlssNr.addon64'))) return null; // engine build predates this addon
   const reshade64 = path.join(dir, 'ReShade64.dll');
-  if (fs.existsSync(reshade64)) return { deployed: false, reason: 'already present' };
+  if (fs.existsSync(reshade64)) {
+    // Re-check even when the file already exists: an earlier buggy build of this function used a
+    // raw byte-scan that false-positived on OptiScaler.dll itself (it embeds the literal string
+    // "ReShade" in its own build) and could have copied OptiScaler.dll here under this name instead
+    // of a real ReShade. Fix that in place rather than leaving a fake ReShade64.dll sitting there
+    // forever just because *a* file exists.
+    if (await isRealReShade(reshade64)) return { deployed: false, reason: 'already present' };
+    await fsp.rm(reshade64);
+  }
 
   let source = null;
   for (const name of RESHADE_PROXY_CANDIDATES) {
     const candidate = path.join(dir, name);
-    if (fs.existsSync(candidate) && findMarkers(candidate, ['ReShade']).size > 0) { source = candidate; break; }
+    if (fs.existsSync(candidate) && await isRealReShade(candidate)) { source = candidate; break; }
   }
   if (source) {
     await fsp.copyFile(source, reshade64);
