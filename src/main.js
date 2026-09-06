@@ -535,6 +535,14 @@ function isReEngineGame(dir) {
   }
 }
 
+// Exe names OptiScaler_DLSSNR's compiled quirks table (misc/Quirks.h) already gives a tested,
+// vendor-aware compute-signature policy to -- see the note in autoConfigureGame.
+const KNOWN_REENGINE_QUIRKED_EXES = new Set([
+  'kunitsugami.exe', 'kunitsugamidemo.exe', 'monsterhunterwilds.exe', 'monsterhunterrise.exe',
+  'drdr.exe', 'dd2.exe', 'dd2ccs.exe', 'pragmata_sketchbook.exe', 'pragmata.exe',
+  're9.exe', 're9demo.exe', 'monster_hunter_stories_3_twisted_reflection.exe', 'onimushawots_demo.exe',
+]);
+
 // ── RE Framework (dinput8.dll) ────────────────────────────────────────────────
 // Capcom RE Engine games need RE Framework present for OptiScaler to work at all --
 // not an OptiScaler setting, a separate injector DLL that has to already be there.
@@ -667,8 +675,19 @@ async function autoConfigureGame(dir, exePath) {
   const reEngine = isReEngineGame(dir);
   let reframework = null;
   if (reEngine) {
-    edits.push({ section: 'Hotfix', key: 'RestoreComputeSignature', value: 'true' });
-    edits.push({ section: 'Hotfix', key: 'RestoreGraphicSignature', value: 'true' });
+    // OptiScaler_DLSSNR already ships a hand-tuned, per-exe quirks table (misc/Quirks.h) for the
+    // newer Capcom titles -- e.g. dd2.exe gets RestoreComputeSigOnNonNvidia, which only restores
+    // the compute signature on AMD/Intel and deliberately leaves it off on Nvidia. Forcing
+    // RestoreComputeSignature=true here regardless of vendor fights that tested config and hard-
+    // crashed Dragon's Dogma 2 at Neural Rendering init. RestoreGraphicSignature isn't set by any
+    // quirk entry for any title -- it's a manual/experimental toggle only, never validated as a
+    // blanket fix. So: skip both for titles the compiled quirks table already covers, and only
+    // fall back to RestoreComputeSignature for the untabulated older RE Engine line (RE2/3/4/7/8,
+    // DMC5, SF6, ...) that the wiki says needs it set by hand.
+    const exeName = path.basename(exePath).toLowerCase();
+    if (!KNOWN_REENGINE_QUIRKED_EXES.has(exeName)) {
+      edits.push({ section: 'Hotfix', key: 'RestoreComputeSignature', value: 'true' });
+    }
     // OptiScaler doesn't work on RE Engine without REFramework already present -- ensure it's
     // there before anything else here matters.
     reframework = await ensureREFrameworkForGame(dir);
