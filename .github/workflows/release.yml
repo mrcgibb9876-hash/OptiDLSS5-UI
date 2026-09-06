@@ -71,8 +71,8 @@ jobs:
         # Both targets, named the way electron-builder names them. An empty dist, or one target
         # silently missing, would otherwise publish as a release with nothing useful in it.
         $expected = @(
-          "dist\OptoRenoDXlss5 Setup $version.exe",
-          "dist\OptoRenoDXlss5 $version.exe"
+          "dist\OptiDLSS5-UI Setup $version.exe",
+          "dist\OptiDLSS5-UI $version.exe"
         )
 
         foreach ($file in $expected) {

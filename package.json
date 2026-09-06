@@ -1,11 +1,11 @@
 {
-  "name": "optorenodxlss5",
-  "productName": "OptoRenoDXlss5",
+  "name": "optidlss5-ui",
+  "productName": "OptiDLSS5-UI",
   "version": "1.3.10",
-  "description": "Per-game OptiScaler / RenoDX / DLSS Ray Reconstruction install manager",
+  "description": "Per-game OptiScaler / DLSS Ray Reconstruction install manager",
   "main": "src/main.js",
   "private": true,
-  "author": "OptoRenoDXlss5",
+  "author": "OptiDLSS5-UI",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --win nsis portable --publish=never"
@@ -15,8 +15,8 @@
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "local.optorenodxlss5.app",
-    "productName": "OptoRenoDXlss5",
+    "appId": "local.optidlss5ui.app",
+    "productName": "OptiDLSS5-UI",
     "directories": {
       "output": "dist"
     },

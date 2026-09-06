@@ -1,5 +1,5 @@
 let games = [];
-let settings = { releaseFolder: '', nrDllPath: '', installedVersion: '', renoDxAddonPath: '', streamlineZipPath: '', dfcZipPath: '' };
+let settings = { releaseFolder: '', nrDllPath: '', installedVersion: '', streamlineZipPath: '' };
 let editingGameId = null;
 let pendingBanner = { appid: null, localPath: null };
 let pendingUpdate = null;
@@ -70,26 +70,15 @@ async function renderGrid() {
     const card = document.createElement('div');
     card.className = 'card';
 
-    // Which actual program(s) are running DLSS-5 for this game, by name -- OptiScaler, RenoDX and
-    // Deep Fried Chicken are three different pieces of software with three different tuning
-    // surfaces, so a badge that just says "Installed" leaves the user guessing which one applies.
-    // Both can be active on the same game at once (OptiScaler hosts a RenoDX/DFC .addon64 already
-    // in the folder rather than conflicting with it), so this names both when that's the case.
-    const backends = status.backends || { optiscaler: false, feeder: { active: false, label: null } };
+    const backends = status.backends || { optiscaler: false };
     let badgeClass = 'badge-none';
     let badgeText = 'Not installed';
     if (status.exeMissing) {
       badgeClass = 'badge-missing';
       badgeText = 'Exe missing';
-    } else if (backends.optiscaler && backends.feeder.active) {
-      badgeClass = 'badge-installed';
-      badgeText = `OptiScaler + ${backends.feeder.label}`;
     } else if (backends.optiscaler) {
       badgeClass = 'badge-installed';
       badgeText = 'OptiScaler';
-    } else if (backends.feeder.active) {
-      badgeClass = 'badge-installed';
-      badgeText = backends.feeder.label;
     } else if (status.hasIni || status.hasNr) {
       badgeClass = 'badge-partial';
       badgeText = status.hasNr ? 'Missing OptiScaler files' : 'Missing NR file';
@@ -116,9 +105,6 @@ async function renderGrid() {
           <button class="btn btn-ghost btn-open">Open Folder</button>
           <button class="btn btn-ghost btn-edit">Edit</button>
           <button class="btn btn-ghost btn-danger btn-remove">Remove</button>
-        </div>
-        <div class="card-actions-row2">
-          <button class="btn ${backends.feeder.active ? 'btn-danger' : 'btn-ghost'} btn-feeder">${backends.feeder.active ? 'Remove ' + escapeHtml(backends.feeder.label) : 'Install ' + escapeHtml(feederConsumerLabel())}</button>
         </div>
       </div>
       </div>
@@ -168,8 +154,7 @@ async function renderGrid() {
       if (backends.optiscaler) {
         flipToConfirm(card, {
           title: 'Remove OptiScaler?',
-          detail: `Opens this game's own uninstaller in a terminal you confirm there -- same as ` +
-            `"Run Setup", just removing instead of installing. Does not touch ${backends.feeder.active ? backends.feeder.label : 'any Feeder/RenoDX'} files.`,
+          detail: `Opens this game's own uninstaller in a terminal you confirm there -- same as "Run Setup", just removing instead of installing.`,
           onConfirm: async () => {
             const res = await window.api.runUninstall(game.exePath);
             const nrNote = res.nrDllRemoved ? ' Also removed the now-unused nvngx_dlssnr.dll.' : '';
@@ -181,21 +166,6 @@ async function renderGrid() {
       }
     });
     card.querySelector('.btn-setup').addEventListener('click', () => runSetup(game));
-    card.querySelector('.btn-feeder').addEventListener('click', () => {
-      if (backends.feeder.active) {
-        flipToConfirm(card, {
-          title: `Remove ${backends.feeder.label}?`,
-          detail: `Deletes its add-on/consumer files for this game right away (no confirmation terminal). ${backends.optiscaler ? 'OptiScaler is left untouched.' : 'If nothing else set up ReShade here, its proxy DLL is removed too.'}`,
-          onConfirm: async () => {
-            const res = await window.api.uninstallFeeder(game.exePath);
-            toast(res.ok ? `${backends.feeder.label} removed (${(res.removed || []).join(', ') || 'nothing found'}).` : `Couldn't remove it: ${res.error}`);
-            renderGrid();
-          }
-        });
-      } else {
-        installFeeder(game);
-      }
-    });
     card.querySelector('.btn-open').addEventListener('click', () => window.api.openFolder(game.exePath));
     card.querySelector('.btn-edit').addEventListener('click', () => openGameModal(game));
     card.querySelector('.btn-remove').addEventListener('click', () => removeGame(game));
@@ -211,24 +181,15 @@ async function renderGrid() {
   }
 }
 
-// The actual name of whichever consumer the Feeder toolchain installs for this user, so buttons
-// and recommendations say "RenoDX" or "Deep Fried Chicken" -- the real programs -- instead of the
-// generic "DLSS 5 Feeder" (that name belongs to the installer/toolchain, not the DLSS-NR consumer
-// it sets up).
-function feederConsumerLabel() {
-  return settings.renoDxAddonPath ? 'RenoDX' : 'Deep Fried Chicken';
-}
-
-// Say which of the two paths this game wants, and make the other one the quieter option.
+// Says whether OptiScaler suits this game, and why.
 //
-// This is a recommendation, never a lock: the detection reads the exe's imports, and a bundled or
-// packed game can hide them, so both buttons stay clickable. What changes is which one looks like
-// the answer -- and when nothing could be determined, neither does, because a confident-looking
-// wrong answer is worse than an honest "could not tell".
+// This is informational, never a lock: the detection reads the exe's imports, and a bundled or
+// packed game can hide them, so the Install button always stays clickable. When the API is one
+// OptiScaler has no hook for at all, or nothing could be determined, this says so plainly instead
+// of guessing.
 async function applyRecommendation(game, card, backends) {
   const line = card.querySelector('.card-recommend');
   const install = card.querySelector('.btn-install');
-  const feeder = card.querySelector('.btn-feeder');
 
   // Reading a multi-hundred-megabyte exe is not something to repeat on every render, so the answer
   // is kept on the game record.
@@ -242,24 +203,20 @@ async function applyRecommendation(game, card, backends) {
 
   if (!line) return;
 
-  // A button already showing "Remove X" (btn-danger, because X is installed) never also gets
-  // "recommended" styling -- recommending an install once that backend is already there would be
-  // a contradictory two-tone button.
+  // A button already showing "Remove OptiScaler" (btn-danger, because it's installed) never also
+  // gets "recommended" styling -- recommending an install once it's already there would be a
+  // contradictory two-tone button.
   const canRecommendInstall = !backends.optiscaler;
-  const canRecommendFeeder = !backends.feeder.active;
 
   if (detected.recommend === 'optiscaler') {
     line.textContent = `OptiScaler — ${detected.reason}`;
     if (canRecommendInstall) install.classList.add('btn-primary');
-    feeder.classList.remove('btn-primary');
-  } else if (detected.recommend === 'feeder') {
-    line.textContent = `${feederConsumerLabel()} — ${detected.reason}`;
+  } else if (detected.recommend === 'unsupported') {
+    line.textContent = `Not supported — ${detected.reason}`;
     install.classList.remove('btn-primary');
-    if (canRecommendFeeder) feeder.classList.add('btn-primary');
   } else {
-    line.textContent = `Not sure — ${detected.reason}. Try OptiScaler first; use ${feederConsumerLabel()} if it does nothing.`;
+    line.textContent = `Not sure — ${detected.reason}. Try Install and see if it works.`;
     if (canRecommendInstall) install.classList.add('btn-primary');
-    feeder.classList.remove('btn-primary');
   }
 }
 
@@ -315,84 +272,6 @@ async function installGame(game) {
 async function runSetup(game) {
   const res = await window.api.runSetup(game.exePath);
   if (!res.ok) toast(res.error);
-}
-
-// Prepares local inputs for jlrouzies-fr/DLSS5-Feeder's own installer (a separate ReShade-addon
-// toolchain from OptiScaler's own DLSS-NR hook) and copies the command to run it, rather than
-// downloading or running the third-party script from this app.
-// Runs the Feeder's own installer for this game and shows its output as it goes.
-//
-// The install takes a couple of minutes and elevates partway through, so a spinner with nothing
-// behind it would read as a hang. Every line the script prints goes straight to the toast.
-async function installFeeder(game) {
-  if (!settings.nrDllPath && !settings.streamlineZipPath) {
-    toast('Set your nvngx_dlssnr.dll (or a Streamline zip that contains it) in Settings first — this app will not download NVIDIA\'s DLL for you.');
-    openSettingsModal();
-    return;
-  }
-
-  const stop = window.api.onFeederProgress((update) => {
-    if (update.exePath === game.exePath) toast(update.line);
-  });
-
-  toast(`Installing the DLSS 5 Feeder toolchain into ${game.name}…`);
-
-  try {
-    const res = await window.api.installFeeder({
-      exePath: game.exePath,
-      nrDllPath: settings.nrDllPath,
-      streamlineZipPath: settings.streamlineZipPath,
-      renoDxAddonPath: settings.renoDxAddonPath,
-      dfcZipPath: settings.dfcZipPath,
-      releaseFolder: settings.releaseFolder,
-      consumer: settings.renoDxAddonPath ? 'RenoDX' : 'DFC'
-    });
-
-    if (res.ok) {
-      toast(`${game.name}: Feeder toolchain installed.`);
-      // Two documented crash conditions (duplicate NGX module, NRStyle=2) are worth surfacing
-      // right when they're most likely to matter -- immediately after the install that could have
-      // introduced either one -- rather than only if the user happens to notice a badge later.
-      const status = await window.api.gameStatus(game.exePath);
-      for (const w of status.warnings || []) toast(w.message);
-      renderGrid();
-      return;
-    }
-
-    // Falling back rather than just reporting: a failure here is often a declined UAC prompt or a
-    // machine that will not run a downloaded script, and in both cases the manual route still
-    // works. This writes the launcher into the game folder and opens it.
-    toast(`Feeder install failed: ${res.error} — setting it up for you to run by hand instead.`);
-    await prepareDlss5Feeder(game);
-  } finally {
-    // Without this every install leaves another listener on the channel, and the fifth install
-    // would print every line five times.
-    stop();
-  }
-}
-
-// The manual route, still here for a machine where running a downloaded script from inside the app
-// is not wanted, or where the automatic one failed and the user wants to drive it by hand.
-async function prepareDlss5Feeder(game) {
-  if (!settings.renoDxAddonPath) {
-    toast('Set the RenoDX add-on path in Settings first.');
-    openSettingsModal();
-    return;
-  }
-  const res = await window.api.prepareDlss5Feeder({
-    exePath: game.exePath,
-    renoDxAddonPath: settings.renoDxAddonPath,
-    streamlineZipPath: settings.streamlineZipPath,
-    releaseFolder: settings.releaseFolder
-  });
-  if (!res.ok) {
-    toast(`Could not prepare: ${res.error}`);
-    return;
-  }
-  // Command is also copied to the clipboard as a fallback, in case double-clicking the .bat
-  // is inconvenient for some reason (e.g. it needs editing first).
-  navigator.clipboard.writeText(res.command).catch(() => {});
-  toast(res.note);
 }
 
 async function removeGame(game) {
@@ -534,8 +413,6 @@ const settingsModal = $('#settings-modal');
 function openSettingsModal() {
   $('#settings-release-folder').value = settings.releaseFolder || '';
   $('#settings-nr-dll').value = settings.nrDllPath || '';
-  $('#settings-dfc-zip').value = settings.dfcZipPath || '';
-  $('#settings-renodx-addon').value = settings.renoDxAddonPath || '';
   $('#settings-streamline-zip').value = settings.streamlineZipPath || '';
   $('#update-status').textContent = settings.installedVersion ? `Installed: ${settings.installedVersion}` : '';
   $('#update-status').className = 'status-line';
@@ -543,22 +420,8 @@ function openSettingsModal() {
   pendingUpdate = null;
   checkReleaseStatus();
   checkNrDllStatus();
-  checkDfcZipStatus();
-  checkRenoDxAddonStatus();
   checkStreamlineZipStatus();
   settingsModal.classList.remove('hidden');
-}
-
-function checkDfcZipStatus() {
-  const el = $('#dfc-zip-status');
-  el.textContent = settings.dfcZipPath ? 'Set.' : '';
-  el.className = 'status-line status-ok';
-}
-
-function checkRenoDxAddonStatus() {
-  const el = $('#renodx-addon-status');
-  el.textContent = settings.renoDxAddonPath ? 'Set.' : '';
-  el.className = 'status-line status-ok';
 }
 
 function checkStreamlineZipStatus() {
@@ -624,26 +487,6 @@ $('#btn-browse-nr-dll').addEventListener('click', async () => {
 });
 $('#settings-nr-dll').addEventListener('change', (e) => persistNrDll(e.target.value.trim()));
 
-async function persistDfcZip(p) {
-  settings.dfcZipPath = p;
-  $('#settings-dfc-zip').value = p;
-  await window.api.saveSettings(settings);
-  checkDfcZipStatus();
-}
-
-$('#btn-browse-dfc-zip').addEventListener('click', async () => {
-  const p = await window.api.pickZip('Select the Deep Fried Chicken zip');
-  if (p) persistDfcZip(p);
-});
-$('#settings-dfc-zip').addEventListener('change', (e) => persistDfcZip(e.target.value.trim()));
-
-async function persistRenoDxAddon(p) {
-  settings.renoDxAddonPath = p;
-  $('#settings-renodx-addon').value = p;
-  await window.api.saveSettings(settings);
-  checkRenoDxAddonStatus();
-}
-
 async function persistStreamlineZip(p) {
   settings.streamlineZipPath = p;
   $('#settings-streamline-zip').value = p;
@@ -651,14 +494,8 @@ async function persistStreamlineZip(p) {
   checkStreamlineZipStatus();
 }
 
-$('#btn-browse-renodx-addon').addEventListener('click', async () => {
-  const p = await window.api.pickAddon();
-  if (p) persistRenoDxAddon(p);
-});
-$('#settings-renodx-addon').addEventListener('change', (e) => persistRenoDxAddon(e.target.value.trim()));
-
 $('#btn-browse-streamline-zip').addEventListener('click', async () => {
-  const p = await window.api.pickZip('Select a zip with nvngx_dlss.dll / nvngx_dlssnr.dll (and optionally Streamline sl.*.dll files)');
+  const p = await window.api.pickZip('Select a zip with Streamline sl.*.dll files');
   if (p) persistStreamlineZip(p);
 });
 $('#settings-streamline-zip').addEventListener('change', (e) => persistStreamlineZip(e.target.value.trim()));
@@ -694,17 +531,6 @@ async function autoSyncStaleGames() {
       configured.push(`${game.name} (${res.api || 'detected'}: ${res.autoConfigured.map((e) => e.key).join(', ')})`);
     }
     if (res.streamline && res.streamline.deployed) streamlined.push(game.name);
-  }
-
-  // Feeder-toolchain (Deep Fried Chicken route) staleness check -- independent of whether an
-  // OptiScaler release folder is even configured, since a user may only use this route.
-  const feederUpdated = [];
-  for (const game of games) {
-    const res = await window.api.syncFeederIfStale(game.exePath);
-    if (res.ok && res.updated) feederUpdated.push(game.name);
-  }
-  if (feederUpdated.length > 0) {
-    toast(`Auto-updated the DLSS5-Feeder add-on in ${feederUpdated.length} game${feederUpdated.length > 1 ? 's' : ''}: ${feederUpdated.join(', ')}`);
   }
 
   if (updated.length > 0) {
@@ -966,7 +792,7 @@ $('#btn-add-scanned').addEventListener('click', async () => {
 (async function init() {
   const data = await window.api.loadData();
   games = data.games || [];
-  settings = data.settings || { releaseFolder: '', nrDllPath: '', installedVersion: '', renoDxAddonPath: '', streamlineZipPath: '', dfcZipPath: '' };
+  settings = data.settings || { releaseFolder: '', nrDllPath: '', installedVersion: '', streamlineZipPath: '' };
   await refreshBannerVisibility();
   await renderGrid();
   await autoUpdateOptiScalerRelease();

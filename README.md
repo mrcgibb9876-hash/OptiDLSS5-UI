@@ -1,10 +1,7 @@
-# OptoRenoDXlss5
+# OptiDLSS5-UI
 
-A Windows desktop app for getting NVIDIA's DLSS 5 Neural Rendering into your games, through
-whichever of two backends a given game actually needs: the
-[OptiScaler_DLSSNR](https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR) build of OptiScaler for
-games it hooks directly, or a ReShade-based route (RenoDX, or Deep Fried Chicken via the
-DLSS5-Feeder toolchain) for everything else.
+A Windows desktop app for getting NVIDIA's DLSS 5 Neural Rendering into your games via the
+[OptiScaler_DLSSNR](https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR) build of OptiScaler.
 
 Instead of copying files into every game folder by hand and running a setup script in each one, you
 point the app at your games once and click Install.
@@ -14,16 +11,14 @@ point the app at your games once and click Install.
 
 ## Screenshots
 
-**The manager itself** — each card names the actual backend(s) active on that game (not a generic
-"Installed"), Install buttons become Remove once a backend is there, and known trouble conditions
-(like a game-local `nvngx_dlss.dll` sitting next to RenoDX) surface right on the card:
+**The manager itself** — each card shows whether OptiScaler is active on that game (not a generic
+"Installed"), the Install button becomes Remove once it's there, and known trouble conditions
+surface right on the card:
 
-![Game grid, showing per-game OptiScaler/RenoDX status and a live warning](docs/screenshots/manager-game-grid.png)
+![Game grid, showing per-game OptiScaler status and a live warning](docs/screenshots/manager-game-grid.png)
 
-**In-game tuning** for the OptiScaler route is OptiScaler's own native panel (`Alt+Home`) — see
-[README-END-USER.txt](README-END-USER.txt). A separate ReShade-overlay add-on was tried for the
-RenoDX/Feeder route as well, but was dropped: RenoDX only reads its config once at load, so nothing
-written to it from outside RenoDX's own process ever took effect without a full game restart anyway.
+**In-game tuning** is OptiScaler's own native panel (`Alt+Home`) — see
+[README-END-USER.txt](README-END-USER.txt).
 
 ## What it does
 
@@ -41,67 +36,24 @@ checkbox you tick rather than on first run.
 folder, tracks what's installed against what's current, and re-runs OptiScaler's own setup script
 in a console you confirm yourself.
 
-**Installs the DLSS 5 Feeder toolchain**, for games OptiScaler can't reach. See below.
-
-## Two paths, and which game gets which
+## What OptiScaler covers, and what it doesn't
 
 OptiScaler intercepts the game's own upscaler — NVNGX, FSR or XeSS — and hands the neural model a
 properly labelled depth buffer, motion vectors, motion-vector scale, reset flag and pre-exposure
-straight from the parameter block. It is the accurate path, and it covers **D3D12 natively, Vulkan
-(natively and through the VkOnDx12 bridge), and D3D11 through the Dx11wDx12 bridge**. There is no
-D3D9 or D3D10 code in OptiScaler and there isn't going to be — those APIs have nothing to
-intercept.
-
-[DLSS5-Feeder](https://github.com/jlrouzies-fr/DLSS5-Feeder) covers the rest by building a synthetic
-DLAA contract from ReShade's depth buffer and estimated optical-flow motion vectors, on a private
-D3D12 device. That is guesswork where OptiScaler has ground truth, and it is DLAA-only — but it
-reaches **D3D8 and D3D9 through dgVoodoo2, D3D10 natively (32-bit), D3D11, D3D12, Vulkan and
-OpenGL**.
-
-So: OptiScaler where it fits, the Feeder where it doesn't.
-
-**Never both in the same game.** If OptiScaler and the Feeder are both active in one process, both
-apply the model to the same frame. Since OptiScaler v1.0.1 it refuses to start when it finds
-`renodx-dlss5.addon64` or `dlss5-feed.addon64` already loaded, and says so in the panel — but that
-is a backstop, not permission: pick one path per game and the app now tells you which.
+straight from the parameter block. It covers **D3D12 natively, Vulkan (natively and through the
+VkOnDx12 bridge), and D3D11 through the Dx11wDx12 bridge**. There is no D3D9 or D3D10 code in
+OptiScaler and there isn't going to be — those APIs have nothing to intercept, so games on them are
+simply not supported by this app. The card says so plainly instead of recommending an install that
+can't work.
 
 ## Dependencies: what the app fetches, and the one thing it won't
 
-The Feeder ships its own `tools/Install-DLSS5Feeder.ps1`, and that script already fetches and wires
-up everything: ReShade, the feeder add-on, LumeniteFX for motion vectors, the neural consumer,
-dgVoodoo2, and the `.ini` files with the techniques enabled in the right order — merging rather than
-replacing, backing up what it touches, and verifying at the end.
+**The NVIDIA runtime is the exception.** `nvngx_dlssnr.dll` comes out of a driver, it's NVIDIA's,
+and it is not ours to redistribute — which is the same reason `package_release.ps1` leaves it out of
+the OptiScaler release and the notes tell you to supply your own.
 
-So the app drives that script instead of reimplementing it. Writing our own downloader for the same
-set would mean owning a list of URLs its author changes whenever a dependency moves, and being
-silently wrong about it inside your game folder.
-
-It is pinned to the newest tagged release rather than whatever last landed on `main`, written to a
-fresh directory, checked, hashed, and re-checked immediately before it runs. The hash is printed in
-the log so you can say exactly what ran.
-
-**The NVIDIA runtime is the exception.** That script sources `nvngx_dlssnr.dll` and `nvngx_dlss.dll`
-from Discord CDN attachments. Those come out of a driver, they are NVIDIA's, and they are not ours
-to redistribute — which is the same reason `package_release.ps1` leaves them out of the OptiScaler
-release and the notes tell you to supply your own.
-
-So the app passes `-DlssNrDll` / `-DlssDll` pointing at the copies you already gave it (the path in
-Settings, or extracted from a Streamline zip). Handed local paths, the script uses them and never
-reaches for Discord. **If you haven't supplied `nvngx_dlssnr.dll`, the app refuses to run the
-install** rather than quietly fetching one on your behalf. When it can't supply `nvngx_dlss.dll` it
-says so in the log instead of letting you find out later.
-
-The RenoDX add-on is the same call for a different reason — closed-source and distributed over
-Discord. The app will use a copy you point it at; it won't go and get one.
-
-### When the installer changes under us
-
-The newest release is re-resolved on every run, so the script can change between one install and the
-next. The app reads the `param()` block of the copy it just downloaded and checks its arguments
-against it. An argument that release no longer takes is dropped, with a warning. If `-GameExe` or
-`-DlssNrDll` has been renamed or removed, the run is **refused** — silently losing `-DlssNrDll`
-would mean the script going and fetching NVIDIA's DLL itself, which is the one outcome that must
-not happen by accident.
+So the app refuses to install until you've pointed it at a copy in Settings. It never fetches one on
+your behalf.
 
 ## In-game keys
 
@@ -130,8 +82,5 @@ Electron 33, Windows x64. No native modules.
 [LICENSE-DLSS5-Swapper.txt](LICENSE-DLSS5-Swapper.txt); keeping that notice is the whole of what MIT
 asks. It is held byte-identical to its upstream so it can be refreshed without a merge — the
 adaptation for this app lives in `src/discover.js` instead.
-
-[DLSS5-Feeder](https://github.com/jlrouzies-fr/DLSS5-Feeder) by jlrouzies-fr, driven through its own
-installer, not vendored.
 
 [OptiScaler](https://github.com/optiscaler/OptiScaler) is the upstream this all rests on.

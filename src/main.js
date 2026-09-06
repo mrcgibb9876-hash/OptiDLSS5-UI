@@ -11,18 +11,10 @@ const crypto = require('node:crypto');
 // LICENSE-DLSS5-Swapper.txt) so it can be refreshed from upstream without a merge; discover.js is
 // ours, and turns the folders it finds into the executables this app installs against.
 const { scanForGames } = require('./discover');
-const feeder = require('./feeder');
-const { installFeederNative } = require('./native-feeder/install');
-const { getBitness } = require('./native-feeder/pe');
-const { resolveGithubAsset, downloadToCache } = require('./native-feeder/download');
-const { openZip, findEntry, extractEntryTo } = require('./native-feeder/zip');
-const { FEEDER_RELEASES_API, FEEDER_ASSET_PATTERN } = require('./native-feeder/sources');
-const { getIniKey } = require('./native-feeder/ini-merge');
-const { extractReShadeDll } = require('./native-feeder/reshade');
 const execFileAsync = promisify(execFile);
 
 const RELEASES_API = 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest';
-const GITHUB_HEADERS = { 'User-Agent': 'OptoRenoDXlss5', Accept: 'application/vnd.github+json' };
+const GITHUB_HEADERS = { 'User-Agent': 'OptiDLSS5-UI', Accept: 'application/vnd.github+json' };
 
 const userDataDir = () => app.getPath('userData');
 const gamesFile = () => path.join(userDataDir(), 'games.json');
@@ -77,9 +69,7 @@ ipcMain.handle('data:load', () => {
     releaseFolder: '',
     nrDllPath: '',
     installedVersion: '',
-    renoDxAddonPath: '',
-    streamlineZipPath: '',
-    dfcZipPath: ''
+    streamlineZipPath: ''
   });
   return { games, settings };
 });
@@ -145,16 +135,6 @@ ipcMain.handle('pick:dll', async () => {
     title: 'Select nvngx_dlssnr.dll (from an extracted NVIDIA driver package)',
     properties: ['openFile'],
     filters: [{ name: 'DLL', extensions: ['dll'] }]
-  });
-  if (res.canceled || res.filePaths.length === 0) return null;
-  return res.filePaths[0];
-});
-
-ipcMain.handle('pick:addon', async () => {
-  const res = await dialog.showOpenDialog({
-    title: 'Select renodx-dlss5.addon64',
-    properties: ['openFile'],
-    filters: [{ name: 'ReShade add-on', extensions: ['addon64', 'addon32', 'addon'] }]
   });
   if (res.canceled || res.filePaths.length === 0) return null;
   return res.filePaths[0];
@@ -255,72 +235,11 @@ function gameDir(exePath) {
   return path.dirname(exePath);
 }
 
-// Which DLSS-5 backend(s) are actually active in a game folder, by real file names rather than
-// the generic "DLSS 5 Feeder" umbrella term the UI used to show -- OptiScaler, RenoDX and Deep
-// Fried Chicken are three different pieces of software with three different DLSS-NR sections and
-// tuning surfaces, and a card that just says "Installed" leaves the user guessing which one is
-// actually running. Both halves are independent, not mutually exclusive: OptiScaler_DLSSNR hosts
-// ReShade's own add-on-loading API once it owns the proxy DLL, so a RenoDX/DFC .addon64 already in
-// the folder keeps loading and running alongside it -- confirmed live in a real game's ReShade.log.
-// installFeederNative disables a conflicting consumer (RenoDX vs DFC, never OptiScaler) by
-// renaming it to *.disabled-by-installer, so an exact-name check here already treats a disabled
-// leftover as not active.
+// Whether OptiScaler is installed for this game, by real file names.
 function detectInstalledBackends(dir) {
   const has = (name) => fs.existsSync(path.join(dir, name));
   const optiscaler = has('OptiScaler.ini') && has('nvngx_dlssnr.dll');
-  const feeder = has('renodx-dlss5.addon64') ? { active: true, route: 'renodx', label: 'RenoDX' }
-    : (has('deep-fried-chicken.addon64') || has('dlss5-feed.addon64')) ? { active: true, route: 'dfc', label: 'Deep Fried Chicken' }
-    : { active: false, route: null, label: null };
-  return { optiscaler, feeder };
-}
-
-// Kept for the one place that still wants a single "what's the headline backend" answer (game
-// cards' badge) -- OptiScaler wins the headline when both are active, since it's the one whose
-// install/uninstall this app fully owns.
-function detectActiveRoute(dir) {
-  const backends = detectInstalledBackends(dir);
-  if (backends.optiscaler) return { route: 'optiscaler', label: 'OptiScaler', both: backends.feeder.active };
-  if (backends.feeder.active) return { route: backends.feeder.route, label: backends.feeder.label, both: false };
-  return { route: 'none', label: null, both: false };
-}
-
-// Two known, documented ways this exact combination crashes RenoDX's own CreateFeature call --
-// found by reading a real crash out of dlss5-feed.log/ReShade.log on a live game, not guessed:
-//
-// 1. "two copies of the DLSS NGX module are loaded (the game-local nvngx_dlss.dll and the
-//    driver's _nvngx.dll), and the DLSS 5 add-on hooks both" -- dlss5-feed.log's own diagnostic
-//    for the access-violation it caught in renodx-dlss5.addon64's CreateFeature.
-// 2. "RenoDX.DLSS5 NRStyle=2 is set -- this crashed at startup on the reference machine" --
-//    the feed addon's own startup warning, logged every launch regardless of whether it actually
-//    crashes this time.
-//
-// Neither is something this app ever writes (RenoDX supplies its own NRStyle default; nrDllPath
-// is the user's own file, copied in deliberately), so this only warns -- it does not silently
-// delete or rewrite either one out from under the user.
-function detectFeederWarnings(dir) {
-  const warnings = [];
-  if (fs.existsSync(path.join(dir, 'renodx-dlss5.addon64')) && fs.existsSync(path.join(dir, 'nvngx_dlss.dll'))) {
-    warnings.push({
-      code: 'ngxDuplicate',
-      message: 'A game-local nvngx_dlss.dll sits next to RenoDX -- with the driver\'s own copy also ' +
-        'present, RenoDX hooks both and this has crashed DLSS-5 feature creation on a real install. ' +
-        'Try removing the game-local nvngx_dlss.dll, or use a renodx-dlss5 v4.7+ build.'
-    });
-  }
-  const reshadeIni = path.join(dir, 'ReShade.ini');
-  if (fs.existsSync(reshadeIni)) {
-    try {
-      const style = getIniKey(fs.readFileSync(reshadeIni, 'utf8'), 'RenoDX.DLSS5', 'NRStyle');
-      if (style === '2') {
-        warnings.push({
-          code: 'renoDxCrashStyle',
-          message: 'ReShade.ini has RenoDX.DLSS5 NRStyle=2 ("Cinematic") -- RenoDX\'s own log flags this ' +
-            'as a known startup crash on some machines. Set NRStyle=0 if this game crashes on launch.'
-        });
-      }
-    } catch { /* unreadable ini -- nothing to warn about */ }
-  }
-  return warnings;
+  return { optiscaler };
 }
 
 ipcMain.handle('game:status', (_evt, exePath) => {
@@ -332,37 +251,10 @@ ipcMain.handle('game:status', (_evt, exePath) => {
     fs.existsSync(path.join(dir, 'uninstall_optiscaler.bat')) ||
     fs.existsSync(path.join(dir, 'uninstaller.bat'));
   const backends = detectInstalledBackends(dir);
-  return {
-    exeMissing: false, hasIni, hasNr, hasUninstaller, dir,
-    activeRoute: detectActiveRoute(dir), backends,
-    warnings: backends.feeder.active ? detectFeederWarnings(dir) : []
-  };
+  return { exeMissing: false, hasIni, hasNr, hasUninstaller, dir, backends };
 });
 
 // ---------- install / uninstall ----------
-
-// CORRECTION (this app previously disabled a game's RenoDX/DFC add-on files whenever OptiScaler
-// was installed over them, on the assumption the two routes fight over the same proxy DLL and
-// can't coexist). They do coexist: OptiScaler hosts ReShade's add-on-loading API itself once it
-// owns the proxy DLL, so a RenoDX/DFC .addon64 already
-// sitting in the game folder just keeps loading and running -- confirmed live in ReShade.log on a
-// real install (RenoDX and DLSS 5 Feed both loaded and ran after OptiScaler took the dxgi.dll
-// slot). Disabling those files was actively counterproductive, not a safety net. Left as a no-op
-// wrapper (rather than deleting the call site) so a future real conflict case has somewhere to go;
-// nothing currently populates FILES.
-const FEEDER_ROUTE_FILES = [];
-async function disableFeederRoute(dir, onProgress = () => {}) {
-  for (const name of FEEDER_ROUTE_FILES) {
-    const file = path.join(dir, name);
-    if (!fs.existsSync(file)) continue;
-    try {
-      await fsp.rename(file, `${file}.disabled-by-installer`);
-      onProgress({ kind: 'info', line: `${name} renamed to .disabled-by-installer.` });
-    } catch (err) {
-      onProgress({ kind: 'warn', line: `Could not disable ${name}: ${err.message}` });
-    }
-  }
-}
 
 ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath }) => {
   try {
@@ -377,10 +269,6 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath 
     }
 
     const dir = gameDir(exePath);
-
-    // A RenoDX/DFC .addon64 already in this folder is left exactly as-is -- OptiScaler hosts
-    // ReShade's own add-on-loading API once it owns the proxy DLL, so it keeps loading and running.
-    // See the note on disableFeederRoute above for why this used to (wrongly) disable it first.
 
     // Copy every file from the extracted release into the game folder (async: avoids blocking the app on large files).
     for (const entry of await fsp.readdir(releaseFolder, { withFileTypes: true })) {
@@ -450,16 +338,11 @@ ipcMain.handle('game:run-setup', async (_evt, exePath) => {
   return { ok: true };
 });
 
-// nvngx_dlssnr.dll is NVIDIA's ~165 MB model file -- neither route's own uninstaller (the
-// generated Remove_OptiScaler.bat, or feeder:uninstall below) ever removed it, since this app is
-// the one that copies it in (from the user's own supplied file, never the game's), not either
-// upstream project. Left behind, it's dead weight in the game folder after every uninstall. Safe
-// to remove unconditionally when NO backend needs it any more; if the other backend is still
-// active, it still needs this same file, so it's left alone.
-async function removeSharedNrDllIfUnneeded(dir, exclude) {
-  const backends = detectInstalledBackends(dir);
-  const stillNeeded = exclude === 'optiscaler' ? backends.feeder.active : backends.optiscaler;
-  if (stillNeeded) return false;
+// nvngx_dlssnr.dll is NVIDIA's ~165 MB model file -- the generated Remove_OptiScaler.bat never
+// removes it, since this app is the one that copies it in (from the user's own supplied file,
+// never the game's), not upstream OptiScaler. Left behind, it's dead weight in the game folder
+// after every uninstall.
+async function removeSharedNrDllIfUnneeded(dir) {
   const file = path.join(dir, 'nvngx_dlssnr.dll');
   if (!fs.existsSync(file)) return false;
   await fsp.rm(file);
@@ -477,7 +360,7 @@ ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
   // proxy name or generates an uninstaller. Rather than a bare failure, still clean up what this
   // app itself knows it added (independent of upstream OptiScaler's own files either way) and say
   // plainly why OptiScaler.dll/dxgi.dll and OptiScaler.ini are being left in place.
-  const nrDllRemoved = await removeSharedNrDllIfUnneeded(dir, 'optiscaler');
+  const nrDllRemoved = await removeSharedNrDllIfUnneeded(dir);
   if (!found) {
     return {
       ok: false,
@@ -497,314 +380,9 @@ ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
   return { ok: true, nrDllRemoved };
 });
 
-// Whether a file is genuinely a ReShade build, by its PE version resource -- NOT a raw byte scan
-// for the string "ReShade" (findMarkers), which false-positives on OptiScaler.dll itself: this
-// engine's build embeds its own ReShade-add-on-hosting code, so the literal text "ReShade" appears
-// inside OptiScaler.dll too. That false positive was a real, shipped bug -- an earlier caller of
-// this trusted a raw byte scan and copied dxgi.dll (actually OptiScaler, renamed) over a real
-// ReShade proxy thinking it had found one to reuse.
-async function isRealReShade(file) {
-  try {
-    const { stdout } = await execFileAsync('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-Command',
-      '(Get-Item -LiteralPath $env:OSM_FILE).VersionInfo.ProductName'
-    ], { env: { ...process.env, OSM_FILE: file } });
-    return stdout.trim().toLowerCase() === 'reshade';
-  } catch {
-    return false;
-  }
-}
-
-// Removes whichever ReShade-based backend (RenoDX or Deep Fried Chicken) is active for a game.
-// Unlike OptiScaler, this route has no generated uninstaller script of its own to run, so this app
-// removes its own files directly rather than leaving "no uninstall RenoDX" as a real gap.
-//
-// Deletes rather than renames-to-.disabled: unlike installFeederNative's conflict guard (which
-// disables a file this app might reinstall moments later in the same flow), this is the user
-// explicitly asking to remove it, and a renamed-not-deleted file left lying around would just
-// confuse the next install attempt or a future scan.
-//
-// Only removes the ReShade proxy DLL itself (dxgi.dll/opengl32.dll/etc.) when OptiScaler is not
-// also active in this folder -- OptiScaler hosts these add-ons through its own proxy once it owns
-// one (see the note on detectInstalledBackends above), so touching the proxy would break OptiScaler
-// too. Verified via a raw byte scan for the "ReShade" version string, the cheapest reliable way to
-// tell "this dxgi.dll is ReShade" from "this dxgi.dll is OptiScaler" without a full PE version
-// resource parser.
-const RESHADE_PROXY_CANDIDATES = ['dxgi.dll', 'opengl32.dll', 'winmm.dll', 'version.dll', 'dbghelp.dll'];
-const FEEDER_CONSUMER_FILES = [
-  'renodx-dlss5.addon64', 'renodx-dlss5.addon64.disabled-by-installer',
-  'dlss5-feed.addon64', 'dlss5-feed.addon64.disabled-by-installer',
-  'deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg'
-];
-ipcMain.handle('feeder:uninstall', async (_evt, exePath) => {
-  try {
-    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
-    const dir = gameDir(exePath);
-    const backends = detectInstalledBackends(dir);
-    if (!backends.feeder.active) return { ok: false, error: 'No RenoDX/Deep Fried Chicken install found for this game.' };
-
-    const removed = [];
-    for (const name of FEEDER_CONSUMER_FILES) {
-      const file = path.join(dir, name);
-      if (fs.existsSync(file)) { await fsp.rm(file); removed.push(name); }
-    }
-    const fxFile = path.join(dir, 'reshade-shaders', 'Shaders', 'DLSS5_Feed.fx');
-    if (fs.existsSync(fxFile)) { await fsp.rm(fxFile); removed.push('reshade-shaders/Shaders/DLSS5_Feed.fx'); }
-
-    if (!backends.optiscaler) {
-      for (const name of RESHADE_PROXY_CANDIDATES) {
-        const file = path.join(dir, name);
-        if (!fs.existsSync(file)) continue;
-        if (!await isRealReShade(file)) continue; // not ReShade (could be OptiScaler under this name) -- leave it alone
-        const original = `${file}.original`;
-        if (fs.existsSync(original)) {
-          await fsp.rm(file);
-          await fsp.rename(original, file);
-          removed.push(`${name} (restored original)`);
-        } else {
-          await fsp.rm(file);
-          removed.push(name);
-        }
-      }
-    }
-
-    if (await removeSharedNrDllIfUnneeded(dir, 'feeder')) removed.push('nvngx_dlssnr.dll');
-
-    return { ok: true, removed };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
-});
-
-// ---------- DLSS5-Feeder / RenoDX (a separate ReShade-addon toolchain from OptiScaler's own
-// embedded DLSS-NR hook -- installs ReShade itself, the feeder addon, LumeniteFX and the chosen
-// neural consumer via jlrouzies-fr/DLSS5-Feeder's own installer script). This app prepares the
-// local files and hands back the command to run; it does not download or execute the third-party
-// script itself. ----------
-
-// The zip is a flat dump of NVIDIA driver-package DLLs, not just Streamline's own bin/x64 layout
-// (it also carries nvngx_dlss.dll/nvngx_dlssnr.dll), so this searches for the two by name rather
-// than assuming a path, the same way ensureStreamlineSdkCache locates sl.interposer.dll.
-async function extractDlssRuntimeDlls(zipPath) {
-  const tmpExtract = path.join(os.tmpdir(), `dlss5-feeder-runtime-${Date.now()}`);
-  await execFileAsync('powershell.exe', [
-    '-NoProfile', '-NonInteractive', '-Command',
-    'Expand-Archive -LiteralPath $env:OSM_ZIP -DestinationPath $env:OSM_DEST -Force'
-  ], { env: { ...process.env, OSM_ZIP: zipPath, OSM_DEST: tmpExtract } });
-
-  const found = { dir: tmpExtract };
-  const stack = [tmpExtract];
-  while (stack.length > 0 && !(found.dlssNr && found.dlss)) {
-    const cur = stack.pop();
-    for (const entry of await fsp.readdir(cur, { withFileTypes: true })) {
-      const full = path.join(cur, entry.name);
-      if (entry.isDirectory()) {
-        stack.push(full);
-      } else if (entry.name.toLowerCase() === 'nvngx_dlssnr.dll') {
-        found.dlssNr = full;
-      } else if (entry.name.toLowerCase() === 'nvngx_dlss.dll') {
-        found.dlss = full;
-      }
-    }
-  }
-  return found;
-}
-
-// The manual path, kept as a fallback: prepares local inputs and writes a launcher the user runs
-// themselves. 'feeder:install' below does the same thing unattended and is what the UI reaches for
-// first; this one is for a machine where running a downloaded script from inside the app is not
-// wanted, or where that run failed and the user wants to drive it by hand.
-ipcMain.handle('game:prepare-dlss5-feeder', async (_evt, { exePath, renoDxAddonPath, streamlineZipPath }) => {
-  try {
-    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
-    if (!renoDxAddonPath || !fs.existsSync(renoDxAddonPath)) {
-      throw new Error(`renodx-dlss5.addon64 not found at "${renoDxAddonPath || '(not set)'}" — set it in Settings`);
-    }
-
-    const dir = gameDir(exePath);
-
-    const parts = [
-      '.\\Install-DLSS5Feeder.ps1',
-      '-GameExe', `"${exePath}"`,
-      '-Consumer', 'RenoDX',
-      '-RenoDxAddon', `"${renoDxAddonPath}"`
-    ];
-
-    let runtimeNote = '';
-    if (streamlineZipPath && fs.existsSync(streamlineZipPath)) {
-      const { dlssNr, dlss } = await extractDlssRuntimeDlls(streamlineZipPath);
-      const gameHasDlss = fs.existsSync(path.join(dir, 'nvngx_dlss.dll'));
-      if (dlssNr) parts.push('-DlssNrDll', `"${dlssNr}"`);
-      if (dlss && !gameHasDlss) parts.push('-DlssDll', `"${dlss}"`);
-      runtimeNote = dlssNr || (dlss && !gameHasDlss)
-        ? ' Extracted the DLSS/DLSSNR runtime from the configured zip, so the launcher uses those ' +
-          'instead of the script\'s own (expiring) Discord links.'
-        : '';
-      if (dlss && gameHasDlss) {
-        runtimeNote += ' This game already has its own nvngx_dlss.dll, so -DlssDll was left out -- not overwriting it.';
-      }
-    }
-
-    const command = `powershell.exe -ExecutionPolicy Bypass -File ${parts.join(' ')}`;
-
-    // A double-click launcher instead of a paste-into-terminal step: classic cmd.exe windows
-    // don't reliably support Ctrl+V, and this needs Install-DLSS5Feeder.ps1 to exist here first
-    // anyway (that part is left to the user -- see the note below -- since fetching and running a
-    // third-party script from this app's own code is exactly the shape sandboxed dev environments
-    // block on sight). Writing this .bat is just a text file, no different from setup_windows.bat
-    // writing Remove_OptiScaler.bat.
-    const launcherPath = path.join(dir, 'Run-DLSS5-Feeder-Install.bat');
-    const launcherContent = `@echo off\r\ncd /d "%~dp0"\r\n${command}\r\npause\r\n`;
-    await fsp.writeFile(launcherPath, launcherContent, 'utf-8');
-
-    shell.openPath(dir);
-
-    return {
-      ok: true,
-      dir,
-      launcherPath,
-      command,
-      note: `Opened the game folder and wrote Run-DLSS5-Feeder-Install.bat there.${runtimeNote} ` +
-        'Download Install-DLSS5Feeder.ps1 from github.com/jlrouzies-fr/DLSS5-Feeder ' +
-        '(tools/Install-DLSS5Feeder.ps1) into that same folder, then double-click the .bat ' +
-        '-- no pasting needed.'
-    };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
-});
-
-// The same install, run for the user instead of handed to them.
-//
-// This resolves the two NVIDIA runtime DLLs from what the user has already supplied -- the path in
-// Settings, or the Streamline zip -- and passes them to the script explicitly. That is the whole
-// point of doing it here: given local paths the script uses them and never reaches for its own
-// Discord CDN copies of files that are NVIDIA's and not redistributable. If the user has not
-// supplied nvngx_dlssnr.dll, this refuses rather than quietly fetching one for them.
-//
-// Everything else -- ReShade, the feeder add-on, LumeniteFX, dgVoodoo2 for Direct3D 8/9, and the
-// .ini wiring -- the script fetches from its real sources, and that is fine to automate.
-ipcMain.handle('feeder:install', async (evt, payload) => {
-  const { exePath, consumer, mvProvider, nrDllPath, streamlineZipPath, renoDxAddonPath, dfcZipPath } = payload || {};
-
-  try {
-    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
-
-    // No exclusivity check here: an active OptiScaler install hosts a RenoDX/DFC .addon64 sitting
-    // in the same folder rather than fighting it for the proxy DLL -- see the note on
-    // disableFeederRoute above. Installing this route alongside OptiScaler is a supported
-    // combination, not a conflict to warn about.
-
-    let resolvedNr = nrDllPath && fs.existsSync(nrDllPath) ? nrDllPath : '';
-    let resolvedDlss = '';
-    let extractedTo = '';
-
-    // The zip is the more common way in: Streamline ships both runtimes, and someone who already
-    // configured it should not have to point at either DLL a second time. An explicitly set
-    // nrDllPath still wins -- it is the more deliberate of the two.
-    if (streamlineZipPath && fs.existsSync(streamlineZipPath)) {
-      const { dlssNr, dlss, dir } = await extractDlssRuntimeDlls(streamlineZipPath);
-      extractedTo = dir;
-      resolvedNr = resolvedNr || dlssNr || '';
-      resolvedDlss = dlss || '';
-    }
-
-    // Progress goes back over the same channel the renderer is already listening on, so a long
-    // install shows its work rather than sitting behind a spinner for two minutes.
-    const send = (update) => {
-      if (!evt.sender.isDestroyed()) evt.sender.send('feeder:progress', { exePath, ...update });
-    };
-
-    // Plain DLSS is common enough that a game frequently already ships its own nvngx_dlss.dll --
-    // unlike nvngx_dlssnr.dll (rarely native, and the whole point of this install), handing the
-    // script a copy here risks it landing next to the driver's own _nvngx.dll, which is exactly
-    // the "two copies of the DLSS NGX module loaded" condition that crashed RenoDX's CreateFeature
-    // on a real install (see detectFeederWarnings). Not supplying one at all when the game already
-    // has one leaves it to the script's own documented merge-not-replace behavior instead of this
-    // app actively feeding it a DLL to overwrite with.
-    if (resolvedDlss && fs.existsSync(path.join(gameDir(exePath), 'nvngx_dlss.dll'))) {
-      send({ kind: 'info', line: 'nvngx_dlss.dll already present in this game -- not supplying a copy, leaving it as-is.' });
-      resolvedDlss = '';
-    }
-
-    try {
-      const detected = await detectInstallPath(gameDir(exePath), exePath);
-      const bits = getBitness(exePath);
-      const nativeSupported = consumer !== 'RenoDX' && bits === 64 && ['dx11', 'dx12', 'dx10', 'opengl'].includes(detected.api);
-
-      if (nativeSupported) {
-        send({ kind: 'info', line: `${detected.api.toUpperCase()}, 64-bit: installing natively (no PowerShell involved).` });
-        const nativeResult = await installFeederNative(
-          {
-            exePath,
-            api: detected.api,
-            mvProvider,
-            nrDllPath: resolvedNr,
-            dlssDllPath: resolvedDlss,
-            dfcZipPath: dfcZipPath && fs.existsSync(dfcZipPath) ? dfcZipPath : '',
-            cacheDir: path.join(userDataDir(), 'feeder-cache-native')
-          },
-          send
-        );
-        return nativeResult;
-      }
-
-      // Everything the native installer above doesn't cover -- RenoDX (any bitness), Vulkan,
-      // 32-bit D3D, and Direct3D 8/9 (dgVoodoo2) -- still gets a real automatic install: feeder.js
-      // drives DLSS5-Feeder's own Install-DLSS5Feeder.ps1 unattended (-Yes -NoPause), the same
-      // script the manual path just hands to the user to run by hand, with the same
-      // redistribution guard (refuses rather than letting the script fetch NVIDIA's DLL itself)
-      // and the same download-integrity checks (pinned release, sha256 re-check right before
-      // exec). This used to dead-end here with "use manual instead" even though that code already
-      // existed and was tested -- it just was never called.
-      const ownedByOptiScaler = detectInstalledBackends(gameDir(exePath)).optiscaler;
-      if (ownedByOptiScaler) {
-        send({ kind: 'info', line: 'OptiScaler already owns dxgi.dll here -- the script will report a "not ReShade" failure for that (it has no idea OptiScaler hosts add-ons directly), but still drops the actual add-on/shader files first. Verifying those landed regardless of its own exit code.' });
-      }
-      send({ kind: 'info', line: `${detected.api ? detected.api.toUpperCase() : 'Unknown API'}${consumer === 'RenoDX' ? ', RenoDX' : ''}: running DLSS5-Feeder's own installer unattended.` });
-      const feederApi = { dx11: 'D3D', dx12: 'D3D', dx10: 'D3D', vulkan: 'Vulkan', opengl: 'OpenGL', dx9: 'D3D9', dx8: 'D3D8' }[detected.api] || 'Auto';
-      const result = await feeder.installForGame(
-        {
-          exePath,
-          api: feederApi,
-          consumer: consumer || 'DFC',
-          mvProvider,
-          nrDllPath: resolvedNr,
-          dlssDllPath: resolvedDlss,
-          renoDxAddonPath: renoDxAddonPath && fs.existsSync(renoDxAddonPath) ? renoDxAddonPath : '',
-          cacheDir: path.join(userDataDir(), 'feeder-cache-script')
-        },
-        send
-      );
-
-      // The script's own proxy-identity check can never pass when OptiScaler already owns
-      // dxgi.dll for this game (confirmed against the real script -- it has no coexistence
-      // awareness at all, and -Force does not override this specific check). That check running
-      // first doesn't stop it from still copying the actual add-on and shader files before it
-      // reports overall failure, and OptiScaler hosts those directly once they're in the folder
-      // (see detectInstalledBackends). So: if it reported failure but the backend is now actually
-      // active, this succeeded in every way that matters -- don't send the user to the manual
-      // fallback for a "failure" that already did its job.
-      if (!result.ok && ownedByOptiScaler && detectInstalledBackends(gameDir(exePath)).feeder.active) {
-        send({ kind: 'info', line: 'Add-on/shader files are in place despite the script\'s own report -- OptiScaler will host them. Treating this as installed.' });
-        return { ok: true, recoveredFromScriptFailure: true, scriptError: result.error };
-      }
-      return result;
-    } finally {
-      // The unpacked zip is hundreds of megabytes and the DLL paths inside it have to stay valid
-      // until it has been copied, so this cannot live inside extractDlssRuntimeDlls. Without it
-      // every install leaves another full copy in %TEMP%.
-      if (extractedTo) await fsp.rm(extractedTo, { recursive: true, force: true }).catch(() => {});
-    }
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
-});
-
 // "Remove" in this app previously only forgot the game (deleted its games.json entry) without
-// touching any installed files, which reads as "delete" but silently leaves OptiScaler (and,
-// separately, any DLSS5-Feeder toolchain) still active in the game's folder. Ask what the user
-// actually wants instead of guessing.
+// touching any installed files, which reads as "delete" but silently leaves OptiScaler still
+// active in the game's folder. Ask what the user actually wants instead of guessing.
 ipcMain.handle('game:confirm-remove', async (_evt, gameName) => {
   const res = await dialog.showMessageBox({
     type: 'question',
@@ -812,10 +390,8 @@ ipcMain.handle('game:confirm-remove', async (_evt, gameName) => {
     defaultId: 0,
     cancelId: 2,
     title: 'Remove game',
-    message: `Remove "${gameName}" from OptoRenoDXlss5?`,
-    detail: 'Removing OptiScaler runs its uninstaller in a terminal you confirm yourself (same as ' +
-      'Run Setup) -- it does not touch a separately installed DLSS5-Feeder/ReShade toolchain, if ' +
-      'you set that up for this game; use its own uninstall steps for that.'
+    message: `Remove "${gameName}" from OptiDLSS5-UI?`,
+    detail: 'Removing OptiScaler runs its uninstaller in a terminal you confirm yourself (same as Run Setup).'
   });
   return ['remove-and-forget', 'forget-only', 'cancel'][res.response] || 'cancel';
 });
@@ -851,12 +427,13 @@ async function detectRenderApi(dir, exePath) {
   return null;
 }
 
-// Which of the two install paths a game should take, and why.
+// Whether OptiScaler can hook this game at all, and why.
 //
 // detectRenderApi above answers only the three APIs OptiScaler can configure, because that is all
-// the ini needs. Choosing a path needs to tell "an API OptiScaler cannot reach" apart from "could
-// not tell", which are very different answers: the first means use the Feeder, the second means
-// say so and let the user decide. So this looks for the older APIs too.
+// the ini needs. Telling "an API OptiScaler cannot reach" apart from "could not tell" still
+// matters even with a single backend: the first is a confident "not supported", the second is an
+// honest "unknown", and those read very differently to the user. So this looks for the older APIs
+// too, purely to give a real reason rather than a guess.
 const OLD_API_MARKERS = [
     ['dx9', ['d3d9.dll', 'd3d8.dll']],
     ['dx10', ['d3d10.dll', 'd3d10core.dll']],
@@ -871,8 +448,8 @@ async function detectInstallPath(dir, exePath) {
     return { api, recommend: 'optiscaler', reason: `${api.toUpperCase()} — OptiScaler hooks this directly` };
   }
 
-  // Nothing modern found. Look for something old before concluding anything: a D3D9 game is a
-  // Feeder job, whereas an exe we simply could not read is not a conclusion at all.
+  // Nothing modern found. Look for something old before concluding anything: a D3D9 game genuinely
+  // has no OptiScaler hook, whereas an exe we simply could not read is not a conclusion at all.
   let buf = null;
   try {
     buf = await fsp.readFile(exePath);
@@ -885,7 +462,7 @@ async function detectInstallPath(dir, exePath) {
 
   for (const [old, markers] of OLD_API_MARKERS) {
     if (markers.some(has)) {
-      return { api: old, recommend: 'feeder', reason: `${old.toUpperCase()} — OptiScaler has no hook here` };
+      return { api: old, recommend: 'unsupported', reason: `${old.toUpperCase()} — OptiScaler has no hook here` };
     }
   }
 
@@ -1207,53 +784,6 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
     return { ok: true, updated: true, file: path.basename(active.file), api, autoConfigured, streamline };
   } catch (err) {
     // Most common cause: the game is currently running and has the DLL locked.
-    return { ok: false, error: err.message };
-  }
-});
-
-// ---------- Feeder-toolchain staleness sync (Deep Fried Chicken / DFC route) ----------
-// dlss5-feed.addon64 + DLSS5_Feed.fx always come from the latest jlrouzies-fr/DLSS5-Feeder release
-// at install time (resolveGithubAsset re-checks GitHub on every install call), so a *new* install
-// is never stale -- but a game installed months ago just keeps whatever was latest back then, with
-// nothing to ever notice a newer release exists later. This closes that gap the same way
-// game:sync-if-stale does for OptiScaler: on every launch, compare what is actually in the game
-// folder against the latest release and refresh it in place if different.
-//
-// RenoDX and Deep Fried Chicken's own consumer files are deliberately NOT covered here (see
-// native-feeder/sources.js's and feeder.js's top comments): both come from expiring Discord CDN
-// links that are not this app's to redistribute or poll versions of, so they stay user-supplied
-// via Settings with no auto-update path -- by design, not an oversight.
-ipcMain.handle('feeder:sync-if-stale', async (_evt, exePath) => {
-  try {
-    if (!exePath || !fs.existsSync(exePath)) return { ok: true, updated: false, reason: 'exe missing' };
-    const dir = gameDir(exePath);
-    const addonPath = path.join(dir, 'dlss5-feed.addon64');
-    if (!fs.existsSync(addonPath)) return { ok: true, updated: false, reason: 'not installed (DFC route)' };
-
-    const cacheDir = path.join(userDataDir(), 'feeder-cache-native');
-    const feederAsset = await resolveGithubAsset(FEEDER_RELEASES_API, FEEDER_ASSET_PATTERN);
-    const zipPath = await downloadToCache(feederAsset.url, cacheDir, feederAsset.name);
-    const zip = openZip(zipPath);
-
-    const addonEntry = findEntry(zip, /(^|\/)dlss5-feed\.addon64$/i);
-    if (!addonEntry) return { ok: true, updated: false, reason: 'dlss5-feed.addon64 not found in latest release' };
-
-    const tmpAddon = path.join(os.tmpdir(), `dlss5-feed-check-${Date.now()}.addon64`);
-    extractEntryTo(zip, addonEntry, tmpAddon);
-    const stale = sha256File(tmpAddon) !== sha256File(addonPath);
-
-    if (stale) {
-      await fsp.copyFile(tmpAddon, addonPath);
-      const fxEntry = findEntry(zip, /(^|\/)DLSS5_Feed\.fx$/i);
-      const shaderDir = path.join(dir, 'reshade-shaders', 'Shaders');
-      if (fxEntry && fs.existsSync(shaderDir)) extractEntryTo(zip, fxEntry, path.join(shaderDir, 'DLSS5_Feed.fx'));
-    }
-    await fsp.rm(tmpAddon, { force: true }).catch(() => {});
-
-    return { ok: true, updated: stale, tag: feederAsset.tag };
-  } catch (err) {
-    // Offline, rate-limited, or the game is running and has the addon locked -- non-fatal, retry
-    // next launch.
     return { ok: false, error: err.message };
   }
 });

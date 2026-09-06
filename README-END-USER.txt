@@ -1,15 +1,13 @@
 ===========================================
- OptoRenoDXlss5 — Setup Guide
+ OptiDLSS5-UI — Setup Guide
 ===========================================
 
 WHAT THIS IS
 ------------
 A desktop app for getting NVIDIA DLSS 5 Neural Rendering into your games
-through whichever backend a game actually needs: OptiScaler (the DLSS
-Neural Rendering / DLSSNR build, with our DLSS 5 Developer Controls UI,
-from github.com/mrcgibb9876-hash/OptiScaler_DLSSNR) for games it hooks
-directly, or a ReShade-based route (RenoDX, or Deep Fried Chicken via the
-DLSS5-Feeder toolchain) for everything else. Instead of manually copying
+through OptiScaler (the DLSS Neural Rendering / DLSSNR build, with our DLSS
+5 Developer Controls UI, from
+github.com/mrcgibb9876-hash/OptiScaler_DLSSNR). Instead of manually copying
 files into every game folder, you point the app at your games once and
 click Install per game.
 
@@ -25,7 +23,7 @@ REQUIREMENTS
 ------------------------------------------
 STEP 1 — Install the app
 ------------------------------------------
-Run the "OptoRenoDXlss5 Setup" installer and follow the prompts. This
+Run the "OptiDLSS5-UI Setup" installer and follow the prompts. This
 installs the app and adds a shortcut to your Desktop and Start Menu.
 
 (A "portable" .exe is also provided if you'd rather not install anything —
@@ -135,29 +133,9 @@ STEP 6 — Games OptiScaler can't reach
 ------------------------------------------
 OptiScaler works by intercepting the game's own upscaler, so it needs the
 game to have one: it covers DirectX 12, Vulkan, and DirectX 11. Older games
-have nothing for it to hook.
-
-For those, the card has "Install DLSS 5 Feeder". It runs the DLSS5-Feeder
-project's own installer for you and fetches what that needs — ReShade, the
-feeder add-on, LumeniteFX, the neural consumer, dgVoodoo2 for the really old
-APIs — and writes the settings files in the right order. Progress appears in
-the app as it goes.
-
-What it will NOT download is nvngx_dlssnr.dll. That file is NVIDIA's and is
-not ours to hand out, so the app passes it the copy YOU supplied in Step 3
-and refuses to run if you haven't set one. Same for the RenoDX add-on: point
-the app at a copy and it will use it; it won't go and get one.
-
-Coverage this way is DirectX 8, 9, 10, 11, 12, Vulkan and OpenGL — but it is
-DLAA only, and the image quality is a step below the OptiScaler path, which
-gets real depth and motion data from the game instead of estimating it. Use
-OptiScaler where it works and this where it doesn't.
-
-IMPORTANT: never both in the same game -- both would apply the model to the
-same frame and the picture will be wrong. From v1.0.1 OptiScaler refuses to
-start if it finds the Feeder's add-on already loaded and tells you so in the
-panel, but don't rely on that: pick one per game. The app now says which one
-each game wants, based on the graphics API it detected.
+(DirectX 8, 9 or 10, or OpenGL) have nothing for it to hook, and this app
+has no other backend for those — the card will say "Not supported" rather
+than offer an install that can't work.
 
 ------------------------------------------
 UPDATING OPTISCALER LATER
@@ -175,6 +153,6 @@ uninstaller batch file that OptiScaler's own setup generated there.
 ------------------------------------------
 UNINSTALLING THE APP ITSELF
 ------------------------------------------
-Windows Settings > Apps > "OptoRenoDXlss5" > Uninstall (or use the
+Windows Settings > Apps > "OptiDLSS5-UI" > Uninstall (or use the
 uninstaller shortcut in its Start Menu folder). This only removes the
 manager app — it does not touch any files already copied into your games.
