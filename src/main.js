@@ -17,6 +17,7 @@ const { getBitness, findMarkers } = require('./native-feeder/pe');
 const { resolveGithubAsset, downloadToCache } = require('./native-feeder/download');
 const { openZip, findEntry, extractEntryTo } = require('./native-feeder/zip');
 const { FEEDER_RELEASES_API, FEEDER_ASSET_PATTERN } = require('./native-feeder/sources');
+const { getIniKey } = require('./native-feeder/ini-merge');
 const execFileAsync = promisify(execFile);
 
 const RELEASES_API = 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest';
@@ -282,6 +283,45 @@ function detectActiveRoute(dir) {
   return { route: 'none', label: null, both: false };
 }
 
+// Two known, documented ways this exact combination crashes RenoDX's own CreateFeature call --
+// found by reading a real crash out of dlss5-feed.log/ReShade.log on a live game, not guessed:
+//
+// 1. "two copies of the DLSS NGX module are loaded (the game-local nvngx_dlss.dll and the
+//    driver's _nvngx.dll), and the DLSS 5 add-on hooks both" -- dlss5-feed.log's own diagnostic
+//    for the access-violation it caught in renodx-dlss5.addon64's CreateFeature.
+// 2. "RenoDX.DLSS5 NRStyle=2 is set -- this crashed at startup on the reference machine" --
+//    the feed addon's own startup warning, logged every launch regardless of whether it actually
+//    crashes this time.
+//
+// Neither is something this app ever writes (RenoDX supplies its own NRStyle default; nrDllPath
+// is the user's own file, copied in deliberately), so this only warns -- it does not silently
+// delete or rewrite either one out from under the user.
+function detectFeederWarnings(dir) {
+  const warnings = [];
+  if (fs.existsSync(path.join(dir, 'renodx-dlss5.addon64')) && fs.existsSync(path.join(dir, 'nvngx_dlss.dll'))) {
+    warnings.push({
+      code: 'ngxDuplicate',
+      message: 'A game-local nvngx_dlss.dll sits next to RenoDX -- with the driver\'s own copy also ' +
+        'present, RenoDX hooks both and this has crashed DLSS-5 feature creation on a real install. ' +
+        'Try removing the game-local nvngx_dlss.dll, or use a renodx-dlss5 v4.7+ build.'
+    });
+  }
+  const reshadeIni = path.join(dir, 'ReShade.ini');
+  if (fs.existsSync(reshadeIni)) {
+    try {
+      const style = getIniKey(fs.readFileSync(reshadeIni, 'utf8'), 'RenoDX.DLSS5', 'NRStyle');
+      if (style === '2') {
+        warnings.push({
+          code: 'renoDxCrashStyle',
+          message: 'ReShade.ini has RenoDX.DLSS5 NRStyle=2 ("Cinematic") -- RenoDX\'s own log flags this ' +
+            'as a known startup crash on some machines. Set NRStyle=0 if this game crashes on launch.'
+        });
+      }
+    } catch { /* unreadable ini -- nothing to warn about */ }
+  }
+  return warnings;
+}
+
 ipcMain.handle('game:status', (_evt, exePath) => {
   if (!exePath || !fs.existsSync(exePath)) return { exeMissing: true };
   const dir = gameDir(exePath);
@@ -290,9 +330,11 @@ ipcMain.handle('game:status', (_evt, exePath) => {
   const hasUninstaller = fs.existsSync(path.join(dir, 'Remove_OptiScaler.bat')) ||
     fs.existsSync(path.join(dir, 'uninstall_optiscaler.bat')) ||
     fs.existsSync(path.join(dir, 'uninstaller.bat'));
+  const backends = detectInstalledBackends(dir);
   return {
     exeMissing: false, hasIni, hasNr, hasUninstaller, dir,
-    activeRoute: detectActiveRoute(dir), backends: detectInstalledBackends(dir)
+    activeRoute: detectActiveRoute(dir), backends,
+    warnings: backends.feeder.active ? detectFeederWarnings(dir) : []
   };
 });
 

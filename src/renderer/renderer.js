@@ -107,6 +107,7 @@ async function renderGrid() {
         <div class="card-title">${escapeHtml(game.name)}</div>
         <div class="card-path" title="${escapeHtml(game.exePath)}">${escapeHtml(game.exePath)}</div>
         <div class="card-path card-recommend" title="Which install path suits this game">Checking graphics API…</div>
+        ${(status.warnings || []).map((w) => `<div class="card-warning" title="${escapeHtml(w.message)}">⚠ ${escapeHtml(w.message)}</div>`).join('')}
         <div class="card-actions">
           <button class="btn ${backends.optiscaler ? 'btn-danger' : 'btn-primary'} btn-install">${backends.optiscaler ? 'Remove OptiScaler' : 'Install OptiScaler'}</button>
           <button class="btn btn-ghost btn-setup">Run Setup</button>
@@ -347,6 +348,12 @@ async function installFeeder(game) {
 
     if (res.ok) {
       toast(`${game.name}: Feeder toolchain installed.`);
+      // Two documented crash conditions (duplicate NGX module, NRStyle=2) are worth surfacing
+      // right when they're most likely to matter -- immediately after the install that could have
+      // introduced either one -- rather than only if the user happens to notice a badge later.
+      const status = await window.api.gameStatus(game.exePath);
+      for (const w of status.warnings || []) toast(w.message);
+      renderGrid();
       return;
     }
 

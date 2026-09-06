@@ -187,6 +187,16 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.card-warning {
+  font-size: 11px;
+  color: #d9a441;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
 .card-actions {
   margin-top: auto;
   display: flex;
