@@ -42,11 +42,12 @@ Open the app, click "Settings", then either:
 
   OR
 
-  B) Manually download the release zip yourself from:
-       github.com/mrcgibb9876-hash/OptiScaler_DLSSNR/releases
-     Extract it anywhere, then click "Browse" next to "OptiScaler (DLSSNR)
-     release folder" and point it at the extracted folder (the one that
-     directly contains setup_windows.bat).
+  B) Manually download the engine zip. It's attached directly to this app's
+     own GitHub release (same page as the installer, named
+     OptiScaler_DLSSNR-<version>.zip) so you don't need to visit a second
+     repo. Extract it anywhere, then click "Browse" next to "OptiScaler
+     (DLSSNR) release folder" and point it at the extracted folder (the one
+     that directly contains setup_windows.bat).
 
 ------------------------------------------
 STEP 3 — Get the NVIDIA DLSS NR model file

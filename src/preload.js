@@ -9,21 +9,13 @@ contextBridge.exposeInMainWorld('api', {
   pickFolder: (title) => ipcRenderer.invoke('pick:folder', title),
   pickDll: () => ipcRenderer.invoke('pick:dll'),
   pickZip: (title) => ipcRenderer.invoke('pick:zip', title),
-  pickImage: () => ipcRenderer.invoke('pick:image'),
-
-  // Finds installed games. scanDrives walks every fixed drive and is slow, so the UI keeps it
-  // behind a checkbox that is off by default.
-  scanLibrary: (options) => ipcRenderer.invoke('library:scan', options),
+  pickImage: () => ipcRenderer.invoke('pick:image'),  scanLibrary: (options) => ipcRenderer.invoke('library:scan', options),
 
   steamSearch: (term) => ipcRenderer.invoke('steam:search', term),
   validateRelease: (folder) => ipcRenderer.invoke('release:validate', folder),
   validateNrDll: (filePath) => ipcRenderer.invoke('nrdll:validate', filePath),
 
-  gameStatus: (exePath) => ipcRenderer.invoke('game:status', exePath),
-
-  // Whether OptiScaler can hook this game, or "could not tell". Cached on the game record by the
-  // renderer, since it reads the whole exe.
-  detectPath: (exePath) => ipcRenderer.invoke('game:detect-path', exePath),
+  gameStatus: (exePath) => ipcRenderer.invoke('game:status', exePath),  detectPath: (exePath) => ipcRenderer.invoke('game:detect-path', exePath),
   installGame: (payload) => ipcRenderer.invoke('game:install', payload),
   syncGameIfStale: (payload) => ipcRenderer.invoke('game:sync-if-stale', payload),
   runSetup: (exePath) => ipcRenderer.invoke('game:run-setup', exePath),

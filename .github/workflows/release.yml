@@ -1,12 +1,3 @@
-# Build the app and publish the installers as a release.
-#
-# Until now the .exe assets on a release were built on someone's desktop and uploaded by hand,
-# which means nobody can say for certain which commit a given installer came from. This builds
-# from the tagged commit on a clean runner, so the answer is always "that one".
-#
-# electron-builder is left to its own devices apart from --publish=never: the upload is done here
-# instead, so the release is assembled the same way as OptiScaler_DLSSNR's.
-
 name: Publish a release
 
 on:
@@ -40,10 +31,6 @@ jobs:
         node-version: 20
         cache: npm
 
-    # The tag and package.json have to agree, because package.json is what names the .exe files.
-    # Tagging v1.1.0 while package.json still says 1.0.0 produces a v1.1.0 release full of assets
-    # called 1.0.0, and the mismatch is the kind of thing nobody notices until someone reports a
-    # bug against a version that was never built.
     - name: Check the tag matches package.json
       shell: pwsh
       run: |
@@ -68,8 +55,6 @@ jobs:
       run: |
         $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
 
-        # Both targets, named the way electron-builder names them. An empty dist, or one target
-        # silently missing, would otherwise publish as a release with nothing useful in it.
         $expected = @(
           "dist\OptiDLSS5-UI Setup $version.exe",
           "dist\OptiDLSS5-UI $version.exe"
@@ -87,6 +72,23 @@ jobs:
           Write-Output "$file  ($mb MB)"
         }
 
+    - name: Fetch the OptiScaler_DLSSNR engine build
+      shell: pwsh
+      run: |
+        $headers = @{ 'User-Agent' = 'OptiDLSS5-UI-release'; Accept = 'application/vnd.github+json' }
+        $release = Invoke-RestMethod -Headers $headers -Uri 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest'
+        $asset = $release.assets | Where-Object { $_.name -like '*.zip' } | Select-Object -First 1
+
+        if (-not $asset) {
+          Write-Error "No .zip asset found on OptiScaler_DLSSNR's latest release ($($release.tag_name))."
+          exit 1
+        }
+
+        $dest = "dist\OptiScaler_DLSSNR-$($release.tag_name).zip"
+        Invoke-WebRequest -Headers $headers -Uri $asset.browser_download_url -OutFile $dest
+        $mb = [math]::Round((Get-Item $dest).Length / 1MB, 1)
+        Write-Output "$dest  ($mb MB, from $($asset.name))"
+
     - name: Publish
       uses: softprops/action-gh-release@v2
       with:
@@ -95,5 +97,6 @@ jobs:
         prerelease: ${{ inputs.prerelease }}
         files: |
           dist/*.exe
+          dist/OptiScaler_DLSSNR-*.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -29,13 +29,7 @@ function initials(name) {
     .slice(0, 2)
     .map((w) => w[0].toUpperCase())
     .join('');
-}
-
-// Banner art comes only from a locally cached file (downloaded by the main process via
-// Steam's appdetails API — see main.js). Guessing fixed CDN paths like /apps/<id>/header.jpg
-// does not work reliably: Steam has moved many listings to hash-versioned asset URLs, so those
-// fixed paths now 404 for a lot of newer titles.
-function setBannerWithFallback(game, imgEl, fallbackEl) {
+}function setBannerWithFallback(game, imgEl, fallbackEl) {
   if (game.bannerLocalPath) {
     imgEl.classList.remove('hidden');
     if (fallbackEl) fallbackEl.classList.add('hidden');
@@ -119,10 +113,7 @@ async function renderGrid() {
       </div>
     `;
 
-    setBannerWithFallback(game, card.querySelector('.card-banner'), card.querySelector('.card-banner-fallback'));
-
-    // Backfill: games saved before local banner caching only have a Steam appid — cache it now.
-    if (!game.bannerLocalPath && game.bannerAppId) {
+    setBannerWithFallback(game, card.querySelector('.card-banner'), card.querySelector('.card-banner-fallback'));    if (!game.bannerLocalPath && game.bannerAppId) {
       window.api.cacheSteamBanner(game.bannerAppId).then((localPath) => {
         if (localPath) {
           game.bannerLocalPath = localPath;
@@ -130,12 +121,7 @@ async function renderGrid() {
           setBannerWithFallback(game, card.querySelector('.card-banner'), card.querySelector('.card-banner-fallback'));
         }
       });
-    } else if (!game.bannerLocalPath && !game.bannerAppId && !game.bannerSearchAttempted) {
-      // No appid at all -- a manually-added game (nobody opened the search box), or a scanned
-      // Epic/GOG title (only Steam scan results carry an appid). Auto-search Steam by name so art
-      // shows up without the user having to open Edit and search by hand. Marked as attempted
-      // either way so a title with no Steam listing does not re-hit the network on every render.
-      game.bannerSearchAttempted = true;
+    } else if (!game.bannerLocalPath && !game.bannerAppId && !game.bannerSearchAttempted) {      game.bannerSearchAttempted = true;
       window.api.steamSearch(game.name).then(async (items) => {
         if (!items || items.length === 0) {
           window.api.saveGames(games);
@@ -179,21 +165,9 @@ async function renderGrid() {
 
     grid.appendChild(card);
   }
-}
-
-// Says whether OptiScaler suits this game, and why.
-//
-// This is informational, never a lock: the detection reads the exe's imports, and a bundled or
-// packed game can hide them, so the Install button always stays clickable. When the API is one
-// OptiScaler has no hook for at all, or nothing could be determined, this says so plainly instead
-// of guessing.
-async function applyRecommendation(game, card, backends) {
+}async function applyRecommendation(game, card, backends) {
   const line = card.querySelector('.card-recommend');
-  const install = card.querySelector('.btn-install');
-
-  // Reading a multi-hundred-megabyte exe is not something to repeat on every render, so the answer
-  // is kept on the game record.
-  let detected = game.detectedPath;
+  const install = card.querySelector('.btn-install');  let detected = game.detectedPath;
 
   if (!detected) {
     detected = await window.api.detectPath(game.exePath);
@@ -201,12 +175,7 @@ async function applyRecommendation(game, card, backends) {
     window.api.saveGames(games);
   }
 
-  if (!line) return;
-
-  // A button already showing "Remove OptiScaler" (btn-danger, because it's installed) never also
-  // gets "recommended" styling -- recommending an install once it's already there would be a
-  // contradictory two-tone button.
-  const canRecommendInstall = !backends.optiscaler;
+  if (!line) return;  const canRecommendInstall = !backends.optiscaler;
 
   if (detected.recommend === 'optiscaler') {
     line.textContent = `OptiScaler — ${detected.reason}`;
@@ -218,12 +187,7 @@ async function applyRecommendation(game, card, backends) {
     line.textContent = `Not sure — ${detected.reason}. Try Install and see if it works.`;
     if (canRecommendInstall) install.classList.add('btn-primary');
   }
-}
-
-// Flips a card to its back face to ask "remove this?" instead of a native confirm() popup --
-// the confirmation stays visually anchored to the specific game/program it's about, rather than a
-// modal dialog that could be mistaken for belonging to a different card entirely.
-function flipToConfirm(card, { title, detail, onConfirm }) {
+}function flipToConfirm(card, { title, detail, onConfirm }) {
   card.querySelector('.card-remove-title').textContent = title;
   card.querySelector('.card-remove-detail').textContent = detail;
   card._onFlipConfirm = onConfirm;
@@ -290,10 +254,7 @@ async function removeGame(game) {
   games = games.filter((g) => g.id !== game.id);
   window.api.saveGames(games);
   renderGrid();
-}
-
-// ---------- Add/Edit Game modal ----------
-
+}
 const gameModal = $('#game-modal');
 
 function openGameModal(game) {
@@ -404,10 +365,7 @@ $('#btn-save-game').addEventListener('click', async () => {
   await window.api.saveGames(games);
   closeGameModal();
   renderGrid();
-});
-
-// ---------- Settings modal ----------
-
+});
 const settingsModal = $('#settings-modal');
 
 function openSettingsModal() {
@@ -503,14 +461,7 @@ $('#settings-streamline-zip').addEventListener('change', (e) => persistStreamlin
 $('#btn-close-settings').addEventListener('click', async () => {
   settingsModal.classList.add('hidden');
   renderGrid();
-});
-
-// ---------- auto-sync stale installs ----------
-// setup_windows.bat renames OptiScaler.dll to a per-game proxy file (dxgi.dll etc.) and deletes
-// itself, so pointing Settings at a newer release does nothing for games already set up -- the
-// proxy actually loaded by the game keeps running whatever version it was last renamed from.
-// This finds and refreshes it directly, without needing setup_windows.bat re-run.
-async function autoSyncStaleGames() {
+});async function autoSyncStaleGames() {
   if (games.length === 0) return;
 
   const updated = [];
@@ -545,17 +496,7 @@ async function autoSyncStaleGames() {
   if (failed.length > 0) {
     toast(`Could not auto-update: ${failed.join(', ')} — close the game and retry.`);
   }
-}
-
-// ---------- Automatic OptiScaler_DLSSNR updates ----------
-// The engine (OptiScaler_DLSSNR) and this manager are two separate GitHub repos, but the user
-// should never have to know or care about that -- so on every launch this does automatically
-// what "Check for Updates" in Settings does by hand: fetch the engine's latest release and apply
-// it. First run included, so a fresh install has a working release folder before the user ever
-// opens Settings. Silent when already current or when the check fails (offline, GitHub rate
-// limit) -- neither is worth interrupting startup for, and installGame's own validation still
-// catches a genuinely missing/bad release folder at install time.
-async function autoUpdateOptiScalerRelease() {
+}async function autoUpdateOptiScalerRelease() {
   const res = await window.api.checkUpdate();
   if (!res.ok || settings.installedVersion === res.tag) return;
 
@@ -578,10 +519,7 @@ async function autoUpdateOptiScalerRelease() {
   checkReleaseStatus();
   toast(hadRelease ? `OptiScaler engine auto-updated to ${res.tag}.` : `Fetched the OptiScaler engine (${res.tag}) automatically.`);
   autoSyncStaleGames();
-}
-
-// ---------- Check for updates ----------
-
+}
 $('#btn-check-updates').addEventListener('click', async () => {
   const btn = $('#btn-check-updates');
   const statusEl = $('#update-status');
@@ -646,18 +584,9 @@ $('#btn-install-update').addEventListener('click', async () => {
   refreshBannerVisibility();
   toast(`OptiScaler updated to ${res.tag}`);
   autoSyncStaleGames();
-});
-
-// ---------- Scan for Games ----------
-// discover.js/library.js do the actual filesystem/registry work; this just drives the modal --
-// show what was found, let the user drop anything they don't want or pick a different exe than
-// the one auto-chosen, and only write to the game list once they hit "Add Selected".
-
+});
 const scanModal = $('#scan-modal');
-let scanResults = [];
-// exePath actually selected for each result, keyed by its index in scanResults -- starts as the
-// auto-chosen one but changes if the user picks a runner-up from the dropdown.
-let scanSelections = {};
+let scanResults = [];let scanSelections = {};
 
 function openScanModal() {
   scanResults = [];
@@ -785,10 +714,7 @@ $('#btn-add-scanned').addEventListener('click', async () => {
   }
 
   closeScanModal();
-});
-
-// ---------- init ----------
-
+});
 (async function init() {
   const data = await window.api.loadData();
   games = data.games || [];

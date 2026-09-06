@@ -7,9 +7,6 @@ const { spawn, execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const crypto = require('node:crypto');
 
-// Game-library discovery. library.js is lifted verbatim from DLSS5-Swapper (MIT, see
-// LICENSE-DLSS5-Swapper.txt) so it can be refreshed from upstream without a merge; discover.js is
-// ours, and turns the folders it finds into the executables this app installs against.
 const { scanForGames } = require('./discover');
 const execFileAsync = promisify(execFile);
 
@@ -61,8 +58,6 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// ---------- data ----------
-
 ipcMain.handle('data:load', () => {
   const games = readJson(gamesFile(), []);
   const settings = readJson(settingsFile(), {
@@ -84,32 +79,15 @@ ipcMain.handle('data:save-settings', (_evt, settings) => {
   return true;
 });
 
-// ---------- library discovery ----------
-
-// Finds installed games rather than making the user point at each executable by hand.
-//
-// Steam, Epic and GOG are cheap: they are read from libraryfolders.vdf and the registry, so this
-// covers every Steam library on every drive without touching the disks themselves.
-//
-// scanDrives is the expensive one -- it walks all fixed drives looking for game-shaped folders --
-// so it is opt-in and must stay that way. On a large library over a spinning disk it takes real
-// time, and running it unasked on first launch would make the app feel broken.
-//
-// Nothing here writes anything or touches the network; it is a pure read of the local filesystem.
 ipcMain.handle('library:scan', async (_evt, options) => {
   const { extraFolders = [], scanDrives = false, excludedRoots = [], knownExePaths = [] } = options || {};
 
   try {
     return { ok: true, ...scanForGames({ extraFolders, scanDrives, excludedRoots, knownExePaths }) };
   } catch (error) {
-    // A scan that throws must not take the window with it. An unreadable drive, a permission-denied
-    // folder or a launcher that is not installed are all normal, and the user should be told rather
-    // than left with a spinner.
     return { ok: false, error: String(error && error.message ? error.message : error), games: [], roots: [] };
   }
 });
-
-// ---------- file/folder pickers ----------
 
 ipcMain.handle('pick:exe', async () => {
   const res = await dialog.showOpenDialog({
@@ -160,16 +138,12 @@ ipcMain.handle('pick:image', async () => {
   return res.filePaths[0];
 });
 
-// ---------- steam search ----------
-
 ipcMain.handle('steam:search', async (_evt, term) => {
   try {
     const url = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(term)}&l=english&cc=US`;
     const res = await fetch(url);
     if (!res.ok) return [];
     const data = await res.json();
-    // tiny_image is a real, currently-valid hash-versioned URL straight from the API response —
-    // guessing fixed CDN paths like /apps/<id>/header.jpg 404s for many newer store listings.
     return (data.items || []).slice(0, 8).map((item) => ({
       appid: item.id,
       name: item.name,
@@ -180,8 +154,6 @@ ipcMain.handle('steam:search', async (_evt, term) => {
   }
 });
 
-// ---------- release folder validation ----------
-
 function findSetupBat(folder) {
   try {
     const entries = fs.readdirSync(folder);
@@ -191,11 +163,6 @@ function findSetupBat(folder) {
   }
 }
 
-// setup_windows.bat ships in upstream OptiScaler too, so its presence alone doesn't tell this
-// fork's DLSS-NR build apart from a plain OptiScaler zip someone grabbed from the real upstream
-// project -- both install fine and neither errors, which is exactly how a wrong build goes
-// unnoticed until the in-game DLSS-NR settings simply aren't there. [DlssNr] in the release's own
-// OptiScaler.ini template is this fork's actual differentiator (confirmed against a real release).
 function hasDlssNrSection(folder) {
   try {
     const ini = fs.readFileSync(path.join(folder, 'OptiScaler.ini'), 'utf8');
@@ -229,13 +196,10 @@ ipcMain.handle('nrdll:validate', (_evt, filePath) => {
   return { valid: true, sizeMB };
 });
 
-// ---------- install status ----------
-
 function gameDir(exePath) {
   return path.dirname(exePath);
 }
 
-// Whether OptiScaler is installed for this game, by real file names.
 function detectInstalledBackends(dir) {
   const has = (name) => fs.existsSync(path.join(dir, name));
   const optiscaler = has('OptiScaler.ini') && has('nvngx_dlssnr.dll');
@@ -254,8 +218,6 @@ ipcMain.handle('game:status', (_evt, exePath) => {
   return { exeMissing: false, hasIni, hasNr, hasUninstaller, dir, backends };
 });
 
-// ---------- install / uninstall ----------
-
 ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
@@ -270,14 +232,12 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath 
 
     const dir = gameDir(exePath);
 
-    // Copy every file from the extracted release into the game folder (async: avoids blocking the app on large files).
     for (const entry of await fsp.readdir(releaseFolder, { withFileTypes: true })) {
       const src = path.join(releaseFolder, entry.name);
       const dest = path.join(dir, entry.name);
       await fsp.cp(src, dest, { recursive: true, force: true });
     }
 
-    // Copy the user-supplied NVIDIA model DLL in under the expected name, then verify it actually landed.
     const nrDest = path.join(dir, 'nvngx_dlssnr.dll');
     await fsp.copyFile(nrDllPath, nrDest);
     const srcStat = await fsp.stat(nrDllPath);
@@ -285,12 +245,6 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath 
     const nrCopied = destStat.size === srcStat.size;
     if (!nrCopied) throw new Error('nvngx_dlssnr.dll copy size mismatch — copy may have failed, try again');
 
-    // nvngx.dll_dlssnr.dll (a small shim, not the model itself -- easy to mistake for nvngx_dlssnr.dll
-    // above at a glance) ships inside the release folder and is supposed to land via the copy-everything
-    // loop above, but setup_windows.bat never copies it itself (it only prints a reminder that it "ships
-    // in this package"), and an incomplete/older release folder can genuinely be missing it. Left
-    // unnoticed, the game shows "nvngx.dll_dlssnr.dll is missing" in its own DLSS-NR panel later, which
-    // reads as a driver problem rather than an install one. Catch it here instead.
     if (!fs.existsSync(path.join(dir, 'nvngx.dll_dlssnr.dll')) && fs.existsSync(path.join(releaseFolder, 'nvngx.dll_dlssnr.dll'))) {
       throw new Error('nvngx.dll_dlssnr.dll did not copy from the release folder -- copy may have failed, try again');
     }
@@ -298,10 +252,6 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath 
       throw new Error('The release folder itself is missing nvngx.dll_dlssnr.dll -- it looks incomplete. Re-download it via "Check for Updates" in Settings.');
     }
 
-    // If this game was already set up before, setup_windows.bat previously renamed OptiScaler.dll
-    // to a proxy name (dxgi.dll etc.) and deleted itself -- the fresh OptiScaler.dll just copied
-    // above sits inert next to it. Refresh the actual proxy in place so an update takes effect
-    // without re-running the interactive setup script.
     let proxyUpdated = null;
     try {
       const active = await findActiveOptiScalerFile(dir);
@@ -310,12 +260,8 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath 
         proxyUpdated = path.basename(active.file);
       }
     } catch {
-      // Non-fatal -- the plain OptiScaler.dll copy above still succeeded either way.
     }
 
-    // Auto-detect the game's rendering API and switch its upscaler/DLSS-NR/Frame-Gen settings on,
-    // so it works without the user having to do this by hand -- the overlay no longer has a menu
-    // section to do it from in-game. Only fills in values still left at "auto"; see patchIniDefaults.
     const { api, applied, streamline } = await autoConfigureGame(dir, exePath);
 
     return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, api, autoConfigured: applied, streamline };
@@ -328,7 +274,6 @@ ipcMain.handle('game:run-setup', async (_evt, exePath) => {
   const dir = gameDir(exePath);
   const bat = findSetupBat(dir);
   if (!bat) return { ok: false, error: 'setup_windows.bat not found in game folder. Install first.' };
-  // Open in a normal interactive console window since the script prompts the user directly.
   spawn('cmd.exe', ['/c', 'start', '""', 'cmd.exe', '/k', bat], {
     cwd: dir,
     detached: true,
@@ -338,10 +283,6 @@ ipcMain.handle('game:run-setup', async (_evt, exePath) => {
   return { ok: true };
 });
 
-// nvngx_dlssnr.dll is NVIDIA's ~165 MB model file -- the generated Remove_OptiScaler.bat never
-// removes it, since this app is the one that copies it in (from the user's own supplied file,
-// never the game's), not upstream OptiScaler. Left behind, it's dead weight in the game folder
-// after every uninstall.
 async function removeSharedNrDllIfUnneeded(dir) {
   const file = path.join(dir, 'nvngx_dlssnr.dll');
   if (!fs.existsSync(file)) return false;
@@ -351,15 +292,8 @@ async function removeSharedNrDllIfUnneeded(dir) {
 
 ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
   const dir = gameDir(exePath);
-  // Remove_OptiScaler.bat is what setup_windows.bat actually generates; the other two names are
-  // kept in case a future release renames it, so this doesn't silently break again.
   const candidates = ['Remove_OptiScaler.bat', 'uninstall_optiscaler.bat', 'uninstaller.bat'];
   const found = candidates.find((c) => fs.existsSync(path.join(dir, c)));
-  // This script only exists once "Run Setup" (setup_windows.bat) has actually been completed for
-  // this game -- game:install alone just copies files in, it never renames OptiScaler.dll to a
-  // proxy name or generates an uninstaller. Rather than a bare failure, still clean up what this
-  // app itself knows it added (independent of upstream OptiScaler's own files either way) and say
-  // plainly why OptiScaler.dll/dxgi.dll and OptiScaler.ini are being left in place.
   const nrDllRemoved = await removeSharedNrDllIfUnneeded(dir);
   if (!found) {
     return {
@@ -380,9 +314,6 @@ ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
   return { ok: true, nrDllRemoved };
 });
 
-// "Remove" in this app previously only forgot the game (deleted its games.json entry) without
-// touching any installed files, which reads as "delete" but silently leaves OptiScaler still
-// active in the game's folder. Ask what the user actually wants instead of guessing.
 ipcMain.handle('game:confirm-remove', async (_evt, gameName) => {
   const res = await dialog.showMessageBox({
     type: 'question',
@@ -400,19 +331,11 @@ ipcMain.handle('game:open-folder', (_evt, exePath) => {
   shell.openPath(gameDir(exePath));
 });
 
-// ---------- render API detection / auto-configuration ----------
-// The overlay no longer has a menu section to turn any of this on from in-game (see the
-// [FrameGen] handling below), so a fresh install needs to already be configured correctly for
-// the game's actual rendering API. This is best-effort: an exe importing d3d12.dll may still
-// render in Dx11 in some hybrid engines, so it never overrides a value the user (or a previous
-// run of this same logic) already changed away from "auto" -- see patchIniDefaults.
-
 async function detectRenderApi(dir, exePath) {
   try {
     const entries = await fsp.readdir(dir);
     if (entries.some((f) => /^vulkan-1\.dll$/i.test(f) || /_vk(ulkan)?\.dll$/i.test(f))) return 'vulkan';
   } catch {
-    // fall through to the exe scan below
   }
   try {
     const buf = await fsp.readFile(exePath);
@@ -422,18 +345,10 @@ async function detectRenderApi(dir, exePath) {
     if (has('d3d12.dll')) return 'dx12';
     if (has('d3d11.dll')) return 'dx11';
   } catch {
-    // exe unreadable/too large/locked -- fall through to "unknown"
   }
   return null;
 }
 
-// Whether OptiScaler can hook this game at all, and why.
-//
-// detectRenderApi above answers only the three APIs OptiScaler can configure, because that is all
-// the ini needs. Telling "an API OptiScaler cannot reach" apart from "could not tell" still
-// matters even with a single backend: the first is a confident "not supported", the second is an
-// honest "unknown", and those read very differently to the user. So this looks for the older APIs
-// too, purely to give a real reason rather than a guess.
 const OLD_API_MARKERS = [
     ['dx9', ['d3d9.dll', 'd3d8.dll']],
     ['dx10', ['d3d10.dll', 'd3d10core.dll']],
@@ -443,13 +358,10 @@ const OLD_API_MARKERS = [
 async function detectInstallPath(dir, exePath) {
   const api = await detectRenderApi(dir, exePath);
 
-  // OptiScaler intercepts the game's own upscaler, so it needs one of these three.
   if (api === 'vulkan' || api === 'dx12' || api === 'dx11') {
     return { api, recommend: 'optiscaler', reason: `${api.toUpperCase()} — OptiScaler hooks this directly` };
   }
 
-  // Nothing modern found. Look for something old before concluding anything: a D3D9 game genuinely
-  // has no OptiScaler hook, whereas an exe we simply could not read is not a conclusion at all.
   let buf = null;
   try {
     buf = await fsp.readFile(exePath);
@@ -466,8 +378,6 @@ async function detectInstallPath(dir, exePath) {
     }
   }
 
-  // Read it fine, recognised nothing. Packed or bundled exes land here, and guessing at this point
-  // would be worse than saying so.
   return { api: null, recommend: 'unknown', reason: 'could not tell which graphics API this uses' };
 }
 
@@ -480,10 +390,6 @@ ipcMain.handle('game:detect-path', async (_evt, exePath) => {
   }
 });
 
-// Text-preserving ini patch: only fills in a key when its current value is still the shipped
-// "auto" placeholder, so it never clobbers a value the user (or a prior run) deliberately set.
-// Rewrites just the matched value lines -- every comment, blank line and unrelated setting in the
-// file is left byte-for-byte alone.
 function patchIniDefaults(iniPath, edits) {
   const original = fs.readFileSync(iniPath, 'utf-8');
   const eol = original.includes('\r\n') ? '\r\n' : '\n';
@@ -516,20 +422,6 @@ function patchIniDefaults(iniPath, edits) {
   return applied;
 }
 
-// ---------- Streamline SDK (needed for FGOutput=dlssg) ----------
-// FGOutput::DLSSG needs sl.interposer.dll/sl.common.dll/nvngx_dlssg.dll in a "streamline"
-// subfolder next to the proxy DLL, or it fails at runtime with "Can't init DLSSG Output -- Are
-// you missing the streamline folder?". Unlike the DLSS NR model file, this one IS freely
-// redistributable straight from NVIDIA-RTX/Streamline's own GitHub releases, so it can be fetched
-// automatically instead of asking the user to run the repo's Streamlined_fetcher_windows.bat by
-// hand for every game.
-//
-// Pinned to the exact version, NOT "latest": the OptiScaler build this app installs compiles
-// against external/streamline's headers, currently SL_VERSION 2.11.1. Deploying the newest
-// release (2.12.0, at the time this was pinned) crashed Witcher 3 hard -- Windows Error Reporting
-// pointed straight at OptiScaler\streamline\sl.reflex.dll, access violation, during DLSS-G init.
-// An ABI-mismatched runtime DLL talking to an interposer built against older headers reproduces
-// exactly like that. Bump this only in lockstep with a rebuild against newer streamline headers.
 const STREAMLINE_SDK_VERSION = 'v2.11.1';
 const STREAMLINE_RELEASE_API = `https://api.github.com/repos/NVIDIA-RTX/Streamline/releases/tags/${STREAMLINE_SDK_VERSION}`;
 
@@ -541,16 +433,6 @@ function streamlineSdkLocalCacheDir() {
   return path.join(userDataDir(), 'streamline-sdk-local');
 }
 
-// Downloads and caches once per app install -- subsequent calls are a no-op if the cache already
-// matches STREAMLINE_SDK_VERSION (a version marker file, not just file presence, so a cache left
-// over from before this version was pinned gets replaced rather than silently reused). Returns
-// the cache directory, or null if the fetch failed (offline, GitHub rate limit, etc.) -- callers
-// treat that as non-fatal and just skip deploying it this time.
-// A configured local zip (Settings > Streamline SDK zip) takes priority over the pinned
-// auto-download -- it's how a version newer than STREAMLINE_SDK_VERSION gets used without
-// waiting on this file to be re-pinned and rebuilt against. Cached separately by content hash
-// (not the pinned version string), so pointing Settings at a different zip later is picked up
-// without deleting anything by hand.
 async function ensureStreamlineSdkCache(localZipPath) {
   const usingLocal = !!(localZipPath && fs.existsSync(localZipPath));
   const cacheDir = usingLocal ? streamlineSdkLocalCacheDir() : streamlineSdkCacheDir();
@@ -586,8 +468,6 @@ async function ensureStreamlineSdkCache(localZipPath) {
       'Expand-Archive -LiteralPath $env:OSM_ZIP -DestinationPath $env:OSM_DEST -Force'
     ], { env: { ...process.env, OSM_ZIP: tmpZip, OSM_DEST: tmpExtract } });
 
-    // The SDK zip nests the real (non-development) DLLs under bin/x64 -- find it rather than
-    // hardcoding the path, in case a future SDK release reshuffles the layout.
     let binDir = null;
     const stack = [tmpExtract];
     while (stack.length > 0 && !binDir) {
@@ -613,21 +493,12 @@ async function ensureStreamlineSdkCache(localZipPath) {
     await fsp.writeFile(versionMarker, wantVersion, 'utf-8');
     return cacheDir;
   } catch {
-    return null; // Offline, rate-limited, bad zip, etc. -- non-fatal, just try again next sync.
+    return null;
   } finally {
     if (tmpZip && !usingLocal) fsp.rm(tmpZip, { force: true }).catch(() => {});
   }
 }
 
-// Copy-if-missing, not force-overwrite: a game folder may already have a hand-populated
-// streamline folder (e.g. NR-specific sl.dlss_nr.dll/nvngx_dlssnr.dll plugins sourced from a
-// driver package, which this SDK download doesn't carry), and this only needs to fill gaps.
-//
-// Goes under <gamedir>/OptiScaler/streamline, not <gamedir>/streamline: dllmain.cpp resolves
-// MainDllPath (the base LoadStreamline() builds "streamline" onto) to the game's OptiScaler/
-// subfolder whenever it exists -- which it always does once the release's own OptiScaler/
-// subfolder has been copied in -- falling back to the game root only if that subfolder is
-// missing.
 async function deployStreamlineFolder(dir) {
   const base = fs.existsSync(path.join(dir, 'OptiScaler')) ? path.join(dir, 'OptiScaler') : dir;
   const dest = path.join(base, 'streamline');
@@ -649,11 +520,6 @@ async function deployStreamlineFolder(dir) {
   return { deployed: copied.length > 0, files: copied };
 }
 
-// Frame Gen output/input are only wired up for Dx11/Dx12 in this build -- the menu's own
-// Vulkan-disables everything gate (see upstream RenderFrameGenerationSelection) no longer runs
-// at all, since the overlay was stripped down to just the DLSS NR panel, so nothing resets an
-// unsupported choice at runtime any more. Leaving Frame Gen untouched on Vulkan avoids silently
-// switching on something the game has no working path for and no in-game control to undo.
 async function autoConfigureGame(dir, exePath) {
   const iniPath = path.join(dir, 'OptiScaler.ini');
   if (!fs.existsSync(iniPath)) return { api: null, applied: [] };
@@ -667,17 +533,6 @@ async function autoConfigureGame(dir, exePath) {
 
   edits.push({ section: 'DlssNr', key: 'Enabled', value: 'true' });
 
-  // FGOutput=dlssg (real NVIDIA DLSS-G, the only backend the overlay's Frame Generation section
-  // is wired to -- fsrfg/xefg are deliberately left out of that panel). OptiScaler's own
-  // StreamlineProxy::LoadStreamline() reuses the game's already-loaded native sl.interposer.dll
-  // when one exists (the same "already in memory" detection dllmain.cpp's startup scan does) and
-  // only falls back to loading OptiScaler's own bundled copy from OptiScaler/streamline for a
-  // game with no native Streamline of its own -- so this is safe to default on either way. (An
-  // earlier version of LoadStreamline() always loaded its own separate copy regardless, which on
-  // a game with native Streamline gave the driver two independent Reflex instances fighting over
-  // its single global Reflex state -- reproduced live as a hard crash on The Witcher 3. Fixed at
-  // the source level; this app only needs to keep the OptiScaler/streamline SDK folder deployed
-  // for the no-native-Streamline case that still needs it.)
   let streamline = null;
   const hasNativeStreamline = fs.existsSync(path.join(dir, 'sl.interposer.dll')) ||
     fs.existsSync(path.join(dir, 'sl.interposer.dll.original'));
@@ -692,21 +547,12 @@ async function autoConfigureGame(dir, exePath) {
   return { api, applied, streamline };
 }
 
-// ---------- stale-install detection / auto-update ----------
-// setup_windows.bat renames OptiScaler.dll to a proxy name (dxgi.dll, winmm.dll, ...) and deletes
-// itself, so re-copying the release folder into a game only refreshes the inert, never-loaded
-// OptiScaler.dll -- the proxy actually being loaded by the game stays on whatever version it was
-// last renamed from. This finds that real, currently-loaded file and refreshes it directly.
-
 const PROXY_CANDIDATES = ['dxgi.dll', 'winmm.dll', 'version.dll', 'dbghelp.dll', 'd3d12.dll', 'wininet.dll', 'winhttp.dll', 'OptiScaler.asi'];
 
 function sha256File(filePath) {
   return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
 
-// Same technique setup_windows.bat itself uses to spot leftover OptiScaler files: the PE
-// OriginalFilename in the version resource survives a plain rename, so it still reads
-// "OptiScaler.dll" no matter what the file on disk is actually called.
 async function findActiveOptiScalerFile(dir) {
   const present = PROXY_CANDIDATES.filter((name) => fs.existsSync(path.join(dir, name)));
   if (present.length === 0) {
@@ -731,10 +577,7 @@ async function findActiveOptiScalerFile(dir) {
     const match = (parsed || []).find((e) => (e.Orig || '').toLowerCase() === 'optiscaler.dll');
     if (match) return { file: path.join(dir, match.Name), renamed: true };
   } catch {
-    // fall through to the single-candidate fallback below
   }
-  // Version-info lookup failed. Only safe to guess when exactly one candidate is present --
-  // with several, guessing wrong would overwrite an unrelated DLL (e.g. a real ReShade dxgi.dll).
   if (present.length === 1) return { file: path.join(dir, present[0]), renamed: true };
   return null;
 }
@@ -745,8 +588,6 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
     const dir = gameDir(exePath);
     if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: true, updated: false, reason: 'not installed' };
 
-    // Fill in any still-"auto" upscaler/DlssNr/FrameGen settings every sync, not just on install --
-    // covers games that were already installed before this feature existed.
     const { api, applied: autoConfigured, streamline } = await autoConfigureGame(dir, exePath);
 
     const releaseDll = releaseFolder ? path.join(releaseFolder, 'OptiScaler.dll') : null;
@@ -754,10 +595,6 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
       return { ok: true, updated: autoConfigured.length > 0, reason: 'no release set', api, autoConfigured, streamline };
     }
 
-    // This runs unattended on every launch and every Settings change (autoSyncStaleGames), silently
-    // overwriting an already-working game install -- so if the release folder has ever pointed at
-    // plain upstream OptiScaler (same setup_windows.bat, no error, no [DlssNr] section), every game
-    // would get quietly downgraded to it without the install button ever being touched again.
     if (!hasDlssNrSection(releaseFolder)) {
       return {
         ok: true, updated: autoConfigured.length > 0,
@@ -783,14 +620,9 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
 
     return { ok: true, updated: true, file: path.basename(active.file), api, autoConfigured, streamline };
   } catch (err) {
-    // Most common cause: the game is currently running and has the DLL locked.
     return { ok: false, error: err.message };
   }
 });
-
-// ---------- banner caching ----------
-// Fetched from the main process (not <img> in the renderer) because Steam's CDN can reject
-// image requests whose Referer/Origin is a file:// page; Node's fetch sends no such header.
 
 function bannersDir() {
   const dir = path.join(userDataDir(), 'banners');
@@ -813,7 +645,6 @@ ipcMain.handle('banner:cache-steam', async (_evt, { appid, fallbackImageUrl }) =
       }
     }
   } catch {
-    // fall through to fallbackImageUrl
   }
   if (!imageUrl) imageUrl = fallbackImageUrl || null;
   if (!imageUrl) return null;
@@ -835,8 +666,6 @@ ipcMain.handle('banner:import-local', async (_evt, sourcePath) => {
   await fsp.copyFile(sourcePath, dest);
   return dest;
 });
-
-// ---------- update check / install (GitHub releases) ----------
 
 ipcMain.handle('update:check', async () => {
   try {
@@ -867,7 +696,6 @@ function findReleaseRoot(folder) {
       }
     }
   } catch {
-    // ignore
   }
   return null;
 }
@@ -889,7 +717,6 @@ ipcMain.handle('update:install', async (_evt, { downloadUrl, assetName, tag, tar
     await fsp.rm(dest, { recursive: true, force: true });
     await fsp.mkdir(dest, { recursive: true });
 
-    // Use Windows' built-in Expand-Archive via PowerShell rather than adding a zip dependency.
     await execFileAsync('powershell.exe', [
       '-NoProfile', '-NonInteractive', '-Command',
       'Expand-Archive -LiteralPath $env:OSM_ZIP -DestinationPath $env:OSM_DEST -Force'

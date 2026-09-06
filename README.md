@@ -36,6 +36,10 @@ checkbox you tick rather than on first run.
 folder, tracks what's installed against what's current, and re-runs OptiScaler's own setup script
 in a console you confirm yourself.
 
+**Fetches the OptiScaler_DLSSNR engine build automatically** on first launch and on every "Check
+for Updates" in Settings. It's also attached directly to this app's own GitHub releases (as
+`OptiScaler_DLSSNR-<version>.zip`), so a manual download never means visiting a second repo.
+
 ## What OptiScaler covers, and what it doesn't
 
 OptiScaler intercepts the game's own upscaler — NVNGX, FSR or XeSS — and hands the neural model a
