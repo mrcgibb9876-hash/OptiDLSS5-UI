@@ -181,13 +181,31 @@ async function installFeederNative(options, onProgress = () => {}) {
     onProgress({ kind: 'warn', line: 'No Deep Fried Chicken zip set in Settings -- the neural consumer was not installed. Set it and re-run.' });
   }
 
-  // NVIDIA runtimes, deduped by hash so a re-run doesn't needlessly rewrite an identical file.
-  for (const [name, srcPath] of [['nvngx_dlssnr.dll', nrDllPath], ['nvngx_dlss.dll', dlssDllPath]]) {
-    if (!srcPath || !fs.existsSync(srcPath)) continue;
-    const dest = path.join(gameDir, name);
-    if (fs.existsSync(dest) && (await sha256(dest)) === (await sha256(srcPath))) continue;
-    await fsp.copyFile(srcPath, dest);
-    onProgress({ kind: 'info', line: `${name} installed.` });
+  // nvngx_dlssnr.dll: deduped by hash so a re-run doesn't needlessly rewrite an identical file --
+  // DLSS Neural Rendering is rarely something a game already ships, so introducing or updating it
+  // here is exactly the point.
+  //
+  // nvngx_dlss.dll is different: plain DLSS is common, so a game frequently already has its own
+  // native copy. Never overwritten, hash match or not -- a game-local copy sitting alongside the
+  // driver's own _nvngx.dll is exactly the "two copies of the DLSS NGX module" condition that
+  // crashed RenoDX's CreateFeature on a real install (see detectFeederWarnings in main.js). Simply
+  // not introducing a second one here is cheaper and more reliable than detecting the crash after
+  // the fact.
+  if (nrDllPath && fs.existsSync(nrDllPath)) {
+    const dest = path.join(gameDir, 'nvngx_dlssnr.dll');
+    if (!fs.existsSync(dest) || (await sha256(dest)) !== (await sha256(nrDllPath))) {
+      await fsp.copyFile(nrDllPath, dest);
+      onProgress({ kind: 'info', line: 'nvngx_dlssnr.dll installed.' });
+    }
+  }
+  if (dlssDllPath && fs.existsSync(dlssDllPath)) {
+    const dest = path.join(gameDir, 'nvngx_dlss.dll');
+    if (fs.existsSync(dest)) {
+      onProgress({ kind: 'info', line: 'nvngx_dlss.dll already present in this game -- left as-is, not overwritten.' });
+    } else {
+      await fsp.copyFile(dlssDllPath, dest);
+      onProgress({ kind: 'info', line: 'nvngx_dlss.dll installed.' });
+    }
   }
 
   // The script's d3dcompiler_47.dll trap (renaming a Windows 8.1-era copy that can't compile the

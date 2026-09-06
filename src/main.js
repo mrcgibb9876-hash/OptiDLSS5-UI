@@ -621,12 +621,16 @@ ipcMain.handle('game:prepare-dlss5-feeder', async (_evt, { exePath, renoDxAddonP
     let runtimeNote = '';
     if (streamlineZipPath && fs.existsSync(streamlineZipPath)) {
       const { dlssNr, dlss } = await extractDlssRuntimeDlls(streamlineZipPath);
+      const gameHasDlss = fs.existsSync(path.join(dir, 'nvngx_dlss.dll'));
       if (dlssNr) parts.push('-DlssNrDll', `"${dlssNr}"`);
-      if (dlss) parts.push('-DlssDll', `"${dlss}"`);
-      runtimeNote = dlssNr || dlss
+      if (dlss && !gameHasDlss) parts.push('-DlssDll', `"${dlss}"`);
+      runtimeNote = dlssNr || (dlss && !gameHasDlss)
         ? ' Extracted the DLSS/DLSSNR runtime from the configured zip, so the launcher uses those ' +
           'instead of the script\'s own (expiring) Discord links.'
         : '';
+      if (dlss && gameHasDlss) {
+        runtimeNote += ' This game already has its own nvngx_dlss.dll, so -DlssDll was left out -- not overwriting it.';
+      }
     }
 
     const command = `powershell.exe -ExecutionPolicy Bypass -File ${parts.join(' ')}`;
@@ -698,6 +702,18 @@ ipcMain.handle('feeder:install', async (evt, payload) => {
     const send = (update) => {
       if (!evt.sender.isDestroyed()) evt.sender.send('feeder:progress', { exePath, ...update });
     };
+
+    // Plain DLSS is common enough that a game frequently already ships its own nvngx_dlss.dll --
+    // unlike nvngx_dlssnr.dll (rarely native, and the whole point of this install), handing the
+    // script a copy here risks it landing next to the driver's own _nvngx.dll, which is exactly
+    // the "two copies of the DLSS NGX module loaded" condition that crashed RenoDX's CreateFeature
+    // on a real install (see detectFeederWarnings). Not supplying one at all when the game already
+    // has one leaves it to the script's own documented merge-not-replace behavior instead of this
+    // app actively feeding it a DLL to overwrite with.
+    if (resolvedDlss && fs.existsSync(path.join(gameDir(exePath), 'nvngx_dlss.dll'))) {
+      send({ kind: 'info', line: 'nvngx_dlss.dll already present in this game -- not supplying a copy, leaving it as-is.' });
+      resolvedDlss = '';
+    }
 
     try {
       const detected = await detectInstallPath(gameDir(exePath), exePath);
