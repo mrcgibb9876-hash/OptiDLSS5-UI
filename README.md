@@ -20,8 +20,10 @@ point the app at your games once and click Install.
 
 ![Game grid, showing per-game OptiScaler/RenoDX status and a live warning](docs/screenshots/manager-game-grid.png)
 
-**In-game tuning** — the DLSS 5 tab drawn inside ReShade's own overlay by `OptiScaler_DlssNr.addon64`
-is still pending a screenshot from a live game session; check back here once one's captured.
+**In-game tuning** for the OptiScaler route is OptiScaler's own native panel (`Alt+Home`) — see
+[README-END-USER.txt](README-END-USER.txt). A separate ReShade-overlay add-on was tried for the
+RenoDX/Feeder route as well, but was dropped: RenoDX only reads its config once at load, so nothing
+written to it from outside RenoDX's own process ever took effect without a full game restart anyway.
 
 ## What it does
 
