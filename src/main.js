@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const { app, ipcMain } = require('electron');
 
 const { ensureOptiScaler, install: installOptiScaler, checkConflicts } = require('./core/optiscaler');
 
@@ -10,6 +11,13 @@ const { ensureOptiScaler, install: installOptiScaler, checkConflicts } = require
 const userDataDir = () => app.getPath('userData');
 const gamesFile = () => path.join(userDataDir(), 'games.json');
 const settingsFile = () => path.join(userDataDir(), 'settings.json');
+
+// detectRenderApi function - detects the render API for a game
+async function detectRenderApi(gameDir, exePath) {
+  // TODO: Implement render API detection (DirectX 12, Vulkan, etc.)
+  // Placeholder returns 'dx12' as default
+  return 'dx12';
+}
 
 ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath }) => {
   try {
