@@ -117,7 +117,7 @@ async function install(config, log) {
   validatePayload(optiRoot);
   const nr = source.payload.find(f => f.name.toLowerCase() === 'nvngx_dlssnr.dll');
   if (!nr || pe.getBitness(nr.path) !== 64) throw fail('errNoNeuralRuntime');
-  const manifest = beginManifest(gameDir, exePath, api);
+  const manifest = await beginManifest(gameDir, exePath, api);
   manifest.route = 'optiscaler';
   manifest.game.bitness = 64;
   manifest.game.apiLabel = config.apiLabel;
