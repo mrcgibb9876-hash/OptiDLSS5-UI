@@ -278,8 +278,27 @@ function filterExcluded(games, excludedRoots = []) {
   return games.filter((game) => !excluded.some((root) => isInside(game.dir, root)));
 }
 
+function genericUninstallRegistryGames() {
+  const games = [];
+  const keys = [
+    ...regKeys('HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall'),
+    ...regKeys('HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall'),
+    ...regKeys('HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall')
+  ];
+
+  for (const key of keys) {
+    const dir = reg(key, 'InstallLocation');
+    if (!dir || !fs.existsSync(dir)) continue;
+    const name = reg(key, 'DisplayName');
+    if (!name || NOT_A_GAME.test(name)) continue;
+    const publisher = reg(key, 'Publisher') || 'Windows';
+    games.push({ launcher: publisher, id: key.split('\\').pop(), name, dir, poster: null });
+  }
+  return games;
+}
+
 function discover(extraFolders = [], scanDrives = false, excludedRoots = [], findAutoRoots = autoRoots) {
-  const found = [...steam(), ...epic(), ...gog()];
+  const found = [...steam(), ...epic(), ...gog(), ...genericUninstallRegistryGames()];
   const roots = (scanDrives ? findAutoRoots() : [])
     .filter((root) => !excludedRoots.some((excluded) => isInside(root, excluded)));
   for (const dir of roots) found.push(...folder(dir, 'My folders', true));
