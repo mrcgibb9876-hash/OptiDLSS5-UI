@@ -8,47 +8,10 @@ const fsp = require('fs/promises');
 const path = require('path');
 const crypto = require('crypto');
 
-const { FEEDER_RELEASES_API, FEEDER_ASSET_PATTERN, LUMENITE_ZIP_URL, RESHADE_HEADERS } = require('./sources');
+const { FEEDER_RELEASES_API, FEEDER_ASSET_PATTERN, LUMENITE_ZIP_URL } = require('./sources');
 const { downloadToCache, resolveGithubAsset } = require('./download');
-const { extractReShadeDll } = require('./reshade');
 const { openZip, findEntry, findEntries, extractEntryTo } = require('./zip');
 const { setIniKey, getIniKey } = require('./ini-merge');
-
-const RESHADE_INI_TEMPLATE = [
-  '[ADDON]',
-  'AddonPath=.\\',
-  '',
-  '[DEPTH]',
-  'DepthCopyBeforeClears=0',
-  '',
-  '[GENERAL]',
-  'EffectSearchPaths=.\\reshade-shaders\\Shaders\\**',
-  'TextureSearchPaths=.\\reshade-shaders\\Textures\\**',
-  'IntermediateCachePath=',
-  'NoDebugInfo=1',
-  'NoEffectCache=0',
-  'NoReloadOnInit=0',
-  'PerformanceMode=0',
-  'PreprocessorDefinitions=',
-  'PresetPath=.\\ReShadePreset.ini',
-  'PresetShortcutKeys=',
-  'PresetShortcutPaths=',
-  'PresetTransitionDuration=1000',
-  'SkipLoadingDisabledEffects=0',
-  'StartupPresetPath=',
-  '',
-  '[INPUT]',
-  'ForceShortcutModifiers=1',
-  'InputProcessing=2',
-  'KeyEffects=222,0,0,0',
-  'KeyOverlay=36,0,0,0',
-  'KeyReload=0,0,0,0',
-  'KeyScreenshot=220,0,0,0',
-  '',
-  '[OVERLAY]',
-  'TutorialProgress=4',
-  ''
-].join('\r\n');
 
 function providerTechnique(mvProvider) {
   return mvProvider === 4 ? 'Lumenite_QuantMotion@lumenite_QuantMotion.fx' : 'Lumenite_Kernel@lumenite_Kernel.fx';
@@ -111,17 +74,10 @@ async function installFeederNative(options, onProgress = () => {}) {
 
   await fsp.mkdir(cacheDir, { recursive: true });
 
-  // 1. ReShade itself, as a local dxgi.dll (D3D) or opengl32.dll (OpenGL).
-  const localName = isGL ? 'opengl32.dll' : 'dxgi.dll';
-  const reshadeLocalDll = path.join(gameDir, localName);
-  if (!fs.existsSync(reshadeLocalDll)) {
-    await extractReShadeDll({ cacheDir, bits: 64, destPath: reshadeLocalDll });
-    onProgress({ kind: 'info', line: `ReShade installed as ${localName}.` });
-  } else {
-    onProgress({ kind: 'info', line: `${localName} already present, kept.` });
-  }
+  // Note: ReShade support has been removed. The installer still places feeder add-on and
+  // motion-vector provider shaders into a shader directory for Lumenite/DLSS5_Feed usage.
 
-  // 2. The feeder add-on + shader, from the latest DLSS5-Feeder GitHub release.
+  // 1. The feeder add-on + shader, from the latest DLSS5-Feeder GitHub release.
   const feederAsset = await resolveGithubAsset(FEEDER_RELEASES_API, FEEDER_ASSET_PATTERN);
   const feederZipPath = await downloadToCache(feederAsset.url, cacheDir, feederAsset.name);
   const feederZip = openZip(feederZipPath);
@@ -132,20 +88,11 @@ async function installFeederNative(options, onProgress = () => {}) {
 
   const fxEntry = findEntry(feederZip, /(^|\/)DLSS5_Feed\.fx$/i);
   if (!fxEntry) throw new Error('DLSS5_Feed.fx not found in the Feeder release');
+  await fsp.mkdir(shaderDir, { recursive: true });
   extractEntryTo(feederZip, fxEntry, path.join(shaderDir, 'DLSS5_Feed.fx'));
   onProgress({ kind: 'info', line: `dlss5-feed.addon64 and DLSS5_Feed.fx installed (${feederAsset.tag}).` });
 
-  // 3. ReShade framework headers.
-  for (const [name, url] of Object.entries(RESHADE_HEADERS)) {
-    const dest = path.join(shaderDir, name);
-    if (fs.existsSync(dest)) continue;
-    const cached = await downloadToCache(url, cacheDir, name);
-    await fsp.mkdir(shaderDir, { recursive: true });
-    await fsp.copyFile(cached, dest);
-  }
-  onProgress({ kind: 'info', line: 'ReShade framework headers in place.' });
-
-  // 4. Motion vectors: LumeniteFX.
+  // 2. Motion vectors: LumeniteFX.
   const lumeniteZipPath = await downloadToCache(LUMENITE_ZIP_URL, cacheDir, 'LumeniteFX-mainline.zip');
   const lumeniteZip = openZip(lumeniteZipPath);
   let lumeniteCount = 0;
@@ -161,7 +108,7 @@ async function installFeederNative(options, onProgress = () => {}) {
   if (lumeniteCount === 0) throw new Error('no Shaders/ or Textures/ entries found in the LumeniteFX zip');
   onProgress({ kind: 'info', line: `LumeniteFX installed (${lumeniteCount} files).` });
 
-  // 5. Neural consumer: Deep Fried Chicken, and the exclusivity rules from the script.
+  // 3. Neural consumer: Deep Fried Chicken, and the exclusivity rules from the script.
   await disableConflict(await findExisting(gameDir, 'renodx-dlss5.addon64'), 'Deep Fried Chicken stays inert while a RenoDX neural provider is loaded', onProgress);
   await disableConflict(await findExisting(gameDir, 'alexs-toolkit.addon64'), "a third interposer on the same NGX module; Chicken's docs ask for it to be removed", onProgress);
   await disableConflict(await findExisting(gameDir, 'dlss5-dx11-bridge.addon64'), 'the DX11 bridge must never be combined with DLSS5-Feeder', onProgress);
@@ -184,13 +131,6 @@ async function installFeederNative(options, onProgress = () => {}) {
   // nvngx_dlssnr.dll: deduped by hash so a re-run doesn't needlessly rewrite an identical file --
   // DLSS Neural Rendering is rarely something a game already ships, so introducing or updating it
   // here is exactly the point.
-  //
-  // nvngx_dlss.dll is different: plain DLSS is common, so a game frequently already has its own
-  // native copy. Never overwritten, hash match or not -- a game-local copy sitting alongside the
-  // driver's own _nvngx.dll is exactly the "two copies of the DLSS NGX module" condition that
-  // crashed RenoDX's CreateFeature on a real install (see detectFeederWarnings in main.js). Simply
-  // not introducing a second one here is cheaper and more reliable than detecting the crash after
-  // the fact.
   if (nrDllPath && fs.existsSync(nrDllPath)) {
     const dest = path.join(gameDir, 'nvngx_dlssnr.dll');
     if (!fs.existsSync(dest) || (await sha256(dest)) !== (await sha256(nrDllPath))) {
@@ -214,62 +154,6 @@ async function installFeederNative(options, onProgress = () => {}) {
   // dropped: it only matters for a small number of older game bundles, and worst case a bad DLL
   // there just means the game falls back to System32's copy failing to compile until removed by
   // hand, not a crash or a security issue.
-
-  // 7. ReShade.ini
-  const iniPath = path.join(gameDir, 'ReShade.ini');
-  const existingIni = await readTextIfExists(iniPath);
-  if (existingIni) {
-    let next = existingIni;
-    next = setIniKey(next, 'ADDON', 'AddonPath', '.\\');
-    next = setIniKey(next, 'GENERAL', 'EffectSearchPaths', '.\\reshade-shaders\\Shaders\\**');
-    next = setIniKey(next, 'GENERAL', 'TextureSearchPaths', '.\\reshade-shaders\\Textures\\**');
-    if (!getIniKey(next, 'GENERAL', 'PresetPath')) next = setIniKey(next, 'GENERAL', 'PresetPath', '.\\ReShadePreset.ini');
-    if (next.trimEnd() !== existingIni.trimEnd()) {
-      const bak = await backupFile(iniPath);
-      await fsp.writeFile(iniPath, next, 'utf8');
-      onProgress({ kind: 'info', line: `ReShade.ini: existing file kept, keys merged in (backup: ${bak}).` });
-    } else {
-      onProgress({ kind: 'info', line: 'ReShade.ini already has the required keys.' });
-    }
-  } else {
-    await fsp.writeFile(iniPath, RESHADE_INI_TEMPLATE, 'utf8');
-    onProgress({ kind: 'info', line: 'ReShade.ini written from the template.' });
-  }
-
-  // 8. ReShadePreset.ini: the motion-vector provider must run before DLSS5_Feed.
-  const presetPath = path.join(gameDir, 'ReShadePreset.ini');
-  const feedTechnique = 'DLSS5_Feed@DLSS5_Feed.fx';
-  const provTechnique = providerTechnique(mvProvider);
-  const existingPreset = await readTextIfExists(presetPath);
-  if (existingPreset) {
-    let next = existingPreset;
-    for (const key of ['Techniques', 'TechniqueSorting']) {
-      const cur = getIniKey(next, '', key);
-      let list = cur ? cur.split(',').map((s) => s.trim()).filter(Boolean) : [];
-      list = list.filter((t) => t.toLowerCase() !== provTechnique.toLowerCase() && t.toLowerCase() !== feedTechnique.toLowerCase() && !/^DLSS5_Feed_Debug@/i.test(t));
-      list.push(provTechnique, feedTechnique);
-      if (key === 'TechniqueSorting') list.push('DLSS5_Feed_Debug@DLSS5_Feed.fx');
-      next = setIniKey(next, '', key, list.join(','));
-    }
-    const curDefs = getIniKey(next, 'DLSS5_Feed.fx', 'PreprocessorDefinitions');
-    let defParts = curDefs ? curDefs.split(',').map((s) => s.trim()).filter((s) => s && !/^DLSS5_MV_PROVIDER\s*=/i.test(s)) : [];
-    defParts.push(`DLSS5_MV_PROVIDER=${mvProvider}`);
-    next = setIniKey(next, 'DLSS5_Feed.fx', 'PreprocessorDefinitions', defParts.join(','));
-    if (next.trimEnd() !== existingPreset.trimEnd()) {
-      const bak = await backupFile(presetPath);
-      await fsp.writeFile(presetPath, next, 'utf8');
-      onProgress({ kind: 'info', line: `ReShadePreset.ini: existing preset kept; ${provTechnique.split('@')[0]} and DLSS5_Feed enabled (backup: ${bak}).` });
-    } else {
-      onProgress({ kind: 'info', line: 'ReShadePreset.ini already correct.' });
-    }
-  } else {
-    const preset = `Techniques=${provTechnique},${feedTechnique}\r\n` +
-      `TechniqueSorting=${provTechnique},${feedTechnique},DLSS5_Feed_Debug@DLSS5_Feed.fx\r\n\r\n` +
-      `[DLSS5_Feed.fx]\r\nDEBUG_VIEW=0\r\nMV_SCALE=1.000000\r\nMV_SIGN=1.000000,1.000000\r\n` +
-      `PreprocessorDefinitions=DLSS5_MV_PROVIDER=${mvProvider}\r\n`;
-    await fsp.writeFile(presetPath, preset, 'utf8');
-    onProgress({ kind: 'info', line: `ReShadePreset.ini written: ${provTechnique.split('@')[0]} then DLSS5_Feed.` });
-  }
 
   return { ok: true, dir: gameDir, feederVersion: feederAsset.tag };
 }
