@@ -8,11 +8,14 @@ const ini = require('./ini-merge');
 const { cached, fetchVerified } = require('./runtime-components');
 const { safePath } = require('./file-journal');
 
+// Pinned to the user's own OptiScaler_DLSSNR fork, not upstream Dagherbou -- only the fork carries
+// the "DLSS 5 Developer Controls" Alt+Home panel (see its README). Upstream's build has no such
+// panel at all, regardless of OptiScaler.ini settings, which is why installs from it never show it.
 const RELEASE = Object.freeze({
-  version: '0.2.0-patch1',
-  url: 'https://github.com/Dagherbou/OptiScaler_DLSSNR/releases/download/v0.2.0-patch1/OptiScaler-DLSSNR-v0.2.0-onimusha-fix.zip',
-  sha256: '5db547216fa8a7dbd8ab0a193da1e3bce0ea4bd71f91189afa4ed2ede8bb9561',
-  licenseUrl: 'https://raw.githubusercontent.com/Dagherbou/OptiScaler_DLSSNR/393e070/LICENSE',
+  version: '1.0.3',
+  url: 'https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/download/v1.0.3/OptiScaler_v1.0.3.zip',
+  sha256: '3cdece4a8a2d6021d55f4ab227a46bf932fa13c1b2a603a8b1435b3eb85f4ef4',
+  licenseUrl: 'https://raw.githubusercontent.com/mrcgibb9876-hash/OptiScaler_DLSSNR/178b758f67c985c9815e0ece72848446f0dc3f34/LICENSE',
   licenseHash: '3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986'
 });
 
@@ -29,7 +32,7 @@ function validatePayload(root) {
   for (const rel of ['OptiScaler.dll', 'nvngx.dll_dlssnr.dll', ...LIBRARIES.map(f => 'OptiScaler/' + f)]) {
     if (pe.getBitness(safePath(root, rel)) !== 64) throw fail('errOptiPayload');
   }
-  for (const rel of ['OptiScaler.ini', 'READ ME - DLSS Neural Rendering.txt', ...LICENSES.map(f => 'Licenses/' + f)]) {
+  for (const rel of ['OptiScaler.ini', ...LICENSES.map(f => 'Licenses/' + f)]) {
     if (!fs.existsSync(safePath(root, rel))) throw fail('errOptiPayload');
   }
 }
@@ -75,8 +78,7 @@ function copyPlan(root, api) {
     ['OptiScaler.dll', hookFor(api)], ['nvngx.dll_dlssnr.dll', 'nvngx.dll_dlssnr.dll'],
     ...LIBRARIES.map(f => ['OptiScaler/' + f, 'OptiScaler/' + f]),
     ...LICENSES.map(f => ['Licenses/' + f, 'OptiScaler/licenses/' + f]),
-    ['OptiScaler-GPL-3.0.txt', 'OptiScaler/licenses/LICENSE.GPL-3.0.txt'],
-    ['READ ME - DLSS Neural Rendering.txt', 'OptiScaler/README-DLSSNR.txt']
+    ['OptiScaler-GPL-3.0.txt', 'OptiScaler/licenses/LICENSE.GPL-3.0.txt']
   ].map(([from, to]) => ({ from: safePath(root, from), to }));
 }
 
