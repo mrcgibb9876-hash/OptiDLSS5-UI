@@ -105,8 +105,15 @@ function checkConflicts(gameDir, exePath, manifest, api) {
 }
 
 async function install(config, log) {
-  const { beginManifest, copyTracked, writeTracked, saveActiveManifest } = require('./apply');
+  const { beginManifest, copyTracked, writeTracked, saveActiveManifest, backupAndDisableConflicts } = require('./apply');
   const { gameDir, exePath, api, optiRoot, source } = config;
+
+  const exeDir = path.dirname(exePath);
+  const hook = hookFor(api);
+  const cleaned = await backupAndDisableConflicts(exeDir, hook);
+  for (const item of cleaned) {
+    log({ code: 'conflictDisabled', params: { file: item.name, backup: item.backup } });
+  }
   validatePayload(optiRoot);
   const nr = source.payload.find(f => f.name.toLowerCase() === 'nvngx_dlssnr.dll');
   if (!nr || pe.getBitness(nr.path) !== 64) throw fail('errNoNeuralRuntime');
@@ -115,7 +122,6 @@ async function install(config, log) {
   manifest.game.bitness = 64;
   manifest.game.apiLabel = config.apiLabel;
   manifest.optiscaler = { version: RELEASE.version, hook: hookFor(api) };
-  const exeDir = path.dirname(exePath);
   for (const item of copyPlan(optiRoot, api)) {
     const rel = await copyTracked(manifest, gameDir, item.from, path.join(exeDir, item.to), { kind: 'optiscaler' });
     log({ code: 'added', params: { rel } });

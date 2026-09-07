@@ -36,4 +36,27 @@ async function saveActiveManifest(gameDir, manifest) {
   await fsp.writeFile(file, JSON.stringify(manifest, null, 2), 'utf8');
 }
 
-module.exports = { safePath, beginManifest, copyTracked, writeTracked, saveActiveManifest };
+async function backupAndDisableConflicts(exeDir, targetHook) {
+  if (!exeDir || !fs.existsSync(exeDir)) return [];
+  const candidates = ['dxgi.dll', 'winmm.dll', 'version.dll', 'dbghelp.dll', 'd3d12.dll', 'd3d11.dll', 'wininet.dll', 'winhttp.dll'];
+  const disabled = [];
+  const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15);
+
+  for (const name of candidates) {
+    if (targetHook && name.toLowerCase() === targetHook.toLowerCase()) continue;
+    const file = path.join(exeDir, name);
+    if (fs.existsSync(file)) {
+      const bak = `${file}.bak-${stamp}`;
+      const dis = `${file}.disabled-by-installer`;
+      try {
+        await fsp.copyFile(file, bak);
+        await fsp.rename(file, dis);
+        disabled.push({ name, backup: bak, disabledPath: dis });
+      } catch {
+      }
+    }
+  }
+  return disabled;
+}
+
+module.exports = { safePath, beginManifest, copyTracked, writeTracked, saveActiveManifest, backupAndDisableConflicts };
