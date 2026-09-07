@@ -92,7 +92,8 @@ jobs:
         }
 
         $dest = "dist\OptiScaler_DLSSNR-$($release.tag_name).zip"
-        Invoke-WebRequest -Headers $headers -Uri $asset.browser_download_url -OutFile $dest
+        $downloadHeaders = @{ 'User-Agent' = 'OptiDLSS5-UI-release' }
+        Invoke-WebRequest -Headers $downloadHeaders -Uri $asset.browser_download_url -OutFile $dest
         $mb = [math]::Round((Get-Item $dest).Length / 1MB, 1)
         Write-Output "$dest  ($mb MB, from $($asset.name))"
 
