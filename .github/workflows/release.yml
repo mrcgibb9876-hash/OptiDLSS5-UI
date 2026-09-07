@@ -1,16 +1,17 @@
 name: Publish a release
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to create or update (e.g. v1.1.0). Must match the version in package.json."
-        required: true
-        default: "v1.1.0"
+        description: "Tag to create or update (e.g. v2.1.0). Must match the version in package.json."
+        required: false
       title:
         description: "Release title"
-        required: true
-        default: "OptiScaler Manager v1.1.0"
+        required: false
       prerelease:
         description: "Mark as a pre-release"
         type: boolean
@@ -35,14 +36,16 @@ jobs:
       shell: pwsh
       run: |
         $pkg = (Get-Content package.json -Raw | ConvertFrom-Json).version
-        $tag = "${{ inputs.tag }}" -replace '^v', ''
+        $rawTag = "${{ inputs.tag }}"
+        if (-not $rawTag) { $rawTag = "${{ github.ref_name }}" }
+        $tag = $rawTag -replace '^v', ''
 
         if ($pkg -ne $tag) {
-          Write-Error "package.json is $pkg but the tag is ${{ inputs.tag }}. Bump one to match the other."
+          Write-Error "package.json is $pkg but the tag is $rawTag. Bump one to match the other."
           exit 1
         }
 
-        Write-Output "package.json $pkg matches tag ${{ inputs.tag }}."
+        Write-Output "package.json $pkg matches tag $rawTag."
 
     - name: Install
       run: npm ci
@@ -75,7 +78,11 @@ jobs:
     - name: Fetch the OptiScaler_DLSSNR engine build
       shell: pwsh
       run: |
-        $headers = @{ 'User-Agent' = 'OptiDLSS5-UI-release'; Accept = 'application/vnd.github+json' }
+        $headers = @{
+          'User-Agent' = 'OptiDLSS5-UI-release'
+          'Accept' = 'application/vnd.github+json'
+          'Authorization' = 'Bearer ${{ secrets.GITHUB_TOKEN }}'
+        }
         $release = Invoke-RestMethod -Headers $headers -Uri 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest'
         $asset = $release.assets | Where-Object { $_.name -like '*.zip' } | Select-Object -First 1
 
@@ -89,12 +96,23 @@ jobs:
         $mb = [math]::Round((Get-Item $dest).Length / 1MB, 1)
         Write-Output "$dest  ($mb MB, from $($asset.name))"
 
+    - name: Get tag and title
+      id: meta
+      shell: pwsh
+      run: |
+        $tag = "${{ inputs.tag }}"
+        if (-not $tag) { $tag = "${{ github.ref_name }}" }
+        $title = "${{ inputs.title }}"
+        if (-not $title) { $title = "OptiDLSS5-UI $tag" }
+        Add-Content -Path $env:GITHUB_OUTPUT -Value "tag=$tag"
+        Add-Content -Path $env:GITHUB_OUTPUT -Value "title=$title"
+
     - name: Publish
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ inputs.tag }}
-        name: ${{ inputs.title }}
-        prerelease: ${{ inputs.prerelease }}
+        tag_name: ${{ steps.meta.outputs.tag }}
+        name: ${{ steps.meta.outputs.title }}
+        prerelease: ${{ inputs.prerelease || false }}
         files: |
           dist/*.exe
           dist/OptiScaler_DLSSNR-*.zip
