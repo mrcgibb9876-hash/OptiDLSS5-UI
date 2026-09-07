@@ -181,6 +181,12 @@ async function installFeederNative(options, onProgress = () => {}) {
     onProgress({ kind: 'warn', line: 'No Deep Fried Chicken zip set in Settings -- the neural consumer was not installed. Set it and re-run.' });
   }
 
+  // Copy tuning overlay add-on if present in cacheDir/OptiScaler
+  const optiAddon = path.join(cacheDir, 'OptiScaler_DlssNr.addon64');
+  if (fs.existsSync(optiAddon)) {
+    await fsp.copyFile(optiAddon, path.join(gameDir, 'OptiScaler_DlssNr.addon64')).catch(() => {});
+  }
+
   // nvngx_dlssnr.dll: deduped by hash so a re-run doesn't needlessly rewrite an identical file --
   // DLSS Neural Rendering is rarely something a game already ships, so introducing or updating it
   // here is exactly the point.
