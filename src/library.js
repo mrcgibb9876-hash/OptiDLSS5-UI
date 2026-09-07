@@ -10,6 +10,57 @@ const { execFileSync } = require('child_process');
 // Entries that are tooling rather than games.
 const NOT_A_GAME = /redistributabl|steamworks common|directx|vcredist|proton|steam linux runtime|soundtrack/i;
 
+// Steam/Epic/GOG only ever report actual game titles, so NOT_A_GAME above is enough for them. The
+// Windows uninstall registry has no such guarantee -- every installed program shows up there, game
+// or not -- so genericUninstallRegistryGames() below needs its own, much broader denylist. Not
+// exhaustive by design (there is no reliable signal that separates "is a game" from "is an app" in
+// the registry alone); covers the categories of ordinary desktop software people are most likely to
+// have installed.
+const NOT_A_GAME_SOFTWARE = new RegExp([
+  // Browsers
+  'google chrome', 'chromium', 'mozilla firefox', 'microsoft edge', '\\bopera\\b', 'brave browser', 'vivaldi',
+  // Runtimes, redistributables, dev tooling
+  'microsoft \\.net', '\\.net (?:desktop )?runtime', '\\bjava\\b', '\\bpython\\b', 'visual c\\+\\+',
+  'visual studio', 'windows sdk', 'node\\.js', '\\bgit\\b', 'docker desktop', 'github desktop', 'postman',
+  'jetbrains', 'notepad\\+\\+', 'putty', 'wireshark',
+  // Communication / collaboration
+  '\\bdiscord\\b', '\\bslack\\b', '\\bzoom\\b', 'microsoft teams', '\\bskype\\b', '\\bwhatsapp\\b', '\\btelegram\\b',
+  // Productivity / creative suites
+  'microsoft office', 'microsoft 365', 'libreoffice', 'adobe (?:acrobat|photoshop|premiere|creative cloud|reader)',
+  // Vendor / driver utilities
+  'nvidia (?:app\\b|geforce experience|control panel|broadcast|hd audio)', 'amd software', 'amd chipset',
+  'intel\\(?r?\\)? (?:driver|graphics|chipset|management engine)', 'realtek', 'razer (?:synapse|cortex)',
+  'logitech (?:g ?hub|options)', 'corsair icue',
+  // General utilities
+  '\\bwinrar\\b', '\\b7-zip\\b', '\\bccleaner\\b', 'malwarebytes', '\\b(?:avast|avg|norton|mcafee|bitdefender)\\b',
+  '\\bdropbox\\b', '\\bonedrive\\b', 'google drive', 'teamviewer', 'anydesk', 'vlc media player', '\\bspotify\\b',
+  '\\bitunes\\b',
+  // Game-launcher clients themselves (the launcher, not a game inside it)
+  '^steam$', 'epic games launcher', 'ubisoft connect', '^ea app$', 'battle\\.net', 'gog galaxy',
+  '^xbox(?: app| identity provider| game bar)?$', 'nvidia geforce now', 'legion space',
+  // Specific well-known non-game apps big enough to clear the size gate below
+  'plex media server', '\\bwindhawk\\b'
+].join('|'), 'i');
+
+// A name denylist can never be exhaustive -- every PC ships different OEM/driver bloatware
+// (vendor "hub" apps, driver control panels, monitoring utilities). Those almost always have a
+// tiny main executable; a modern game's does not. Only applied to the registry scan, where (unlike
+// Steam/Epic/GOG) nothing else vouches for an entry actually being a game.
+const MIN_GAME_EXE_BYTES = 15 * 1024 * 1024;
+function hasLargeExe(dir, depth = 3) {
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return false; }
+  for (const e of entries) {
+    const full = path.join(dir, e.name);
+    if (e.isFile() && /\.exe$/i.test(e.name)) {
+      try { if (fs.statSync(full).size >= MIN_GAME_EXE_BYTES) return true; } catch {}
+    } else if (e.isDirectory() && depth > 0 && hasLargeExe(full, depth - 1)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function reg(key, value) {
   try {
     const out = execFileSync('reg', ['query', key, '/v', value], { encoding: 'utf8', windowsHide: true });
@@ -290,7 +341,11 @@ function genericUninstallRegistryGames() {
     const dir = reg(key, 'InstallLocation');
     if (!dir || !fs.existsSync(dir)) continue;
     const name = reg(key, 'DisplayName');
-    if (!name || NOT_A_GAME.test(name)) continue;
+    if (!name || NOT_A_GAME.test(name) || NOT_A_GAME_SOFTWARE.test(name)) continue;
+    // Windows itself hides these from Add/Remove Programs -- driver components, helper
+    // services, plugins -- so real games never set this. Cheap, reliable, no false negatives.
+    if (reg(key, 'SystemComponent') === '0x1') continue;
+    if (!hasLargeExe(dir)) continue;
     const publisher = reg(key, 'Publisher') || 'Windows';
     games.push({ launcher: publisher, id: key.split('\\').pop(), name, dir, poster: null });
   }
