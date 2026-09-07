@@ -55,6 +55,11 @@ function configure(text, target) {
     ['ProcessFilter', 'TargetProcessName', path.basename(target.exePath)]
   ]) out = ini.setIni(out, section, key, value);
 
+  if (target.reEngine || target.profile?.reEngine) {
+    out = ini.setIni(out, 'Hotfix', 'RestoreComputeSignature', 'true');
+    out = ini.setIni(out, 'Hotfix', 'RestoreGraphicSignature', 'true');
+  }
+
   for (const field of ['Dx12Upscaler', 'Dx11Upscaler', 'VulkanUpscaler']) {
     const current = ini.getIni(out, 'Upscalers', field);
     const bridge = field !== 'Dx12Upscaler';

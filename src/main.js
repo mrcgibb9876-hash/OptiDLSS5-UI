@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 
-const { ensureOptiScaler, install: installOptiScaler } = require('./core/optiscaler');
+const { ensureOptiScaler, install: installOptiScaler, checkConflicts } = require('./core/optiscaler');
 
 // Existing helpers in main.js
 const userDataDir = () => app.getPath('userData');
@@ -42,6 +42,14 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath 
       source,
       profile: {}
     };
+
+    try {
+      checkConflicts(path.dirname(exePath), exePath, null, api);
+    } catch (conflictErr) {
+      if (conflictErr.code === 'errOptiConflict') {
+        throw new Error(`Mod conflict detected: ${conflictErr.message}`);
+      }
+    }
 
     const logLines = [];
     const manifest = await installOptiScaler(config, (entry) => logLines.push(entry));
