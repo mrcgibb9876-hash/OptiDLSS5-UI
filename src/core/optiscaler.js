@@ -3,10 +3,10 @@
 const fs = require('fs');
 const path = require('path');
 const extractZip = require('extract-zip');
-const pe = require('../native-feeder/pe')||require('./pe');
-const ini = require('../native-feeder/ini-merge')||require('./ini-merge');
-const { cached, fetchVerified } = require('./runtime-components') || { cached: () => false, fetchVerified: async () => {} };
-const { safePath } = require('../native-feeder/file-journal') || require('./file-journal');
+const pe = require('./pe');
+const ini = require('./ini-merge');
+const { cached, fetchVerified } = require('./runtime-components');
+const { safePath } = require('./file-journal');
 
 const RELEASE = Object.freeze({
   version: '0.2.0-patch1',
