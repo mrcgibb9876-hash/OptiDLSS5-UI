@@ -17,7 +17,7 @@ function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function setIniKey(text, section, key, value) {
+function setIni(text, section, key, value) {
   const lines = splitLines(text);
   const keyRe = new RegExp('^' + escapeRegExp(key) + '\\s*=', 'i');
   let cur = '';
@@ -61,7 +61,7 @@ function setIniKey(text, section, key, value) {
   return lines.join('\r\n') + '\r\n';
 }
 
-function getIniKey(text, section, key) {
+function getIni(text, section, key) {
   if (text == null) return null;
   const keyRe = new RegExp('^' + escapeRegExp(key) + '\\s*=\\s*(.*)$', 'i');
   let cur = '';
@@ -77,4 +77,13 @@ function getIniKey(text, section, key) {
   return null;
 }
 
-module.exports = { setIniKey, getIniKey };
+function readText(filePath) {
+  const fs = require('fs');
+  try {
+    return fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+module.exports = { setIni, getIni, setIniKey: setIni, getIniKey: getIni, readText };
