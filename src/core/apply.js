@@ -12,7 +12,7 @@ function safePath(root, rel) {
 }
 
 async function beginManifest(gameDir, exePath, api) {
-  return { gameDir, exePath, api, added: [], replaced: [] };
+  return { gameDir, exePath, api, added: [], replaced: [], game: {} };
 }
 
 async function copyTracked(manifest, gameDir, src, dest, opts = {}) {
@@ -34,6 +34,11 @@ async function writeTracked(manifest, gameDir, dest, text, opts = {}) {
 async function saveActiveManifest(gameDir, manifest) {
   const file = path.join(gameDir, '.optdlss5-active-manifest.json');
   await fsp.writeFile(file, JSON.stringify(manifest, null, 2), 'utf8');
+}
+
+function originalPath(gameDir, manifest, rel) {
+  const replaced = manifest?.replaced?.find(f => f.rel.toLowerCase() === rel.toLowerCase());
+  return replaced ? replaced.originalPath : safePath(gameDir, rel);
 }
 
 async function backupAndDisableConflicts(exeDir, targetHook) {
@@ -59,4 +64,4 @@ async function backupAndDisableConflicts(exeDir, targetHook) {
   return disabled;
 }
 
-module.exports = { safePath, beginManifest, copyTracked, writeTracked, saveActiveManifest, backupAndDisableConflicts };
+module.exports = { safePath, beginManifest, copyTracked, writeTracked, saveActiveManifest, backupAndDisableConflicts, originalPath };
