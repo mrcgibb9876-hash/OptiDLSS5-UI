@@ -62,8 +62,7 @@ game when the game doesn't already ship one. The version list comes from RHI's p
 `dlss_manifest.json`, so a newer Streamline build reaches you the day RHI packages it, without
 waiting for a release of this app. "Latest" is the default; Settings has a dropdown if you want to
 hold a specific build, and a game with a known ceiling (The Witcher 3 hard-crashes on 2.12.0 and
-newer) is capped automatically. You can still point Settings at your own zip, which overrides all
-of that. Only the Streamline DLLs are taken from RHI — the OptiScaler build and the DLSS-NR model
+newer) is capped automatically. Only the Streamline DLLs are taken from RHI — the OptiScaler build and the DLSS-NR model
 stay pinned to our own `OptiScaler_DLSSNR` fork.
 
 **REFramework** is fetched from `praydog/REFramework-nightly` for RE Engine games, where OptiScaler

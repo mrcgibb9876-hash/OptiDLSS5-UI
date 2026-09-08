@@ -8,7 +8,6 @@ contextBridge.exposeInMainWorld('api', {
   pickExe: () => ipcRenderer.invoke('pick:exe'),
   pickFolder: (title) => ipcRenderer.invoke('pick:folder', title),
   pickDll: () => ipcRenderer.invoke('pick:dll'),
-  pickZip: (title) => ipcRenderer.invoke('pick:zip', title),
   pickImage: () => ipcRenderer.invoke('pick:image'),
   scanLibrary: (options) => ipcRenderer.invoke('library:scan', options),
   streamlineVersions: () => ipcRenderer.invoke('streamline:versions'),

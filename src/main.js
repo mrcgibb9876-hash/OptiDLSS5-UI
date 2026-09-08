@@ -64,7 +64,6 @@ ipcMain.handle('data:load', () => {
     releaseFolder: '',
     nrDllPath: '',
     installedVersion: '',
-    streamlineZipPath: '',
     streamlineVersion: 'latest'
   });
   return { games, settings };
@@ -124,16 +123,6 @@ ipcMain.handle('pick:dll', async () => {
     title: 'Select nvngx_dlssnr.dll (from an extracted NVIDIA driver package)',
     properties: ['openFile'],
     filters: [{ name: 'DLL', extensions: ['dll'] }]
-  });
-  if (res.canceled || res.filePaths.length === 0) return null;
-  return res.filePaths[0];
-});
-
-ipcMain.handle('pick:zip', async (_evt, title) => {
-  const res = await dialog.showOpenDialog({
-    title: title || 'Select a .zip file',
-    properties: ['openFile'],
-    filters: [{ name: 'Zip archive', extensions: ['zip'] }]
   });
   if (res.canceled || res.filePaths.length === 0) return null;
   return res.filePaths[0];
@@ -611,10 +600,6 @@ function streamlineSdkCacheDir(version) {
   return path.join(streamlineSdkCacheRoot(), version.replace(/[^0-9A-Za-z.]/g, '_'));
 }
 
-function streamlineSdkLocalCacheDir() {
-  return path.join(userDataDir(), 'streamline-sdk-local');
-}
-
 /// Versions used to share one flat cache directory. Move an old one into its per-version slot so
 /// upgrading the app doesn't force a re-download of a build that's already on disk.
 function migrateFlatStreamlineCache() {
@@ -640,14 +625,13 @@ function migrateFlatStreamlineCache() {
   }
 }
 
-async function ensureStreamlineSdkCache(localZipPath, release) {
-  const usingLocal = !!(localZipPath && fs.existsSync(localZipPath));
-  if (!usingLocal && !release) return null;
-  if (!usingLocal) migrateFlatStreamlineCache();
+async function ensureStreamlineSdkCache(release) {
+  if (!release) return null;
+  migrateFlatStreamlineCache();
 
-  const cacheDir = usingLocal ? streamlineSdkLocalCacheDir() : streamlineSdkCacheDir(release.version);
+  const cacheDir = streamlineSdkCacheDir(release.version);
   const versionMarker = path.join(cacheDir, '.version');
-  const wantVersion = usingLocal ? `local:${sha256File(localZipPath)}` : release.version;
+  const wantVersion = release.version;
   const cachedVersion = fs.existsSync(versionMarker) ? fs.readFileSync(versionMarker, 'utf-8').trim() : null;
   if (cachedVersion === wantVersion && fs.existsSync(path.join(cacheDir, 'sl.interposer.dll'))) {
     return cacheDir;
@@ -655,16 +639,12 @@ async function ensureStreamlineSdkCache(localZipPath, release) {
 
   let tmpZip;
   try {
-    if (usingLocal) {
-      tmpZip = localZipPath;
-    } else {
-      const dlRes = await fetch(release.url, { headers: GITHUB_HEADERS });
-      if (!dlRes.ok) throw new Error(`Download failed: HTTP ${dlRes.status}`);
-      const buf = Buffer.from(await dlRes.arrayBuffer());
+    const dlRes = await fetch(release.url, { headers: GITHUB_HEADERS });
+    if (!dlRes.ok) throw new Error(`Download failed: HTTP ${dlRes.status}`);
+    const buf = Buffer.from(await dlRes.arrayBuffer());
 
-      tmpZip = path.join(os.tmpdir(), `streamline-sdk-${Date.now()}.zip`);
-      await fsp.writeFile(tmpZip, buf);
-    }
+    tmpZip = path.join(os.tmpdir(), `streamline-sdk-${Date.now()}.zip`);
+    await fsp.writeFile(tmpZip, buf);
 
     const tmpExtract = path.join(os.tmpdir(), `streamline-sdk-extract-${Date.now()}`);
     await execFileAsync('powershell.exe', [
@@ -700,7 +680,7 @@ async function ensureStreamlineSdkCache(localZipPath, release) {
     // A previously-cached copy of this same version is better than no Streamline at all.
     return fs.existsSync(path.join(cacheDir, 'sl.interposer.dll')) ? cacheDir : null;
   } finally {
-    if (tmpZip && !usingLocal) fsp.rm(tmpZip, { force: true }).catch(() => {});
+    if (tmpZip) fsp.rm(tmpZip, { force: true }).catch(() => {});
   }
 }
 
@@ -710,10 +690,8 @@ async function deployStreamlineFolder(dir, exePath) {
   if (fs.existsSync(path.join(dest, 'sl.interposer.dll'))) return { deployed: false, reason: 'already present' };
 
   const settings = readJson(settingsFile(), {});
-  const streamlineZipPath = settings.streamlineZipPath || '';
-  const usingLocal = !!(streamlineZipPath && fs.existsSync(streamlineZipPath));
-  const release = usingLocal ? null : await resolveStreamlineRelease(exePath, settings.streamlineVersion || 'latest');
-  const cacheDir = await ensureStreamlineSdkCache(streamlineZipPath, release);
+  const release = await resolveStreamlineRelease(exePath, settings.streamlineVersion || 'latest');
+  const cacheDir = await ensureStreamlineSdkCache(release);
   if (!cacheDir) {
     return { deployed: false, reason: 'could not fetch Streamline SDK', version: release ? release.version : null };
   }
@@ -730,8 +708,8 @@ async function deployStreamlineFolder(dir, exePath) {
   return {
     deployed: copied.length > 0,
     files: copied,
-    version: usingLocal ? 'your own zip' : release.version,
-    reason: usingLocal ? 'local zip from Settings' : release.reason,
+    version: release.version,
+    reason: release.reason,
   };
 }
 
@@ -743,17 +721,23 @@ function isReEngineGame(dir) {
   }
 }
 
-// The [Hotfix] block RE Engine needs, from a tested Dragon's Dogma 2 configuration.
+// The ini keys RE Engine needs, from a tested Dragon's Dogma 2 configuration.
 //
 // These are FORCED, not defaulted, because two of them are values that crash rather than values
 // that are merely wrong -- see patchIniValues.
 //
 // What each one is for:
 //
-//   ManualInputPolling      OptiScaler and REFramework both subclass WndProc. When they fight, the
-//                           log shows "subclass lost input" / "InputHwnd is set but WndProc is not
-//                           subclassed" and the message pump can deadlock. This hands the pump to
-//                           REFramework and polls input asynchronously instead.
+//   ShortcutKey (Menu)      REFramework's own default menu key is Insert too -- confirmed straight
+//                           out of its dinput8.dll ("Default Menu Key: Insert"). REFramework's
+//                           DirectInput proxy evicts OptiScaler's window subclass a couple of
+//                           seconds into startup (OptiScaler.log shows "subclass lost input" right
+//                           as DirectInput's CreateDevice hook fires), and OptiScaler deliberately
+//                           does not fight to reclaim it. From that point Insert can only reach
+//                           REFramework's own menu, never OptiScaler's -- so this moves OptiScaler
+//                           off Insert entirely rather than trying to win a hook fight. 0x24 is
+//                           VK_HOME, OptiScaler's own pre-Insert default and not claimed by
+//                           REFramework's defaults either.
 //
 //   RestoreComputeSignature RE Engine's scheduler expects its compute pipeline state intact across
 //                           frames. Return without restoring the compute root signature and it hits
@@ -774,7 +758,7 @@ function isReEngineGame(dir) {
 // the graphics restore is the one that kills it, and the compute restore is required. Setting them
 // explicitly and in opposite directions is what was actually needed.
 const RE_ENGINE_HOTFIX = [
-  { section: 'Hotfix', key: 'ManualInputPolling', value: 'true' },
+  { section: 'Menu', key: 'ShortcutKey', value: '0x24' },
   { section: 'Hotfix', key: 'RestoreComputeSignature', value: 'true' },
   { section: 'Hotfix', key: 'RestoreGraphicSignature', value: 'false' },
   { section: 'Hotfix', key: 'ExtendedStateRestore', value: 'false' },

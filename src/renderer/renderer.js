@@ -1,5 +1,5 @@
 let games = [];
-let settings = { releaseFolder: '', nrDllPath: '', installedVersion: '', streamlineZipPath: '', streamlineVersion: 'latest' };
+let settings = { releaseFolder: '', nrDllPath: '', installedVersion: '', streamlineVersion: 'latest' };
 let editingGameId = null;
 let pendingBanner = { appid: null, localPath: null };
 let pendingUpdate = null;
@@ -413,24 +413,14 @@ const settingsModal = $('#settings-modal');
 function openSettingsModal() {
   $('#settings-release-folder').value = settings.releaseFolder || '';
   $('#settings-nr-dll').value = settings.nrDllPath || '';
-  $('#settings-streamline-zip').value = settings.streamlineZipPath || '';
   $('#update-status').textContent = settings.installedVersion ? `Installed: ${settings.installedVersion}` : '';
   $('#update-status').className = 'status-line';
   $('#btn-install-update').classList.add('hidden');
   pendingUpdate = null;
   checkReleaseStatus();
   checkNrDllStatus();
-  checkStreamlineZipStatus();
   loadStreamlineVersions();
   settingsModal.classList.remove('hidden');
-}
-
-function checkStreamlineZipStatus() {
-  const el = $('#streamline-zip-status');
-  el.textContent = settings.streamlineZipPath
-    ? 'Set — this overrides the version above.'
-    : '';
-  el.className = 'status-line status-ok';
 }
 
 let streamlineVersionsLoaded = false;
@@ -530,19 +520,6 @@ $('#btn-browse-nr-dll').addEventListener('click', async () => {
   if (p) persistNrDll(p);
 });
 $('#settings-nr-dll').addEventListener('change', (e) => persistNrDll(e.target.value.trim()));
-
-async function persistStreamlineZip(p) {
-  settings.streamlineZipPath = p;
-  $('#settings-streamline-zip').value = p;
-  await window.api.saveSettings(settings);
-  checkStreamlineZipStatus();
-}
-
-$('#btn-browse-streamline-zip').addEventListener('click', async () => {
-  const p = await window.api.pickZip('Select a zip with Streamline sl.*.dll files');
-  if (p) persistStreamlineZip(p);
-});
-$('#settings-streamline-zip').addEventListener('change', (e) => persistStreamlineZip(e.target.value.trim()));
 
 $('#btn-close-settings').addEventListener('click', async () => {
   settingsModal.classList.add('hidden');
@@ -812,7 +789,7 @@ window.addEventListener('focus', () => {
 (async function init() {
   const data = await window.api.loadData();
   games = data.games || [];
-  settings = data.settings || { releaseFolder: '', nrDllPath: '', installedVersion: '', streamlineZipPath: '' };
+  settings = data.settings || { releaseFolder: '', nrDllPath: '', installedVersion: '' };
   await refreshBannerVisibility();
   await renderGrid();
   await autoUpdateOptiScalerRelease();
