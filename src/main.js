@@ -64,7 +64,8 @@ ipcMain.handle('data:load', () => {
     releaseFolder: '',
     nrDllPath: '',
     installedVersion: '',
-    streamlineZipPath: ''
+    streamlineZipPath: '',
+    streamlineVersion: 'latest'
   });
   return { games, settings };
 });
@@ -77,6 +78,16 @@ ipcMain.handle('data:save-games', (_evt, games) => {
 ipcMain.handle('data:save-settings', (_evt, settings) => {
   writeJson(settingsFile(), settings);
   return true;
+});
+
+// The Streamline builds RHI currently publishes, newest first, for the Settings dropdown.
+ipcMain.handle('streamline:versions', async () => {
+  try {
+    const releases = await getStreamlineReleases();
+    return { ok: true, versions: releases.map((r) => r.version) };
+  } catch (error) {
+    return { ok: false, versions: [], error: String(error && error.message ? error.message : error) };
+  }
 });
 
 ipcMain.handle('library:scan', async (_evt, options) => {
@@ -218,7 +229,7 @@ ipcMain.handle('game:status', (_evt, exePath) => {
   return { exeMissing: false, hasIni, hasNr, hasUninstaller, dir, backends };
 });
 
-ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath }) => {
+ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath, proxyName }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     if (!releaseFolder || !fs.existsSync(releaseFolder)) throw new Error('OptiScaler release folder not set');
@@ -231,6 +242,21 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath 
     }
 
     const dir = gameDir(exePath);
+
+    // Checked before anything is written, not after. OptiScaler does not work on RE Engine without
+    // REFramework, so an install that could not get it is not a working install -- and reporting
+    // success with a footnote leaves an "Installed" badge on a game that will not start it. Failing
+    // here means the folder is untouched and the user can retry once they are online.
+    if (isReEngineGame(dir)) {
+      const pre = await ensureREFrameworkForGame(dir);
+      if (pre && pre.error) {
+        throw new Error(
+          `This is an RE Engine game, which needs REFramework before OptiScaler will do anything -- ` +
+            `and it could not be fetched (${pre.error}). Nothing has been changed in the game folder. ` +
+            `Check your connection and try again, or drop REFramework's ${REFRAMEWORK_DLL_NAME} in yourself.`
+        );
+      }
+    }
 
     for (const entry of await fsp.readdir(releaseFolder, { withFileTypes: true })) {
       const src = path.join(releaseFolder, entry.name);
@@ -262,9 +288,21 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath 
     } catch {
     }
 
-    const { api, applied, streamline, reEngine, reframework } = await autoConfigureGame(dir, exePath);
+    // The rename that actually makes the game load OptiScaler. Previously this only happened when
+    // the user went and ran setup_windows.bat in a console afterwards; until they did, an
+    // "Installed" badge meant nothing was hooked.
+    let proxy = null;
+    let proxyError = null;
+    try {
+      proxy = await installProxy(dir, proxyName || DEFAULT_PROXY);
+    } catch (err) {
+      // Not fatal: everything else is in place, and Run Setup is still there to do it by hand.
+      proxyError = err.message;
+    }
 
-    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, api, autoConfigured: applied, streamline, reEngine, reframework };
+    const { api, applied, streamline, reEngine, reframework, reEngineHotfix } = await autoConfigureGame(dir, exePath);
+
+    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, proxy, proxyError, api, autoConfigured: applied, streamline, reEngine, reframework, reEngineHotfix };
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -292,26 +330,15 @@ async function removeSharedNrDllIfUnneeded(dir) {
 
 ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
   const dir = gameDir(exePath);
-  const candidates = ['Remove_OptiScaler.bat', 'uninstall_optiscaler.bat', 'uninstaller.bat'];
-  const found = candidates.find((c) => fs.existsSync(path.join(dir, c)));
-  const nrDllRemoved = await removeSharedNrDllIfUnneeded(dir);
-  if (!found) {
-    return {
-      ok: false,
-      error: 'No generated uninstaller found -- "Run Setup" was never completed for this game, so ' +
-        'OptiScaler was never fully set up here. Removed what this app added directly ' +
-        `(${nrDllRemoved ? 'nvngx_dlssnr.dll' : 'nothing found'}); ` +
-        'the plain OptiScaler.dll/OptiScaler.ini copy is still in the folder, remove those by hand or via "Remove" below.',
-      nrDllRemoved
-    };
+  try {
+    // Done here rather than by spawning the generated .bat: that script asks its own questions in
+    // a console the app cannot see, and decides what to restore by guessing from filenames. This
+    // reverses what the install recorded it did.
+    const result = await uninstallOptiScaler(dir);
+    return { ok: true, ...result };
+  } catch (err) {
+    return { ok: false, error: err.message };
   }
-  spawn('cmd.exe', ['/c', 'start', '""', 'cmd.exe', '/k', found], {
-    cwd: dir,
-    detached: true,
-    stdio: 'ignore',
-    shell: false
-  }).unref();
-  return { ok: true, nrDllRemoved };
 });
 
 ipcMain.handle('game:confirm-remove', async (_evt, gameName) => {
@@ -390,6 +417,48 @@ ipcMain.handle('game:detect-path', async (_evt, exePath) => {
   }
 });
 
+// Sets keys to an exact value whatever they currently hold, and reports what it changed.
+//
+// patchIniDefaults below only writes over the shipped "auto" placeholder, which is right for a
+// default: it never argues with a value someone chose. That is exactly wrong for a setting that is
+// known to crash. v1.4.3 wrote RestoreGraphicSignature=true into every RE Engine game's ini;
+// v1.4.4 stopped writing it, but stopping is not undoing -- every install made with 1.4.3 still
+// has the fatal value, and a fill-if-auto pass will never touch it again because it is no longer
+// "auto". Those games stay broken through any number of updates.
+function patchIniValues(iniPath, edits) {
+  const original = fs.readFileSync(iniPath, 'utf-8');
+  const eol = original.includes('\r\n') ? '\r\n' : '\n';
+  const lines = original.split(/\r\n|\n/);
+  const wanted = new Map(edits.map((e) => [`${e.section.toLowerCase()}::${e.key.toLowerCase()}`, e]));
+  const changed = [];
+  let currentSection = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const sectionMatch = lines[i].match(/^\s*\[([^\]]+)\]\s*$/);
+    if (sectionMatch) {
+      currentSection = sectionMatch[1];
+      continue;
+    }
+    if (!currentSection) continue;
+
+    const kvMatch = lines[i].match(/^(\s*)([^;#=\s][^=]*?)(\s*=\s*)(.*)$/);
+    if (!kvMatch) continue;
+
+    const [, indent, key, sep, value] = kvMatch;
+    const edit = wanted.get(`${currentSection.toLowerCase()}::${key.trim().toLowerCase()}`);
+    if (!edit) continue;
+
+    // Already correct: leave the line alone so the app does not report a change it did not make.
+    if (value.trim().toLowerCase() === String(edit.value).toLowerCase()) continue;
+
+    changed.push({ ...edit, was: value.trim() });
+    lines[i] = `${indent}${key}${sep}${edit.value}`;
+  }
+
+  if (changed.length > 0) fs.writeFileSync(iniPath, lines.join(eol), 'utf-8');
+  return changed;
+}
+
 function patchIniDefaults(iniPath, edits) {
   const original = fs.readFileSync(iniPath, 'utf-8');
   const eol = original.includes('\r\n') ? '\r\n' : '\n';
@@ -422,15 +491,32 @@ function patchIniDefaults(iniPath, edits) {
   return applied;
 }
 
-// Pinned to 2.11.1 -- 2.12.0+ hard-crashed Witcher 3. Fetched from RHI's own pre-packaged,
-// DLLs-only zip (the same one RHI itself downloads for its Streamline staging) rather than
-// NVIDIA-RTX/Streamline's official release, which bundles the full SDK (headers, samples, docs,
-// every platform) and needs a recursive search for where the DLLs actually landed. RHI's manifest
-// (raw.githubusercontent.com/RankFTW/RHI/main/dlss_manifest.json) lists these same per-version
-// zips; this hardcodes the URL for the one pinned version rather than fetching that manifest.
-const STREAMLINE_SDK_VERSION = '2.11.1';
-const STREAMLINE_DIRECT_ZIP_URL =
-  `https://github.com/RankFTW/rhi-repo/releases/download/streamline-${STREAMLINE_SDK_VERSION}/streamline_${STREAMLINE_SDK_VERSION}.zip`;
+// Streamline comes from RHI's pre-packaged, DLLs-only zips rather than NVIDIA-RTX/Streamline's
+// official releases, which bundle the full SDK (headers, samples, docs, every platform) and need a
+// recursive search for where the DLLs actually landed.
+//
+// Which version to fetch used to be a hardcoded constant, which meant a Manager release had to ship
+// before anyone could get a newer Streamline. RHI publishes the list it uses in a manifest, so read
+// that instead and take the newest entry. Note this manifest also carries a "dlssnr" list: we
+// deliberately ignore it. The DLSS-NR model and the OptiScaler build both stay pinned to our own
+// OptiScaler_DLSSNR fork -- RHI is a source for third-party dependencies here, not for the thing
+// this app exists to install.
+const RHI_MANIFEST_URL = 'https://raw.githubusercontent.com/RankFTW/RHI/main/dlss_manifest.json';
+const RHI_MANIFEST_TTL_MS = 6 * 60 * 60 * 1000;
+
+// Only consulted when the manifest can't be read and nothing has been cached yet: the newest build
+// known when this shipped, plus the last one The Witcher 3 tolerates (see STREAMLINE_GAME_PINS).
+const STREAMLINE_BUILTIN_VERSIONS = ['2.14.0.0', '2.11.1'];
+
+const streamlineZipUrlFor = (version) =>
+  `https://github.com/RankFTW/rhi-repo/releases/download/streamline-${version}/streamline_${version}.zip`;
+
+// Games whose own interposer can't be driven by an arbitrarily new Streamline. 2.12.0 hard-crashed
+// The Witcher 3 on startup; 2.11.1 is the last build it survives. Everything not listed here gets
+// whatever RHI has newest.
+const STREAMLINE_GAME_PINS = [
+  { exe: /^witcher3(_dx12)?\.exe$/i, maxVersion: '2.11.1' },
+];
 
 const KNOWN_STREAMLINE_DLLS = new Set([
   'sl.common.dll', 'sl.deepdvc.dll', 'sl.directsr.dll', 'sl.dlss.dll',
@@ -438,19 +524,130 @@ const KNOWN_STREAMLINE_DLLS = new Set([
   'sl.nvperf.dll', 'sl.pcl.dll', 'sl.reflex.dll',
 ]);
 
-function streamlineSdkCacheDir() {
+/// Compares dotted numeric versions part-by-part, treating missing parts as 0 -- so "2.11.1" and
+/// "2.11.1.0" compare equal, and "2.12.128.0" sorts above "2.12.0.0".
+function compareStreamlineVersions(a, b) {
+  const pa = String(a).split('.');
+  const pb = String(b).split('.');
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const na = Number(pa[i] || 0);
+    const nb = Number(pb[i] || 0);
+    if (!Number.isFinite(na) || !Number.isFinite(nb)) return String(a).localeCompare(String(b));
+    if (na !== nb) return na - nb;
+  }
+  return 0;
+}
+
+function rhiManifestCacheFile() {
+  return path.join(userDataDir(), 'rhi-dlss-manifest.json');
+}
+
+let rhiManifestMemo = null;
+
+/// Returns RHI's Streamline list as [{ version, url }], newest first. Prefers a fresh fetch, falls
+/// back to the on-disk copy from a previous run when offline, and to a built-in list when there has
+/// never been one. Never throws.
+async function getStreamlineReleases() {
+  if (rhiManifestMemo && Date.now() - rhiManifestMemo.at < RHI_MANIFEST_TTL_MS) {
+    return rhiManifestMemo.releases;
+  }
+
+  const normalize = (list) => (Array.isArray(list) ? list : [])
+    .filter((e) => e && typeof e.version === 'string')
+    .map((e) => ({ version: e.version, url: typeof e.url === 'string' && e.url ? e.url : streamlineZipUrlFor(e.version) }))
+    .sort((x, y) => compareStreamlineVersions(y.version, x.version));
+
+  try {
+    const res = await fetch(RHI_MANIFEST_URL, { headers: { 'User-Agent': GITHUB_HEADERS['User-Agent'] } });
+    if (res.ok) {
+      const data = await res.json();
+      const releases = normalize(data && data.streamline);
+      if (releases.length > 0) {
+        writeJson(rhiManifestCacheFile(), { fetchedAt: Date.now(), streamline: releases });
+        rhiManifestMemo = { at: Date.now(), releases };
+        return releases;
+      }
+    }
+  } catch {
+    // Fall through to the cached / built-in list.
+  }
+
+  const cached = normalize(readJson(rhiManifestCacheFile(), {}).streamline);
+  const releases = cached.length > 0
+    ? cached
+    : STREAMLINE_BUILTIN_VERSIONS.map((version) => ({ version, url: streamlineZipUrlFor(version) }));
+  rhiManifestMemo = { at: Date.now(), releases };
+  return releases;
+}
+
+/// Picks the release to deploy for one game: an explicit user choice if there is one, otherwise the
+/// newest build that game is known to tolerate.
+async function resolveStreamlineRelease(exePath, pinnedVersion) {
+  const releases = await getStreamlineReleases();
+  if (releases.length === 0) return null;
+
+  if (pinnedVersion && pinnedVersion !== 'latest') {
+    const exact = releases.find((r) => compareStreamlineVersions(r.version, pinnedVersion) === 0);
+    if (exact) return { ...exact, reason: 'pinned in Settings' };
+    return { version: pinnedVersion, url: streamlineZipUrlFor(pinnedVersion), reason: 'pinned in Settings' };
+  }
+
+  // Split on both separators by hand: these paths are always Windows paths, but the app is also
+  // developed and unit-tested on posix, where path.basename() would hand back the whole string.
+  const exeName = exePath ? String(exePath).split(/[\\/]/).pop() : '';
+  const cap = STREAMLINE_GAME_PINS.find((p) => exeName && p.exe.test(exeName));
+  if (cap) {
+    const allowed = releases.find((r) => compareStreamlineVersions(r.version, cap.maxVersion) <= 0);
+    if (allowed) return { ...allowed, reason: `capped for ${exeName}` };
+  }
+  return { ...releases[0], reason: 'newest from RHI' };
+}
+
+function streamlineSdkCacheRoot() {
   return path.join(userDataDir(), 'streamline-sdk');
+}
+
+function streamlineSdkCacheDir(version) {
+  return path.join(streamlineSdkCacheRoot(), version.replace(/[^0-9A-Za-z.]/g, '_'));
 }
 
 function streamlineSdkLocalCacheDir() {
   return path.join(userDataDir(), 'streamline-sdk-local');
 }
 
-async function ensureStreamlineSdkCache(localZipPath) {
+/// Versions used to share one flat cache directory. Move an old one into its per-version slot so
+/// upgrading the app doesn't force a re-download of a build that's already on disk.
+function migrateFlatStreamlineCache() {
+  const root = streamlineSdkCacheRoot();
+  const flatMarker = path.join(root, '.version');
+  if (!fs.existsSync(flatMarker)) return;
+  try {
+    const version = fs.readFileSync(flatMarker, 'utf-8').trim();
+    const dest = version ? streamlineSdkCacheDir(version) : null;
+    if (dest && !fs.existsSync(dest)) {
+      fs.mkdirSync(dest, { recursive: true });
+      for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+        if (!entry.isFile()) continue;
+        fs.renameSync(path.join(root, entry.name), path.join(dest, entry.name));
+      }
+      return;
+    }
+    for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+      if (entry.isFile()) fs.rmSync(path.join(root, entry.name), { force: true });
+    }
+  } catch {
+    // A cache that can't be migrated just gets re-downloaded; not worth failing an install over.
+  }
+}
+
+async function ensureStreamlineSdkCache(localZipPath, release) {
   const usingLocal = !!(localZipPath && fs.existsSync(localZipPath));
-  const cacheDir = usingLocal ? streamlineSdkLocalCacheDir() : streamlineSdkCacheDir();
+  if (!usingLocal && !release) return null;
+  if (!usingLocal) migrateFlatStreamlineCache();
+
+  const cacheDir = usingLocal ? streamlineSdkLocalCacheDir() : streamlineSdkCacheDir(release.version);
   const versionMarker = path.join(cacheDir, '.version');
-  const wantVersion = usingLocal ? `local:${sha256File(localZipPath)}` : STREAMLINE_SDK_VERSION;
+  const wantVersion = usingLocal ? `local:${sha256File(localZipPath)}` : release.version;
   const cachedVersion = fs.existsSync(versionMarker) ? fs.readFileSync(versionMarker, 'utf-8').trim() : null;
   if (cachedVersion === wantVersion && fs.existsSync(path.join(cacheDir, 'sl.interposer.dll'))) {
     return cacheDir;
@@ -461,7 +658,7 @@ async function ensureStreamlineSdkCache(localZipPath) {
     if (usingLocal) {
       tmpZip = localZipPath;
     } else {
-      const dlRes = await fetch(STREAMLINE_DIRECT_ZIP_URL, { headers: GITHUB_HEADERS });
+      const dlRes = await fetch(release.url, { headers: GITHUB_HEADERS });
       if (!dlRes.ok) throw new Error(`Download failed: HTTP ${dlRes.status}`);
       const buf = Buffer.from(await dlRes.arrayBuffer());
 
@@ -500,31 +697,42 @@ async function ensureStreamlineSdkCache(localZipPath) {
     await fsp.writeFile(versionMarker, wantVersion, 'utf-8');
     return cacheDir;
   } catch {
-    return null;
+    // A previously-cached copy of this same version is better than no Streamline at all.
+    return fs.existsSync(path.join(cacheDir, 'sl.interposer.dll')) ? cacheDir : null;
   } finally {
     if (tmpZip && !usingLocal) fsp.rm(tmpZip, { force: true }).catch(() => {});
   }
 }
 
-async function deployStreamlineFolder(dir) {
+async function deployStreamlineFolder(dir, exePath) {
   const base = fs.existsSync(path.join(dir, 'OptiScaler')) ? path.join(dir, 'OptiScaler') : dir;
   const dest = path.join(base, 'streamline');
   if (fs.existsSync(path.join(dest, 'sl.interposer.dll'))) return { deployed: false, reason: 'already present' };
 
-  const streamlineZipPath = readJson(settingsFile(), {}).streamlineZipPath || '';
-  const cacheDir = await ensureStreamlineSdkCache(streamlineZipPath);
-  if (!cacheDir) return { deployed: false, reason: 'could not fetch Streamline SDK' };
+  const settings = readJson(settingsFile(), {});
+  const streamlineZipPath = settings.streamlineZipPath || '';
+  const usingLocal = !!(streamlineZipPath && fs.existsSync(streamlineZipPath));
+  const release = usingLocal ? null : await resolveStreamlineRelease(exePath, settings.streamlineVersion || 'latest');
+  const cacheDir = await ensureStreamlineSdkCache(streamlineZipPath, release);
+  if (!cacheDir) {
+    return { deployed: false, reason: 'could not fetch Streamline SDK', version: release ? release.version : null };
+  }
 
   await fsp.mkdir(dest, { recursive: true });
   const copied = [];
   for (const entry of await fsp.readdir(cacheDir, { withFileTypes: true })) {
-    if (!entry.isFile()) continue;
+    if (!entry.isFile() || entry.name === '.version') continue;
     const destFile = path.join(dest, entry.name);
     if (fs.existsSync(destFile)) continue;
     await fsp.copyFile(path.join(cacheDir, entry.name), destFile);
     copied.push(entry.name);
   }
-  return { deployed: copied.length > 0, files: copied };
+  return {
+    deployed: copied.length > 0,
+    files: copied,
+    version: usingLocal ? 'your own zip' : release.version,
+    reason: usingLocal ? 'local zip from Settings' : release.reason,
+  };
 }
 
 function isReEngineGame(dir) {
@@ -535,13 +743,42 @@ function isReEngineGame(dir) {
   }
 }
 
-// Exe names OptiScaler_DLSSNR's compiled quirks table (misc/Quirks.h) already gives a tested,
-// vendor-aware compute-signature policy to -- see the note in autoConfigureGame.
-const KNOWN_REENGINE_QUIRKED_EXES = new Set([
-  'kunitsugami.exe', 'kunitsugamidemo.exe', 'monsterhunterwilds.exe', 'monsterhunterrise.exe',
-  'drdr.exe', 'dd2.exe', 'dd2ccs.exe', 'pragmata_sketchbook.exe', 'pragmata.exe',
-  're9.exe', 're9demo.exe', 'monster_hunter_stories_3_twisted_reflection.exe', 'onimushawots_demo.exe',
-]);
+// The [Hotfix] block RE Engine needs, from a tested Dragon's Dogma 2 configuration.
+//
+// These are FORCED, not defaulted, because two of them are values that crash rather than values
+// that are merely wrong -- see patchIniValues.
+//
+// What each one is for:
+//
+//   ManualInputPolling      OptiScaler and REFramework both subclass WndProc. When they fight, the
+//                           log shows "subclass lost input" / "InputHwnd is set but WndProc is not
+//                           subclassed" and the message pump can deadlock. This hands the pump to
+//                           REFramework and polls input asynchronously instead.
+//
+//   RestoreComputeSignature RE Engine's scheduler expects its compute pipeline state intact across
+//                           frames. Return without restoring the compute root signature and it hits
+//                           its own assertion trap -- the Capcom CrashReport box, 0xC000001D.
+//
+//   RestoreGraphicSignature MUST be false. On the intro-to-3D transition Streamline tears down the
+//                           swapchain and RE Engine rebinds bindless descriptors. Restoring graphics
+//                           root state there feeds dangling pointers into nvwgf2umx.dll: instant
+//                           0xC0000005. The log shows "Couldn't restore GraphicsRoot32BitConstant"
+//                           and "Couldn't restore GraphicsRootDescriptorTable" first.
+//
+//   ExtendedStateRestore    MUST be false, same failure for the same reason -- extended tracking of
+//                           bindless state across that teardown.
+//
+// This supersedes the v1.4.3/v1.4.4 handling. v1.4.3 set the compute AND graphics restores to true
+// together, which crashed Dragon's Dogma 2, and v1.4.4 responded by setting neither -- reading the
+// crash as "the compute restore fought the quirks table". On this evidence that was the wrong half:
+// the graphics restore is the one that kills it, and the compute restore is required. Setting them
+// explicitly and in opposite directions is what was actually needed.
+const RE_ENGINE_HOTFIX = [
+  { section: 'Hotfix', key: 'ManualInputPolling', value: 'true' },
+  { section: 'Hotfix', key: 'RestoreComputeSignature', value: 'true' },
+  { section: 'Hotfix', key: 'RestoreGraphicSignature', value: 'false' },
+  { section: 'Hotfix', key: 'ExtendedStateRestore', value: 'false' },
+];
 
 // ── RE Framework (dinput8.dll) ────────────────────────────────────────────────
 // Capcom RE Engine games need RE Framework present for OptiScaler to work at all --
@@ -674,20 +911,10 @@ async function autoConfigureGame(dir, exePath) {
 
   const reEngine = isReEngineGame(dir);
   let reframework = null;
+  let reEngineHotfix = [];
   if (reEngine) {
-    // OptiScaler_DLSSNR already ships a hand-tuned, per-exe quirks table (misc/Quirks.h) for the
-    // newer Capcom titles -- e.g. dd2.exe gets RestoreComputeSigOnNonNvidia, which only restores
-    // the compute signature on AMD/Intel and deliberately leaves it off on Nvidia. Forcing
-    // RestoreComputeSignature=true here regardless of vendor fights that tested config and hard-
-    // crashed Dragon's Dogma 2 at Neural Rendering init. RestoreGraphicSignature isn't set by any
-    // quirk entry for any title -- it's a manual/experimental toggle only, never validated as a
-    // blanket fix. So: skip both for titles the compiled quirks table already covers, and only
-    // fall back to RestoreComputeSignature for the untabulated older RE Engine line (RE2/3/4/7/8,
-    // DMC5, SF6, ...) that the wiki says needs it set by hand.
-    const exeName = path.basename(exePath).toLowerCase();
-    if (!KNOWN_REENGINE_QUIRKED_EXES.has(exeName)) {
-      edits.push({ section: 'Hotfix', key: 'RestoreComputeSignature', value: 'true' });
-    }
+    reEngineHotfix = patchIniValues(iniPath, RE_ENGINE_HOTFIX);
+
     // OptiScaler doesn't work on RE Engine without REFramework already present -- ensure it's
     // there before anything else here matters.
     reframework = await ensureREFrameworkForGame(dir);
@@ -700,11 +927,11 @@ async function autoConfigureGame(dir, exePath) {
     edits.push({ section: 'FrameGen', key: 'Enabled', value: 'true' });
     edits.push({ section: 'FrameGen', key: 'FGInput', value: 'upscaler' });
     edits.push({ section: 'FrameGen', key: 'FGOutput', value: 'dlssg' });
-    if (!hasNativeStreamline) streamline = await deployStreamlineFolder(dir);
+    if (!hasNativeStreamline) streamline = await deployStreamlineFolder(dir, exePath);
   }
 
   const applied = patchIniDefaults(iniPath, edits);
-  return { api, applied, streamline, reEngine, reframework };
+  return { api, applied, streamline, reEngine, reframework, reEngineHotfix };
 }
 
 const PROXY_CANDIDATES = ['dxgi.dll', 'winmm.dll', 'version.dll', 'dbghelp.dll', 'd3d12.dll', 'wininet.dll', 'winhttp.dll', 'OptiScaler.asi'];
@@ -748,11 +975,11 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
     const dir = gameDir(exePath);
     if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: true, updated: false, reason: 'not installed' };
 
-    const { api, applied: autoConfigured, streamline, reEngine, reframework } = await autoConfigureGame(dir, exePath);
+    const { api, applied: autoConfigured, streamline, reEngine, reframework, reEngineHotfix } = await autoConfigureGame(dir, exePath);
 
     const releaseDll = releaseFolder ? path.join(releaseFolder, 'OptiScaler.dll') : null;
     if (!releaseDll || !fs.existsSync(releaseDll)) {
-      return { ok: true, updated: autoConfigured.length > 0, reason: 'no release set', api, autoConfigured, streamline, reEngine, reframework };
+      return { ok: true, updated: autoConfigured.length > 0, reason: 'no release set', api, autoConfigured, streamline, reEngine, reframework, reEngineHotfix };
     }
 
     if (!hasDlssNrSection(releaseFolder)) {
@@ -771,18 +998,141 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
     }
 
     if (sha256File(releaseDll) === sha256File(active.file)) {
-      return { ok: true, updated: autoConfigured.length > 0, reason: 'up to date', api, autoConfigured, streamline, reEngine, reframework };
+      return { ok: true, updated: autoConfigured.length > 0, reason: 'up to date', api, autoConfigured, streamline, reEngine, reframework, reEngineHotfix };
     }
 
     await fsp.copyFile(releaseDll, active.file);
     const plain = path.join(dir, 'OptiScaler.dll');
     if (active.file !== plain) await fsp.copyFile(releaseDll, plain).catch(() => {});
 
-    return { ok: true, updated: true, file: path.basename(active.file), api, autoConfigured, streamline, reEngine, reframework };
+    return { ok: true, updated: true, file: path.basename(active.file), api, autoConfigured, streamline, reEngine, reframework, reEngineHotfix };
   } catch (err) {
     return { ok: false, error: err.message };
   }
 });
+
+// ── Proxy install / removal, without the terminal ─────────────────────────────
+//
+// Copying the release in does not make a game load OptiScaler: the DLL has to be renamed to
+// something the game already loads. setup_windows.bat did that, which is why installing was two
+// steps -- click Install, then click Run Setup and answer seven prompts in a console window. The
+// app then had no idea whether any of it worked, so the badge and reality drifted apart.
+//
+// This does the same rename directly. The prompts the script asks are all things the app already
+// knows or has a sane default for.
+
+const INSTALL_MARKER = '.optiscaler-manager-install.json';
+
+// dxgi.dll is what the script offers as option 1 and what nearly every DX11/DX12/Vulkan game on
+// Windows already loads.
+const DEFAULT_PROXY = 'dxgi.dll';
+
+function readInstallMarker(dir) {
+  return readJson(path.join(dir, INSTALL_MARKER), null);
+}
+
+// Renames OptiScaler.dll to the proxy name, preserving anything already using that name.
+//
+// The backup rule is deliberately more cautious than the script's: if a backup already exists this
+// refuses instead of overwriting it. The script does `del /F` on the old backup first, so
+// installing twice over a game that shipped its own dxgi.dll destroys the original permanently on
+// the second run. Refusing is recoverable; deleting someone's file is not.
+async function installProxy(dir, proxyName = DEFAULT_PROXY) {
+  if (!PROXY_CANDIDATES.includes(proxyName)) {
+    throw new Error(`${proxyName} is not one of the proxy names OptiScaler supports`);
+  }
+
+  const active = await findActiveOptiScalerFile(dir);
+  if (active && active.renamed) {
+    return { proxy: path.basename(active.file), created: false, backedUp: null };
+  }
+
+  const source = path.join(dir, 'OptiScaler.dll');
+  if (!fs.existsSync(source)) {
+    throw new Error('OptiScaler.dll is not in the game folder -- the release copy did not land');
+  }
+
+  const target = path.join(dir, proxyName);
+  let backedUp = null;
+
+  if (fs.existsSync(target)) {
+    const bare = proxyName.replace(/\.[^.]+$/, '');
+    const backupName = `${bare}.optiscaler_original_backup`;
+    const backup = path.join(dir, backupName);
+
+    if (fs.existsSync(backup)) {
+      throw new Error(
+        `${proxyName} already exists here and so does ${backupName}. Refusing to overwrite the ` +
+          'backup -- that would destroy the original for good. Sort those two files out by hand, ' +
+          'or install to a different proxy name.'
+      );
+    }
+
+    await fsp.rename(target, backup);
+    backedUp = backupName;
+  }
+
+  await fsp.rename(source, target);
+
+  // What we did, so removal reverses exactly this rather than inferring it from what is lying
+  // around. The generated uninstaller has to guess, which is why it can hijack a hand-made setup.
+  writeJson(path.join(dir, INSTALL_MARKER), {
+    proxy: proxyName,
+    backedUp,
+    installedAt: new Date().toISOString()
+  });
+
+  return { proxy: proxyName, created: true, backedUp };
+}
+
+// Reverses installProxy and clears out what the app copied in.
+//
+// Never deletes a file at a proxy name without confirming it is actually OptiScaler: if someone
+// renamed things by hand in between, the honest outcome is to leave their file alone and say so.
+async function uninstallOptiScaler(dir) {
+  const removed = [];
+  const kept = [];
+  const marker = readInstallMarker(dir);
+
+  const active = await findActiveOptiScalerFile(dir);
+  const proxyPath = active && active.renamed
+    ? active.file
+    : (marker && marker.proxy ? path.join(dir, marker.proxy) : null);
+
+  if (proxyPath && fs.existsSync(proxyPath)) {
+    if (active && active.renamed && path.resolve(active.file) === path.resolve(proxyPath)) {
+      await fsp.rm(proxyPath, { force: true });
+      removed.push(path.basename(proxyPath));
+    } else {
+      kept.push(
+        `${path.basename(proxyPath)} (does not identify itself as OptiScaler -- left alone)`
+      );
+    }
+  }
+
+  if (marker && marker.backedUp) {
+    const backup = path.join(dir, marker.backedUp);
+    const restoreTo = path.join(dir, marker.proxy);
+    if (fs.existsSync(backup) && !fs.existsSync(restoreTo)) {
+      await fsp.rename(backup, restoreTo);
+      removed.push(`restored ${marker.proxy}`);
+    }
+  }
+
+  for (const name of ['OptiScaler.dll', 'OptiScaler.ini', 'OptiScaler.log', 'nvngx.dll_dlssnr.dll',
+                      'Remove_OptiScaler.bat', 'setup_windows.bat', 'setup_linux.sh', INSTALL_MARKER]) {
+    const f = path.join(dir, name);
+    if (fs.existsSync(f)) {
+      await fsp.rm(f, { force: true });
+      if (name !== INSTALL_MARKER) removed.push(name);
+    }
+  }
+
+  const nrDllRemoved = await removeSharedNrDllIfUnneeded(dir);
+  if (nrDllRemoved) removed.push('nvngx_dlssnr.dll');
+
+  return { removed, kept, nrDllRemoved };
+}
 
 function bannersDir() {
   const dir = path.join(userDataDir(), 'banners');

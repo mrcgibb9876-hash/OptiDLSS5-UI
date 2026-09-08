@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('api', {
   pickZip: (title) => ipcRenderer.invoke('pick:zip', title),
   pickImage: () => ipcRenderer.invoke('pick:image'),
   scanLibrary: (options) => ipcRenderer.invoke('library:scan', options),
+  streamlineVersions: () => ipcRenderer.invoke('streamline:versions'),
 
   steamSearch: (term) => ipcRenderer.invoke('steam:search', term),
   validateRelease: (folder) => ipcRenderer.invoke('release:validate', folder),
