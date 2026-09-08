@@ -32,7 +32,7 @@ pipeline, all live over the running game. It ships in light and dark themes:
 
 ![DLSS 5 Developer Controls overlay, open over a running game](docs/screenshots/dlss5-developer-controls.png)
 
-![DLSS 5 Developer Controls panel, light and dark themes side by side](docs/screenshots/dlssnr-theme-mockup.svg)
+![DLSS 5 Developer Controls panel, light and dark themes side by side](docs/screenshots/dlssnr-theme-comparison.png)
 
 See [README-END-USER.txt](README-END-USER.txt) for the full key list and setup steps.
 

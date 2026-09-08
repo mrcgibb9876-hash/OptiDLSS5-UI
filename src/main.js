@@ -289,9 +289,9 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
       proxyError = err.message;
     }
 
-    const { api, applied, streamline, reEngine, reframework, reEngineHotfix } = await autoConfigureGame(dir, exePath);
+    const { api, applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix } = await autoConfigureGame(dir, exePath);
 
-    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, proxy, proxyError, api, autoConfigured: applied, streamline, reEngine, reframework, reEngineHotfix };
+    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, proxy, proxyError, api, autoConfigured: applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -913,6 +913,52 @@ async function ensureREFrameworkForGame(dir) {
     ? fs.readFileSync(path.join(reframeworkCacheDir(), '.version'), 'utf-8').trim() : 'unknown' };
 }
 
+// REFramework writes its own settings the first time the game actually runs with dinput8.dll in
+// place -- a flat KEY=VALUE file, no [Section] headers, so patchIniValues/patchIniDefaults (which
+// both require a section) don't apply to it. There is nothing to patch until that first run has
+// happened, which is fine: this only ever fixes a file that already exists.
+const REFRAMEWORK_CONFIG_NAME = 're2_fw_config.txt';
+
+// REFramework's own docs and in-game text say the menu opens on Insert (VK_INSERT = 45), but a real
+// generated config here had REFrameworkConfig_MenuKey_V2=96 (VK_NUMPAD0) instead -- a key a laptop
+// keyboard doesn't have, which is why pressing Insert looked like it did nothing. Forced back to 45
+// so the documented key actually matches what's bound.
+//
+// REFramework has no separate window-size or DPI setting -- the overlay is Dear ImGui, so its only
+// lever on how big things render is font size. 22 renders small on a high-res panel; 34 reads like a
+// normal desktop window there while staying reasonable at 1080p.
+const REFRAMEWORK_CONFIG_FIXES = [
+  { key: 'REFrameworkConfig_MenuKey_V2', value: '45' },
+  { key: 'REFrameworkConfig_FontSize', value: '34' },
+  { key: 'REFrameworkConfig_UIFontSize', value: '34.000000' },
+];
+
+function patchFlatKeyValueFile(filePath, edits) {
+  if (!fs.existsSync(filePath)) return [];
+  const original = fs.readFileSync(filePath, 'utf-8');
+  const eol = original.includes('\r\n') ? '\r\n' : '\n';
+  const lines = original.split(/\r\n|\n/);
+  const wanted = new Map(edits.map((e) => [e.key.toLowerCase(), e]));
+  const changed = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const kvMatch = lines[i].match(/^([^=]+)=(.*)$/);
+    if (!kvMatch) continue;
+    const [, key, value] = kvMatch;
+    const edit = wanted.get(key.trim().toLowerCase());
+    if (!edit || value.trim() === String(edit.value)) continue;
+    changed.push({ ...edit, was: value.trim() });
+    lines[i] = `${key}=${edit.value}`;
+  }
+
+  if (changed.length > 0) fs.writeFileSync(filePath, lines.join(eol), 'utf-8');
+  return changed;
+}
+
+function fixREFrameworkConfig(dir) {
+  return patchFlatKeyValueFile(path.join(dir, REFRAMEWORK_CONFIG_NAME), REFRAMEWORK_CONFIG_FIXES);
+}
+
 async function autoConfigureGame(dir, exePath) {
   const iniPath = path.join(dir, 'OptiScaler.ini');
   if (!fs.existsSync(iniPath)) return { api: null, applied: [] };
@@ -933,6 +979,7 @@ async function autoConfigureGame(dir, exePath) {
 
   const reEngine = isReEngineGame(dir);
   let reframework = null;
+  let reframeworkConfig = [];
   let reEngineHotfix = [];
   if (reEngine) {
     reEngineHotfix = patchIniValues(iniPath, RE_ENGINE_HOTFIX);
@@ -940,6 +987,7 @@ async function autoConfigureGame(dir, exePath) {
     // OptiScaler doesn't work on RE Engine without REFramework already present -- ensure it's
     // there before anything else here matters.
     reframework = await ensureREFrameworkForGame(dir);
+    reframeworkConfig = fixREFrameworkConfig(dir);
   }
 
   let streamline = null;
@@ -953,7 +1001,7 @@ async function autoConfigureGame(dir, exePath) {
   }
 
   const applied = patchIniDefaults(iniPath, edits);
-  return { api, applied, streamline, reEngine, reframework, reEngineHotfix };
+  return { api, applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
 }
 
 const PROXY_CANDIDATES = ['dxgi.dll', 'winmm.dll', 'version.dll', 'dbghelp.dll', 'd3d12.dll', 'wininet.dll', 'winhttp.dll', 'OptiScaler.asi'];
@@ -997,11 +1045,11 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
     const dir = gameDir(exePath);
     if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: true, updated: false, reason: 'not installed' };
 
-    const { api, applied: autoConfigured, streamline, reEngine, reframework, reEngineHotfix } = await autoConfigureGame(dir, exePath);
+    const { api, applied: autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix } = await autoConfigureGame(dir, exePath);
 
     const releaseDll = releaseFolder ? path.join(releaseFolder, 'OptiScaler.dll') : null;
     if (!releaseDll || !fs.existsSync(releaseDll)) {
-      return { ok: true, updated: autoConfigured.length > 0, reason: 'no release set', api, autoConfigured, streamline, reEngine, reframework, reEngineHotfix };
+      return { ok: true, updated: autoConfigured.length > 0, reason: 'no release set', api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
     }
 
     if (!hasDlssNrSection(releaseFolder)) {
@@ -1020,14 +1068,14 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
     }
 
     if (sha256File(releaseDll) === sha256File(active.file)) {
-      return { ok: true, updated: autoConfigured.length > 0, reason: 'up to date', api, autoConfigured, streamline, reEngine, reframework, reEngineHotfix };
+      return { ok: true, updated: autoConfigured.length > 0, reason: 'up to date', api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
     }
 
     await fsp.copyFile(releaseDll, active.file);
     const plain = path.join(dir, 'OptiScaler.dll');
     if (active.file !== plain) await fsp.copyFile(releaseDll, plain).catch(() => {});
 
-    return { ok: true, updated: true, file: path.basename(active.file), api, autoConfigured, streamline, reEngine, reframework, reEngineHotfix };
+    return { ok: true, updated: true, file: path.basename(active.file), api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
   } catch (err) {
     return { ok: false, error: err.message };
   }

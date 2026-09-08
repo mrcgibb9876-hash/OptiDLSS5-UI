@@ -262,7 +262,12 @@ async function installGame(game) {
       : res.reframework && res.reframework.error
         ? ` WARNING: REFramework is missing (${res.reframework.error}) -- OptiScaler will not run on this game until it is there.`
         : '';
-    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}${proxyCreatedNote}${configNote}${streamlineNote}${reEngineNote}${hotfixNote}${reframeworkNote}`);
+    // Only fires once REFramework has actually generated its config from a prior run of the game --
+    // there is nothing to fix on a brand new install.
+    const reframeworkConfigNote = res.reframeworkConfig && res.reframeworkConfig.length > 0
+      ? ' Set REFramework’s menu key to Insert (it had drifted to Numpad0, unreachable on a laptop) and enlarged its overlay text.'
+      : '';
+    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}${proxyCreatedNote}${configNote}${streamlineNote}${reEngineNote}${hotfixNote}${reframeworkNote}${reframeworkConfigNote}`);
   } else {
     toast(`Install failed: ${res.error}`);
   }
