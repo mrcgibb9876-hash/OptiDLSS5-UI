@@ -57,12 +57,25 @@ can't work.
 
 ## Dependencies: what the app fetches, and the one thing it won't
 
+**Streamline** — the `streamline` folder OptiScaler's DLSS-G Frame Gen needs — is downloaded per
+game when the game doesn't already ship one. The version list comes from RHI's published
+`dlss_manifest.json`, so a newer Streamline build reaches you the day RHI packages it, without
+waiting for a release of this app. "Latest" is the default; Settings has a dropdown if you want to
+hold a specific build, and a game with a known ceiling (The Witcher 3 hard-crashes on 2.12.0 and
+newer) is capped automatically. You can still point Settings at your own zip, which overrides all
+of that. Only the Streamline DLLs are taken from RHI — the OptiScaler build and the DLSS-NR model
+stay pinned to our own `OptiScaler_DLSSNR` fork.
+
+**REFramework** is fetched from `praydog/REFramework-nightly` for RE Engine games, where OptiScaler
+does nothing without it. The install fails rather than half-succeeds if it can't be got.
+
 **The NVIDIA runtime is the exception.** `nvngx_dlssnr.dll` comes out of a driver, it's NVIDIA's,
 and it is not ours to redistribute — which is the same reason `package_release.ps1` leaves it out of
 the OptiScaler release and the notes tell you to supply your own.
 
 So the app refuses to install until you've pointed it at a copy in Settings. It never fetches one on
-your behalf.
+your behalf. It is the only file you have to find yourself — everything else above arrives on its
+own.
 
 ## In-game keys
 
