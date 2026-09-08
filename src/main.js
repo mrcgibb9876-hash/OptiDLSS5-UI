@@ -371,18 +371,31 @@ const OLD_API_MARKERS = [
     ['opengl', ['opengl32.dll']]
 ];
 
+// `badge` is the short chip shown on the card; `reason` is the longer explanation that goes in its
+// tooltip. Engine identity (RE Engine, RED Engine) takes the badge over the raw graphics API when
+// both are known -- which tool matters (REFramework, etc.) is more useful at a glance than DX/Vulkan.
 async function detectInstallPath(dir, exePath) {
   const api = await detectRenderApi(dir, exePath);
 
+  if (isReEngineGame(dir)) {
+    return {
+      api, recommend: 'optiscaler', badge: 'RE Engine',
+      reason: 'RE Engine (Capcom) — needs REFramework, which this app fetches automatically'
+    };
+  }
+
   if (api === 'vulkan' || api === 'dx12' || api === 'dx11') {
-    return { api, recommend: 'optiscaler', reason: `${api.toUpperCase()} — OptiScaler hooks this directly` };
+    return {
+      api, recommend: 'optiscaler', badge: api.toUpperCase(),
+      reason: `${api.toUpperCase()} — OptiScaler hooks this directly`
+    };
   }
 
   let buf = null;
   try {
     buf = await fsp.readFile(exePath);
   } catch {
-    return { api: null, recommend: 'unknown', reason: 'could not read the executable' };
+    return { api: null, recommend: 'unknown', badge: 'Unknown', reason: 'could not read the executable' };
   }
 
   const has = (name) =>
@@ -390,11 +403,25 @@ async function detectInstallPath(dir, exePath) {
 
   for (const [old, markers] of OLD_API_MARKERS) {
     if (markers.some(has)) {
-      return { api: old, recommend: 'unsupported', reason: `${old.toUpperCase()} — OptiScaler has no hook here` };
+      return {
+        api: old, recommend: 'unsupported', badge: old.toUpperCase(),
+        reason: `${old.toUpperCase()} — OptiScaler has no hook here`
+      };
     }
   }
 
-  return { api: null, recommend: 'unknown', reason: 'could not tell which graphics API this uses' };
+  // REDengine (Cyberpunk 2077, The Witcher 3) never fails detectRenderApi's d3d11.dll/d3d12.dll
+  // scan because it doesn't succeed either -- confirmed against both games' real executables,
+  // neither contains that literal string, so the DLL is loaded some other way than a static
+  // import. "REDengine" and "CD PROJEKT" are both in there in plain text, though.
+  if (has('redengine') || has('cd projekt')) {
+    return {
+      api: null, recommend: 'optiscaler', badge: 'RED Engine',
+      reason: 'RED Engine (CD Projekt Red) — graphics API not detected, but OptiScaler is commonly used with this engine'
+    };
+  }
+
+  return { api: null, recommend: 'unknown', badge: 'Unknown', reason: 'could not tell which graphics API this uses' };
 }
 
 ipcMain.handle('game:detect-path', async (_evt, exePath) => {
@@ -735,9 +762,20 @@ function isReEngineGame(dir) {
 //                           as DirectInput's CreateDevice hook fires), and OptiScaler deliberately
 //                           does not fight to reclaim it. From that point Insert can only reach
 //                           REFramework's own menu, never OptiScaler's -- so this moves OptiScaler
-//                           off Insert entirely rather than trying to win a hook fight. 0x24 is
-//                           VK_HOME, OptiScaler's own pre-Insert default and not claimed by
-//                           REFramework's defaults either.
+//                           off Insert entirely rather than trying to win a hook fight.
+//
+//                           Not 0x24/VK_HOME (tried first): DlssNrPanelKey defaults to Alt+Home, and
+//                           an unchorded bind here ignores whatever modifiers are held -- by design,
+//                           in BindMatches, so a plain bind still fires if you're incidentally
+//                           holding Shift for something else -- so bare Home also matched every
+//                           Alt+Home press, double-toggling both menus on every key-repeat tick.
+//                           That storm coincided with REFramework logging a fatal "Present failed:
+//                           87a0001" (DXGI_ERROR_INVALID_CALL) and going silent -- two Present hooks
+//                           racing on rapid BlockMouse/BlockKeyboard/BlockCursor flips, most likely.
+//                           0x91/VK_SCROLL (Scroll Lock) tested clean afterwards. Final choice is
+//                           0x14F = VK_O (0x4F) | KeyModAlt (0x100), i.e. Alt+O: chorded, and 'O'
+//                           isn't a base key for REFramework's defaults, DlssNr's panel key, or any
+//                           of OptiScaler's own other shortcuts either.
 //
 //   RestoreComputeSignature RE Engine's scheduler expects its compute pipeline state intact across
 //                           frames. Return without restoring the compute root signature and it hits
@@ -758,7 +796,7 @@ function isReEngineGame(dir) {
 // the graphics restore is the one that kills it, and the compute restore is required. Setting them
 // explicitly and in opposite directions is what was actually needed.
 const RE_ENGINE_HOTFIX = [
-  { section: 'Menu', key: 'ShortcutKey', value: '0x24' },
+  { section: 'Menu', key: 'ShortcutKey', value: '0x14F' },
   { section: 'Hotfix', key: 'RestoreComputeSignature', value: 'true' },
   { section: 'Hotfix', key: 'RestoreGraphicSignature', value: 'false' },
   { section: 'Hotfix', key: 'ExtendedStateRestore', value: 'false' },

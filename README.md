@@ -17,11 +17,20 @@ surface right on the card:
 
 ![Game grid, showing per-game OptiScaler status and a live warning](docs/screenshots/manager-game-grid.png)
 
+**Each card is badged with the engine or graphics API it detected** — a quick answer to "will this
+work" without reading a sentence. Known engines (RE Engine, RED Engine) take the badge over the raw
+graphics API when both are known, since which tooling matters is more useful at a glance than
+DX/Vulkan:
+
+![Game cards badged DX12, RED Engine, and RE Engine](docs/screenshots/engine-badges.png)
+
 **In-game tuning** is OptiScaler's own native panel (`Alt+Home`), the DLSS 5 Developer Controls
 overlay — global model controls, per-model style/intensity, Frame Generation, and the colour/HDR
-pipeline, all live over the running game:
+pipeline, all live over the running game. It ships in light and dark themes:
 
 ![DLSS 5 Developer Controls overlay, open over a running game](docs/screenshots/dlss5-developer-controls.png)
+
+![DLSS 5 Developer Controls panel, light and dark themes side by side](docs/screenshots/dlssnr-theme-mockup.svg)
 
 See [README-END-USER.txt](README-END-USER.txt) for the full key list and setup steps.
 
@@ -85,6 +94,11 @@ own.
 
 Both are rebindable, and both panels can be open at once. The panel moved off bare `Home` in
 v1.0.1 because `Home` collided with too many games; v1.0.0 still uses it.
+
+**RE Engine games** (Dragon's Dogma 2, the Resident Evil titles, Monster Hunter Rise/Wilds, and
+the rest of Capcom's RE Engine catalogue) also need REFramework, which uses Insert for its own
+overlay. On these games the app switches OptiScaler's own overlay key to **Alt+O** automatically,
+so both work side by side without a manual rebind.
 
 ## Building
 

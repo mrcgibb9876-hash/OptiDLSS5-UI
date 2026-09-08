@@ -182,16 +182,17 @@ async function applyRecommendation(game, card, backends) {
 
   if (!line) return;
   const canRecommendInstall = !backends.optiscaler;
+  const badgeText = detected.badge || (detected.api ? detected.api.toUpperCase() : 'Unknown');
+  const badgeClass = detected.recommend === 'unsupported' ? 'engine-badge-unsupported'
+    : detected.recommend === 'optiscaler' ? 'engine-badge-known'
+    : 'engine-badge-unknown';
 
-  if (detected.recommend === 'optiscaler') {
-    line.textContent = `OptiScaler — ${detected.reason}`;
-    if (canRecommendInstall) install.classList.add('btn-primary');
-  } else if (detected.recommend === 'unsupported') {
-    line.textContent = `Not supported — ${detected.reason}`;
+  line.innerHTML = `<span class="engine-badge ${badgeClass}" title="${escapeHtml(detected.reason)}">${escapeHtml(badgeText)}</span>`;
+
+  if (detected.recommend === 'unsupported') {
     install.classList.remove('btn-primary');
-  } else {
-    line.textContent = `Not sure — ${detected.reason}. Try Install and see if it works.`;
-    if (canRecommendInstall) install.classList.add('btn-primary');
+  } else if (canRecommendInstall) {
+    install.classList.add('btn-primary');
   }
 }
 function flipToConfirm(card, { title, detail, onConfirm }) {
