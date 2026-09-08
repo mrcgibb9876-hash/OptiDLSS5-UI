@@ -1,5 +1,7 @@
 # OptiDLSS5-UI
 
+[![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://buymeacoffee.com/ripplingsnake)
+
 A Windows desktop app for getting NVIDIA's DLSS 5 Neural Rendering into your games via the
 [OptiScaler_DLSSNR](https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR) build of OptiScaler.
 
