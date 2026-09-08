@@ -254,6 +254,18 @@ input[type="text"] {
 }
 input[type="text"]:focus { outline: 1px solid var(--accent); }
 
+select {
+  flex: 1;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  min-width: 0;
+}
+select:focus { outline: 1px solid var(--accent); }
+
 .banner-picker { display: flex; gap: 12px; margin-top: 4px; }
 .banner-preview-wrap {
   position: relative;

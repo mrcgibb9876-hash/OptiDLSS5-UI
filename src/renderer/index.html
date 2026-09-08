@@ -116,8 +116,17 @@
       </div>
       <div id="nr-dll-status" class="status-line"></div>
 
-      <label class="field-label">Streamline SDK zip (optional)</label>
-      <p class="field-hint">A zip containing Streamline's sl.*.dll files (e.g. extracted from the Streamline SDK or an NVIDIA driver package). Used to fill in the streamline folder OptiScaler's own DLSS-G Frame Gen needs, when a game doesn't already have one.</p>
+      <label class="field-label">Streamline version</label>
+      <p class="field-hint">The streamline folder OptiScaler's DLSS-G Frame Gen needs is downloaded for you, so nvngx_dlssnr.dll above is the only file you have to supply yourself. "Latest" tracks the newest build RHI publishes; pick a specific one if a game misbehaves on the newest.</p>
+      <div class="field-row">
+        <select id="settings-streamline-version">
+          <option value="latest">Latest (recommended)</option>
+        </select>
+      </div>
+      <div id="streamline-version-status" class="status-line"></div>
+
+      <label class="field-label">Streamline SDK zip (optional override)</label>
+      <p class="field-hint">Only needed if you want to supply your own sl.*.dll files — a zip extracted from the Streamline SDK or an NVIDIA driver package. When set, this is used instead of the download above.</p>
       <div class="field-row">
         <input id="settings-streamline-zip" type="text" placeholder="Not set — browse or paste a path" />
         <button id="btn-browse-streamline-zip" class="btn btn-ghost">Browse</button>

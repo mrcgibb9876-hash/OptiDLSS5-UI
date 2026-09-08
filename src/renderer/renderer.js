@@ -1,5 +1,5 @@
 let games = [];
-let settings = { releaseFolder: '', nrDllPath: '', installedVersion: '', streamlineZipPath: '' };
+let settings = { releaseFolder: '', nrDllPath: '', installedVersion: '', streamlineZipPath: '', streamlineVersion: 'latest' };
 let editingGameId = null;
 let pendingBanner = { appid: null, localPath: null };
 let pendingUpdate = null;
@@ -94,7 +94,7 @@ async function renderGrid() {
         ${(status.warnings || []).map((w) => `<div class="card-warning" title="${escapeHtml(w.message)}">⚠ ${escapeHtml(w.message)}</div>`).join('')}
         <div class="card-actions">
           <button class="btn ${backends.optiscaler ? 'btn-danger' : 'btn-primary'} btn-install">${backends.optiscaler ? 'Remove OptiScaler' : 'Install OptiScaler'}</button>
-          <button class="btn btn-ghost btn-setup">Run Setup</button>
+          <button class="btn btn-ghost btn-setup" title="Optional -- the app already sets up the proxy DLL. Use this for OptiPatcher or spoofing options.">Setup script</button>
         </div>
         <div class="card-actions-row2">
           <button class="btn btn-ghost btn-open">Open Folder</button>
@@ -143,11 +143,10 @@ async function renderGrid() {
       if (backends.optiscaler) {
         flipToConfirm(card, {
           title: 'Remove OptiScaler?',
-          detail: `Opens this game's own uninstaller in a terminal you confirm there -- same as "Run Setup", just removing instead of installing.`,
+          detail: 'Removes the files this app installed and puts back anything it renamed. No terminal.',
           onConfirm: async () => {
             const res = await window.api.runUninstall(game.exePath);
-            const nrNote = res.nrDllRemoved ? ' Also removed the now-unused nvngx_dlssnr.dll.' : '';
-            toast(res.ok ? `Uninstaller opened in a terminal -- confirm there to finish removing OptiScaler.${nrNote}` : `Couldn't start the uninstaller: ${res.error}`);
+            toast(res.ok ? describeUninstall(res) : `Couldn't remove OptiScaler: ${res.error}`);
             renderGrid();
           }
         });
@@ -233,18 +232,53 @@ async function installGame(game) {
     const configNote = res.autoConfigured && res.autoConfigured.length > 0
       ? ` Auto-configured for ${res.api || 'detected API'}: ${res.autoConfigured.map((e) => e.key).join(', ')}.`
       : '';
-    const streamlineNote = res.streamline && res.streamline.deployed ? ' Deployed the Streamline SDK for DLSS Frame Gen.' : '';
-    const reEngineNote = res.reEngine ? ' Detected RE Engine (Capcom).' : '';
-    const reframeworkNote = res.reframework && res.reframework.installed ? ' Installed REFramework (required for OptiScaler on RE Engine).'
-      : res.reframework && res.reframework.error ? ` REFramework install failed (${res.reframework.error}) -- OptiScaler will not work until it's installed.`
+    const streamlineNote = res.streamline && res.streamline.deployed
+      ? ` Deployed Streamline ${res.streamline.version || ''} for DLSS Frame Gen.`.replace('  ', ' ')
       : '';
-    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}${configNote}${streamlineNote}${reEngineNote}${reframeworkNote}`);
+    const reEngineNote = res.reEngine ? ' Detected RE Engine (Capcom).' : '';
+
+    // The rename is the step that actually hooks the game, so it gets said out loud -- and if it
+    // could not happen, that is the difference between "installed" and "installed but inert".
+    const proxyCreatedNote = res.proxy && res.proxy.created
+      ? ` Hooked it up as ${res.proxy.proxy}${res.proxy.backedUp ? ` (backed up the original as ${res.proxy.backedUp})` : ''}.`
+      : res.proxyError
+        ? ` NOTE: could not set up the proxy DLL -- ${res.proxyError} Use "Run Setup" to do it by hand.`
+        : '';
+
+    // Worth naming rather than folding into a count: two of these are settings that crash the game
+    // rather than settings that are merely suboptimal, and one of them was written by an older
+    // version of this app, so "corrected" is the honest word for what happened.
+    const hotfix = res.reEngineHotfix || [];
+    const hotfixNote = hotfix.length
+      ? ` Applied the RE Engine hotfix (${hotfix.map((h) => `${h.key}=${h.value}`).join(', ')}).`
+      : '';
+    // On the install path a REFramework failure now stops the install outright, so this only ever
+    // reports the good cases. The error branch stays for the sync path, which patches an existing
+    // install and must not pretend a missing prerequisite is fine.
+    const reframeworkNote = res.reframework && res.reframework.installed
+      ? ' Installed REFramework (required for OptiScaler on RE Engine).'
+      : res.reframework && res.reframework.alreadyPresent ? ' REFramework already present.'
+      : res.reframework && res.reframework.error
+        ? ` WARNING: REFramework is missing (${res.reframework.error}) -- OptiScaler will not run on this game until it is there.`
+        : '';
+    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}${proxyCreatedNote}${configNote}${streamlineNote}${reEngineNote}${hotfixNote}${reframeworkNote}`);
   } else {
     toast(`Install failed: ${res.error}`);
   }
   renderGrid();
 }
 
+// Says what was actually done rather than what was started. The old flow could only report that a
+// terminal had opened, which is why the badge and the folder could disagree.
+function describeUninstall(res) {
+  const removed = (res.removed || []).length ? ` Removed: ${res.removed.join(', ')}.` : ' Nothing left to remove.';
+  const kept = (res.kept || []).length ? ` Left alone: ${res.kept.join('; ')}.` : '';
+  return `OptiScaler removed.${removed}${kept}`;
+}
+
+// The escape hatch. Installing no longer needs this -- the app does the rename itself -- but the
+// script also handles OptiPatcher and the spoofing questions, and someone who wants those, or who
+// hits the backup refusal, still needs a way to run it.
 async function runSetup(game) {
   const res = await window.api.runSetup(game.exePath);
   if (!res.ok) toast(res.error);
@@ -256,11 +290,7 @@ async function removeGame(game) {
 
   if (choice === 'remove-and-forget') {
     const res = await window.api.runUninstall(game.exePath);
-    if (!res.ok) {
-      toast(`Couldn't start the uninstaller: ${res.error}. Removed from the list anyway.`);
-    } else {
-      toast('Uninstaller opened in a terminal -- confirm there to actually remove the files.');
-    }
+    toast(res.ok ? describeUninstall(res) : `Couldn't remove OptiScaler: ${res.error}. Removed from the list anyway.`);
   }
 
   games = games.filter((g) => g.id !== game.id);
@@ -391,14 +421,58 @@ function openSettingsModal() {
   checkReleaseStatus();
   checkNrDllStatus();
   checkStreamlineZipStatus();
+  loadStreamlineVersions();
   settingsModal.classList.remove('hidden');
 }
 
 function checkStreamlineZipStatus() {
   const el = $('#streamline-zip-status');
-  el.textContent = settings.streamlineZipPath ? 'Set.' : '';
+  el.textContent = settings.streamlineZipPath
+    ? 'Set — this overrides the version above.'
+    : '';
   el.className = 'status-line status-ok';
 }
+
+let streamlineVersionsLoaded = false;
+
+async function loadStreamlineVersions() {
+  const select = $('#settings-streamline-version');
+  const status = $('#streamline-version-status');
+  const wanted = settings.streamlineVersion || 'latest';
+
+  if (!streamlineVersionsLoaded) {
+    status.className = 'status-line';
+    status.textContent = 'Checking what RHI has published…';
+    const res = await window.api.streamlineVersions();
+    if (res && res.ok && res.versions.length > 0) {
+      for (const v of res.versions) {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        select.appendChild(opt);
+      }
+      streamlineVersionsLoaded = true;
+      status.className = 'status-line status-ok';
+      status.textContent = `Newest available: ${res.versions[0]}`;
+    } else {
+      status.className = 'status-line';
+      status.textContent = 'Could not reach the version list — "Latest" still works, it just resolves at install time.';
+    }
+  }
+
+  if (wanted !== 'latest' && !Array.from(select.options).some((o) => o.value === wanted)) {
+    const opt = document.createElement('option');
+    opt.value = wanted;
+    opt.textContent = wanted;
+    select.appendChild(opt);
+  }
+  select.value = wanted;
+}
+
+$('#settings-streamline-version').addEventListener('change', async (e) => {
+  settings.streamlineVersion = e.target.value || 'latest';
+  await window.api.saveSettings(settings);
+});
 
 async function checkReleaseStatus() {
   const el = $('#release-status');
