@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld('api', {
   injectorSteamOption: (releaseFolder) => ipcRenderer.invoke('injector:steamOption', { releaseFolder }),
   injectorLaunch: (exePath, releaseFolder) => ipcRenderer.invoke('injector:launch', { exePath, releaseFolder }),
 
+  feederReadiness: (exePath) => ipcRenderer.invoke('feeder:readiness', exePath),
+  feederMvProviders: () => ipcRenderer.invoke('feeder:mvProviders'),
+  feederDeploy: (exePath, mvProviderId) => ipcRenderer.invoke('feeder:deploy', { exePath, mvProviderId }),
+
   steamSearch: (term) => ipcRenderer.invoke('steam:search', term),
   validateRelease: (folder) => ipcRenderer.invoke('release:validate', folder),
   validateNrDll: (filePath) => ipcRenderer.invoke('nrdll:validate', filePath),

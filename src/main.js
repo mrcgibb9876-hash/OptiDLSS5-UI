@@ -10,6 +10,7 @@ const crypto = require('node:crypto');
 const { scanForGames } = require('./discover');
 const framegen = require('./framegen');
 const injector = require('./injector');
+const feeder = require('./feeder');
 const execFileAsync = promisify(execFile);
 
 const RELEASES_API = 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest';
@@ -187,6 +188,39 @@ ipcMain.handle('injector:launch', (_evt, { exePath, releaseFolder } = {}) => {
       gameExe: exePath,
     });
     return { ok: true };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+const feederCacheDir = () => path.join(userDataDir(), 'feeder-cache');
+
+// Whether this game needs the Feeder at all (no native DLSS), and what's already deployed --
+// same "explain, don't just disable" posture as injector:readiness.
+ipcMain.handle('feeder:readiness', async (_evt, exePath) => {
+  if (!exePath || !fs.existsSync(exePath)) return { ready: false, reason: 'Game .exe not found' };
+  const dir = gameDir(exePath);
+  if (!feeder.needsFeeder(dir)) return { ready: false, needed: false, reason: 'This game already has native DLSS -- use the DLSS 5 only profile instead, not the Feeder.' };
+  const api = await detectRenderApi(dir, exePath);
+  return { needed: true, ...feeder.feederReadiness(dir, api) };
+});
+
+ipcMain.handle('feeder:mvProviders', () => {
+  return feeder.mvProviderList();
+});
+
+ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const api = await detectRenderApi(dir, exePath);
+    const results = await feeder.deployFeederStack(dir, api, mvProviderId, {
+      cacheDir: feederCacheDir(),
+      getRhiManifest,
+      compareVersions: compareStreamlineVersions,
+      ghHeaders: GITHUB_HEADERS,
+    });
+    return { ok: true, ...results };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -383,18 +417,27 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
     // The rename that actually makes the game load OptiScaler. Previously this only happened when
     // the user went and ran setup_windows.bat in a console afterwards; until they did, an
     // "Installed" badge meant nothing was hooked.
+    // A game with no native DLSS at all is Feeder territory (see feeder.js) -- ReShade owns the
+    // proxy slot there, not OptiScaler. Renaming OptiScaler.dll to dxgi.dll here would steal that
+    // slot right back out from under ReShade the moment Feeder deploy runs, so this game's
+    // OptiScaler instead stays a plain, unrenamed .dll in its own folder and loads via the
+    // injector at launch time (src/injector.js) -- nothing to do here but leave it alone.
+    const feederGame = feeder.needsFeeder(dir);
+
     let proxy = null;
     let proxyError = null;
-    try {
-      proxy = await installProxy(dir, proxyName || DEFAULT_PROXY);
-    } catch (err) {
-      // Not fatal: everything else is in place, and Run Setup is still there to do it by hand.
-      proxyError = err.message;
+    if (!feederGame) {
+      try {
+        proxy = await installProxy(dir, proxyName || DEFAULT_PROXY);
+      } catch (err) {
+        // Not fatal: everything else is in place, and Run Setup is still there to do it by hand.
+        proxyError = err.message;
+      }
     }
 
     const { api, applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix } = await autoConfigureGame(dir, exePath);
 
-    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, proxy, proxyError, api, autoConfigured: applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
+    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, proxy, proxyError, feederGame, api, autoConfigured: applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
   } catch (err) {
     return { ok: false, error: err.message };
   }

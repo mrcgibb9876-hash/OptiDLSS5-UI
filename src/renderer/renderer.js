@@ -326,6 +326,7 @@ async function openGameModal(game) {
   gameModal.classList.remove('hidden');
   await loadFrameGenSection(game);
   await loadInjectorSection(game);
+  await loadFeederSection(game);
 }
 
 let frameGenVersionsLoaded = false;
@@ -457,6 +458,75 @@ $('#btn-injector-launch-now').addEventListener('click', async () => {
   status.textContent = 'Launching…';
   const res = await window.api.injectorLaunch(game.exePath, settings.releaseFolder);
   status.textContent = res.ok ? 'Launched through the injector.' : `Launch failed: ${res.error}`;
+});
+
+let feederProvidersLoaded = false;
+
+// Populates and shows the "Neural Rendering source: DLSS5 Feeder" control -- only for a game
+// with no native DLSS (feeder:readiness reports needed:false otherwise, and this stays
+// hidden). Unlike Frame Gen and Launch mode, this has one action (Deploy) rather than a
+// swap/restore pair -- restore isn't implemented yet, see the Manager's own notes on this.
+async function loadFeederSection(game) {
+  const section = $('#game-feeder-section');
+  if (!game || !game.exePath) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  const readiness = await window.api.feederReadiness(game.exePath);
+  const status = $('#game-feeder-status');
+  if (!readiness.needed) {
+    section.classList.add('hidden');
+    return;
+  }
+  section.classList.remove('hidden');
+
+  if (!readiness.supported) {
+    status.className = 'status-line';
+    status.textContent = readiness.reason;
+    $('#btn-feeder-deploy').disabled = true;
+    return;
+  }
+  $('#btn-feeder-deploy').disabled = false;
+
+  const select = $('#game-feeder-mv-provider');
+  if (!feederProvidersLoaded) {
+    const providers = await window.api.feederMvProviders();
+    for (const p of providers) {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.autoFetchable ? p.displayName : `${p.displayName} — ${p.license}`;
+      if (p.default) opt.selected = true;
+      select.appendChild(opt);
+    }
+    feederProvidersLoaded = true;
+  }
+
+  status.className = 'status-line';
+  status.textContent = readiness.complete
+    ? 'Feeder stack fully deployed.'
+    : [
+        readiness.reshadeInstalled ? null : 'ReShade',
+        readiness.addonInstalled ? null : 'Feeder add-on',
+        readiness.fxInstalled ? null : 'DLSS5_Feed.fx',
+        readiness.dlssInstalled ? null : 'nvngx_dlss.dll',
+        readiness.dlssnrInstalled ? null : 'nvngx_dlssnr.dll (install this yourself first)',
+      ].filter(Boolean).join(', ') + ' missing.';
+}
+
+$('#btn-feeder-deploy').addEventListener('click', async () => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  const providerId = $('#game-feeder-mv-provider').value;
+  const status = $('#game-feeder-status');
+  status.textContent = 'Deploying…';
+  const res = await window.api.feederDeploy(game.exePath, providerId);
+  if (res.ok) {
+    toast('Feeder stack deployed. Install OptiScaler via the injector (Launch mode above) to finish.');
+  } else {
+    toast(`Deploy failed: ${res.error}`);
+  }
+  loadFeederSection(game);
 });
 
 function closeGameModal() {

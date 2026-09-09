@@ -1,0 +1,327 @@
+// DLSS5-Feeder integration for games with no native DLSS at all.
+//
+// OptiScaler's Neural Rendering pass only fires when it catches a real DLSS evaluate call.
+// A native-DLSS game makes that call on its own -- see hasNativeDlss()/DLSS5_ONLY_FORCED in
+// main.js. A game with no native DLSS never makes that call, so a bare OptiScaler install
+// there does nothing. The DLSS5-Feeder (jlrouzies-fr, MIT) is a ReShade add-on that
+// synthesises a fake DLSS DLAA evaluate from ReShade's own depth/colour/motion-vector
+// capture, purely so a consumer has something to hook. We are that consumer -- via
+// OptiScaler_DLSSNR's own fork patch (ConflictingNrAddon no longer refuses dlss5-feed.addon64,
+// see that repo's commit f2290a39), not a third-party consumer like Deep Fried Chicken.
+//
+// Two conflicts this deploy has to route around, both already solved elsewhere in this app:
+//   * ReShade needs the dxgi.dll (or opengl32.dll) proxy slot for itself -- that's how ReShade
+//     always works. OptiScaler must NOT also try to take that slot here, so this path always
+//     installs OptiScaler via the injector (src/injector.js), never proxy-file.
+//   * OptiScaler must not drive its own upscaler/FrameGen alongside the Feeder -- that is
+//     exactly the conflict the Feeder's own README warns about ("turn off OptiScaler"). The
+//     DLSS5-only profile (hasNativeDlss()/DLSS5_ONLY_FORCED in main.js) already forces that
+//     narrow NR-only mode; this path must always end up in that mode, never full config.
+//
+// Caveats inherent to the Feeder itself, not this integration: motion vectors are *estimated*
+// (ghosting in fast motion, softer thin geometry vs. native-DLSS-fed NR), and this needs ReShade
+// add-on support in the game, which rides on the same dxgi/ReShade coexistence the injector
+// solves. Scope of this pass: 64-bit DX11/DX12 games only. 32-bit games (which need
+// dlss5-feed.addon32 + a host64\dlss5-feed-host64.exe helper process) and Vulkan games (which
+// need a Vulkan layer, not a ReShade add-on, and a different injection story entirely) are
+// deliberately NOT handled here -- the release zip has the files for both, but wiring them up is
+// real, untested extra work, not a corner worth cutting silently. Both are reported as
+// "not yet supported" by feederReadiness() rather than a dead button or a silent wrong action.
+
+const path = require('node:path');
+const fs = require('node:fs');
+const fsp = require('node:fs/promises');
+const os = require('node:os');
+
+const { openZip, findEntry, extractEntryTo } = require('./zip');
+const { setIniKey, getIniKey } = require('./ini-merge');
+
+const FEEDER_RELEASES_API = 'https://api.github.com/repos/jlrouzies-fr/DLSS5-Feeder/releases/latest';
+const FEEDER_ASSET_PATTERN = /^DLSS5-Feeder-.*\.zip$/i;
+
+// The "_Addon" build specifically -- ReShade's plain build refuses third-party add-ons, and
+// dlss5-feed.addon64 is exactly that. Verified this is the add-on-enabled build by its name;
+// the alternative (opening the installer as an archive and checking which DLL variant is
+// inside) was not re-verified this pass since a prior, since-removed integration in this same
+// repo already downloaded and confirmed this exact URL's contents (see git history on the
+// deleted src/native-feeder/reshade.js, commit 0738a9e removed it, ec3083d added it).
+const RESHADE_SETUP_URL = 'https://reshade.me/downloads/ReShade_Setup_6.8.0_Addon.exe';
+
+// Motion-vector provider. DLSS5_Feed.fx reads whichever shader DLSS5_MV_PROVIDER selects (a
+// preprocessor definition, five options per the Feeder's own README). Only two are wired up
+// here -- see MV_PROVIDERS below for why: the other three (iMMERSE Launchpad, VORT,
+// LumeniteFX QuantMotion) are real, valid choices the Feeder's README documents, just not ones
+// this pass sourced a verified download URL for. Not a licensing question for those three,
+// just unfinished breadth -- add them the same shape as reshade-motion-estimation below once a
+// URL is confirmed.
+//
+// reshade-motion-estimation uses provider value 0 ("anything writing the shared
+// texMotionVectors" -- the Feeder's own README calls this "the old convention"), not one of
+// the four specifically-numbered/tuned providers (1-4). It is not literally broken -- the
+// README's only correctness warning under provider 0 is that a *different* shader called DRME
+// fails to compile on ReShade 6.8, not this one -- but it hasn't been confirmed against a real
+// deploy either. Flagged here rather than silently presented as equally proven as the
+// Feeder's own recommended default (LumeniteFX Kernel, provider 3).
+const MV_PROVIDERS = {
+  'reshade-motion-estimation': {
+    id: 'reshade-motion-estimation',
+    displayName: 'ReShade Motion Estimation (JakobPCoder)',
+    mvProviderValue: 0,
+    license: 'CC BY-NC 4.0',
+    autoFetchable: true,
+    zipUrl: 'https://github.com/JakobPCoder/ReshadeMotionEstimation/archive/refs/heads/master.zip',
+    default: true,
+  },
+  'lumenite-kernel': {
+    id: 'lumenite-kernel',
+    displayName: 'LumeniteFX Kernel (recommended by the Feeder)',
+    mvProviderValue: 3,
+    license: 'All rights reserved (umar-afzaal/AGNYA) -- you install this',
+    autoFetchable: false,
+    officialUrl: 'https://github.com/umar-afzaal/LumeniteFX',
+    default: false,
+  },
+};
+
+function mvProviderList() {
+  return Object.values(MV_PROVIDERS);
+}
+
+// --- detection ----------------------------------------------------------------------
+
+// The inverse of hasNativeDlss() in main.js (not imported from there to avoid main.js<->this
+// module becoming circular -- every other module in this app that needs a main.js-side check
+// takes it as a parameter or duplicates the two-line fs check; this does the same). A game
+// needing the Feeder has neither a Streamline interposer nor its own nvngx_dlss.dll.
+function needsFeeder(dir) {
+  return !fs.existsSync(path.join(dir, 'sl.interposer.dll')) &&
+    !fs.existsSync(path.join(dir, 'sl.interposer.dll.original')) &&
+    !fs.existsSync(path.join(dir, 'nvngx_dlss.dll'));
+}
+
+function reshadeProxyName(api) {
+  if (api === 'opengl') return 'opengl32.dll';
+  if (api === 'dx11' || api === 'dx12') return 'dxgi.dll';
+  return null; // vulkan and anything else: out of scope, see file header.
+}
+
+// What's deployed, what's missing, and the real reason anything blocking is blocking -- same
+// "explain, don't just disable" posture as injectorReadiness() in injector.js.
+function feederReadiness(dir, api) {
+  if (api === 'vulkan') return { ready: false, supported: false, reason: 'Vulkan needs a layer, not a ReShade add-on -- not yet supported by this app.' };
+  const proxyName = reshadeProxyName(api);
+  if (!proxyName) return { ready: false, supported: false, reason: `Render API not detected (${api || 'unknown'}) -- cannot pick ReShade's proxy DLL name.` };
+
+  const reshadeInstalled = fs.existsSync(path.join(dir, proxyName));
+  const addonInstalled = fs.existsSync(path.join(dir, 'dlss5-feed.addon64'));
+  const fxInstalled = fs.existsSync(path.join(dir, 'reshade-shaders', 'Shaders', 'DLSS5_Feed.fx'));
+  const dlssInstalled = fs.existsSync(path.join(dir, 'nvngx_dlss.dll'));
+  const dlssnrInstalled = fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'));
+
+  return {
+    ready: true,
+    supported: true,
+    proxyName,
+    reshadeInstalled,
+    addonInstalled,
+    fxInstalled,
+    dlssInstalled,
+    dlssnrInstalled,
+    complete: reshadeInstalled && addonInstalled && fxInstalled && dlssInstalled && dlssnrInstalled,
+  };
+}
+
+// --- download + cache, mirroring framegen.js's ensureFrameGenDllCache shape -----------
+
+async function downloadToCache(url, cacheDir, fileName, ghHeaders) {
+  const dest = path.join(cacheDir, fileName);
+  if (fs.existsSync(dest)) return dest;
+  const res = await fetch(url, { headers: ghHeaders });
+  if (!res.ok) throw new Error(`Download failed: HTTP ${res.status} for ${url}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  await fsp.mkdir(cacheDir, { recursive: true });
+  const tmp = dest + '.part';
+  await fsp.writeFile(tmp, buf);
+  await fsp.rename(tmp, dest);
+  return dest;
+}
+
+async function resolveFeederAsset(ghHeaders) {
+  const res = await fetch(FEEDER_RELEASES_API, { headers: ghHeaders });
+  if (!res.ok) throw new Error(`Could not check the DLSS5-Feeder release: HTTP ${res.status}`);
+  const release = await res.json();
+  const asset = (release.assets || []).find((a) => FEEDER_ASSET_PATTERN.test(a.name));
+  if (!asset) throw new Error('No matching asset in the latest DLSS5-Feeder release');
+  return { url: asset.browser_download_url, name: asset.name, tag: release.tag_name };
+}
+
+// --- deploy steps ---------------------------------------------------------------------
+
+// ReShade itself. Its setup .exe is a self-extracting archive (an NSIS stub in front of a
+// zip); a plain Expand-Archive (what the rest of this app uses for ordinary zips -- see
+// deployStreamlineFolder/ensureREFrameworkForGame in main.js) fails on it because the End Of
+// Central Directory record isn't the very last thing in the file. zip.js's EOCD scan handles
+// both a plain zip and this case with the same code path.
+async function deployReShade(dir, api, cacheDir, ghHeaders) {
+  const proxyName = reshadeProxyName(api);
+  const dest = path.join(dir, proxyName);
+  if (fs.existsSync(dest)) return { deployed: false, reason: 'already present', file: proxyName };
+
+  const setupPath = await downloadToCache(RESHADE_SETUP_URL, cacheDir, path.basename(RESHADE_SETUP_URL), ghHeaders);
+  const zip = openZip(setupPath);
+  const entry = findEntry(zip, /^ReShade64\.dll$/i);
+  if (!entry) throw new Error('ReShade64.dll not found in the downloaded ReShade setup');
+  extractEntryTo(zip, entry, dest);
+  return { deployed: true, file: proxyName };
+}
+
+// The Feeder add-on + its .fx, both from the one release zip -- the earlier, unrelated deploy
+// on Alien: Isolation only extracted the addon and skipped the shader, which is why the
+// technique never registered ("unknown technique 'DLSS5_Feed@DLSS5_Feed.fx'" in ReShade.log).
+// This extracts both from the same zip on purpose.
+async function deployFeederAddon(dir, cacheDir, ghHeaders) {
+  const addonDest = path.join(dir, 'dlss5-feed.addon64');
+  const fxDest = path.join(dir, 'reshade-shaders', 'Shaders', 'DLSS5_Feed.fx');
+  if (fs.existsSync(addonDest) && fs.existsSync(fxDest)) {
+    return { deployed: false, reason: 'already present' };
+  }
+
+  const asset = await resolveFeederAsset(ghHeaders);
+  const zipPath = await downloadToCache(asset.url, cacheDir, asset.name, ghHeaders);
+  const zip = openZip(zipPath);
+
+  const addonEntry = findEntry(zip, /(^|\/)dlss5-feed\.addon64$/i);
+  if (!addonEntry) throw new Error('dlss5-feed.addon64 not found in the Feeder release');
+  extractEntryTo(zip, addonEntry, addonDest);
+
+  const fxEntry = findEntry(zip, /(^|\/)DLSS5_Feed\.fx$/i);
+  if (!fxEntry) throw new Error('DLSS5_Feed.fx not found in the Feeder release');
+  extractEntryTo(zip, fxEntry, fxDest);
+
+  return { deployed: true, version: asset.tag };
+}
+
+// The motion-vector provider shader. Only the auto-fetchable providers reach here --
+// LumeniteFX (and any future non-fetchable entry) is the caller's job to detect, not deploy.
+async function deployMvProvider(dir, providerId, cacheDir, ghHeaders) {
+  const provider = MV_PROVIDERS[providerId];
+  if (!provider) throw new Error(`Unknown motion-vector provider: ${providerId}`);
+  if (!provider.autoFetchable) {
+    throw new Error(`${provider.displayName} is not auto-fetchable (${provider.license}) -- install it yourself, then re-check readiness.`);
+  }
+
+  const shaderDir = path.join(dir, 'reshade-shaders', 'Shaders');
+  const zipName = `${providerId}.zip`;
+  const zipPath = await downloadToCache(provider.zipUrl, cacheDir, zipName, ghHeaders);
+  const zip = openZip(zipPath);
+
+  const fxEntries = zip.entries.filter((e) => /\.fx$/i.test(e.name));
+  if (fxEntries.length === 0) throw new Error(`No .fx files found in ${provider.displayName}'s zip`);
+  const deployedFiles = [];
+  for (const entry of fxEntries) {
+    const dest = path.join(shaderDir, path.basename(entry.name));
+    extractEntryTo(zip, entry, dest);
+    deployedFiles.push(path.basename(entry.name));
+  }
+  return { deployed: true, files: deployedFiles };
+}
+
+// nvngx_dlss.dll: public-SDK, fetchable via the app's shared RHI manifest (same fetch the
+// Streamline and Frame Gen version lists already use). Mirrors framegen.js's "never overwrite
+// a game's own copy" posture -- a game-local DLL sitting alongside a mismatched driver copy is
+// exactly the kind of duplicate-NGX-module condition that crashes other tools (see the
+// removed native-feeder/install.js's own comment on this, same underlying risk).
+async function deployNvngxDlss(dir, getRhiManifest, compareVersions, cacheDir, ghHeaders) {
+  const dest = path.join(dir, 'nvngx_dlss.dll');
+  if (fs.existsSync(dest)) return { deployed: false, reason: 'already present, not overwritten' };
+
+  const manifest = await getRhiManifest();
+  const list = Array.isArray(manifest && manifest.dlss) ? manifest.dlss : [];
+  if (list.length === 0) throw new Error('No dlss entries in the RHI manifest');
+  const newest = [...list].sort((a, b) => compareVersions(b.version, a.version))[0];
+
+  const zipName = `nvngx_dlss_${newest.version.replace(/[^0-9A-Za-z.]/g, '_')}.zip`;
+  const zipPath = await downloadToCache(newest.url, cacheDir, zipName, ghHeaders);
+  const zip = openZip(zipPath);
+  const entry = findEntry(zip, /(^|\/)nvngx_dlss\.dll$/i);
+  if (!entry) throw new Error('nvngx_dlss.dll not found in the downloaded RHI package');
+  extractEntryTo(zip, entry, dest);
+  return { deployed: true, version: newest.version };
+}
+
+// ReShadePreset.ini: the motion-vector provider's technique must run before DLSS5_Feed, and
+// DLSS5_Feed.fx's own DLSS5_MV_PROVIDER preprocessor definition must match. Structure-
+// preserving (setIniKey/getIniKey from ini-merge.js) rather than a template overwrite -- this
+// file is also where the user's own ReShade effect list and settings live.
+function configurePreset(dir, providerId) {
+  const provider = MV_PROVIDERS[providerId];
+  if (!provider) throw new Error(`Unknown motion-vector provider: ${providerId}`);
+
+  const presetPath = path.join(dir, 'ReShadePreset.ini');
+  const feedTechnique = 'DLSS5_Feed@DLSS5_Feed.fx';
+  const existing = fs.existsSync(presetPath) ? fs.readFileSync(presetPath, 'utf8') : '';
+
+  let next = existing;
+  for (const key of ['Techniques', 'TechniqueSorting']) {
+    const cur = getIniKey(next, '', key);
+    let list = cur ? cur.split(',').map((s) => s.trim()).filter(Boolean) : [];
+    list = list.filter((t) => t.toLowerCase() !== feedTechnique.toLowerCase());
+    list.push(feedTechnique);
+    next = setIniKey(next, '', key, list.join(','));
+  }
+  const curDefs = getIniKey(next, 'DLSS5_Feed.fx', 'PreprocessorDefinitions');
+  let defParts = curDefs ? curDefs.split(',').map((s) => s.trim()).filter((s) => s && !/^DLSS5_MV_PROVIDER\s*=/i.test(s)) : [];
+  defParts.push(`DLSS5_MV_PROVIDER=${provider.mvProviderValue}`);
+  next = setIniKey(next, 'DLSS5_Feed.fx', 'PreprocessorDefinitions', defParts.join(','));
+
+  fs.writeFileSync(presetPath, next, 'utf8');
+  return { configured: true, mvProviderValue: provider.mvProviderValue };
+}
+
+// ReShade.ini: make sure add-on loading and the shaders folder are actually enabled. A fresh
+// ReShade64.dll deploy has no ini yet; an existing one (the user already had ReShade for other
+// effects) is merged into, never replaced.
+function configureReShadeIni(dir) {
+  const iniPath = path.join(dir, 'ReShade.ini');
+  const existing = fs.existsSync(iniPath) ? fs.readFileSync(iniPath, 'utf8') : '';
+  let next = existing;
+  next = setIniKey(next, 'ADDON', 'AddonPath', '.\\');
+  next = setIniKey(next, 'GENERAL', 'EffectSearchPaths', '.\\reshade-shaders\\Shaders\\**');
+  if (!getIniKey(next, 'GENERAL', 'PresetPath')) next = setIniKey(next, 'GENERAL', 'PresetPath', '.\\ReShadePreset.ini');
+  fs.writeFileSync(iniPath, next, 'utf8');
+  return { configured: true };
+}
+
+// --- orchestration ---------------------------------------------------------------------
+
+// Deploys the whole Feeder stack for one game: ReShade, the add-on + its shader, the chosen
+// motion-vector provider, and nvngx_dlss.dll. Does NOT install OptiScaler -- the caller
+// (main.js's game:install handler) does that afterward via the injector, forcing the
+// DLSS5-only profile, the same way it already does for native-DLSS games. Keeping that step
+// out of this module avoids feeder.js depending on injector.js/autoConfigureGame and vice
+// versa -- main.js is the one place that already composes both.
+async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifest, compareVersions, ghHeaders }) {
+  const results = {};
+  results.reshade = await deployReShade(dir, api, cacheDir, ghHeaders);
+  results.addon = await deployFeederAddon(dir, cacheDir, ghHeaders);
+  results.mvProvider = await deployMvProvider(dir, providerId, cacheDir, ghHeaders);
+  results.dlss = await deployNvngxDlss(dir, getRhiManifest, compareVersions, cacheDir, ghHeaders);
+  results.ini = configureReShadeIni(dir);
+  results.preset = configurePreset(dir, providerId);
+  return results;
+}
+
+module.exports = {
+  MV_PROVIDERS,
+  mvProviderList,
+  needsFeeder,
+  reshadeProxyName,
+  feederReadiness,
+  deployReShade,
+  deployFeederAddon,
+  deployMvProvider,
+  deployNvngxDlss,
+  configurePreset,
+  configureReShadeIni,
+  deployFeederStack,
+};
