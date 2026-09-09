@@ -114,6 +114,14 @@ const MV_PROVIDERS = {
     license: 'CC BY-NC 4.0',
     autoFetchable: true,
     zipUrl: 'https://github.com/JakobPCoder/ReshadeMotionEstimation/archive/refs/heads/master.zip',
+    // The real ReShade technique declared inside MotionEstimation.fx ("technique DRME") --
+    // must run before DLSS5_Feed's own technique so its motion vectors exist for DLSS5_Feed to
+    // read. configurePreset() below enables this explicitly rather than counting on ReShade's
+    // own "auto-enable a newly found technique" behaviour, which is real but not something to
+    // depend on for correctness (confirmed inconsistent in practice, 2026-09-09: the ordering
+    // came out right once by that path and can't be trusted to every time).
+    techniqueFile: 'MotionEstimation.fx',
+    techniqueName: 'DRME',
     default: true,
   },
   'lumenite-kernel': {
@@ -136,6 +144,10 @@ const MV_PROVIDERS = {
       'reserved. Redistribution must exclusively use the author\'s own official links -- ' +
       'independently hosting a copy is explicitly prohibited, which is why this always ' +
       'fetches live from the official repo rather than a cached copy. No warranty of any kind.',
+    // The real declared technique name inside lumenite_Kernel.fx ("technique Lumenite_Kernel").
+    // Same ordering requirement as reshade-motion-estimation above.
+    techniqueFile: 'lumenite_Kernel.fx',
+    techniqueName: 'Lumenite_Kernel',
     default: false,
   },
 };
@@ -377,12 +389,34 @@ function configurePreset(dir, providerId) {
   const feedTechnique = 'DLSS5_Feed@DLSS5_Feed.fx';
   const existing = fs.existsSync(presetPath) ? fs.readFileSync(presetPath, 'utf8') : '';
 
+  // Order matters: the motion-vector provider's own technique must run BEFORE DLSS5_Feed's, so
+  // its motion vectors already exist when DLSS5_Feed reads them. Both are added explicitly and
+  // in this order -- ReShade will auto-add a newly-compiled technique to TechniqueSorting on its
+  // own once it actually runs, but that's ReShade's own runtime behaviour firing after the fact,
+  // not something this app's deploy step should rely on for a correct first launch. Confirmed
+  // missing on a real deploy (Bodycam, 2026-09-09) where only DLSS5_Feed had ever been added
+  // here -- the motion-vector technique was absent until ReShade itself corrected it.
+  const mvTechnique = provider.techniqueFile && provider.techniqueName
+    ? `${provider.techniqueName}@${provider.techniqueFile}`
+    : null;
+  const orderedTechniques = [mvTechnique, feedTechnique].filter(Boolean);
+
+  // Strip every OTHER provider's technique too, not just the one being set now -- otherwise
+  // switching providers leaves the old one's technique orphaned in the list alongside the new
+  // one instead of replacing it (found this exact bug testing the fix above, same session).
+  const anyKnownMvTechnique = Object.values(MV_PROVIDERS)
+    .filter((p) => p.techniqueFile && p.techniqueName)
+    .map((p) => `${p.techniqueName}@${p.techniqueFile}`.toLowerCase());
+
   let next = existing;
   for (const key of ['Techniques', 'TechniqueSorting']) {
     const cur = getIniKey(next, '', key);
     let list = cur ? cur.split(',').map((s) => s.trim()).filter(Boolean) : [];
-    list = list.filter((t) => t.toLowerCase() !== feedTechnique.toLowerCase());
-    list.push(feedTechnique);
+    list = list.filter((t) => {
+      const lower = t.toLowerCase();
+      return lower !== feedTechnique.toLowerCase() && !anyKnownMvTechnique.includes(lower);
+    });
+    list.push(...orderedTechniques);
     next = setIniKey(next, '', key, list.join(','));
   }
   const curDefs = getIniKey(next, 'DLSS5_Feed.fx', 'PreprocessorDefinitions');
@@ -407,7 +441,13 @@ function configureReShadeIni(dir) {
   // Marks ReShade's own first-run tutorial as already complete, so its "ReShade is now
   // installed successfully! Press Home to start the tutorial" banner never shows. This app's
   // users are here for the Feeder running silently, not for ReShade's own onboarding/UI.
-  if (!getIniKey(next, 'GENERAL', 'TutorialProgress')) next = setIniKey(next, 'GENERAL', 'TutorialProgress', '4');
+  //
+  // [OVERLAY], not [GENERAL] -- confirmed against ReShade's actual source (runtime_gui.cpp):
+  // `global_config().get("OVERLAY", "TutorialProgress", _tutorial_index)`, falling back to the
+  // per-preset config under the same section/key if the global one has no value. Verified wrong
+  // on a real deploy (Bodycam, 2026-09-09) -- [GENERAL] silently did nothing since ReShade never
+  // reads that section for this key.
+  if (!getIniKey(next, 'OVERLAY', 'TutorialProgress')) next = setIniKey(next, 'OVERLAY', 'TutorialProgress', '4');
   fs.writeFileSync(iniPath, next, 'utf8');
   return { configured: true };
 }
