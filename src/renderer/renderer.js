@@ -327,6 +327,7 @@ async function openGameModal(game) {
   await loadFrameGenSection(game);
   await loadInjectorSection(game);
   await loadFeederSection(game);
+  await loadOptiFgSection(game);
 }
 
 let frameGenVersionsLoaded = false;
@@ -586,6 +587,56 @@ $('#btn-feeder-update').addEventListener('click', () => {
   if (!editingGameId) return;
   const game = games.find((x) => x.id === editingGameId);
   deployFeederStack(game, $('#game-feeder-mv-provider').value, true);
+});
+
+// Scoped to Feeder games for now -- that's the only case this was actually verified against
+// (Bodycam, 2026-09-09: config read back correctly as FrameGen.FGOutput=FSRFG). A native-DLSS
+// game already gets real DLSS-G from the game itself; nothing here is about that case.
+async function loadOptiFgSection(game) {
+  const section = $('#game-optifg-section');
+  const checkbox = $('#game-optifg-toggle');
+  const status = $('#game-optifg-status');
+  if (!game || !game.exePath) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  const feederStatus = await window.api.feederReadiness(game.exePath);
+  if (!feederStatus.needed) {
+    section.classList.add('hidden');
+    return;
+  }
+  section.classList.remove('hidden');
+
+  const readiness = await window.api.optiFgReadiness(game.exePath);
+  if (!readiness.supported) {
+    checkbox.checked = false;
+    checkbox.disabled = true;
+    status.className = 'status-line';
+    status.textContent = readiness.reason;
+    return;
+  }
+
+  checkbox.disabled = false;
+  checkbox.checked = !!readiness.enabled;
+  status.className = 'status-line';
+  status.textContent = readiness.enabled
+    ? 'On -- applied to OptiScaler.ini.'
+    : 'Off.';
+}
+
+$('#game-optifg-toggle').addEventListener('change', async (e) => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  const status = $('#game-optifg-status');
+  status.textContent = 'Applying…';
+  const res = await window.api.optiFgSet(game.exePath, e.target.checked);
+  if (res.ok) {
+    toast(e.target.checked ? 'OptiScaler Frame Generation (FSRFG) enabled.' : 'OptiScaler Frame Generation disabled.');
+  } else {
+    toast(`Could not change Frame Generation: ${res.error}`);
+  }
+  loadOptiFgSection(game);
 });
 
 function closeGameModal() {

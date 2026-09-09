@@ -249,6 +249,30 @@ ipcMain.handle('feeder:checkUpdate', async (_evt, exePath) => {
   }
 });
 
+// Whether this game can offer OptiScaler's own Frame Generation, and whether it's on --
+// optiFgReadiness (defined further down, next to autoConfigureGame -- hoisted, fine to call
+// from up here) explains why not rather than just hiding the control.
+ipcMain.handle('optifg:readiness', async (_evt, exePath) => {
+  if (!exePath || !fs.existsSync(exePath)) return { supported: false, reason: 'Game .exe not found' };
+  const dir = gameDir(exePath);
+  const api = await detectRenderApi(dir, exePath);
+  return { api, ...optiFgReadiness(dir, api) };
+});
+
+// Toggles the per-game marker and immediately re-runs autoConfigureGame so the ini reflects it
+// right away, rather than waiting for the next Install/sync to pick it up.
+ipcMain.handle('optifg:set', async (_evt, { exePath, enabled }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    setOptiFgEnabled(dir, !!enabled);
+    const result = await autoConfigureGame(dir, exePath);
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
 // force: true re-fetches and overwrites the whole stack (an update, not a first install).
 // licenseConfirmed: only meaningful when mvProviderId names a non-auto-fetchable provider
 // (LumeniteFX right now) -- the renderer only ever sends true here after the user has actually
@@ -1196,12 +1220,58 @@ const LOAD_RESHADE_FORCED = [
   { section: 'Plugins', key: 'LoadReshade', value: 'true' },
 ];
 
+// OptiScaler's own Frame Generation, opted into per game -- see optiFgReadiness() below for
+// why this only ever applies to a D3D12 game. FSRFG specifically (not DLSSG/XeFG): it's plain
+// ini config with no Streamline dependency, which is what makes it reachable through a Feeder
+// game at all (confirmed on a real Feeder deploy, Bodycam, 2026-09-09: OptiScaler.log read back
+// `FrameGen.FGOutput: FSRFG` correctly).
+const OPTIFG_FORCED = [
+  { section: 'FrameGen', key: 'Enabled', value: 'true' },
+  { section: 'FrameGen', key: 'FGInput', value: 'upscaler' },
+  { section: 'FrameGen', key: 'FGOutput', value: 'fsrfg' },
+];
+
+// Persisted per game-folder, not in games.json -- same reasoning as feederDeployed(): this has
+// to survive being read by any entry point that calls autoConfigureGame (game:install,
+// game:sync-if-stale), not just the one IPC call that set it.
+const OPTIFG_MARKER = '.dlss5ui-optifg-enabled';
+
+function isOptiFgEnabled(dir) {
+  return fs.existsSync(path.join(dir, OPTIFG_MARKER));
+}
+
+function setOptiFgEnabled(dir, enabled) {
+  const marker = path.join(dir, OPTIFG_MARKER);
+  if (enabled) fs.writeFileSync(marker, new Date().toISOString(), 'utf-8');
+  else if (fs.existsSync(marker)) fs.rmSync(marker);
+}
+
+// OptiScaler's FGHooks::CreateSwapChain requires the game's own swapchain device to answer
+// QueryInterface for ID3D12CommandQueue -- refuses outright (E_INVALIDARG) otherwise, for every
+// FG backend, not just FSRFG. That's a hard wall for a D3D11 game (confirmed against OptiScaler's
+// own source, 2026-09-09) -- no ini setting or Manager-side trigger can route around it, so this
+// reports why rather than offering a control that can't work. Also checks the FFX DLLs FSRFG
+// specifically needs (OptiScaler's own release payload ships them under OptiScaler/, already
+// copied there by game:install same as everything else in the release folder).
+function optiFgReadiness(dir, api) {
+  if (api !== 'dx12') {
+    return { supported: false, reason: `OptiScaler's own Frame Generation needs the game's swapchain to be D3D12 -- this game is ${api || 'not yet detected'}.` };
+  }
+  const ffxLoader = path.join(dir, 'OptiScaler', 'amd_fidelityfx_loader_dx12.dll');
+  const ffxFg = path.join(dir, 'OptiScaler', 'amd_fidelityfx_framegeneration_dx12.dll');
+  if (!fs.existsSync(ffxLoader) || !fs.existsSync(ffxFg)) {
+    return { supported: false, reason: 'Missing amd_fidelityfx_loader_dx12.dll / amd_fidelityfx_framegeneration_dx12.dll -- install OptiScaler for this game first (Install button).' };
+  }
+  return { supported: true, enabled: isOptiFgEnabled(dir) };
+}
+
 async function autoConfigureGame(dir, exePath) {
   const iniPath = path.join(dir, 'OptiScaler.ini');
   if (!fs.existsSync(iniPath)) return { api: null, applied: [] };
 
   const api = await detectRenderApi(dir, exePath);
   const dlss5Only = hasNativeDlss(dir);
+  const optiFgOn = dlss5Only && api === 'dx12' && isOptiFgEnabled(dir);
   const edits = [];
 
   if (!dlss5Only) {
@@ -1241,11 +1311,11 @@ async function autoConfigureGame(dir, exePath) {
   const streamline = null;
 
   const applied = patchIniDefaults(iniPath, edits);
-  let forced = dlss5Only ? patchIniValues(iniPath, DLSS5_ONLY_FORCED) : [];
+  let forced = dlss5Only ? patchIniValues(iniPath, optiFgOn ? OPTIFG_FORCED : DLSS5_ONLY_FORCED) : [];
   if (feeder.feederDeployed(dir)) forced = [...forced, ...patchIniValues(iniPath, LOAD_RESHADE_FORCED)];
   return {
     api, applied: [...applied, ...forced], streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix,
-    profile: dlss5Only ? 'dlss5-only' : 'full',
+    profile: dlss5Only ? (optiFgOn ? 'dlss5-only+optifg' : 'dlss5-only') : 'full',
   };
 }
 

@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld('api', {
   injectorSteamOption: (releaseFolder) => ipcRenderer.invoke('injector:steamOption', { releaseFolder }),
   injectorLaunch: (exePath, releaseFolder) => ipcRenderer.invoke('injector:launch', { exePath, releaseFolder }),
 
+  optiFgReadiness: (exePath) => ipcRenderer.invoke('optifg:readiness', exePath),
+  optiFgSet: (exePath, enabled) => ipcRenderer.invoke('optifg:set', { exePath, enabled }),
+
   feederReadiness: (exePath) => ipcRenderer.invoke('feeder:readiness', exePath),
   feederMvProviders: () => ipcRenderer.invoke('feeder:mvProviders'),
   feederCheckUpdate: (exePath) => ipcRenderer.invoke('feeder:checkUpdate', exePath),

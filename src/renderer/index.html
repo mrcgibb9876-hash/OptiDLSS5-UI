@@ -105,6 +105,15 @@
         <span id="game-feeder-status" class="status-line"></span>
       </div>
 
+      <div id="game-optifg-section" class="hidden">
+        <label class="field-label">
+          <input type="checkbox" id="game-optifg-toggle" />
+          OptiScaler Frame Generation (FSRFG)
+        </label>
+        <p class="field-hint">Only reachable on a D3D12 game with no frame gen of its own -- OptiScaler's own FG needs the game's swapchain to be D3D12, no way around that. AMD's own tech (FSR3), not NVIDIA's -- doesn't need Streamline. Estimated motion vectors, same as Neural Rendering here, so expect more artifacting than a native DLSS-G game.</p>
+        <span id="game-optifg-status" class="status-line"></span>
+      </div>
+
       <div class="modal-actions">
         <button id="btn-cancel-game" class="btn btn-ghost">Cancel</button>
         <button id="btn-save-game" class="btn btn-primary">Save Game</button>
