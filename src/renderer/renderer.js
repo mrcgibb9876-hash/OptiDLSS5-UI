@@ -539,10 +539,10 @@ async function loadFeederSection(game) {
   status.textContent = 'Feeder stack fully deployed. Checking for updates…';
   const update = await window.api.feederCheckUpdate(game.exePath);
   if (update.ok && update.checked && !update.upToDate) {
-    status.textContent = `Feeder stack deployed (v${update.currentVersion} -- v${update.latestVersion} available).`;
+    status.textContent = `Feeder stack deployed (${update.currentVersion} -- ${update.latestVersion} available).`;
     updateBtn.classList.remove('hidden');
   } else if (update.ok && update.checked) {
-    status.textContent = `Feeder stack up to date (v${update.currentVersion}).`;
+    status.textContent = `Feeder stack up to date (${update.currentVersion}).`;
   } else {
     status.textContent = 'Feeder stack fully deployed.';
   }
