@@ -1257,6 +1257,13 @@ function optiFgReadiness(dir, api) {
   if (api !== 'dx12') {
     return { supported: false, reason: `OptiScaler's own Frame Generation needs the game's swapchain to be D3D12 -- this game is ${api || 'not yet detected'}.` };
   }
+  // Crashes on a real game: our exported NGX Shutdown1 forwards into NVIDIA's real
+  // _nvngx.dll while the Feeder's own private DX12 NGX session is still live, and NVIDIA's
+  // side null-derefs. Confirmed via a symbolicated minidump (Bodycam, 2026-09-09) -- not a
+  // theoretical risk. Block the combo until that interaction is actually fixed.
+  if (feeder.needsFeeder(dir) || feeder.feederDeployed(dir)) {
+    return { supported: false, reason: 'Not available together with the DLSS5 Feeder yet -- this combination crashed on a real test (confirmed via a symbolicated crash dump). Blocked until fixed.' };
+  }
   const ffxLoader = path.join(dir, 'OptiScaler', 'amd_fidelityfx_loader_dx12.dll');
   const ffxFg = path.join(dir, 'OptiScaler', 'amd_fidelityfx_framegeneration_dx12.dll');
   if (!fs.existsSync(ffxLoader) || !fs.existsSync(ffxFg)) {
@@ -1271,7 +1278,12 @@ async function autoConfigureGame(dir, exePath) {
 
   const api = await detectRenderApi(dir, exePath);
   const dlss5Only = hasNativeDlss(dir);
-  const optiFgOn = dlss5Only && api === 'dx12' && isOptiFgEnabled(dir);
+  // hasNativeDlss() just checks for nvngx_dlss.dll on disk -- for a Feeder game that file was
+  // placed by the Feeder deploy itself, not the game, so this alone can't tell native DLSS
+  // apart from Feeder-supplied. Excluded explicitly: Feeder + FSRFG crashed on a real game
+  // (confirmed via a symbolicated minidump) -- see optiFgReadiness's own guard above.
+  const isFeederGame = feeder.needsFeeder(dir) || feeder.feederDeployed(dir);
+  const optiFgOn = dlss5Only && api === 'dx12' && !isFeederGame && isOptiFgEnabled(dir);
   const edits = [];
 
   if (!dlss5Only) {
