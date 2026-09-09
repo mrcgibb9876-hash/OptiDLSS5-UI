@@ -328,6 +328,7 @@ async function openGameModal(game) {
   await loadInjectorSection(game);
   await loadFeederSection(game);
   await loadOptiFgSection(game);
+  await loadLosslessSection(game);
 }
 
 let frameGenVersionsLoaded = false;
@@ -637,6 +638,159 @@ $('#game-optifg-toggle').addEventListener('change', async (e) => {
     toast(`Could not change Frame Generation: ${res.error}`);
   }
   loadOptiFgSection(game);
+});
+
+// Edits Lossless Scaling's real Settings.xml in place: finds this game's <Profile> (by <Path>,
+// falling back to a normalised <Title> match for a profile the user already created by hand
+// through LS's own UI -- e.g. by typing a title before browsing for the exe, which leaves <Path>
+// empty), or clones an existing profile as a schema-correct template if none exists yet. Only
+// ever touches Title/Path/FrameGeneration/ScalingType; every other field -- and every other
+// profile in the file -- passes through untouched. See lossless.js for why this file, not a
+// hand-rolled default profile, is the safe source of truth for the rest of the schema.
+async function configureLossless(game, frameGenMode = 'LSFG3') {
+  const xmlText = await window.api.losslessReadSettings();
+  if (!xmlText) {
+    throw new Error("Lossless Scaling hasn't been run yet -- launch it once first, then try again.");
+  }
+
+  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  if (doc.querySelector('parsererror')) {
+    throw new Error("Could not parse Lossless Scaling's settings file -- it may be from an unexpected version.");
+  }
+
+  const profilesEl = doc.querySelector('GameProfiles');
+  if (!profilesEl) {
+    throw new Error('Unexpected Lossless Scaling settings format (no GameProfiles section).');
+  }
+
+  const profiles = Array.from(profilesEl.querySelectorAll('Profile'));
+  const exePathLower = (game.exePath || '').trim().toLowerCase();
+  const normalizedTitle = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, '');
+
+  let profile = profiles.find((p) => {
+    const el = p.querySelector('Path');
+    return el && el.textContent.trim().toLowerCase() === exePathLower;
+  });
+
+  if (!profile) {
+    profile = profiles.find((p) => {
+      const el = p.querySelector('Title');
+      return el && normalizedTitle(el.textContent) === normalizedTitle(game.name);
+    });
+  }
+
+  let isNew = false;
+  if (!profile) {
+    const template = profiles[0];
+    if (!template) throw new Error('No existing Lossless Scaling profile to use as a template.');
+    isNew = true;
+    profile = template.cloneNode(true);
+    profilesEl.appendChild(profile);
+  }
+
+  const setField = (name, value) => {
+    let el = profile.querySelector(name);
+    if (!el) {
+      el = doc.createElement(name);
+      profile.appendChild(el);
+    }
+    el.textContent = value;
+  };
+
+  setField('Title', game.name);
+  setField('Path', game.exePath);
+  setField('FrameGeneration', frameGenMode);
+  setField('ScalingType', 'Off');
+
+  // The parsed doc already carries its own <?xml ...?> declaration; XMLSerializer re-emits it
+  // verbatim. Prepending another one here produced a file with two declarations -- invalid XML,
+  // and the actual cause of a "could not parse" failure on the very next read. Found live.
+  const newXml = new XMLSerializer().serializeToString(doc);
+  const writeResult = await window.api.losslessWriteSettings(newXml);
+  if (!writeResult.ok) throw new Error(writeResult.error || 'Failed to write Lossless Scaling settings.');
+
+  return { isNew };
+}
+
+async function loadLosslessSection(game) {
+  const section = $('#game-lossless-section');
+  const status = $('#game-lossless-status');
+  const configureBtn = $('#btn-lossless-configure');
+  const launchBtn = $('#btn-lossless-launch');
+  if (!game || !game.exePath) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  const feederStatus = await window.api.feederReadiness(game.exePath);
+  if (!feederStatus.needed) {
+    section.classList.add('hidden');
+    return;
+  }
+  section.classList.remove('hidden');
+
+  const info = await window.api.losslessDetect();
+  if (!info.installed) {
+    status.textContent = 'Lossless Scaling was not found (checked your Steam library).';
+    configureBtn.disabled = true;
+    launchBtn.classList.add('hidden');
+    return;
+  }
+  if (!info.hasRunOnce) {
+    status.textContent = "Installed, but hasn't been run yet -- launch it once first.";
+    configureBtn.disabled = true;
+    launchBtn.classList.remove('hidden');
+    return;
+  }
+
+  configureBtn.disabled = false;
+  launchBtn.classList.remove('hidden');
+
+  const xmlText = await window.api.losslessReadSettings();
+  const exePathLower = game.exePath.trim().toLowerCase();
+  let configured = false;
+  try {
+    const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+    configured = Array.from(doc.querySelectorAll('GameProfiles > Profile')).some((p) => {
+      const pathEl = p.querySelector('Path');
+      const fgEl = p.querySelector('FrameGeneration');
+      return pathEl && pathEl.textContent.trim().toLowerCase() === exePathLower &&
+        fgEl && fgEl.textContent.trim() !== 'Off';
+    });
+  } catch {}
+
+  status.textContent = configured
+    ? 'Configured -- Frame Generation is set for this game.'
+    : 'Not yet configured for this game.';
+}
+
+$('#btn-lossless-configure').addEventListener('click', async () => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  const status = $('#game-lossless-status');
+  status.textContent = 'Configuring…';
+  try {
+    const result = await configureLossless(game);
+    toast(result.isNew
+      ? 'Added a Lossless Scaling profile for this game with Frame Generation on.'
+      : 'Updated this game\'s Lossless Scaling profile with Frame Generation on.');
+  } catch (error) {
+    toast(`Could not configure Lossless Scaling: ${error.message}`);
+  }
+  loadLosslessSection(game);
+});
+
+$('#btn-lossless-launch').addEventListener('click', async () => {
+  const res = await window.api.losslessLaunch();
+  if (res.ok) {
+    toast('Launched Lossless Scaling.');
+  } else {
+    toast(`Could not launch Lossless Scaling: ${res.error}`);
+  }
+  if (editingGameId) {
+    const game = games.find((x) => x.id === editingGameId);
+    loadLosslessSection(game);
+  }
 });
 
 function closeGameModal() {

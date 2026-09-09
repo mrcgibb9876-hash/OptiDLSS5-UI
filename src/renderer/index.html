@@ -114,6 +114,16 @@
         <span id="game-optifg-status" class="status-line"></span>
       </div>
 
+      <div id="game-lossless-section" class="hidden">
+        <label class="field-label">Frame Generation via Lossless Scaling</label>
+        <p class="field-hint">OptiScaler's own Frame Generation isn't available together with the DLSS5 Feeder (crashes on a real test -- see above). Lossless Scaling generates extra frames from outside the game entirely, so it never touches the swapchain ReShade and the Feeder share -- unaffected by that crash. Separate paid app; this only configures its per-game profile (Frame Generation on, Scaling off), it doesn't install it.</p>
+        <div class="field-row">
+          <button id="btn-lossless-configure" class="btn btn-ghost">Configure for this game</button>
+          <button id="btn-lossless-launch" class="btn btn-ghost hidden">Launch Lossless Scaling</button>
+        </div>
+        <span id="game-lossless-status" class="status-line"></span>
+      </div>
+
       <div class="modal-actions">
         <button id="btn-cancel-game" class="btn btn-ghost">Cancel</button>
         <button id="btn-save-game" class="btn btn-primary">Save Game</button>

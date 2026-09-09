@@ -30,6 +30,11 @@ contextBridge.exposeInMainWorld('api', {
   feederConfirmProviderLicense: (providerId) => ipcRenderer.invoke('feeder:confirmProviderLicense', providerId),
   feederDeploy: (exePath, mvProviderId, options) => ipcRenderer.invoke('feeder:deploy', { exePath, mvProviderId, ...options }),
 
+  losslessDetect: () => ipcRenderer.invoke('lossless:detect'),
+  losslessReadSettings: () => ipcRenderer.invoke('lossless:readSettings'),
+  losslessWriteSettings: (xmlText) => ipcRenderer.invoke('lossless:writeSettings', xmlText),
+  losslessLaunch: () => ipcRenderer.invoke('lossless:launch'),
+
   steamSearch: (term) => ipcRenderer.invoke('steam:search', term),
   validateRelease: (folder) => ipcRenderer.invoke('release:validate', folder),
   validateNrDll: (filePath) => ipcRenderer.invoke('nrdll:validate', filePath),

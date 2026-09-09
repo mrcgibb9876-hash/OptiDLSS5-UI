@@ -11,6 +11,7 @@ const { scanForGames } = require('./discover');
 const framegen = require('./framegen');
 const injector = require('./injector');
 const feeder = require('./feeder');
+const lossless = require('./lossless');
 const execFileAsync = promisify(execFile);
 
 const RELEASES_API = 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest';
@@ -268,6 +269,38 @@ ipcMain.handle('optifg:set', async (_evt, { exePath, enabled }) => {
     setOptiFgEnabled(dir, !!enabled);
     const result = await autoConfigureGame(dir, exePath);
     return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// Lossless Scaling as an alternative Frame Generation path for Feeder games, since OptiScaler's
+// own FSRFG is blocked there -- see optiFgReadiness()'s Feeder gate above. See lossless.js for
+// why this sidesteps that whole crash class (it never touches the game's own Present/swapchain).
+ipcMain.handle('lossless:detect', () => {
+  try { return lossless.detect(); } catch (error) { return { installed: false, error: String(error && error.message ? error.message : error) }; }
+});
+
+ipcMain.handle('lossless:readSettings', () => lossless.readSettingsRaw());
+
+// xmlText is fully-formed replacement content, built in the renderer via DOMParser/XMLSerializer
+// (see configureLossless() in renderer.js) -- this handler only ever writes what it's given,
+// after backing up whatever was there. It does not itself understand or validate the XML shape.
+ipcMain.handle('lossless:writeSettings', (_evt, xmlText) => {
+  try {
+    lossless.writeSettingsRaw(xmlText);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+ipcMain.handle('lossless:launch', () => {
+  try {
+    const info = lossless.detect();
+    if (!info.installed) throw new Error('Lossless Scaling is not installed');
+    spawn(info.exePath, [], { cwd: path.dirname(info.exePath), detached: true, stdio: 'ignore' }).unref();
+    return { ok: true };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
