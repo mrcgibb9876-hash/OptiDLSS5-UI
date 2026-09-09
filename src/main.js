@@ -197,10 +197,18 @@ const feederCacheDir = () => path.join(userDataDir(), 'feeder-cache');
 
 // Whether this game needs the Feeder at all (no native DLSS), and what's already deployed --
 // same "explain, don't just disable" posture as injector:readiness.
+//
+// needsFeeder() alone isn't enough here: it flips false the moment a Feeder deploy places
+// nvngx_dlss.dll (that's correct for needsFeeder's own purpose -- see its own comment -- but
+// would make this section vanish from the UI right after the first successful deploy, taking
+// the update-check control with it). feederDeployed() covers that: once deployed, stays
+// "needed" so the user can still see/update it.
 ipcMain.handle('feeder:readiness', async (_evt, exePath) => {
   if (!exePath || !fs.existsSync(exePath)) return { ready: false, reason: 'Game .exe not found' };
   const dir = gameDir(exePath);
-  if (!feeder.needsFeeder(dir)) return { ready: false, needed: false, reason: 'This game already has native DLSS -- use the DLSS 5 only profile instead, not the Feeder.' };
+  if (!feeder.needsFeeder(dir) && !feeder.feederDeployed(dir)) {
+    return { ready: false, needed: false, reason: 'This game already has native DLSS -- use the DLSS 5 only profile instead, not the Feeder.' };
+  }
   const api = await detectRenderApi(dir, exePath);
   return { needed: true, ...feeder.feederReadiness(dir, api) };
 });
@@ -209,7 +217,45 @@ ipcMain.handle('feeder:mvProviders', () => {
   return feeder.mvProviderList();
 });
 
-ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId }) => {
+// A real native dialog showing a provider's actual licence text, for the one MV provider that
+// can't be auto-fetched without it (LumeniteFX). Same dialog.showMessageBox pattern as
+// game:confirm-remove. Returns the confirmation itself -- feeder:deploy's licenseConfirmed
+// param is what this feeds, and deployLumeniteFx() refuses without it regardless, so a
+// renderer bug skipping this call can't turn into a silent fetch.
+ipcMain.handle('feeder:confirmProviderLicense', async (_evt, providerId) => {
+  const provider = feeder.MV_PROVIDERS[providerId];
+  if (!provider) return false;
+  const res = await dialog.showMessageBox({
+    type: 'warning',
+    buttons: ['Cancel', `I understand, fetch ${provider.displayName}`],
+    defaultId: 0,
+    cancelId: 0,
+    title: 'Third-party licence',
+    message: `${provider.displayName} -- before this fetches anything`,
+    detail: `${provider.licenseSummary || provider.license}\n\nOfficial repo: ${provider.officialUrl}${provider.licenseUrl ? `\nFull licence text: ${provider.licenseUrl}` : ''}`,
+  });
+  return res.response === 1;
+});
+
+// Compares the deployed Feeder's recorded version against its actual latest release. Only
+// meaningful once something has been deployed -- feeder.js reports why not, otherwise.
+ipcMain.handle('feeder:checkUpdate', async (_evt, exePath) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    return { ok: true, ...(await feeder.feederUpdateCheck(dir, GITHUB_HEADERS)) };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// force: true re-fetches and overwrites the whole stack (an update, not a first install).
+// licenseConfirmed: only meaningful when mvProviderId names a non-auto-fetchable provider
+// (LumeniteFX right now) -- the renderer only ever sends true here after the user has actually
+// seen and confirmed that provider's real licence text in a dedicated dialog, never as a side
+// effect of the generic Deploy button. deployLumeniteFx() itself refuses without it regardless,
+// so a renderer bug can't turn this into a silent bypass.
+ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, licenseConfirmed }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
@@ -219,6 +265,8 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId }) => {
       getRhiManifest,
       compareVersions: compareStreamlineVersions,
       ghHeaders: GITHUB_HEADERS,
+      force: !!force,
+      licenseConfirmed: !!licenseConfirmed,
     });
     return { ok: true, ...results };
   } catch (error) {

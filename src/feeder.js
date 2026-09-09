@@ -72,6 +72,25 @@ const RESHADE_DLL_NAME = 'ReShade64.dll';
 const RESHADE_COMMON_HEADERS = ['ReShade.fxh', 'ReShadeUI.fxh'];
 const RESHADE_SHADERS_REPO_RAW = 'https://raw.githubusercontent.com/crosire/reshade-shaders/slim/Shaders/';
 
+// LumeniteFX's own official repo, fetched live (never cached/mirrored) -- see the licence
+// note on MV_PROVIDERS['lumenite-kernel'] for why that matters, not just why it's convenient.
+// lumenite_Kernel.fx's own #include lines name exactly these four files (checked against the
+// real source, 2026-09-09: ReShade.fxh -- already covered by RESHADE_COMMON_HEADERS -- plus
+// three from its own include/ subfolder; lumenite_ColorManagement.fxh in that same folder is
+// NOT included by Kernel.fx and is deliberately left out).
+const LUMENITEFX_REPO_RAW = 'https://raw.githubusercontent.com/umar-afzaal/LumeniteFX/mainline/Shaders/';
+const LUMENITEFX_KERNEL_FILE = 'lumenite_Kernel.fx';
+const LUMENITEFX_KERNEL_INCLUDES = [
+  'include/lumenite_Projections.fxh',
+  'include/lumenite_Helpers.fxh',
+  'include/lumenite_Compute.fxh',
+];
+
+// Written into a game's folder after a successful Feeder deploy -- deploy functions only know
+// "is the file there", not "is it current"; this is what feederUpdateCheck() compares against
+// the Feeder's actual latest release tag.
+const FEEDER_DEPLOY_MARKER = '.dlss5ui-feeder-deploy.json';
+
 // Motion-vector provider. DLSS5_Feed.fx reads whichever shader DLSS5_MV_PROVIDER selects (a
 // preprocessor definition, five options per the Feeder's own README). Only two are wired up
 // here -- see MV_PROVIDERS below for why: the other three (iMMERSE Launchpad, VORT,
@@ -101,9 +120,22 @@ const MV_PROVIDERS = {
     id: 'lumenite-kernel',
     displayName: 'LumeniteFX Kernel (recommended by the Feeder)',
     mvProviderValue: 3,
-    license: 'All rights reserved (umar-afzaal/AGNYA) -- you install this',
+    license: 'AGNYA (all rights reserved) -- umar-afzaal/LumeniteFX',
+    // Not auto-fetchable through the generic deployMvProvider() path -- that path has no way
+    // to carry real per-action consent, and this licence is real, not a formality (AGNYA
+    // ss.1: redistribution must "exclusively use the official links provided by the author";
+    // independently hosting a copy is explicitly prohibited). deployLumeniteFx() below is the
+    // only way this ever gets fetched: it fetches live from this exact repo every time (never
+    // a cached/mirrored copy, satisfying "official links"), and refuses outright unless the
+    // caller passes licenseConfirmed:true -- enforced here, not just in the UI, so a UI bug
+    // can't silently bypass consent.
     autoFetchable: false,
     officialUrl: 'https://github.com/umar-afzaal/LumeniteFX',
+    licenseUrl: 'https://github.com/umar-afzaal/LumeniteFX/blob/mainline/LICENSE.md',
+    licenseSummary: 'AGNYA licence (Rev 1.4), Copyright (C) 2025-2026 Afzaal (Kaidō). All rights ' +
+      'reserved. Redistribution must exclusively use the author\'s own official links -- ' +
+      'independently hosting a copy is explicitly prohibited, which is why this always ' +
+      'fetches live from the official repo rather than a cached copy. No warranty of any kind.',
     default: false,
   },
 };
@@ -195,9 +227,9 @@ async function resolveFeederAsset(ghHeaders) {
 // rest of this app uses for ordinary zips -- see deployStreamlineFolder/ensureREFrameworkForGame
 // in main.js) fails on it because the End Of Central Directory record isn't the very last thing
 // in the file. zip.js's EOCD scan handles both a plain zip and this case with the same code path.
-async function deployReShade(dir, cacheDir, ghHeaders) {
+async function deployReShade(dir, cacheDir, ghHeaders, { force = false } = {}) {
   const dest = path.join(dir, RESHADE_DLL_NAME);
-  if (fs.existsSync(dest)) return { deployed: false, reason: 'already present', file: RESHADE_DLL_NAME };
+  if (fs.existsSync(dest) && !force) return { deployed: false, reason: 'already present', file: RESHADE_DLL_NAME };
 
   const setupPath = await downloadToCache(RESHADE_SETUP_URL, cacheDir, path.basename(RESHADE_SETUP_URL), ghHeaders);
   const zip = openZip(setupPath);
@@ -210,13 +242,13 @@ async function deployReShade(dir, cacheDir, ghHeaders) {
 // ReShade.fxh / ReShadeUI.fxh -- see the RESHADE_COMMON_HEADERS comment above for why these
 // are needed at all. Small text files, fetched directly rather than through the zip-cache
 // machinery the other deploy steps use.
-async function deployReShadeCommonHeaders(dir, ghHeaders) {
+async function deployReShadeCommonHeaders(dir, ghHeaders, { force = false } = {}) {
   const shaderDir = path.join(dir, 'reshade-shaders', 'Shaders');
   await fsp.mkdir(shaderDir, { recursive: true });
   const deployed = [];
   for (const name of RESHADE_COMMON_HEADERS) {
     const dest = path.join(shaderDir, name);
-    if (fs.existsSync(dest)) continue;
+    if (fs.existsSync(dest) && !force) continue;
     const res = await fetch(RESHADE_SHADERS_REPO_RAW + name, { headers: { 'User-Agent': ghHeaders['User-Agent'] } });
     if (!res.ok) throw new Error(`Could not fetch ${name}: HTTP ${res.status}`);
     await fsp.writeFile(dest, await res.text(), 'utf8');
@@ -229,10 +261,10 @@ async function deployReShadeCommonHeaders(dir, ghHeaders) {
 // on Alien: Isolation only extracted the addon and skipped the shader, which is why the
 // technique never registered ("unknown technique 'DLSS5_Feed@DLSS5_Feed.fx'" in ReShade.log).
 // This extracts both from the same zip on purpose.
-async function deployFeederAddon(dir, cacheDir, ghHeaders) {
+async function deployFeederAddon(dir, cacheDir, ghHeaders, { force = false } = {}) {
   const addonDest = path.join(dir, 'dlss5-feed.addon64');
   const fxDest = path.join(dir, 'reshade-shaders', 'Shaders', 'DLSS5_Feed.fx');
-  if (fs.existsSync(addonDest) && fs.existsSync(fxDest)) {
+  if (fs.existsSync(addonDest) && fs.existsSync(fxDest) && !force) {
     return { deployed: false, reason: 'already present' };
   }
 
@@ -280,6 +312,34 @@ async function deployMvProvider(dir, providerId, cacheDir, ghHeaders) {
     deployedFiles.push(path.basename(entry.name));
   }
   return { deployed: true, files: deployedFiles };
+}
+
+// LumeniteFX Kernel -- the ONLY path that ever fetches it, and only with real, per-action
+// consent. Deliberately separate from deployMvProvider(): that function's autoFetchable guard
+// exists precisely so nothing generic ever reaches this licence by accident. Fetches every
+// file individually and live from LUMENITEFX_REPO_RAW (the official repo, not a cache/mirror)
+// on every call -- see the licence note on MV_PROVIDERS['lumenite-kernel'] for why that's not
+// just tidiness, it's the actual condition the licence sets for redistribution.
+async function deployLumeniteFx(dir, ghHeaders, { licenseConfirmed = false } = {}) {
+  if (!licenseConfirmed) {
+    throw new Error('LumeniteFX requires explicit licence confirmation before it can be fetched -- ' +
+      'see MV_PROVIDERS["lumenite-kernel"].licenseSummary. Refusing.');
+  }
+
+  const shaderDir = path.join(dir, 'reshade-shaders', 'Shaders');
+  const includeDir = path.join(shaderDir, 'include');
+  await fsp.mkdir(includeDir, { recursive: true });
+
+  const files = [LUMENITEFX_KERNEL_FILE, ...LUMENITEFX_KERNEL_INCLUDES];
+  const deployed = [];
+  for (const relPath of files) {
+    const res = await fetch(LUMENITEFX_REPO_RAW + relPath, { headers: { 'User-Agent': ghHeaders['User-Agent'] } });
+    if (!res.ok) throw new Error(`Could not fetch ${relPath} from LumeniteFX's official repo: HTTP ${res.status}`);
+    const dest = path.join(shaderDir, ...relPath.split('/'));
+    await fsp.writeFile(dest, await res.text(), 'utf8');
+    deployed.push(relPath);
+  }
+  return { deployed: true, files: deployed };
 }
 
 // nvngx_dlss.dll: public-SDK, fetchable via the app's shared RHI manifest (same fetch the
@@ -344,8 +404,50 @@ function configureReShadeIni(dir) {
   next = setIniKey(next, 'ADDON', 'AddonPath', '.\\');
   next = setIniKey(next, 'GENERAL', 'EffectSearchPaths', '.\\reshade-shaders\\Shaders\\**');
   if (!getIniKey(next, 'GENERAL', 'PresetPath')) next = setIniKey(next, 'GENERAL', 'PresetPath', '.\\ReShadePreset.ini');
+  // Marks ReShade's own first-run tutorial as already complete, so its "ReShade is now
+  // installed successfully! Press Home to start the tutorial" banner never shows. This app's
+  // users are here for the Feeder running silently, not for ReShade's own onboarding/UI.
+  if (!getIniKey(next, 'GENERAL', 'TutorialProgress')) next = setIniKey(next, 'GENERAL', 'TutorialProgress', '4');
   fs.writeFileSync(iniPath, next, 'utf8');
   return { configured: true };
+}
+
+// --- update checking --------------------------------------------------------------------
+
+function readFeederDeployMarker(dir) {
+  try {
+    const raw = fs.readFileSync(path.join(dir, FEEDER_DEPLOY_MARKER), 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function writeFeederDeployMarker(dir, data) {
+  fs.writeFileSync(path.join(dir, FEEDER_DEPLOY_MARKER), JSON.stringify(data, null, 2), 'utf8');
+}
+
+// Every deploy function's own "already present" check answers "is the file there", never "is
+// it current" -- there was no way to tell a stale Feeder deploy from a fresh one until now.
+// Only tracks the Feeder add-on's own release tag: that's the piece with a real "latest
+// release" concept (a GitHub releases API). ReShade is pinned to one URL in code (an update
+// means bumping RESHADE_SETUP_URL, not something a running app can detect on its own), and the
+// motion-vector shaders/nvngx_dlss.dll don't meaningfully go stale the same way a day-to-day
+// tool like the Feeder does.
+async function feederUpdateCheck(dir, ghHeaders) {
+  const marker = readFeederDeployMarker(dir);
+  if (!marker || !marker.feederVersion) {
+    return { checked: false, reason: feederDeployed(dir) ? 'deployed before update-checking existed -- deploy again once to start tracking' : 'not deployed yet' };
+  }
+
+  const latest = await resolveFeederAsset(ghHeaders);
+  return {
+    checked: true,
+    currentVersion: marker.feederVersion,
+    latestVersion: latest.tag,
+    upToDate: marker.feederVersion === latest.tag,
+    mvProviderId: marker.mvProviderId,
+  };
 }
 
 // --- orchestration ---------------------------------------------------------------------
@@ -358,15 +460,34 @@ function configureReShadeIni(dir) {
 // and forcing LoadReshade=true so OptiScaler itself loads this ReShade64.dll. Keeping that step
 // out of this module avoids feeder.js depending on main.js's ini-patching helpers and vice
 // versa -- main.js is the one place that already composes both.
-async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifest, compareVersions, ghHeaders }) {
+//
+// force: true re-fetches and overwrites everything (used by an update). licenseConfirmed: only
+// consulted when providerId names a non-auto-fetchable provider (currently just LumeniteFX) --
+// deployLumeniteFx() itself refuses without it, this just threads it through.
+async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifest, compareVersions, ghHeaders, force = false, licenseConfirmed = false }) {
   const results = {};
-  results.reshade = await deployReShade(dir, cacheDir, ghHeaders);
-  results.commonHeaders = await deployReShadeCommonHeaders(dir, ghHeaders);
-  results.addon = await deployFeederAddon(dir, cacheDir, ghHeaders);
-  results.mvProvider = await deployMvProvider(dir, providerId, cacheDir, ghHeaders);
+  results.reshade = await deployReShade(dir, cacheDir, ghHeaders, { force });
+  results.commonHeaders = await deployReShadeCommonHeaders(dir, ghHeaders, { force });
+  results.addon = await deployFeederAddon(dir, cacheDir, ghHeaders, { force });
+
+  const provider = MV_PROVIDERS[providerId];
+  results.mvProvider = provider && provider.autoFetchable
+    ? await deployMvProvider(dir, providerId, cacheDir, ghHeaders)
+    : await deployLumeniteFx(dir, ghHeaders, { licenseConfirmed });
+
   results.dlss = await deployNvngxDlss(dir, getRhiManifest, compareVersions, cacheDir, ghHeaders);
   results.ini = configureReShadeIni(dir);
   results.preset = configurePreset(dir, providerId);
+
+  // The addon step only resolves the release tag when it actually deploys (fresh install, or
+  // force). On a "already present, skip" run there's nothing fresh to record -- keep whatever
+  // the marker already said rather than losing the version history feederUpdateCheck needs.
+  const previousMarker = readFeederDeployMarker(dir);
+  const feederVersion = results.addon.version || (previousMarker && previousMarker.feederVersion) || null;
+  if (feederVersion) {
+    writeFeederDeployMarker(dir, { feederVersion, mvProviderId: providerId, deployedAt: new Date().toISOString() });
+  }
+
   return results;
 }
 
@@ -376,10 +497,12 @@ module.exports = {
   needsFeeder,
   feederDeployed,
   feederReadiness,
+  feederUpdateCheck,
   deployReShade,
   deployReShadeCommonHeaders,
   deployFeederAddon,
   deployMvProvider,
+  deployLumeniteFx,
   deployNvngxDlss,
   configurePreset,
   configureReShadeIni,

@@ -23,7 +23,9 @@ contextBridge.exposeInMainWorld('api', {
 
   feederReadiness: (exePath) => ipcRenderer.invoke('feeder:readiness', exePath),
   feederMvProviders: () => ipcRenderer.invoke('feeder:mvProviders'),
-  feederDeploy: (exePath, mvProviderId) => ipcRenderer.invoke('feeder:deploy', { exePath, mvProviderId }),
+  feederCheckUpdate: (exePath) => ipcRenderer.invoke('feeder:checkUpdate', exePath),
+  feederConfirmProviderLicense: (providerId) => ipcRenderer.invoke('feeder:confirmProviderLicense', providerId),
+  feederDeploy: (exePath, mvProviderId, options) => ipcRenderer.invoke('feeder:deploy', { exePath, mvProviderId, ...options }),
 
   steamSearch: (term) => ipcRenderer.invoke('steam:search', term),
   validateRelease: (folder) => ipcRenderer.invoke('release:validate', folder),

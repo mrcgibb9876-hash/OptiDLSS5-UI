@@ -472,11 +472,13 @@ $('#btn-injector-launch-now').addEventListener('click', async () => {
 });
 
 let feederProvidersLoaded = false;
+let feederProvidersById = {};
 
 // Populates and shows the "Neural Rendering source: DLSS5 Feeder" control -- only for a game
 // with no native DLSS (feeder:readiness reports needed:false otherwise, and this stays
-// hidden). Unlike Frame Gen and Launch mode, this has one action (Deploy) rather than a
-// swap/restore pair -- restore isn't implemented yet, see the Manager's own notes on this.
+// hidden). Unlike Frame Gen and Launch mode, this has one action (Deploy, which doubles as
+// Update once something's deployed) rather than a swap/restore pair -- restore isn't
+// implemented yet, see the Manager's own notes on this.
 async function loadFeederSection(game) {
   const section = $('#game-feeder-section');
   if (!game || !game.exePath) {
@@ -486,6 +488,7 @@ async function loadFeederSection(game) {
 
   const readiness = await window.api.feederReadiness(game.exePath);
   const status = $('#game-feeder-status');
+  const updateBtn = $('#btn-feeder-update');
   if (!readiness.needed) {
     section.classList.add('hidden');
     return;
@@ -496,6 +499,7 @@ async function loadFeederSection(game) {
     status.className = 'status-line';
     status.textContent = readiness.reason;
     $('#btn-feeder-deploy').disabled = true;
+    updateBtn.classList.add('hidden');
     return;
   }
   $('#btn-feeder-deploy').disabled = false;
@@ -504,6 +508,7 @@ async function loadFeederSection(game) {
   if (!feederProvidersLoaded) {
     const providers = await window.api.feederMvProviders();
     for (const p of providers) {
+      feederProvidersById[p.id] = p;
       const opt = document.createElement('option');
       opt.value = p.id;
       opt.textContent = p.autoFetchable ? p.displayName : `${p.displayName} — ${p.license}`;
@@ -513,31 +518,74 @@ async function loadFeederSection(game) {
     feederProvidersLoaded = true;
   }
 
+  const missing = [
+    readiness.reshadeInstalled ? null : 'ReShade',
+    readiness.addonInstalled ? null : 'Feeder add-on',
+    readiness.fxInstalled ? null : 'DLSS5_Feed.fx',
+    readiness.headersInstalled ? null : 'ReShade.fxh/ReShadeUI.fxh',
+    readiness.dlssInstalled ? null : 'nvngx_dlss.dll',
+    readiness.dlssnrInstalled ? null : 'nvngx_dlssnr.dll (install this yourself first)',
+  ].filter(Boolean);
+
   status.className = 'status-line';
-  status.textContent = readiness.complete
-    ? 'Feeder stack fully deployed.'
-    : [
-        readiness.reshadeInstalled ? null : 'ReShade',
-        readiness.addonInstalled ? null : 'Feeder add-on',
-        readiness.fxInstalled ? null : 'DLSS5_Feed.fx',
-        readiness.dlssInstalled ? null : 'nvngx_dlss.dll',
-        readiness.dlssnrInstalled ? null : 'nvngx_dlssnr.dll (install this yourself first)',
-      ].filter(Boolean).join(', ') + ' missing.';
+  updateBtn.classList.add('hidden');
+
+  if (!readiness.complete) {
+    status.textContent = `${missing.join(', ')} missing.`;
+    return;
+  }
+
+  status.textContent = 'Feeder stack fully deployed. Checking for updates…';
+  const update = await window.api.feederCheckUpdate(game.exePath);
+  if (update.ok && update.checked && !update.upToDate) {
+    status.textContent = `Feeder stack deployed (v${update.currentVersion} -- v${update.latestVersion} available).`;
+    updateBtn.classList.remove('hidden');
+  } else if (update.ok && update.checked) {
+    status.textContent = `Feeder stack up to date (v${update.currentVersion}).`;
+  } else {
+    status.textContent = 'Feeder stack fully deployed.';
+  }
 }
 
-$('#btn-feeder-deploy').addEventListener('click', async () => {
-  if (!editingGameId) return;
-  const game = games.find((x) => x.id === editingGameId);
-  const providerId = $('#game-feeder-mv-provider').value;
+// Deploys the selected provider, gating LumeniteFX (or any future non-auto-fetchable
+// provider) behind a real, per-action confirmation of its actual licence text -- never
+// silently, never just because it's selected in the dropdown. force=true is an update:
+// re-fetches and overwrites everything rather than skipping what's already present.
+async function deployFeederStack(game, providerId, force) {
   const status = $('#game-feeder-status');
-  status.textContent = 'Deploying…';
-  const res = await window.api.feederDeploy(game.exePath, providerId);
+  const provider = feederProvidersById[providerId];
+
+  let licenseConfirmed = true;
+  if (provider && !provider.autoFetchable) {
+    licenseConfirmed = await window.api.feederConfirmProviderLicense(providerId);
+    if (!licenseConfirmed) {
+      status.textContent = 'Cancelled -- licence not confirmed.';
+      return;
+    }
+  }
+
+  status.textContent = force ? 'Updating…' : 'Deploying…';
+  const res = await window.api.feederDeploy(game.exePath, providerId, { force, licenseConfirmed });
   if (res.ok) {
-    toast('Feeder stack deployed. Install OptiScaler normally (Install button) to finish -- not the injector.');
+    toast(force
+      ? 'Feeder stack updated.'
+      : 'Feeder stack deployed. Install OptiScaler normally (Install button) to finish -- not the injector.');
   } else {
-    toast(`Deploy failed: ${res.error}`);
+    toast(`${force ? 'Update' : 'Deploy'} failed: ${res.error}`);
   }
   loadFeederSection(game);
+}
+
+$('#btn-feeder-deploy').addEventListener('click', () => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  deployFeederStack(game, $('#game-feeder-mv-provider').value, false);
+});
+
+$('#btn-feeder-update').addEventListener('click', () => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  deployFeederStack(game, $('#game-feeder-mv-provider').value, true);
 });
 
 function closeGameModal() {
