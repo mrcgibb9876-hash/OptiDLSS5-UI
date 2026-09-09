@@ -17,6 +17,10 @@ contextBridge.exposeInMainWorld('api', {
   frameGenSwap: (exePath, version) => ipcRenderer.invoke('framegen:swap', { exePath, version }),
   frameGenRestore: (exePath) => ipcRenderer.invoke('framegen:restore', exePath),
 
+  injectorReadiness: (releaseFolder) => ipcRenderer.invoke('injector:readiness', { releaseFolder }),
+  injectorSteamOption: (releaseFolder) => ipcRenderer.invoke('injector:steamOption', { releaseFolder }),
+  injectorLaunch: (exePath, releaseFolder) => ipcRenderer.invoke('injector:launch', { exePath, releaseFolder }),
+
   steamSearch: (term) => ipcRenderer.invoke('steam:search', term),
   validateRelease: (folder) => ipcRenderer.invoke('release:validate', folder),
   validateNrDll: (filePath) => ipcRenderer.invoke('nrdll:validate', filePath),

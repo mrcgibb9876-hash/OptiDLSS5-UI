@@ -28,6 +28,10 @@
       {
         "from": "README-END-USER.txt",
         "to": "README.txt"
+      },
+      {
+        "from": "tools/DLSS5Injector/DLSS5Injector.exe",
+        "to": "DLSS5Injector.exe"
       }
     ],
     "win": {

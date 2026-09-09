@@ -9,6 +9,7 @@ const crypto = require('node:crypto');
 
 const { scanForGames } = require('./discover');
 const framegen = require('./framegen');
+const injector = require('./injector');
 const execFileAsync = promisify(execFile);
 
 const RELEASES_API = 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest';
@@ -139,6 +140,53 @@ ipcMain.handle('framegen:restore', async (_evt, exePath) => {
     const dir = gameDir(exePath);
     const result = await framegen.restoreFrameGenDll(dir);
     return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// Everything Launch mode: Injector needs, or the real reason it can't run yet, so the UI
+// can show an explanation instead of a dead button.
+ipcMain.handle('injector:readiness', (_evt, { releaseFolder } = {}) => {
+  return injector.injectorReadiness({
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    appRoot: app.getAppPath(),
+    releaseFolder,
+  });
+});
+
+// The Steam Launch Options string to paste into Properties -> Launch Options. Copy-paste
+// only -- see the header comment in injector.js for why this doesn't auto-write
+// localconfig.vdf.
+ipcMain.handle('injector:steamOption', (_evt, { releaseFolder } = {}) => {
+  const readiness = injector.injectorReadiness({
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    appRoot: app.getAppPath(),
+    releaseFolder,
+  });
+  if (!readiness.ready) return { ok: false, error: readiness.reason };
+  return { ok: true, launchOption: injector.steamLaunchOption(readiness.injectorExe, readiness.dllPath) };
+});
+
+// Non-Steam "Launch now": spawn the game through the injector directly, detached.
+ipcMain.handle('injector:launch', (_evt, { exePath, releaseFolder } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const readiness = injector.injectorReadiness({
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      appRoot: app.getAppPath(),
+      releaseFolder,
+    });
+    if (!readiness.ready) throw new Error(readiness.reason);
+    injector.launchThroughInjector(spawn, {
+      injectorExe: readiness.injectorExe,
+      dllPath: readiness.dllPath,
+      gameExe: exePath,
+    });
+    return { ok: true };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }

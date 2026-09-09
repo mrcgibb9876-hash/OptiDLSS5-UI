@@ -325,6 +325,7 @@ async function openGameModal(game) {
   updateBannerPreview();
   gameModal.classList.remove('hidden');
   await loadFrameGenSection(game);
+  await loadInjectorSection(game);
 }
 
 let frameGenVersionsLoaded = false;
@@ -393,6 +394,69 @@ $('#btn-framegen-restore').addEventListener('click', async () => {
     toast(res.ok ? `Nothing to restore: ${res.reason}` : `Restore failed: ${res.error}`);
   }
   loadFrameGenSection(game);
+});
+
+// Populates and shows the per-game "Launch mode" control -- hidden entirely if the
+// injector isn't ready yet (no DLSS5Injector.exe / no OptiScaler.dll in the release
+// folder), same "real reason, not a dead button" posture as injectorReadiness gives.
+// A game is treated as a Steam game if it carries a Steam appid (either from a library
+// scan or from picking Steam banner art) -- the app has no separate persisted
+// "launcher" field to check, so this is the best available signal.
+async function loadInjectorSection(game) {
+  const section = $('#game-injector-section');
+  if (!game || !game.exePath) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  const readiness = await window.api.injectorReadiness(settings.releaseFolder);
+  const status = $('#game-injector-status');
+  if (!readiness.ready) {
+    section.classList.add('hidden');
+    return;
+  }
+  section.classList.remove('hidden');
+
+  const modeSelect = $('#game-launch-mode');
+  modeSelect.value = game.launchMode === 'injector' ? 'injector' : 'proxy';
+
+  const isSteamGame = !!game.bannerAppId;
+  const steamBlock = $('#game-injector-steam');
+  const directBlock = $('#game-injector-direct');
+
+  const updateBlocks = async () => {
+    const isInjector = modeSelect.value === 'injector';
+    steamBlock.classList.toggle('hidden', !(isInjector && isSteamGame));
+    directBlock.classList.toggle('hidden', !(isInjector && !isSteamGame));
+    status.className = 'status-line';
+    status.textContent = '';
+    if (isInjector && isSteamGame) {
+      const res = await window.api.injectorSteamOption(settings.releaseFolder);
+      if (res.ok) {
+        $('#game-injector-launch-option').value = res.launchOption;
+      } else {
+        status.textContent = res.error;
+      }
+    }
+  };
+  modeSelect.onchange = updateBlocks;
+  await updateBlocks();
+}
+
+$('#btn-injector-copy').addEventListener('click', async () => {
+  const value = $('#game-injector-launch-option').value;
+  if (!value) return;
+  await navigator.clipboard.writeText(value);
+  toast('Launch option copied -- paste it into Steam → Properties → Launch Options.');
+});
+
+$('#btn-injector-launch-now').addEventListener('click', async () => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  const status = $('#game-injector-status');
+  status.textContent = 'Launching…';
+  const res = await window.api.injectorLaunch(game.exePath, settings.releaseFolder);
+  status.textContent = res.ok ? 'Launched through the injector.' : `Launch failed: ${res.error}`;
 });
 
 function closeGameModal() {
@@ -470,19 +534,23 @@ $('#btn-save-game').addEventListener('click', async () => {
   if (!exePath) return toast('Pick the game .exe first.');
   if (!name) return toast('Give the game a name.');
 
+  const launchMode = $('#game-launch-mode').value === 'injector' ? 'injector' : 'proxy';
+
   if (editingGameId) {
     const g = games.find((x) => x.id === editingGameId);
     g.exePath = exePath;
     g.name = name;
     g.bannerAppId = pendingBanner.appid;
     g.bannerLocalPath = pendingBanner.localPath;
+    g.launchMode = launchMode;
   } else {
     games.push({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       exePath,
       name,
       bannerAppId: pendingBanner.appid,
-      bannerLocalPath: pendingBanner.localPath
+      bannerLocalPath: pendingBanner.localPath,
+      launchMode
     });
   }
   await window.api.saveGames(games);

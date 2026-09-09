@@ -72,6 +72,28 @@
         <span id="game-framegen-status" class="status-line"></span>
       </div>
 
+      <div id="game-injector-section" class="hidden">
+        <label class="field-label">Launch mode</label>
+        <p class="field-hint">Injector loads OptiScaler without renaming a file on disk, so ReShade keeps its own dxgi.dll -- both run. Single-player only; refuses a game shipping a known anti-cheat.</p>
+        <div class="field-row">
+          <select id="game-launch-mode">
+            <option value="proxy">Proxy file (default)</option>
+            <option value="injector">Injector</option>
+          </select>
+        </div>
+        <div id="game-injector-steam" class="hidden">
+          <p class="field-hint">Paste this into Steam &rarr; this game &rarr; Properties &rarr; Launch Options:</p>
+          <div class="field-row">
+            <input id="game-injector-launch-option" type="text" readonly />
+            <button id="btn-injector-copy" class="btn btn-ghost">Copy</button>
+          </div>
+        </div>
+        <div id="game-injector-direct" class="hidden field-row">
+          <button id="btn-injector-launch-now" class="btn btn-ghost">Launch now</button>
+        </div>
+        <span id="game-injector-status" class="status-line"></span>
+      </div>
+
       <div class="modal-actions">
         <button id="btn-cancel-game" class="btn btn-ghost">Cancel</button>
         <button id="btn-save-game" class="btn btn-primary">Save Game</button>
