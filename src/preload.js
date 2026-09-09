@@ -12,6 +12,11 @@ contextBridge.exposeInMainWorld('api', {
   scanLibrary: (options) => ipcRenderer.invoke('library:scan', options),
   streamlineVersions: () => ipcRenderer.invoke('streamline:versions'),
 
+  frameGenVersions: () => ipcRenderer.invoke('framegen:versions'),
+  frameGenState: (exePath) => ipcRenderer.invoke('framegen:state', exePath),
+  frameGenSwap: (exePath, version) => ipcRenderer.invoke('framegen:swap', { exePath, version }),
+  frameGenRestore: (exePath) => ipcRenderer.invoke('framegen:restore', exePath),
+
   steamSearch: (term) => ipcRenderer.invoke('steam:search', term),
   validateRelease: (folder) => ipcRenderer.invoke('release:validate', folder),
   validateNrDll: (filePath) => ipcRenderer.invoke('nrdll:validate', filePath),

@@ -59,6 +59,19 @@
         </div>
       </div>
 
+      <div id="game-framegen-section" class="hidden">
+        <label class="field-label">DLSS Frame Generation version</label>
+        <p class="field-hint">The game's own frame gen, not OptiScaler's -- this only versions the DLL it already loads (nvngx_dlssg.dll).</p>
+        <div class="field-row">
+          <select id="game-framegen-version">
+            <option value="">Game default (don't touch)</option>
+          </select>
+          <button id="btn-framegen-swap" class="btn btn-ghost">Apply</button>
+          <button id="btn-framegen-restore" class="btn btn-ghost">Restore original</button>
+        </div>
+        <span id="game-framegen-status" class="status-line"></span>
+      </div>
+
       <div class="modal-actions">
         <button id="btn-cancel-game" class="btn btn-ghost">Cancel</button>
         <button id="btn-save-game" class="btn btn-primary">Save Game</button>

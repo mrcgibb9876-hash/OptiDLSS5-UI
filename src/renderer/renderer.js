@@ -237,6 +237,12 @@ async function installGame(game) {
       ? ` Deployed Streamline ${res.streamline.version || ''} for DLSS Frame Gen.`.replace('  ', ' ')
       : '';
     const reEngineNote = res.reEngine ? ' Detected RE Engine (Capcom).' : '';
+    // Named so it's obvious why the upscaler wasn't touched and FrameGen was forced off --
+    // the game already does its own DLSS (and DLSS-G where it has it); OptiScaler is only
+    // adding Neural Rendering on top, not replacing anything.
+    const profileNote = res.profile === 'dlss5-only'
+      ? ' Native DLSS detected -- used the "DLSS 5 only" profile (Neural Rendering on the game’s own DLSS, upscaler/frame-gen untouched).'
+      : '';
 
     // The rename is the step that actually hooks the game, so it gets said out loud -- and if it
     // could not happen, that is the difference between "installed" and "installed but inert".
@@ -267,7 +273,7 @@ async function installGame(game) {
     const reframeworkConfigNote = res.reframeworkConfig && res.reframeworkConfig.length > 0
       ? ' Set REFramework’s menu key to Insert (it had drifted to Numpad0, unreachable on a laptop) and enlarged its overlay text.'
       : '';
-    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}${proxyCreatedNote}${configNote}${streamlineNote}${reEngineNote}${hotfixNote}${reframeworkNote}${reframeworkConfigNote}`);
+    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}${proxyCreatedNote}${configNote}${streamlineNote}${reEngineNote}${profileNote}${hotfixNote}${reframeworkNote}${reframeworkConfigNote}`);
   } else {
     toast(`Install failed: ${res.error}`);
   }
@@ -305,7 +311,7 @@ async function removeGame(game) {
 }
 const gameModal = $('#game-modal');
 
-function openGameModal(game) {
+async function openGameModal(game) {
   editingGameId = game ? game.id : null;
   $('#game-modal-title').textContent = game ? 'Edit Game' : 'Add Game';
   $('#game-exe').value = game ? game.exePath : '';
@@ -318,7 +324,76 @@ function openGameModal(game) {
   $('#steam-results').innerHTML = '';
   updateBannerPreview();
   gameModal.classList.remove('hidden');
+  await loadFrameGenSection(game);
 }
+
+let frameGenVersionsLoaded = false;
+
+// Populates and shows the per-game "DLSS Frame Generation version" control -- only meaningful
+// for a game that already has an nvngx_dlssg.dll to version, so it stays hidden otherwise
+// (including the "Add Game" case, where there's no game folder to check yet).
+async function loadFrameGenSection(game) {
+  const section = $('#game-framegen-section');
+  if (!game || !game.exePath) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  const state = await window.api.frameGenState(game.exePath);
+  if (!state.hasFrameGen) {
+    section.classList.add('hidden');
+    return;
+  }
+  section.classList.remove('hidden');
+
+  const select = $('#game-framegen-version');
+  const status = $('#game-framegen-status');
+
+  if (!frameGenVersionsLoaded) {
+    const res = await window.api.frameGenVersions();
+    if (res && res.ok && res.versions.length > 0) {
+      for (const v of res.versions) {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        select.appendChild(opt);
+      }
+      frameGenVersionsLoaded = true;
+    }
+  }
+  select.value = '';
+  status.className = 'status-line';
+  status.textContent = `${state.dll}: currently ${state.currentVersion || 'unknown version'}` +
+    (state.swapped ? ' (swapped by this app -- original backed up, Restore puts it back)' : '');
+}
+
+$('#btn-framegen-swap').addEventListener('click', async () => {
+  if (!editingGameId) return;
+  const version = $('#game-framegen-version').value;
+  if (!version) return toast('Pick a version first.');
+  const game = games.find((x) => x.id === editingGameId);
+  const status = $('#game-framegen-status');
+  status.textContent = 'Applying…';
+  const res = await window.api.frameGenSwap(game.exePath, version);
+  if (res.ok && res.swapped) {
+    toast(`Swapped ${res.dll} to ${version} (original backed up).`);
+  } else {
+    toast(res.ok ? `Could not swap: ${res.reason}` : `Swap failed: ${res.error}`);
+  }
+  loadFrameGenSection(game);
+});
+
+$('#btn-framegen-restore').addEventListener('click', async () => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  const res = await window.api.frameGenRestore(game.exePath);
+  if (res.ok && res.restored) {
+    toast(`Restored ${res.dll} to the game's original.`);
+  } else {
+    toast(res.ok ? `Nothing to restore: ${res.reason}` : `Restore failed: ${res.error}`);
+  }
+  loadFrameGenSection(game);
+});
 
 function closeGameModal() {
   gameModal.classList.add('hidden');

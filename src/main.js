@@ -8,6 +8,7 @@ const { promisify } = require('node:util');
 const crypto = require('node:crypto');
 
 const { scanForGames } = require('./discover');
+const framegen = require('./framegen');
 const execFileAsync = promisify(execFile);
 
 const RELEASES_API = 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest';
@@ -86,6 +87,60 @@ ipcMain.handle('streamline:versions', async () => {
     return { ok: true, versions: releases.map((r) => r.version) };
   } catch (error) {
     return { ok: false, versions: [], error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// The DLSS Frame Generation (nvngx_dlssg.dll) builds RHI currently publishes, newest first,
+// for the per-game version dropdown. Shares getRhiManifest with the Streamline fetch above --
+// see the comment on getRhiManifest.
+ipcMain.handle('framegen:versions', async () => {
+  try {
+    const releases = await framegen.getFrameGenReleases(getRhiManifest, compareStreamlineVersions);
+    return { ok: true, versions: releases.map((r) => r.version) };
+  } catch (error) {
+    return { ok: false, versions: [], error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// Whether this game has a frame-gen DLL to version at all, whether the Manager has already
+// swapped it, and what version is currently in the folder.
+ipcMain.handle('framegen:state', async (_evt, exePath) => {
+  if (!exePath || !fs.existsSync(exePath)) return { hasFrameGen: false };
+  const dir = gameDir(exePath);
+  const state = framegen.frameGenSwapState(dir);
+  if (state.hasFrameGen) {
+    state.currentVersion = await framegen.readDllVersion(execFileAsync, path.join(dir, state.dll));
+  }
+  return state;
+});
+
+ipcMain.handle('framegen:swap', async (_evt, { exePath, version }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const releases = await framegen.getFrameGenReleases(getRhiManifest, compareStreamlineVersions);
+    const release = releases.find((r) => r.version === version);
+    if (!release) throw new Error(`Version ${version} not found in the manifest`);
+    const sourceDll = await framegen.ensureFrameGenDllCache(release, {
+      cacheRoot: path.join(userDataDir(), 'framegen-dll-cache'),
+      execFileAsync,
+      ghHeaders: GITHUB_HEADERS,
+    });
+    const result = await framegen.swapFrameGenDll(dir, sourceDll);
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+ipcMain.handle('framegen:restore', async (_evt, exePath) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const result = await framegen.restoreFrameGenDll(dir);
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
   }
 });
 
@@ -560,40 +615,50 @@ function rhiManifestCacheFile() {
 
 let rhiManifestMemo = null;
 
-/// Returns RHI's Streamline list as [{ version, url }], newest first. Prefers a fresh fetch, falls
-/// back to the on-disk copy from a previous run when offline, and to a built-in list when there has
-/// never been one. Never throws.
-async function getStreamlineReleases() {
+/// Fetches RHI's whole dlss_manifest.json (streamline, dlssg, dlss, dlssnr lists) once and
+/// shares it between every consumer -- the Streamline version dropdown and the Frame Gen
+/// version dropdown both read from this instead of fetching twice. Prefers a fresh fetch,
+/// falls back to the on-disk copy from a previous run when offline, and to an empty object
+/// when there has never been one (callers apply their own built-in fallback list on top of
+/// that, since only Streamline has one). Never throws.
+async function getRhiManifest() {
   if (rhiManifestMemo && Date.now() - rhiManifestMemo.at < RHI_MANIFEST_TTL_MS) {
-    return rhiManifestMemo.releases;
+    return rhiManifestMemo.data;
   }
-
-  const normalize = (list) => (Array.isArray(list) ? list : [])
-    .filter((e) => e && typeof e.version === 'string')
-    .map((e) => ({ version: e.version, url: typeof e.url === 'string' && e.url ? e.url : streamlineZipUrlFor(e.version) }))
-    .sort((x, y) => compareStreamlineVersions(y.version, x.version));
 
   try {
     const res = await fetch(RHI_MANIFEST_URL, { headers: { 'User-Agent': GITHUB_HEADERS['User-Agent'] } });
     if (res.ok) {
       const data = await res.json();
-      const releases = normalize(data && data.streamline);
-      if (releases.length > 0) {
-        writeJson(rhiManifestCacheFile(), { fetchedAt: Date.now(), streamline: releases });
-        rhiManifestMemo = { at: Date.now(), releases };
-        return releases;
+      if (data && typeof data === 'object') {
+        writeJson(rhiManifestCacheFile(), { fetchedAt: Date.now(), manifest: data });
+        rhiManifestMemo = { at: Date.now(), data };
+        return data;
       }
     }
   } catch {
-    // Fall through to the cached / built-in list.
+    // Fall through to the cached / empty manifest.
   }
 
-  const cached = normalize(readJson(rhiManifestCacheFile(), {}).streamline);
-  const releases = cached.length > 0
-    ? cached
+  const cachedWrap = readJson(rhiManifestCacheFile(), {});
+  const data = cachedWrap && cachedWrap.manifest && typeof cachedWrap.manifest === 'object' ? cachedWrap.manifest : {};
+  rhiManifestMemo = { at: Date.now(), data };
+  return data;
+}
+
+/// Returns RHI's Streamline list as [{ version, url }], newest first, falling back to a
+/// built-in list only when the manifest has nothing at all (never fetched, offline with no
+/// cache yet).
+async function getStreamlineReleases() {
+  const manifest = await getRhiManifest();
+  const releases = (Array.isArray(manifest && manifest.streamline) ? manifest.streamline : [])
+    .filter((e) => e && typeof e.version === 'string')
+    .map((e) => ({ version: e.version, url: typeof e.url === 'string' && e.url ? e.url : streamlineZipUrlFor(e.version) }))
+    .sort((x, y) => compareStreamlineVersions(y.version, x.version));
+
+  return releases.length > 0
+    ? releases
     : STREAMLINE_BUILTIN_VERSIONS.map((version) => ({ version, url: streamlineZipUrlFor(version) }));
-  rhiManifestMemo = { at: Date.now(), releases };
-  return releases;
 }
 
 /// Picks the release to deploy for one game: an explicit user choice if there is one, otherwise the
@@ -959,16 +1024,40 @@ function fixREFrameworkConfig(dir) {
   return patchFlatKeyValueFile(path.join(dir, REFRAMEWORK_CONFIG_NAME), REFRAMEWORK_CONFIG_FIXES);
 }
 
+// A game that already has its own DLSS -- a native Streamline interposer, or a bare
+// nvngx_dlss.dll -- already does its own upscaling and (where present) its own frame gen.
+// OptiScaler's job there is Neural Rendering only: its native-DLSS passthrough already runs
+// NR on top of whatever the game's own DLSS produced, so replacing the upscaler or touching
+// frame gen is not just unnecessary, forcing FrameGen on is the Cyberpunk crash. A game with
+// none of these signals gets the full config below -- OptiScaler is doing the upscaling
+// there, so it needs to be told which upscaler to use.
+function hasNativeDlss(dir) {
+  return fs.existsSync(path.join(dir, 'sl.interposer.dll')) ||
+    fs.existsSync(path.join(dir, 'sl.interposer.dll.original')) ||
+    fs.existsSync(path.join(dir, 'nvngx_dlss.dll'));
+}
+
+// The one value that MUST be forced for a "DLSS 5 only" game: a full install from before the
+// Cyberpunk-crash fix may have left [FrameGen] Enabled=true in this game's ini, and leaving it
+// on is the crash. patchIniValues (force), not patchIniDefaults (fill-if-auto), because a
+// value that already crashed once needs to be corrected, not left alone for being non-default.
+const DLSS5_ONLY_FORCED = [
+  { section: 'FrameGen', key: 'Enabled', value: 'false' },
+];
+
 async function autoConfigureGame(dir, exePath) {
   const iniPath = path.join(dir, 'OptiScaler.ini');
   if (!fs.existsSync(iniPath)) return { api: null, applied: [] };
 
   const api = await detectRenderApi(dir, exePath);
+  const dlss5Only = hasNativeDlss(dir);
   const edits = [];
 
-  if (api === 'dx12') edits.push({ section: 'Upscalers', key: 'Dx12Upscaler', value: 'dlss' });
-  else if (api === 'dx11') edits.push({ section: 'Upscalers', key: 'Dx11Upscaler', value: 'dlss' });
-  else if (api === 'vulkan') edits.push({ section: 'Upscalers', key: 'VulkanUpscaler', value: 'dlss' });
+  if (!dlss5Only) {
+    if (api === 'dx12') edits.push({ section: 'Upscalers', key: 'Dx12Upscaler', value: 'dlss' });
+    else if (api === 'dx11') edits.push({ section: 'Upscalers', key: 'Dx11Upscaler', value: 'dlss' });
+    else if (api === 'vulkan') edits.push({ section: 'Upscalers', key: 'VulkanUpscaler', value: 'dlss' });
+  }
 
   // Only force DlssNr on when the actual model file is present -- forcing it on every game
   // regardless (including ones where NR was never installed) risks the pass trying to initialize
@@ -990,18 +1079,22 @@ async function autoConfigureGame(dir, exePath) {
     reframeworkConfig = fixREFrameworkConfig(dir);
   }
 
-  let streamline = null;
-  const hasNativeStreamline = fs.existsSync(path.join(dir, 'sl.interposer.dll')) ||
-    fs.existsSync(path.join(dir, 'sl.interposer.dll.original'));
-  if (api === 'dx11' || api === 'dx12') {
-    edits.push({ section: 'FrameGen', key: 'Enabled', value: 'true' });
-    edits.push({ section: 'FrameGen', key: 'FGInput', value: 'upscaler' });
-    edits.push({ section: 'FrameGen', key: 'FGOutput', value: 'dlssg' });
-    if (!hasNativeStreamline) streamline = await deployStreamlineFolder(dir, exePath);
-  }
+  // Frame gen is the game's own job, not OptiScaler's -- OptiScaler's FG bridge and a
+  // game's native DLSS-G both try to wrap the swapchain, and running both at once is a
+  // hard crash (confirmed via Aftermath on Cyberpunk: DXGI_ERROR_INVALID_CALL through
+  // hkslDLSSGSetOptions intercepting the game's own native slDLSSGSetOptions call).
+  // [FrameGen] Enabled is deliberately left untouched here -- OptiScaler's own FG stays a
+  // narrow, explicit per-game opt-in (for titles with no native frame gen at all), never
+  // the default. Streamline SDK deploy moves with it: it exists to feed OptiScaler's FG
+  // bridge, so it has no default-path reason to run once that bridge isn't forced on.
+  const streamline = null;
 
   const applied = patchIniDefaults(iniPath, edits);
-  return { api, applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
+  const forced = dlss5Only ? patchIniValues(iniPath, DLSS5_ONLY_FORCED) : [];
+  return {
+    api, applied: [...applied, ...forced], streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix,
+    profile: dlss5Only ? 'dlss5-only' : 'full',
+  };
 }
 
 const PROXY_CANDIDATES = ['dxgi.dll', 'winmm.dll', 'version.dll', 'dbghelp.dll', 'd3d12.dll', 'wininet.dll', 'winhttp.dll', 'OptiScaler.asi'];
