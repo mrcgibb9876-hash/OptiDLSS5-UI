@@ -96,7 +96,7 @@
 
       <div id="game-feeder-section" class="hidden">
         <label class="field-label">Neural Rendering source: DLSS5 Feeder</label>
-        <p class="field-hint">This game has no native DLSS, so there's no DLSS call for OptiScaler to add Neural Rendering to. The Feeder synthesises one from ReShade's own depth and motion vectors -- estimated, so it ghosts more in fast motion than a native-DLSS-fed game. Deploys ReShade, the Feeder add-on, and a motion-vector shader here; OptiScaler still installs via the injector, not this game's own dxgi.dll.</p>
+        <p class="field-hint">This game has no native DLSS, so there's no DLSS call for OptiScaler to add Neural Rendering to. The Feeder synthesises one from ReShade's own depth and motion vectors -- estimated, so it ghosts more in fast motion than a native-DLSS-fed game. Deploys ReShade (as a plain ReShade64.dll, not a proxy), the Feeder add-on, and a motion-vector shader here; install OptiScaler normally afterward (Install button) -- it loads ReShade itself once installed, not the other way round.</p>
         <div class="field-row">
           <select id="game-feeder-mv-provider"></select>
           <button id="btn-feeder-deploy" class="btn btn-ghost">Deploy</button>

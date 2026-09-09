@@ -10,9 +10,18 @@
 // see that repo's commit f2290a39), not a third-party consumer like Deep Fried Chicken.
 //
 // Two conflicts this deploy has to route around, both already solved elsewhere in this app:
-//   * ReShade needs the dxgi.dll (or opengl32.dll) proxy slot for itself -- that's how ReShade
-//     always works. OptiScaler must NOT also try to take that slot here, so this path always
-//     installs OptiScaler via the injector (src/injector.js), never proxy-file.
+//   * OptiScaler and ReShade must not independently fight over hooking the swapchain. The
+//     first version of this integration tried "OptiScaler via the injector, ReShade as its own
+//     proxy (dxgi.dll/d3d11.dll)" -- that broke TWO different ways on a real game (Batman:
+//     Arkham Knight, 2026-09-09): the Feeder couldn't find an injected OptiScaler at all
+//     ("this game never loaded a DLL of that name"), and even after switching OptiScaler back
+//     to proxy-file, ReShade's own Present hook never engaged (its own overlay never opened,
+//     zero effects ever compiled) as long as the two were independent proxies. The fix that
+//     actually worked: OptiScaler proxy-installs normally (installProxy() in main.js, same as
+//     every other game), ReShade deploys as a plain, non-proxying ReShade64.dll beside it, and
+//     OptiScaler.ini's [Plugins] LoadReshade=true makes OptiScaler itself explicitly load and
+//     coordinate with it -- see forceLoadReshadeForFeederGames() in main.js. Do not reintroduce
+//     the injector for this path; it looked reasonable and was empirically wrong.
 //   * OptiScaler must not drive its own upscaler/FrameGen alongside the Feeder -- that is
 //     exactly the conflict the Feeder's own README warns about ("turn off OptiScaler"). The
 //     DLSS5-only profile (hasNativeDlss()/DLSS5_ONLY_FORCED in main.js) already forces that
@@ -46,6 +55,22 @@ const FEEDER_ASSET_PATTERN = /^DLSS5-Feeder-.*\.zip$/i;
 // repo already downloaded and confirmed this exact URL's contents (see git history on the
 // deleted src/native-feeder/reshade.js, commit 0738a9e removed it, ec3083d added it).
 const RESHADE_SETUP_URL = 'https://reshade.me/downloads/ReShade_Setup_6.8.0_Addon.exe';
+
+// Plain filename, not a proxy name -- see the file header for why ReShade no longer proxies
+// anything itself in this integration. OptiScaler.ini's [Plugins] LoadReshade=true is what
+// makes OptiScaler actually load this.
+const RESHADE_DLL_NAME = 'ReShade64.dll';
+
+// ReShade's own universal shared headers -- #include'd by virtually every effect, including
+// DLSS5_Feed.fx itself ("ReShade.fxh") and the motion-vector shader's UI half
+// ("ReShadeUI.fxh"). Neither the Feeder's release zip nor any motion-vector-provider repo
+// ships these -- every real ReShade shader assumes they're already present from a full
+// reshade-shaders install. Missing them fails compilation with a preprocessor error naming
+// the include, not a missing-file error -- easy to miss in the log. Found the hard way on a
+// real deploy (Batman: Arkham Knight, 2026-09-09): compilation failed on both shaders until
+// these were fetched by hand from ReShade's own community shader repo.
+const RESHADE_COMMON_HEADERS = ['ReShade.fxh', 'ReShadeUI.fxh'];
+const RESHADE_SHADERS_REPO_RAW = 'https://raw.githubusercontent.com/crosire/reshade-shaders/slim/Shaders/';
 
 // Motion-vector provider. DLSS5_Feed.fx reads whichever shader DLSS5_MV_PROVIDER selects (a
 // preprocessor definition, five options per the Feeder's own README). Only two are wired up
@@ -99,35 +124,41 @@ function needsFeeder(dir) {
     !fs.existsSync(path.join(dir, 'nvngx_dlss.dll'));
 }
 
-function reshadeProxyName(api) {
-  if (api === 'opengl') return 'opengl32.dll';
-  if (api === 'dx11' || api === 'dx12') return 'dxgi.dll';
-  return null; // vulkan and anything else: out of scope, see file header.
+// Stable marker that a Feeder deploy has actually happened here -- unlike needsFeeder(), this
+// does NOT flip once the deploy itself places nvngx_dlss.dll (needsFeeder()'s absence check is
+// about whether a game needs the Feeder in the first place; this is about whether one has
+// already been deployed, which main.js needs to know separately -- e.g. to force
+// [Plugins] LoadReshade=true even after nvngx_dlss.dll's presence would otherwise make
+// needsFeeder() say "false" here).
+function feederDeployed(dir) {
+  return fs.existsSync(path.join(dir, 'dlss5-feed.addon64'));
 }
 
 // What's deployed, what's missing, and the real reason anything blocking is blocking -- same
 // "explain, don't just disable" posture as injectorReadiness() in injector.js.
 function feederReadiness(dir, api) {
   if (api === 'vulkan') return { ready: false, supported: false, reason: 'Vulkan needs a layer, not a ReShade add-on -- not yet supported by this app.' };
-  const proxyName = reshadeProxyName(api);
-  if (!proxyName) return { ready: false, supported: false, reason: `Render API not detected (${api || 'unknown'}) -- cannot pick ReShade's proxy DLL name.` };
+  if (api !== 'dx11' && api !== 'dx12') {
+    return { ready: false, supported: false, reason: `Render API not detected (${api || 'unknown'}) -- not yet supported by this app.` };
+  }
 
-  const reshadeInstalled = fs.existsSync(path.join(dir, proxyName));
+  const reshadeInstalled = fs.existsSync(path.join(dir, RESHADE_DLL_NAME));
   const addonInstalled = fs.existsSync(path.join(dir, 'dlss5-feed.addon64'));
   const fxInstalled = fs.existsSync(path.join(dir, 'reshade-shaders', 'Shaders', 'DLSS5_Feed.fx'));
+  const headersInstalled = RESHADE_COMMON_HEADERS.every((f) => fs.existsSync(path.join(dir, 'reshade-shaders', 'Shaders', f)));
   const dlssInstalled = fs.existsSync(path.join(dir, 'nvngx_dlss.dll'));
   const dlssnrInstalled = fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'));
 
   return {
     ready: true,
     supported: true,
-    proxyName,
     reshadeInstalled,
     addonInstalled,
     fxInstalled,
+    headersInstalled,
     dlssInstalled,
     dlssnrInstalled,
-    complete: reshadeInstalled && addonInstalled && fxInstalled && dlssInstalled && dlssnrInstalled,
+    complete: reshadeInstalled && addonInstalled && fxInstalled && headersInstalled && dlssInstalled && dlssnrInstalled,
   };
 }
 
@@ -157,22 +188,41 @@ async function resolveFeederAsset(ghHeaders) {
 
 // --- deploy steps ---------------------------------------------------------------------
 
-// ReShade itself. Its setup .exe is a self-extracting archive (an NSIS stub in front of a
-// zip); a plain Expand-Archive (what the rest of this app uses for ordinary zips -- see
-// deployStreamlineFolder/ensureREFrameworkForGame in main.js) fails on it because the End Of
-// Central Directory record isn't the very last thing in the file. zip.js's EOCD scan handles
-// both a plain zip and this case with the same code path.
-async function deployReShade(dir, api, cacheDir, ghHeaders) {
-  const proxyName = reshadeProxyName(api);
-  const dest = path.join(dir, proxyName);
-  if (fs.existsSync(dest)) return { deployed: false, reason: 'already present', file: proxyName };
+// ReShade itself, as a plain file (RESHADE_DLL_NAME) -- NOT a proxy. OptiScaler takes the
+// proxy slot in this integration (installProxy() in main.js) and explicitly loads this one
+// itself via [Plugins] LoadReshade=true; see the file header for why. Its setup .exe is a
+// self-extracting archive (an NSIS stub in front of a zip); a plain Expand-Archive (what the
+// rest of this app uses for ordinary zips -- see deployStreamlineFolder/ensureREFrameworkForGame
+// in main.js) fails on it because the End Of Central Directory record isn't the very last thing
+// in the file. zip.js's EOCD scan handles both a plain zip and this case with the same code path.
+async function deployReShade(dir, cacheDir, ghHeaders) {
+  const dest = path.join(dir, RESHADE_DLL_NAME);
+  if (fs.existsSync(dest)) return { deployed: false, reason: 'already present', file: RESHADE_DLL_NAME };
 
   const setupPath = await downloadToCache(RESHADE_SETUP_URL, cacheDir, path.basename(RESHADE_SETUP_URL), ghHeaders);
   const zip = openZip(setupPath);
   const entry = findEntry(zip, /^ReShade64\.dll$/i);
   if (!entry) throw new Error('ReShade64.dll not found in the downloaded ReShade setup');
   extractEntryTo(zip, entry, dest);
-  return { deployed: true, file: proxyName };
+  return { deployed: true, file: RESHADE_DLL_NAME };
+}
+
+// ReShade.fxh / ReShadeUI.fxh -- see the RESHADE_COMMON_HEADERS comment above for why these
+// are needed at all. Small text files, fetched directly rather than through the zip-cache
+// machinery the other deploy steps use.
+async function deployReShadeCommonHeaders(dir, ghHeaders) {
+  const shaderDir = path.join(dir, 'reshade-shaders', 'Shaders');
+  await fsp.mkdir(shaderDir, { recursive: true });
+  const deployed = [];
+  for (const name of RESHADE_COMMON_HEADERS) {
+    const dest = path.join(shaderDir, name);
+    if (fs.existsSync(dest)) continue;
+    const res = await fetch(RESHADE_SHADERS_REPO_RAW + name, { headers: { 'User-Agent': ghHeaders['User-Agent'] } });
+    if (!res.ok) throw new Error(`Could not fetch ${name}: HTTP ${res.status}`);
+    await fsp.writeFile(dest, await res.text(), 'utf8');
+    deployed.push(name);
+  }
+  return { deployed: deployed.length > 0, files: deployed };
 }
 
 // The Feeder add-on + its .fx, both from the one release zip -- the earlier, unrelated deploy
@@ -215,10 +265,16 @@ async function deployMvProvider(dir, providerId, cacheDir, ghHeaders) {
   const zipPath = await downloadToCache(provider.zipUrl, cacheDir, zipName, ghHeaders);
   const zip = openZip(zipPath);
 
-  const fxEntries = zip.entries.filter((e) => /\.fx$/i.test(e.name));
-  if (fxEntries.length === 0) throw new Error(`No .fx files found in ${provider.displayName}'s zip`);
+  // .fx AND .fxh -- a provider repo's .fx commonly #includes sibling .fxh files (found the hard
+  // way: JakobPCoder/ReshadeMotionEstimation ships MotionEstimation.fx alongside
+  // MotionEstimation.fxh/MotionEstimationUI.fxh/MotionVectors.fxh, and compilation fails on the
+  // missing includes if only the .fx is extracted).
+  const shaderEntries = zip.entries.filter((e) => /\.fxh?$/i.test(e.name));
+  if (!shaderEntries.some((e) => /\.fx$/i.test(e.name))) {
+    throw new Error(`No .fx files found in ${provider.displayName}'s zip`);
+  }
   const deployedFiles = [];
-  for (const entry of fxEntries) {
+  for (const entry of shaderEntries) {
     const dest = path.join(shaderDir, path.basename(entry.name));
     extractEntryTo(zip, entry, dest);
     deployedFiles.push(path.basename(entry.name));
@@ -294,15 +350,18 @@ function configureReShadeIni(dir) {
 
 // --- orchestration ---------------------------------------------------------------------
 
-// Deploys the whole Feeder stack for one game: ReShade, the add-on + its shader, the chosen
-// motion-vector provider, and nvngx_dlss.dll. Does NOT install OptiScaler -- the caller
-// (main.js's game:install handler) does that afterward via the injector, forcing the
-// DLSS5-only profile, the same way it already does for native-DLSS games. Keeping that step
-// out of this module avoids feeder.js depending on injector.js/autoConfigureGame and vice
+// Deploys the whole Feeder stack for one game: ReShade (plain file, not a proxy) + its common
+// shared headers, the add-on + its shader, the chosen motion-vector provider, and
+// nvngx_dlss.dll. Does NOT install OptiScaler and does NOT set [Plugins] LoadReshade -- the
+// caller (main.js's game:install handler, via autoConfigureGame/forceLoadReshadeForFeederGames)
+// does both afterward, proxy-installing OptiScaler the same way it does for every other game
+// and forcing LoadReshade=true so OptiScaler itself loads this ReShade64.dll. Keeping that step
+// out of this module avoids feeder.js depending on main.js's ini-patching helpers and vice
 // versa -- main.js is the one place that already composes both.
 async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifest, compareVersions, ghHeaders }) {
   const results = {};
-  results.reshade = await deployReShade(dir, api, cacheDir, ghHeaders);
+  results.reshade = await deployReShade(dir, cacheDir, ghHeaders);
+  results.commonHeaders = await deployReShadeCommonHeaders(dir, ghHeaders);
   results.addon = await deployFeederAddon(dir, cacheDir, ghHeaders);
   results.mvProvider = await deployMvProvider(dir, providerId, cacheDir, ghHeaders);
   results.dlss = await deployNvngxDlss(dir, getRhiManifest, compareVersions, cacheDir, ghHeaders);
@@ -315,9 +374,10 @@ module.exports = {
   MV_PROVIDERS,
   mvProviderList,
   needsFeeder,
-  reshadeProxyName,
+  feederDeployed,
   feederReadiness,
   deployReShade,
+  deployReShadeCommonHeaders,
   deployFeederAddon,
   deployMvProvider,
   deployNvngxDlss,

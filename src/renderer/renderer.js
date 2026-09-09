@@ -410,6 +410,17 @@ async function loadInjectorSection(game) {
     return;
   }
 
+  // Never for a Feeder game -- the Feeder can only find OptiScaler when it proxy-installs
+  // (LoadLibrary interception by name); injected under its own name, the Feeder logs "this
+  // game never loaded a DLL of that name" and never finds it. Confirmed on a real deploy
+  // (Batman: Arkham Knight, 2026-09-09). Proxy is the only supported mode there, so this
+  // whole toggle would just be a way to break it.
+  const feederStatus = await window.api.feederReadiness(game.exePath);
+  if (feederStatus.needed) {
+    section.classList.add('hidden');
+    return;
+  }
+
   const readiness = await window.api.injectorReadiness(settings.releaseFolder);
   const status = $('#game-injector-status');
   if (!readiness.ready) {
@@ -522,7 +533,7 @@ $('#btn-feeder-deploy').addEventListener('click', async () => {
   status.textContent = 'Deploying…';
   const res = await window.api.feederDeploy(game.exePath, providerId);
   if (res.ok) {
-    toast('Feeder stack deployed. Install OptiScaler via the injector (Launch mode above) to finish.');
+    toast('Feeder stack deployed. Install OptiScaler normally (Install button) to finish -- not the injector.');
   } else {
     toast(`Deploy failed: ${res.error}`);
   }

@@ -417,22 +417,25 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
     // The rename that actually makes the game load OptiScaler. Previously this only happened when
     // the user went and ran setup_windows.bat in a console afterwards; until they did, an
     // "Installed" badge meant nothing was hooked.
-    // A game with no native DLSS at all is Feeder territory (see feeder.js) -- ReShade owns the
-    // proxy slot there, not OptiScaler. Renaming OptiScaler.dll to dxgi.dll here would steal that
-    // slot right back out from under ReShade the moment Feeder deploy runs, so this game's
-    // OptiScaler instead stays a plain, unrenamed .dll in its own folder and loads via the
-    // injector at launch time (src/injector.js) -- nothing to do here but leave it alone.
-    const feederGame = feeder.needsFeeder(dir);
+    //
+    // A Feeder game (see feeder.js) proxy-installs exactly the same way as any other game --
+    // OptiScaler takes the proxy slot. ReShade is NOT a competing proxy here: it deploys as a
+    // plain ReShade64.dll, and OptiScaler itself loads it via [Plugins] LoadReshade=true (forced
+    // below, in autoConfigureGame). An earlier version of this used the injector for Feeder
+    // games instead, on the theory that OptiScaler-as-proxy would fight ReShade for the slot --
+    // that was wrong on both counts, confirmed on a real deploy (Batman: Arkham Knight,
+    // 2026-09-09): the Feeder couldn't find an injected OptiScaler at all ("this game never
+    // loaded a DLL of that name"), and two independent proxies (even different DLL names) meant
+    // ReShade's own Present hook never engaged. Do not reintroduce the injector here.
+    const feederGame = feeder.needsFeeder(dir) || feeder.feederDeployed(dir);
 
     let proxy = null;
     let proxyError = null;
-    if (!feederGame) {
-      try {
-        proxy = await installProxy(dir, proxyName || DEFAULT_PROXY);
-      } catch (err) {
-        // Not fatal: everything else is in place, and Run Setup is still there to do it by hand.
-        proxyError = err.message;
-      }
+    try {
+      proxy = await installProxy(dir, proxyName || DEFAULT_PROXY);
+    } catch (err) {
+      // Not fatal: everything else is in place, and Run Setup is still there to do it by hand.
+      proxyError = err.message;
     }
 
     const { api, applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix } = await autoConfigureGame(dir, exePath);
@@ -1136,6 +1139,15 @@ const DLSS5_ONLY_FORCED = [
   { section: 'FrameGen', key: 'Enabled', value: 'false' },
 ];
 
+// The one value that MUST be forced for a Feeder game: OptiScaler has to explicitly load
+// ReShade64.dll itself (feeder.js deploys it as a plain file, not a proxy) for the two to
+// coexist at all -- see the long comment on installProxy's caller in game:install for why.
+// Forced, not defaulted, for the same reason as DLSS5_ONLY_FORCED: a game Feeder-deployed
+// before this fix existed needs LoadReshade corrected, not left at whatever it already was.
+const LOAD_RESHADE_FORCED = [
+  { section: 'Plugins', key: 'LoadReshade', value: 'true' },
+];
+
 async function autoConfigureGame(dir, exePath) {
   const iniPath = path.join(dir, 'OptiScaler.ini');
   if (!fs.existsSync(iniPath)) return { api: null, applied: [] };
@@ -1181,7 +1193,8 @@ async function autoConfigureGame(dir, exePath) {
   const streamline = null;
 
   const applied = patchIniDefaults(iniPath, edits);
-  const forced = dlss5Only ? patchIniValues(iniPath, DLSS5_ONLY_FORCED) : [];
+  let forced = dlss5Only ? patchIniValues(iniPath, DLSS5_ONLY_FORCED) : [];
+  if (feeder.feederDeployed(dir)) forced = [...forced, ...patchIniValues(iniPath, LOAD_RESHADE_FORCED)];
   return {
     api, applied: [...applied, ...forced], streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix,
     profile: dlss5Only ? 'dlss5-only' : 'full',
