@@ -13,6 +13,7 @@ const injector = require('./injector');
 const feeder = require('./feeder');
 const lossless = require('./lossless');
 const lumaue = require('./lumaue');
+const ENGINE_KNOWN_GAMES = new Set(require('./engine-known-games.json').exeNames);
 const execFileAsync = promisify(execFile);
 
 const RELEASES_API = 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest';
@@ -690,21 +691,60 @@ ipcMain.handle('game:open-folder', (_evt, exePath) => {
   shell.openPath(gameDir(exePath));
 });
 
+// Guard against scanning something absurd (a multi-GB data blob happening to sit beside the
+// exe) -- every real D3D/Vulkan/OpenGL import lives in a normal-sized PE file, so skipping
+// anything past this is a safe, cheap filter, not a real limitation.
+const RENDER_API_SCAN_MAX_BYTES = 200 * 1024 * 1024;
+
+// The exe plus every top-level DLL beside it -- not the exe alone. RED Engine (Cyberpunk 2077,
+// The Witcher 3) never carries d3d11.dll/d3d12.dll as a literal string in its own exe (confirmed
+// against both real executables), and the same turned out true for RBDOOM-3-BFG, the DX12/Vulkan
+// community source port of DOOM 3: BFG Edition -- its D3D12 import lives in NVRHI's own DLL, not
+// the game's exe, so the old exe-only scan reported it as undetected. Scanning every sibling DLL
+// too catches that whole class of engine without a per-game special case, the same way
+// vulkan-1.dll's presence in the directory already worked before this without ever needing to be
+// found inside the exe's own bytes.
+async function findDllMarkers(dir, exePath, markerNames) {
+  const found = new Set();
+  let entries = [];
+  try {
+    entries = await fsp.readdir(dir);
+  } catch {
+    return found;
+  }
+
+  const dllPaths = entries.filter((f) => /\.dll$/i.test(f)).map((f) => path.join(dir, f));
+  const filesToScan = [exePath, ...dllPaths];
+
+  for (const filePath of filesToScan) {
+    try {
+      const st = await fsp.stat(filePath);
+      if (st.size > RENDER_API_SCAN_MAX_BYTES) continue;
+      const buf = await fsp.readFile(filePath);
+      for (const name of markerNames) {
+        if (found.has(name)) continue;
+        if (buf.includes(Buffer.from(name.toLowerCase(), 'ascii')) ||
+            buf.includes(Buffer.from(name.toUpperCase(), 'ascii'))) {
+          found.add(name);
+        }
+      }
+    } catch {
+    }
+  }
+  return found;
+}
+
 async function detectRenderApi(dir, exePath) {
   try {
     const entries = await fsp.readdir(dir);
     if (entries.some((f) => /^vulkan-1\.dll$/i.test(f) || /_vk(ulkan)?\.dll$/i.test(f))) return 'vulkan';
   } catch {
   }
-  try {
-    const buf = await fsp.readFile(exePath);
-    const has = (name) => buf.includes(Buffer.from(name.toLowerCase(), 'ascii')) ||
-      buf.includes(Buffer.from(name.toUpperCase(), 'ascii'));
-    if (has('vulkan-1.dll')) return 'vulkan';
-    if (has('d3d12.dll')) return 'dx12';
-    if (has('d3d11.dll')) return 'dx11';
-  } catch {
-  }
+
+  const found = await findDllMarkers(dir, exePath, ['vulkan-1.dll', 'd3d12.dll', 'd3d11.dll']);
+  if (found.has('vulkan-1.dll')) return 'vulkan';
+  if (found.has('d3d12.dll')) return 'dx12';
+  if (found.has('d3d11.dll')) return 'dx11';
   return null;
 }
 
@@ -744,8 +784,14 @@ async function detectInstallPath(dir, exePath) {
   const has = (name) =>
     buf.includes(Buffer.from(name.toLowerCase(), 'ascii')) || buf.includes(Buffer.from(name.toUpperCase(), 'ascii'));
 
+  // Same widened exe+directory scan detectRenderApi uses, not just the exe buffer -- an old-API
+  // game with its real import in a side DLL (the same class of case as RED Engine / RBDOOM-3-BFG
+  // above) would otherwise silently fall through to "Unknown" instead of a correct "not
+  // supported" reason. DOOM 3: BFG Edition's stock OpenGL release is the confirmed real case this
+  // closes: reported Unknown before, now correctly OPENGL / not supported.
+  const oldApiMarkers = await findDllMarkers(dir, exePath, OLD_API_MARKERS.flatMap(([, markers]) => markers));
   for (const [old, markers] of OLD_API_MARKERS) {
-    if (markers.some(has)) {
+    if (markers.some((m) => oldApiMarkers.has(m))) {
       return {
         api: old, recommend: 'unsupported', badge: old.toUpperCase(),
         reason: `${old.toUpperCase()} — OptiScaler has no hook here`
@@ -1825,6 +1871,16 @@ ipcMain.handle('update:checkManager', async () => {
 
 ipcMain.handle('update:openManagerReleasePage', () => {
   shell.openExternal(`https://github.com/${MANAGER_REPO}/releases/latest`);
+});
+
+// Closes the "blind install" gap without this app guessing at settings it hasn't verified:
+// tells the user whether OptiScaler_DLSSNR's own engine has ever been specifically tuned for
+// this exe (a real compiled-in Quirks.h entry) versus a completely default configuration. Does
+// NOT read or apply the actual quirk flags -- those stay engine-internal and can differ by
+// build; this is visibility only, not another source of auto-applied settings.
+ipcMain.handle('engine:hasKnownProfile', (_evt, { exePath }) => {
+  if (!exePath) return { ok: true, known: false };
+  return { ok: true, known: ENGINE_KNOWN_GAMES.has(path.basename(exePath).toLowerCase()) };
 });
 
 function findReleaseRoot(folder) {

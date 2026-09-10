@@ -61,5 +61,7 @@ contextBridge.exposeInMainWorld('api', {
   checkUpdate: () => ipcRenderer.invoke('update:check'),
   installUpdate: (payload) => ipcRenderer.invoke('update:install', payload),
   checkManagerUpdate: () => ipcRenderer.invoke('update:checkManager'),
-  openManagerReleasePage: () => ipcRenderer.invoke('update:openManagerReleasePage')
+  openManagerReleasePage: () => ipcRenderer.invoke('update:openManagerReleasePage'),
+
+  engineHasKnownProfile: (exePath) => ipcRenderer.invoke('engine:hasKnownProfile', { exePath })
 });

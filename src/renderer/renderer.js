@@ -324,12 +324,35 @@ async function openGameModal(game) {
   $('#steam-results').innerHTML = '';
   updateBannerPreview();
   gameModal.classList.remove('hidden');
+  await loadEngineProfileStatus(game);
   await loadFrameGenSection(game);
   await loadInjectorSection(game);
   await loadFeederSection(game);
   await loadOptiFgSection(game);
   await loadLosslessSection(game);
   await loadLumaUeSection(game);
+}
+
+// Turns a "blind install" into an informed one: says whether OptiScaler_DLSSNR's own engine has
+// a compiled-in compatibility entry for this exe (see engine-known-games.json's own header for
+// what that does and doesn't mean) or is running on a completely default configuration. Doesn't
+// change what gets installed -- visibility only, since this app doesn't know the actual quirk
+// flags and shouldn't guess at them.
+async function loadEngineProfileStatus(game) {
+  const el = $('#game-engine-profile-status');
+  if (!game || !game.exePath) {
+    el.classList.add('hidden');
+    return;
+  }
+  const res = await window.api.engineHasKnownProfile(game.exePath);
+  el.classList.remove('hidden');
+  if (res.known) {
+    el.className = 'status-line status-ok';
+    el.textContent = 'OptiScaler has a known compatibility profile built in for this exe.';
+  } else {
+    el.className = 'status-line';
+    el.textContent = 'No compiled-in compatibility profile for this exe -- default OptiScaler configuration.';
+  }
 }
 
 let frameGenVersionsLoaded = false;
