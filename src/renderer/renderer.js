@@ -1149,32 +1149,59 @@ async function autoUpdateOptiScalerRelease() {
 $('#btn-check-updates').addEventListener('click', async () => {
   const btn = $('#btn-check-updates');
   const statusEl = $('#update-status');
+  const managerStatusEl = $('#manager-update-status');
+  const mismatchEl = $('#manager-update-mismatch');
   btn.disabled = true;
   statusEl.className = 'status-line';
   statusEl.textContent = 'Checking…';
+  managerStatusEl.textContent = '';
+  mismatchEl.classList.add('hidden');
   $('#btn-install-update').classList.add('hidden');
 
-  const res = await window.api.checkUpdate();
+  const [res, managerRes] = await Promise.all([window.api.checkUpdate(), window.api.checkManagerUpdate()]);
   btn.disabled = false;
 
   if (!res.ok) {
     statusEl.className = 'status-line status-bad';
     statusEl.textContent = `Check failed: ${res.error}`;
+  } else {
+    pendingUpdate = res;
+    if (settings.installedVersion === res.tag) {
+      statusEl.className = 'status-line status-ok';
+      statusEl.textContent = `Engine up to date (${res.tag}).`;
+    } else {
+      statusEl.className = 'status-line';
+      statusEl.textContent = settings.installedVersion
+        ? `Engine update available: ${res.tag} (installed: ${settings.installedVersion})`
+        : `Latest engine release: ${res.tag} — not installed yet.`;
+      $('#btn-install-update').classList.remove('hidden');
+    }
+  }
+
+  if (!managerRes.ok) {
+    managerStatusEl.className = 'status-line status-bad';
+    managerStatusEl.textContent = `Manager check failed: ${managerRes.error}`;
     return;
   }
 
-  pendingUpdate = res;
-  if (settings.installedVersion === res.tag) {
-    statusEl.className = 'status-line status-ok';
-    statusEl.textContent = `Up to date (${res.tag}).`;
-  } else {
-    statusEl.className = 'status-line';
-    statusEl.textContent = settings.installedVersion
-      ? `Update available: ${res.tag} (installed: ${settings.installedVersion})`
-      : `Latest release: ${res.tag} — not installed yet.`;
-    $('#btn-install-update').classList.remove('hidden');
+  managerStatusEl.className = managerRes.upToDate ? 'status-line status-ok' : 'status-line';
+  managerStatusEl.textContent = managerRes.upToDate
+    ? `Manager up to date (v${managerRes.currentVersion}).`
+    : `Manager update available: ${managerRes.latestVersion} (running v${managerRes.currentVersion}).`;
+
+  // The real compatibility signal: does the engine actually installed right now match the one
+  // THIS Manager build shipped with and was tested against -- not just "are both independently
+  // latest", which two asynchronously-released repos don't guarantee. See update:checkManager's
+  // own comment in main.js for why.
+  if (managerRes.bundledEngineTag && settings.installedVersion && settings.installedVersion !== managerRes.bundledEngineTag) {
+    mismatchEl.classList.remove('hidden');
+    mismatchEl.textContent = `Version mismatch: this Manager (v${managerRes.currentVersion}) shipped tested with engine ` +
+      `${managerRes.bundledEngineTag}, but ${settings.installedVersion} is installed. Update the engine to ` +
+      `${managerRes.bundledEngineTag} above, or update the Manager itself, to bring them back in sync.`;
   }
 });
+
+$('#manager-update-status').addEventListener('click', () => window.api.openManagerReleasePage());
 
 $('#btn-install-update').addEventListener('click', async () => {
   if (!pendingUpdate) return;

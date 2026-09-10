@@ -1782,6 +1782,51 @@ ipcMain.handle('update:check', async () => {
   }
 });
 
+const MANAGER_REPO = 'mrcgibb9876-hash/OptiDLSS5-UI';
+
+// What engine version THIS running Manager build actually shipped with -- parsed off the
+// bundled zip asset name on the Manager's own GitHub release for its own current tag
+// (release.yml's "Fetch the OptiScaler_DLSSNR engine build" step names that asset
+// OptiScaler_DLSSNR-<tag>.zip). This is a stronger compatibility signal than "are both
+// independently the latest release of their own repo" -- two repos each being independently
+// up to date doesn't mean the two latest releases were ever tested together, but the pair a
+// single Manager release actually bundled and shipped was.
+ipcMain.handle('update:checkManager', async () => {
+  try {
+    const currentVersion = app.getVersion();
+    const currentTag = `v${currentVersion}`;
+
+    let bundledEngineTag = null;
+    const ownRes = await fetch(`https://api.github.com/repos/${MANAGER_REPO}/releases/tags/${encodeURIComponent(currentTag)}`, { headers: GITHUB_HEADERS });
+    if (ownRes.ok) {
+      const ownRelease = await ownRes.json();
+      const zipAsset = (ownRelease.assets || []).find((a) => /^OptiScaler_DLSSNR-.*\.zip$/i.test(a.name));
+      const m = zipAsset && zipAsset.name.match(/^OptiScaler_DLSSNR-(.+)\.zip$/i);
+      if (m) bundledEngineTag = m[1];
+    }
+
+    const latestRes = await fetch(`https://api.github.com/repos/${MANAGER_REPO}/releases/latest`, { headers: GITHUB_HEADERS });
+    if (!latestRes.ok) throw new Error(`GitHub API returned ${latestRes.status}`);
+    const latest = await latestRes.json();
+    const latestVersion = String(latest.tag_name || '').replace(/^v/i, '');
+
+    return {
+      ok: true,
+      currentVersion,
+      latestVersion,
+      upToDate: latestVersion ? compareStreamlineVersions(currentVersion, latestVersion) >= 0 : null,
+      releaseUrl: latest.html_url,
+      bundledEngineTag,
+    };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('update:openManagerReleasePage', () => {
+  shell.openExternal(`https://github.com/${MANAGER_REPO}/releases/latest`);
+});
+
 function findReleaseRoot(folder) {
   if (findSetupBat(folder)) return folder;
   try {

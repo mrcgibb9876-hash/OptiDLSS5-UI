@@ -59,5 +59,7 @@ contextBridge.exposeInMainWorld('api', {
   importLocalBanner: (sourcePath) => ipcRenderer.invoke('banner:import-local', sourcePath),
 
   checkUpdate: () => ipcRenderer.invoke('update:check'),
-  installUpdate: (payload) => ipcRenderer.invoke('update:install', payload)
+  installUpdate: (payload) => ipcRenderer.invoke('update:install', payload),
+  checkManagerUpdate: () => ipcRenderer.invoke('update:checkManager'),
+  openManagerReleasePage: () => ipcRenderer.invoke('update:openManagerReleasePage')
 });
