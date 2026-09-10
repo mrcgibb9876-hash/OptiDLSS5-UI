@@ -704,17 +704,18 @@ const RENDER_API_SCAN_MAX_BYTES = 200 * 1024 * 1024;
 // too catches that whole class of engine without a per-game special case, the same way
 // vulkan-1.dll's presence in the directory already worked before this without ever needing to be
 // found inside the exe's own bytes.
-async function findDllMarkers(dir, exePath, markerNames) {
+async function findDllMarkers(dir, exePath, markerNames, { exeOnly = false } = {}) {
   const found = new Set();
-  let entries = [];
-  try {
-    entries = await fsp.readdir(dir);
-  } catch {
-    return found;
-  }
+  let filesToScan = [exePath];
 
-  const dllPaths = entries.filter((f) => /\.dll$/i.test(f)).map((f) => path.join(dir, f));
-  const filesToScan = [exePath, ...dllPaths];
+  if (!exeOnly) {
+    try {
+      const entries = await fsp.readdir(dir);
+      const dllPaths = entries.filter((f) => /\.dll$/i.test(f)).map((f) => path.join(dir, f));
+      filesToScan = [exePath, ...dllPaths];
+    } catch {
+    }
+  }
 
   for (const filePath of filesToScan) {
     try {
@@ -734,6 +735,15 @@ async function findDllMarkers(dir, exePath, markerNames) {
   return found;
 }
 
+// Exe first, whole-directory scan only as a fallback when the exe alone says nothing at all.
+// The flat "combine every sibling DLL, Vulkan wins ties" version of this reported DOOM 3: BFG
+// Edition as Vulkan -- a false positive from some unrelated side DLL mentioning "vulkan-1.dll"
+// (Steam overlay, a codec, driver-capability-check middleware; not confirmed which, the report
+// didn't come with the actual files) overriding what the exe itself correctly said. RED Engine /
+// RBDOOM-3-BFG are exactly the opposite case -- the exe has NO marker at all, so only they ever
+// reach the fallback, which is where scanning sibling DLLs is actually needed. Preferring the
+// exe's own, unambiguous answer whenever it has one closes the false-positive case without
+// reopening the one this was built to fix.
 async function detectRenderApi(dir, exePath) {
   try {
     const entries = await fsp.readdir(dir);
@@ -741,7 +751,10 @@ async function detectRenderApi(dir, exePath) {
   } catch {
   }
 
-  const found = await findDllMarkers(dir, exePath, ['vulkan-1.dll', 'd3d12.dll', 'd3d11.dll']);
+  const apiNames = ['vulkan-1.dll', 'd3d12.dll', 'd3d11.dll'];
+  const exeOnly = await findDllMarkers(dir, exePath, apiNames, { exeOnly: true });
+  const found = exeOnly.size > 0 ? exeOnly : await findDllMarkers(dir, exePath, apiNames);
+
   if (found.has('vulkan-1.dll')) return 'vulkan';
   if (found.has('d3d12.dll')) return 'dx12';
   if (found.has('d3d11.dll')) return 'dx11';
@@ -784,12 +797,19 @@ async function detectInstallPath(dir, exePath) {
   const has = (name) =>
     buf.includes(Buffer.from(name.toLowerCase(), 'ascii')) || buf.includes(Buffer.from(name.toUpperCase(), 'ascii'));
 
-  // Same widened exe+directory scan detectRenderApi uses, not just the exe buffer -- an old-API
-  // game with its real import in a side DLL (the same class of case as RED Engine / RBDOOM-3-BFG
-  // above) would otherwise silently fall through to "Unknown" instead of a correct "not
-  // supported" reason. DOOM 3: BFG Edition's stock OpenGL release is the confirmed real case this
-  // closes: reported Unknown before, now correctly OPENGL / not supported.
-  const oldApiMarkers = await findDllMarkers(dir, exePath, OLD_API_MARKERS.flatMap(([, markers]) => markers));
+  // Same exe-first, directory-scan-as-fallback tiering detectRenderApi uses (see its own
+  // comment) -- an old-API game with its real import in a side DLL would otherwise silently fall
+  // through to "Unknown" instead of a correct "not supported" reason, but trusting every sibling
+  // DLL equally over the exe's own answer is what caused a real false positive (DOOM 3: BFG
+  // Edition briefly misreported as Vulkan from an unrelated side DLL). Note: DOOM 3: BFG Edition
+  // itself turned out NOT to be the stock OpenGL release this was written expecting -- it has a
+  // real Vulkan/DX12 marker somewhere, consistent with RBDOOM-3-BFG, the community DX12/Vulkan
+  // source port, not the original id Tech 4 OpenGL build. That was inferred from general research,
+  // never confirmed against this user's actual files -- don't trust that inference further.
+  const exeOnlyOldApi = await findDllMarkers(dir, exePath, OLD_API_MARKERS.flatMap(([, markers]) => markers), { exeOnly: true });
+  const oldApiMarkers = exeOnlyOldApi.size > 0
+    ? exeOnlyOldApi
+    : await findDllMarkers(dir, exePath, OLD_API_MARKERS.flatMap(([, markers]) => markers));
   for (const [old, markers] of OLD_API_MARKERS) {
     if (markers.some((m) => oldApiMarkers.has(m))) {
       return {
