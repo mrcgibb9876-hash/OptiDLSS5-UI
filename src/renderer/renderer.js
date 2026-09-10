@@ -3,6 +3,7 @@ let settings = { releaseFolder: '', nrDllPath: '', installedVersion: '', streaml
 let editingGameId = null;
 let pendingBanner = { appid: null, localPath: null };
 let pendingUpdate = null;
+let pendingManagerUpdate = null;
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -1209,12 +1210,15 @@ $('#btn-check-updates').addEventListener('click', async () => {
   const [res, managerRes] = await Promise.all([window.api.checkUpdate(), window.api.checkManagerUpdate()]);
   btn.disabled = false;
 
+  let engineNeedsUpdate = false;
   if (!res.ok) {
     statusEl.className = 'status-line status-bad';
     statusEl.textContent = `Check failed: ${res.error}`;
+    pendingUpdate = null;
   } else {
     pendingUpdate = res;
-    if (settings.installedVersion === res.tag) {
+    engineNeedsUpdate = settings.installedVersion !== res.tag;
+    if (!engineNeedsUpdate) {
       statusEl.className = 'status-line status-ok';
       statusEl.textContent = `Engine up to date (${res.tag}).`;
     } else {
@@ -1222,69 +1226,96 @@ $('#btn-check-updates').addEventListener('click', async () => {
       statusEl.textContent = settings.installedVersion
         ? `Engine update available: ${res.tag} (installed: ${settings.installedVersion})`
         : `Latest engine release: ${res.tag} — not installed yet.`;
-      $('#btn-install-update').classList.remove('hidden');
     }
   }
 
+  let managerNeedsUpdate = false;
   if (!managerRes.ok) {
     managerStatusEl.className = 'status-line status-bad';
     managerStatusEl.textContent = `Manager check failed: ${managerRes.error}`;
-    return;
+    pendingManagerUpdate = null;
+  } else {
+    pendingManagerUpdate = managerRes.upToDate ? null : managerRes;
+    managerNeedsUpdate = !managerRes.upToDate;
+    managerStatusEl.className = managerRes.upToDate ? 'status-line status-ok' : 'status-line';
+    managerStatusEl.textContent = managerRes.upToDate
+      ? `Manager up to date (v${managerRes.currentVersion}).`
+      : `Manager update available: ${managerRes.latestVersion} (running v${managerRes.currentVersion}).`;
+
+    // The real compatibility signal: does the engine actually installed right now match the one
+    // THIS Manager build shipped with and was tested against -- not just "are both independently
+    // latest", which two asynchronously-released repos don't guarantee. See update:checkManager's
+    // own comment in main.js for why.
+    if (managerRes.bundledEngineTag && settings.installedVersion && settings.installedVersion !== managerRes.bundledEngineTag) {
+      mismatchEl.classList.remove('hidden');
+      mismatchEl.textContent = `Version mismatch: this Manager (v${managerRes.currentVersion}) shipped tested with engine ` +
+        `${managerRes.bundledEngineTag}, but ${settings.installedVersion} is installed. Update the engine to ` +
+        `${managerRes.bundledEngineTag} above, or update the Manager itself, to bring them back in sync.`;
+    }
   }
 
-  managerStatusEl.className = managerRes.upToDate ? 'status-line status-ok' : 'status-line';
-  managerStatusEl.textContent = managerRes.upToDate
-    ? `Manager up to date (v${managerRes.currentVersion}).`
-    : `Manager update available: ${managerRes.latestVersion} (running v${managerRes.currentVersion}).`;
-
-  // The real compatibility signal: does the engine actually installed right now match the one
-  // THIS Manager build shipped with and was tested against -- not just "are both independently
-  // latest", which two asynchronously-released repos don't guarantee. See update:checkManager's
-  // own comment in main.js for why.
-  if (managerRes.bundledEngineTag && settings.installedVersion && settings.installedVersion !== managerRes.bundledEngineTag) {
-    mismatchEl.classList.remove('hidden');
-    mismatchEl.textContent = `Version mismatch: this Manager (v${managerRes.currentVersion}) shipped tested with engine ` +
-      `${managerRes.bundledEngineTag}, but ${settings.installedVersion} is installed. Update the engine to ` +
-      `${managerRes.bundledEngineTag} above, or update the Manager itself, to bring them back in sync.`;
+  // One button covers both from here -- see its own click handler for what "both" means when
+  // only the Manager needs it (there's no self-replacing installer, so that half opens the
+  // release page instead of downloading silently).
+  const installBtn = $('#btn-install-update');
+  if (engineNeedsUpdate || managerNeedsUpdate) {
+    installBtn.classList.remove('hidden');
+    installBtn.textContent = engineNeedsUpdate && managerNeedsUpdate ? 'Update Both'
+      : managerNeedsUpdate ? 'Get New Manager'
+      : 'Update Engine';
+  } else {
+    installBtn.classList.add('hidden');
   }
 });
 
-$('#manager-update-status').addEventListener('click', () => window.api.openManagerReleasePage());
-
 $('#btn-install-update').addEventListener('click', async () => {
-  if (!pendingUpdate) return;
   const btn = $('#btn-install-update');
   const statusEl = $('#update-status');
-  btn.disabled = true;
-  statusEl.className = 'status-line';
-  statusEl.textContent = `Downloading ${pendingUpdate.tag}…`;
+  const managerStatusEl = $('#manager-update-status');
 
-  const res = await window.api.installUpdate({
-    downloadUrl: pendingUpdate.downloadUrl,
-    assetName: pendingUpdate.assetName,
-    tag: pendingUpdate.tag,
-    targetFolder: settings.releaseFolder
-  });
+  if (pendingUpdate && settings.installedVersion !== pendingUpdate.tag) {
+    btn.disabled = true;
+    statusEl.className = 'status-line';
+    statusEl.textContent = `Downloading ${pendingUpdate.tag}…`;
 
-  btn.disabled = false;
+    const res = await window.api.installUpdate({
+      downloadUrl: pendingUpdate.downloadUrl,
+      assetName: pendingUpdate.assetName,
+      tag: pendingUpdate.tag,
+      targetFolder: settings.releaseFolder
+    });
 
-  if (!res.ok) {
-    statusEl.className = 'status-line status-bad';
-    statusEl.textContent = `Update failed: ${res.error}`;
-    return;
+    btn.disabled = false;
+
+    if (!res.ok) {
+      statusEl.className = 'status-line status-bad';
+      statusEl.textContent = `Update failed: ${res.error}`;
+      return;
+    }
+
+    settings.releaseFolder = res.folder;
+    settings.installedVersion = res.tag;
+    await window.api.saveSettings(settings);
+    $('#settings-release-folder').value = res.folder;
+    statusEl.className = 'status-line status-ok';
+    statusEl.textContent = `Installed ${res.tag}.`;
+    checkReleaseStatus();
+    refreshBannerVisibility();
+    toast(`OptiScaler engine updated to ${res.tag}`);
+    autoSyncStaleGames();
   }
 
-  settings.releaseFolder = res.folder;
-  settings.installedVersion = res.tag;
-  await window.api.saveSettings(settings);
-  $('#settings-release-folder').value = res.folder;
-  statusEl.className = 'status-line status-ok';
-  statusEl.textContent = `Installed ${res.tag}.`;
+  // No self-replacing installer for the Manager itself (deliberately -- see update:checkManager's
+  // own comment in main.js) -- the closest this can do in one click is open the release page for
+  // you rather than making you notice and click the separate status line yourself.
+  if (pendingManagerUpdate) {
+    await window.api.openManagerReleasePage();
+    managerStatusEl.className = 'status-line';
+    managerStatusEl.textContent = `Opened the release page for ${pendingManagerUpdate.latestVersion} -- install it and relaunch.`;
+    toast(`Grab Manager ${pendingManagerUpdate.latestVersion} from the page that just opened, then relaunch.`);
+  }
+
   btn.classList.add('hidden');
-  checkReleaseStatus();
-  refreshBannerVisibility();
-  toast(`OptiScaler updated to ${res.tag}`);
-  autoSyncStaleGames();
 });
 const scanModal = $('#scan-modal');
 let scanResults = [];
