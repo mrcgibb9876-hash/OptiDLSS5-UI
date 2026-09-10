@@ -179,6 +179,7 @@ body {
 .engine-badge-known { background: rgba(118,185,0,0.18); color: #9ed94f; border: 1px solid rgba(118,185,0,0.4); }
 .engine-badge-unsupported { background: rgba(229,72,77,0.16); color: #e5484d; border: 1px solid rgba(229,72,77,0.4); }
 .engine-badge-unknown { background: rgba(255,255,255,0.08); color: var(--text-dim); border: 1px solid rgba(255,255,255,0.15); }
+.api-badge { font-weight: 600; opacity: 0.9; }
 
 .card-body {
   padding: 12px;

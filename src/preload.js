@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('api', {
 
   gameStatus: (exePath) => ipcRenderer.invoke('game:status', exePath),
   detectPath: (exePath) => ipcRenderer.invoke('game:detect-path', exePath),
+  detectPathIfStale: (exePath, stored) => ipcRenderer.invoke('game:detect-path-if-stale', { exePath, stored }),
   installGame: (payload) => ipcRenderer.invoke('game:install', payload),
   syncGameIfStale: (payload) => ipcRenderer.invoke('game:sync-if-stale', payload),
   runSetup: (exePath) => ipcRenderer.invoke('game:run-setup', exePath),

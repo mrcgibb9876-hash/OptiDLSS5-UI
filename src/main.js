@@ -13,6 +13,7 @@ const injector = require('./injector');
 const feeder = require('./feeder');
 const lossless = require('./lossless');
 const lumaue = require('./lumaue');
+const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame } = require('./detect');
 const ENGINE_KNOWN_GAMES = new Set(require('./engine-known-games.json').exeNames);
 const execFileAsync = promisify(execFile);
 
@@ -691,152 +692,24 @@ ipcMain.handle('game:open-folder', (_evt, exePath) => {
   shell.openPath(gameDir(exePath));
 });
 
-// Guard against scanning something absurd (a multi-GB data blob happening to sit beside the
-// exe) -- every real D3D/Vulkan/OpenGL import lives in a normal-sized PE file, so skipping
-// anything past this is a safe, cheap filter, not a real limitation.
-const RENDER_API_SCAN_MAX_BYTES = 200 * 1024 * 1024;
-
-// The exe plus every top-level DLL beside it -- not the exe alone. RED Engine (Cyberpunk 2077,
-// The Witcher 3) never carries d3d11.dll/d3d12.dll as a literal string in its own exe (confirmed
-// against both real executables), and the same turned out true for RBDOOM-3-BFG, the DX12/Vulkan
-// community source port of DOOM 3: BFG Edition -- its D3D12 import lives in NVRHI's own DLL, not
-// the game's exe, so the old exe-only scan reported it as undetected. Scanning every sibling DLL
-// too catches that whole class of engine without a per-game special case, the same way
-// vulkan-1.dll's presence in the directory already worked before this without ever needing to be
-// found inside the exe's own bytes.
-async function findDllMarkers(dir, exePath, markerNames, { exeOnly = false } = {}) {
-  const found = new Set();
-  let filesToScan = [exePath];
-
-  if (!exeOnly) {
-    try {
-      const entries = await fsp.readdir(dir);
-      const dllPaths = entries.filter((f) => /\.dll$/i.test(f)).map((f) => path.join(dir, f));
-      filesToScan = [exePath, ...dllPaths];
-    } catch {
-    }
-  }
-
-  for (const filePath of filesToScan) {
-    try {
-      const st = await fsp.stat(filePath);
-      if (st.size > RENDER_API_SCAN_MAX_BYTES) continue;
-      const buf = await fsp.readFile(filePath);
-      for (const name of markerNames) {
-        if (found.has(name)) continue;
-        if (buf.includes(Buffer.from(name.toLowerCase(), 'ascii')) ||
-            buf.includes(Buffer.from(name.toUpperCase(), 'ascii'))) {
-          found.add(name);
-        }
-      }
-    } catch {
-    }
-  }
-  return found;
-}
-
-// Exe first, whole-directory scan only as a fallback when the exe alone says nothing at all.
-// The flat "combine every sibling DLL, Vulkan wins ties" version of this reported DOOM 3: BFG
-// Edition as Vulkan -- a false positive from some unrelated side DLL mentioning "vulkan-1.dll"
-// (Steam overlay, a codec, driver-capability-check middleware; not confirmed which, the report
-// didn't come with the actual files) overriding what the exe itself correctly said. RED Engine /
-// RBDOOM-3-BFG are exactly the opposite case -- the exe has NO marker at all, so only they ever
-// reach the fallback, which is where scanning sibling DLLs is actually needed. Preferring the
-// exe's own, unambiguous answer whenever it has one closes the false-positive case without
-// reopening the one this was built to fix.
-async function detectRenderApi(dir, exePath) {
-  try {
-    const entries = await fsp.readdir(dir);
-    if (entries.some((f) => /^vulkan-1\.dll$/i.test(f) || /_vk(ulkan)?\.dll$/i.test(f))) return 'vulkan';
-  } catch {
-  }
-
-  const apiNames = ['vulkan-1.dll', 'd3d12.dll', 'd3d11.dll'];
-  const exeOnly = await findDllMarkers(dir, exePath, apiNames, { exeOnly: true });
-  const found = exeOnly.size > 0 ? exeOnly : await findDllMarkers(dir, exePath, apiNames);
-
-  if (found.has('vulkan-1.dll')) return 'vulkan';
-  if (found.has('d3d12.dll')) return 'dx12';
-  if (found.has('d3d11.dll')) return 'dx11';
-  return null;
-}
-
-const OLD_API_MARKERS = [
-    ['dx9', ['d3d9.dll', 'd3d8.dll']],
-    ['dx10', ['d3d10.dll', 'd3d10core.dll']],
-    ['opengl', ['opengl32.dll']]
-];
-
-// `badge` is the short chip shown on the card; `reason` is the longer explanation that goes in its
-// tooltip. Engine identity (RE Engine, RED Engine) takes the badge over the raw graphics API when
-// both are known -- which tool matters (REFramework, etc.) is more useful at a glance than DX/Vulkan.
-async function detectInstallPath(dir, exePath) {
-  const api = await detectRenderApi(dir, exePath);
-
-  if (isReEngineGame(dir)) {
-    return {
-      api, recommend: 'optiscaler', badge: 'RE Engine',
-      reason: 'RE Engine (Capcom) — needs REFramework, which this app fetches automatically'
-    };
-  }
-
-  if (api === 'vulkan' || api === 'dx12' || api === 'dx11') {
-    return {
-      api, recommend: 'optiscaler', badge: api.toUpperCase(),
-      reason: `${api.toUpperCase()} — OptiScaler hooks this directly`
-    };
-  }
-
-  let buf = null;
-  try {
-    buf = await fsp.readFile(exePath);
-  } catch {
-    return { api: null, recommend: 'unknown', badge: 'Unknown', reason: 'could not read the executable' };
-  }
-
-  const has = (name) =>
-    buf.includes(Buffer.from(name.toLowerCase(), 'ascii')) || buf.includes(Buffer.from(name.toUpperCase(), 'ascii'));
-
-  // Same exe-first, directory-scan-as-fallback tiering detectRenderApi uses (see its own
-  // comment) -- an old-API game with its real import in a side DLL would otherwise silently fall
-  // through to "Unknown" instead of a correct "not supported" reason, but trusting every sibling
-  // DLL equally over the exe's own answer is what caused a real false positive (DOOM 3: BFG
-  // Edition briefly misreported as Vulkan from an unrelated side DLL). Note: DOOM 3: BFG Edition
-  // itself turned out NOT to be the stock OpenGL release this was written expecting -- it has a
-  // real Vulkan/DX12 marker somewhere, consistent with RBDOOM-3-BFG, the community DX12/Vulkan
-  // source port, not the original id Tech 4 OpenGL build. That was inferred from general research,
-  // never confirmed against this user's actual files -- don't trust that inference further.
-  const exeOnlyOldApi = await findDllMarkers(dir, exePath, OLD_API_MARKERS.flatMap(([, markers]) => markers), { exeOnly: true });
-  const oldApiMarkers = exeOnlyOldApi.size > 0
-    ? exeOnlyOldApi
-    : await findDllMarkers(dir, exePath, OLD_API_MARKERS.flatMap(([, markers]) => markers));
-  for (const [old, markers] of OLD_API_MARKERS) {
-    if (markers.some((m) => oldApiMarkers.has(m))) {
-      return {
-        api: old, recommend: 'unsupported', badge: old.toUpperCase(),
-        reason: `${old.toUpperCase()} — OptiScaler has no hook here`
-      };
-    }
-  }
-
-  // REDengine (Cyberpunk 2077, The Witcher 3) never fails detectRenderApi's d3d11.dll/d3d12.dll
-  // scan because it doesn't succeed either -- confirmed against both games' real executables,
-  // neither contains that literal string, so the DLL is loaded some other way than a static
-  // import. "REDengine" and "CD PROJEKT" are both in there in plain text, though.
-  if (has('redengine') || has('cd projekt')) {
-    return {
-      api: null, recommend: 'optiscaler', badge: 'RED Engine',
-      reason: 'RED Engine (CD Projekt Red) — graphics API not detected, but OptiScaler is commonly used with this engine'
-    };
-  }
-
-  return { api: null, recommend: 'unknown', badge: 'Unknown', reason: 'could not tell which graphics API this uses' };
-}
-
+// Engine + graphics API detection lives in detect.js. Results are cached per game in games.json;
+// the renderer asks for a refresh through game:detect-path-if-stale, which re-runs detection when
+// the rules have changed since the cached result (DETECT_VERSION) or the result was provisional
+// (a Unity game that has not been run yet, so its Player.log could not settle the API).
 ipcMain.handle('game:detect-path', async (_evt, exePath) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) return { recommend: 'unknown', reason: 'executable not found' };
-    return await detectInstallPath(gameDir(exePath), exePath);
+    return await detectGame(gameDir(exePath), exePath);
+  } catch (error) {
+    return { recommend: 'unknown', reason: String(error && error.message ? error.message : error) };
+  }
+});
+
+ipcMain.handle('game:detect-path-if-stale', async (_evt, { exePath, stored }) => {
+  if (!isDetectionStale(stored)) return null;
+  try {
+    if (!exePath || !fs.existsSync(exePath)) return { recommend: 'unknown', reason: 'executable not found' };
+    return await detectGame(gameDir(exePath), exePath);
   } catch (error) {
     return { recommend: 'unknown', reason: String(error && error.message ? error.message : error) };
   }
@@ -1205,14 +1078,6 @@ async function deployStreamlineFolder(dir, exePath) {
   };
 }
 
-function isReEngineGame(dir) {
-  try {
-    return fs.readdirSync(dir).some((f) => /^re_chunk_000\.pak$/i.test(f));
-  } catch {
-    return false;
-  }
-}
-
 // The ini keys RE Engine needs, from a tested Dragon's Dogma 2 configuration.
 //
 // These are FORCED, not defaulted, because two of them are values that crash rather than values
@@ -1454,9 +1319,13 @@ const DLSS5_ONLY_FORCED = [
 // game's DLSS means saying `dlss` explicitly. Forced, because a stale `auto` from an earlier
 // install is exactly the case that bites.
 const UPSCALER_KEY_FOR_API = { dx12: 'Dx12Upscaler', dx11: 'Dx11Upscaler', vulkan: 'VulkanUpscaler' };
-function keepGamesOwnDlss(api) {
-  const key = UPSCALER_KEY_FOR_API[api];
-  return key ? [{ section: 'Upscalers', key, value: 'dlss' }] : [];
+// Every API the game can run on gets its key, not just the one it defaults to: a Unity or Unreal
+// game that also ships a DX12 path must keep its DLSS there too, and an unused key is harmless.
+function keepGamesOwnDlss(apis) {
+  return apis
+    .map((api) => UPSCALER_KEY_FOR_API[api])
+    .filter(Boolean)
+    .map((key) => ({ section: 'Upscalers', key, value: 'dlss' }));
 }
 
 // The one value that MUST be forced for a Feeder game: OptiScaler has to explicitly load
@@ -1524,7 +1393,7 @@ async function autoConfigureGame(dir, exePath) {
   const iniPath = path.join(dir, 'OptiScaler.ini');
   if (!fs.existsSync(iniPath)) return { api: null, applied: [] };
 
-  const api = await detectRenderApi(dir, exePath);
+  const { api, apis } = await detectGame(dir, exePath);
   const dlss5Only = hasNativeDlss(dir);
   // hasNativeDlss() just checks for nvngx_dlss.dll on disk -- for a Feeder game that file was
   // placed by the Feeder deploy itself, not the game, so this alone can't tell native DLSS
@@ -1534,11 +1403,7 @@ async function autoConfigureGame(dir, exePath) {
   const optiFgOn = dlss5Only && api === 'dx12' && !isFeederGame && isOptiFgEnabled(dir);
   const edits = [];
 
-  if (!dlss5Only) {
-    if (api === 'dx12') edits.push({ section: 'Upscalers', key: 'Dx12Upscaler', value: 'dlss' });
-    else if (api === 'dx11') edits.push({ section: 'Upscalers', key: 'Dx11Upscaler', value: 'dlss' });
-    else if (api === 'vulkan') edits.push({ section: 'Upscalers', key: 'VulkanUpscaler', value: 'dlss' });
-  }
+  if (!dlss5Only) edits.push(...keepGamesOwnDlss(apis));
 
   // Only force DlssNr on when the actual model file is present -- forcing it on every game
   // regardless (including ones where NR was never installed) risks the pass trying to initialize
@@ -1574,7 +1439,7 @@ async function autoConfigureGame(dir, exePath) {
   // A DLSS-5-only game keeps its own DLSS whether or not OptiFG is layered on -- see
   // keepGamesOwnDlss for why the upscaler key cannot be left at auto.
   let forced = dlss5Only
-    ? patchIniValues(iniPath, [...(optiFgOn ? OPTIFG_FORCED : DLSS5_ONLY_FORCED), ...keepGamesOwnDlss(api)])
+    ? patchIniValues(iniPath, [...(optiFgOn ? OPTIFG_FORCED : DLSS5_ONLY_FORCED), ...keepGamesOwnDlss(apis)])
     : [];
   if (feeder.feederDeployed(dir)) forced = [...forced, ...patchIniValues(iniPath, LOAD_RESHADE_FORCED)];
   // Luma UE deploys its own ReShade64.dll the same non-proxying way the Feeder does (see

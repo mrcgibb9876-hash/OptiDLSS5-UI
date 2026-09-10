@@ -175,20 +175,27 @@ async function applyRecommendation(game, card, backends) {
   const install = card.querySelector('.btn-install');
   let detected = game.detectedPath;
 
-  if (!detected) {
-    detected = await window.api.detectPath(game.exePath);
-    game.detectedPath = detected;
+  // Re-detects when the cached result predates the current detection rules or was provisional.
+  const fresh = await window.api.detectPathIfStale(game.exePath, detected);
+  if (fresh && JSON.stringify(fresh) !== JSON.stringify(detected)) {
+    detected = fresh;
+    game.detectedPath = fresh;
     window.api.saveGames(games);
   }
+  detected = detected || fresh || { recommend: 'unknown', reason: 'not detected yet' };
 
   if (!line) return;
   const canRecommendInstall = !backends.optiscaler;
-  const badgeText = detected.badge || (detected.api ? detected.api.toUpperCase() : 'Unknown');
   const badgeClass = detected.recommend === 'unsupported' ? 'engine-badge-unsupported'
     : detected.recommend === 'optiscaler' ? 'engine-badge-known'
     : 'engine-badge-unknown';
+  const title = escapeHtml(detected.reason);
+  const engineText = detected.engine || (detected.apiBadge ? null : (detected.badge || 'Unknown'));
+  const chips = [];
+  if (engineText) chips.push(`<span class="engine-badge ${badgeClass}" title="${title}">${escapeHtml(engineText)}</span>`);
+  if (detected.apiBadge) chips.push(`<span class="engine-badge api-badge ${badgeClass}" title="${title}">${escapeHtml(detected.apiBadge)}</span>`);
 
-  line.innerHTML = `<span class="engine-badge ${badgeClass}" title="${escapeHtml(detected.reason)}">${escapeHtml(badgeText)}</span>`;
+  line.innerHTML = chips.join(' ');
 
   if (detected.recommend === 'unsupported') {
     install.classList.remove('btn-primary');
