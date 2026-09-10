@@ -173,7 +173,7 @@ ipcMain.handle('injector:steamOption', (_evt, { releaseFolder } = {}) => {
 });
 
 // Non-Steam "Launch now": spawn the game through the injector directly, detached.
-ipcMain.handle('injector:launch', (_evt, { exePath, releaseFolder } = {}) => {
+ipcMain.handle('injector:launch', async (_evt, { exePath, releaseFolder } = {}) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const readiness = injector.injectorReadiness({
@@ -183,12 +183,19 @@ ipcMain.handle('injector:launch', (_evt, { exePath, releaseFolder } = {}) => {
       releaseFolder,
     });
     if (!readiness.ready) throw new Error(readiness.reason);
-    injector.launchThroughInjector(spawn, {
+    // Await the injector itself (not the game -- the injector exits right after injecting),
+    // so an anti-cheat refusal, a 32-bit game or an early exit reaches the card as the real
+    // reason instead of a false "launched".
+    const result = await injector.launchThroughInjector(spawn, {
       injectorExe: readiness.injectorExe,
       dllPath: readiness.dllPath,
       gameExe: exePath,
     });
-    return { ok: true };
+    if (!result.ok) {
+      const detail = result.stderr ? ` (${result.stderr.split('\n').pop()})` : '';
+      throw new Error(`${result.reason}${detail}`);
+    }
+    return { ok: true, reason: result.reason };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
