@@ -47,6 +47,14 @@ jobs:
     - name: Install
       run: npm ci
 
+    - name: Build DLSS5Injector.exe
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat" || call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+        cd tools\DLSS5Injector
+        cl /std:c++17 /EHsc /O2 /Fe:DLSS5Injector.exe DLSS5Injector.cpp
+        if not exist DLSS5Injector.exe exit /b 1
+
     - name: Build
       run: npm run dist
 
@@ -70,6 +78,15 @@ jobs:
 
           $mb = [math]::Round((Get-Item $file).Length / 1MB, 1)
           Write-Output "$file  ($mb MB)"
+        }
+
+        # DLSS5Injector.exe is gitignored (built above, not committed) and only reaches the
+        # installer via extraResources -- confirmed live that a missing source file there fails
+        # silently rather than failing the build, so v1.7.0 shipped without it. Check the actual
+        # packaged output, not just that the build step didn't error.
+        if (-Not (Test-Path "dist\win-unpacked\resources\DLSS5Injector.exe")) {
+          Write-Error "DLSS5Injector.exe did not make it into the packaged app -- the injector feature would ship broken."
+          exit 1
         }
 
     - name: Fetch the OptiScaler_DLSSNR engine build
