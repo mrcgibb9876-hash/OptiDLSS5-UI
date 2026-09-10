@@ -18,7 +18,7 @@
 //   runs against an uninitialised loader and crashes or deadlocks. So instead:
 //       CreateProcess(CREATE_SUSPENDED)    -- a clean handle, nothing loaded yet
 //       ResumeThread                       -- let the loader initialise
-//       wait for the process to settle     -- WaitForInputIdle, then a short poll
+//       wait for the loader to finish      -- until user32.dll is loaded (a real signal)
 //       CreateRemoteThread -> LoadLibraryW -- standard, documented, non-stealth
 //   A few hundred ms "late" is fine: OptiScaler installs its hooks lazily and the
 //   upscaler is not created until a save is loaded anyway.
@@ -27,6 +27,8 @@
 //       cl /std:c++17 /EHsc /O2 /Fe:DLSS5Injector.exe DLSS5Injector.cpp
 //   The libs it needs (user32, psapi) are pinned below with #pragma comment, so no
 //   /link line is required. 64-bit only; every DLSS title is x64.
+//
+// EXIT CODES: 0 ok, 1 error, 2 usage, 3 anti-cheat refused, 4 32-bit game, 5 exited early.
 //
 // USAGE
 //       DLSS5Injector.exe [--dll <OptiScaler.dll>] [--] <game.exe> [game args...]
@@ -39,9 +41,14 @@
 //   Steam expands %command% to the real game command line, so the injector wraps the
 //   game Steam would have run -- playtime, overlay and cloud saves all keep working.
 //   The trailing "--" matters: it stops the game's own switches being read as ours.
+//
+// STATUS: reviewed second pass, still written without a Windows box to compile or run it
+//   on. Build it and test on one game before trusting it.
 
 #include <windows.h>
 #include <psapi.h>
+#include <algorithm>
+#include <cwctype>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -52,13 +59,15 @@
 
 namespace fs = std::filesystem;
 
-static void fail(const std::string& msg, bool withLastError = true) {
-    std::cerr << "DLSS5Injector: " << msg;
+// Wide throughout: fs::path::string() narrows through the ANSI code page and THROWS on a
+// character it cannot represent -- a Norwegian path is enough to crash the error path.
+static void fail(const std::wstring& msg, bool withLastError = true) {
+    std::wcerr << L"DLSS5Injector: " << msg;
     if (withLastError) {
         DWORD e = GetLastError();
-        if (e) std::cerr << " (GetLastError=" << e << ")";
+        if (e) std::wcerr << L" (GetLastError=" << e << L")";
     }
-    std::cerr << "\n";
+    std::wcerr << L"\n";
 }
 
 // Anti-cheat files that commonly sit in a game's tree. If any is present we refuse:
@@ -71,8 +80,14 @@ static const wchar_t* kAntiCheatMarkers[] = {
 };
 
 static bool looksLikeAntiCheat(const fs::path& gameExe) {
-    std::error_code ec;
+    // Anti-cheat usually lives at the install root, while the exe is often two folders
+    // down (Game\Binaries\Win64\game.exe). Scan from two parents up, so the root is
+    // covered, but cap the depth so a huge install does not take seconds to walk.
     fs::path root = gameExe.parent_path();
+    for (int up = 0; up < 2 && root.has_parent_path() && root.parent_path() != root; ++up)
+        root = root.parent_path();
+
+    std::error_code ec;
     for (auto it = fs::recursive_directory_iterator(
              root, fs::directory_options::skip_permission_denied, ec);
          it != fs::recursive_directory_iterator(); it.increment(ec)) {
@@ -100,17 +115,35 @@ static LPTHREAD_START_ROUTINE remoteLoadLibraryW() {
 // Give the freshly-resumed process a moment to finish its own loader init before we
 // create a remote thread in it. WaitForInputIdle handles GUI apps; the poll is a
 // floor for everything else.
-static void waitForProcessInit(HANDLE hProcess) {
-    WaitForInputIdle(hProcess, 4000); // returns fast for most GUI games; harmless otherwise
-    // Floor: ensure the module list is populated (loader has run) before injecting.
-    for (int i = 0; i < 40; ++i) {           // up to ~4s
-        HMODULE mods[8];
-        DWORD needed = 0;
-        if (EnumProcessModulesEx(hProcess, mods, sizeof(mods), &needed, LIST_MODULES_ALL)
-            && needed >= sizeof(HMODULE) * 3) // ntdll + kernel32 + at least one more
-            break;
+static bool processHasModule(HANDLE hProcess, const wchar_t* baseName) {
+    HMODULE mods[1024];
+    DWORD needed = 0;
+    if (!EnumProcessModulesEx(hProcess, mods, sizeof(mods), &needed, LIST_MODULES_ALL))
+        return false;
+    const DWORD count = (std::min)(needed / (DWORD)sizeof(HMODULE), (DWORD)1024);
+    for (DWORD i = 0; i < count; ++i) {
+        wchar_t name[MAX_PATH];
+        if (GetModuleBaseNameW(hProcess, mods[i], name, MAX_PATH) && _wcsicmp(name, baseName) == 0)
+            return true;
+    }
+    return false;
+}
+
+// Wait until the target's loader has genuinely finished. ntdll, kernel32 and KernelBase
+// are mapped before the process even resumes, so counting modules proves nothing; the
+// presence of user32.dll does -- it is loaded by the process's own initialisation, after
+// LdrpInitializeProcess, and every game pulls it in. Falls back to a fixed pause for the
+// rare headless target. Returns false if the process died while we waited (a launcher
+// that relaunches the real game is the usual reason).
+static bool waitForProcessInit(HANDLE hProcess) {
+    WaitForInputIdle(hProcess, 3000); // fast for GUI apps; WAIT_FAILED (no queue) is fine
+    for (int i = 0; i < 100; ++i) {   // up to ~10s
+        if (WaitForSingleObject(hProcess, 0) == WAIT_OBJECT_0) return false; // it exited
+        if (processHasModule(hProcess, L"user32.dll")) return true;
         Sleep(100);
     }
+    Sleep(500); // headless target: give the loader a clear margin and carry on
+    return WaitForSingleObject(hProcess, 0) != WAIT_OBJECT_0;
 }
 
 static bool inject(HANDLE hProcess, const fs::path& dll) {
@@ -118,21 +151,21 @@ static bool inject(HANDLE hProcess, const fs::path& dll) {
     const SIZE_T bytes = (path.size() + 1) * sizeof(wchar_t);
 
     LPTHREAD_START_ROUTINE loadLib = remoteLoadLibraryW();
-    if (!loadLib) { fail("could not resolve LoadLibraryW"); return false; }
+    if (!loadLib) { fail(L"could not resolve LoadLibraryW"); return false; }
 
     LPVOID remote = VirtualAllocEx(hProcess, nullptr, bytes, MEM_COMMIT | MEM_RESERVE,
                                    PAGE_READWRITE);
-    if (!remote) { fail("VirtualAllocEx failed"); return false; }
+    if (!remote) { fail(L"VirtualAllocEx failed"); return false; }
 
     if (!WriteProcessMemory(hProcess, remote, path.c_str(), bytes, nullptr)) {
-        fail("WriteProcessMemory failed");
+        fail(L"WriteProcessMemory failed");
         VirtualFreeEx(hProcess, remote, 0, MEM_RELEASE);
         return false;
     }
 
     HANDLE hThread = CreateRemoteThread(hProcess, nullptr, 0, loadLib, remote, 0, nullptr);
     if (!hThread) {
-        fail("CreateRemoteThread failed");
+        fail(L"CreateRemoteThread failed");
         VirtualFreeEx(hProcess, remote, 0, MEM_RELEASE);
         return false;
     }
@@ -148,7 +181,7 @@ static bool inject(HANDLE hProcess, const fs::path& dll) {
     VirtualFreeEx(hProcess, remote, 0, MEM_RELEASE);
 
     if (exitCode == 0) {
-        fail("remote LoadLibraryW returned NULL -- the DLL failed to load", false);
+        fail(L"remote LoadLibraryW returned NULL -- the DLL failed to load", false);
         return false;
     }
     return true;
@@ -156,10 +189,18 @@ static bool inject(HANDLE hProcess, const fs::path& dll) {
 
 // Build a mutable command line: "game.exe" arg1 arg2 ...  (CreateProcessW needs a
 // writable buffer, and argv[0] must be quoted in case the path has spaces.)
+static std::wstring quoteArg(const std::wstring& a) {
+    if (!a.empty() && a.find_first_of(L" \t\"") == std::wstring::npos) return a;
+    std::wstring out = L"\"";
+    for (wchar_t c : a) { if (c == L'\"') out += L'\\'; out += c; }
+    out += L"\"";
+    return out;
+}
+
 static std::wstring buildCommandLine(const fs::path& exe,
                                      const std::vector<std::wstring>& args) {
     std::wstring cl = L"\"" + fs::absolute(exe).wstring() + L"\"";
-    for (const auto& a : args) cl += L" " + a;
+    for (const auto& a : args) cl += L" " + quoteArg(a);
     return cl;
 }
 
@@ -189,17 +230,17 @@ int wmain(int argc, wchar_t** argv) {
         }
     }
 
-    if (gameExe.empty()) { fail("no game executable given", false); return 2; }
+    if (gameExe.empty()) { fail(L"no game executable given", false); return 2; }
 
     // Default DLL: OptiScaler.dll next to this injector executable.
     if (dll.empty()) {
-        wchar_t self[MAX_PATH];
-        GetModuleFileNameW(nullptr, self, MAX_PATH);
-        dll = fs::path(self).parent_path() / L"OptiScaler.dll";
+        std::vector<wchar_t> self(32768);
+        GetModuleFileNameW(nullptr, self.data(), (DWORD)self.size());
+        dll = fs::path(self.data()).parent_path() / L"OptiScaler.dll";
     }
 
-    if (!fs::exists(gameExe)) { fail("game exe not found: " + gameExe.string(), false); return 1; }
-    if (!fs::exists(dll))     { fail("OptiScaler.dll not found: " + dll.string(), false); return 1; }
+    if (!fs::exists(gameExe)) { fail(L"game exe not found: " + gameExe.wstring(), false); return 1; }
+    if (!fs::exists(dll))     { fail(L"OptiScaler.dll not found: " + dll.wstring(), false); return 1; }
 
     if (looksLikeAntiCheat(gameExe)) {
         std::wcerr << L"\nDLSS5Injector: this game appears to ship an anti-cheat.\n"
@@ -223,12 +264,31 @@ int wmain(int argc, wchar_t** argv) {
     if (!CreateProcessW(fs::absolute(gameExe).c_str(), cmdBuf.data(), nullptr, nullptr,
                         FALSE, CREATE_SUSPENDED, nullptr,
                         fs::absolute(gameExe).parent_path().c_str(), &si, &pi)) {
-        fail("CreateProcess failed");
+        fail(L"CreateProcess failed");
         return 1;
     }
 
+    // A 64-bit LoadLibraryW address means nothing inside a 32-bit process; injecting would
+    // crash the game. Check while it is still suspended so refusing leaves no zombie.
+    BOOL isWow64 = FALSE;
+    if (IsWow64Process(pi.hProcess, &isWow64) && isWow64) {
+        TerminateProcess(pi.hProcess, 1);
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        fail(L"this is a 32-bit game; this injector and OptiScaler are 64-bit only", false);
+        return 4;
+    }
+
     ResumeThread(pi.hThread);
-    waitForProcessInit(pi.hProcess);
+
+    if (!waitForProcessInit(pi.hProcess)) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        fail(L"the process exited before it could be injected. If this game starts a "
+             L"launcher that then runs the real executable, point the injector at the real "
+             L"executable instead (or use the Steam %command% route).", false);
+        return 5;
+    }
 
     bool ok = inject(pi.hProcess, dll);
     if (ok) {
