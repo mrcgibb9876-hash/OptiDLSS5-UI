@@ -1316,6 +1316,20 @@ const DLSS5_ONLY_FORCED = [
   { section: 'FrameGen', key: 'Enabled', value: 'false' },
 ];
 
+// The SECOND value that must be forced for a "DLSS 5 only" game, and the one that is easy
+// to get wrong: the upscaler key. Leaving it alone is NOT "leave the game's DLSS alone". An
+// unset/auto upscaler is OptiScaler's own default backend -- Config.h: Dx12Upscaler defaults
+// to XeSS, Dx11Upscaler and VulkanUpscaler to FSR 2.2 -- so on a fresh ini a native-DLSS game
+// (Cyberpunk, 007 First Light...) has its DLSS 4.x quietly REPLACED by XeSS/FSR, with NR run
+// on top of that. The game works, NR runs, and it looks worse than it should. Keeping the
+// game's DLSS means saying `dlss` explicitly. Forced, because a stale `auto` from an earlier
+// install is exactly the case that bites.
+const UPSCALER_KEY_FOR_API = { dx12: 'Dx12Upscaler', dx11: 'Dx11Upscaler', vulkan: 'VulkanUpscaler' };
+function keepGamesOwnDlss(api) {
+  const key = UPSCALER_KEY_FOR_API[api];
+  return key ? [{ section: 'Upscalers', key, value: 'dlss' }] : [];
+}
+
 // The one value that MUST be forced for a Feeder game: OptiScaler has to explicitly load
 // ReShade64.dll itself (feeder.js deploys it as a plain file, not a proxy) for the two to
 // coexist at all -- see the long comment on installProxy's caller in game:install for why.
@@ -1428,7 +1442,11 @@ async function autoConfigureGame(dir, exePath) {
   const streamline = null;
 
   const applied = patchIniDefaults(iniPath, edits);
-  let forced = dlss5Only ? patchIniValues(iniPath, optiFgOn ? OPTIFG_FORCED : DLSS5_ONLY_FORCED) : [];
+  // A DLSS-5-only game keeps its own DLSS whether or not OptiFG is layered on -- see
+  // keepGamesOwnDlss for why the upscaler key cannot be left at auto.
+  let forced = dlss5Only
+    ? patchIniValues(iniPath, [...(optiFgOn ? OPTIFG_FORCED : DLSS5_ONLY_FORCED), ...keepGamesOwnDlss(api)])
+    : [];
   if (feeder.feederDeployed(dir)) forced = [...forced, ...patchIniValues(iniPath, LOAD_RESHADE_FORCED)];
   return {
     api, applied: [...applied, ...forced], streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix,
