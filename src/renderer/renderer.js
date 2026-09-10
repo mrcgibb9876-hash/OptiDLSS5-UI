@@ -647,7 +647,7 @@ $('#game-optifg-toggle').addEventListener('change', async (e) => {
 // ever touches Title/Path/FrameGeneration/ScalingType; every other field -- and every other
 // profile in the file -- passes through untouched. See lossless.js for why this file, not a
 // hand-rolled default profile, is the safe source of truth for the rest of the schema.
-async function configureLossless(game, frameGenMode = 'LSFG3') {
+async function configureLossless(game, { frameGenMode = 'LSFG3', multiplier = 2 } = {}) {
   const xmlText = await window.api.losslessReadSettings();
   if (!xmlText) {
     throw new Error("Lossless Scaling hasn't been run yet -- launch it once first, then try again.");
@@ -701,6 +701,12 @@ async function configureLossless(game, frameGenMode = 'LSFG3') {
   setField('Path', game.exePath);
   setField('FrameGeneration', frameGenMode);
   setField('ScalingType', 'Off');
+  setField('LSFG3Mode1', 'FIXED');
+  setField('LSFG3Multiplier', String(multiplier));
+  // Without this, Lossless Scaling only applies the profile once the user manually selects this
+  // game's window in its own UI -- AutoScale is what makes "just launch it" (the in-game checkbox's
+  // whole point) actually turn Frame Generation on.
+  setField('AutoScale', 'true');
 
   // The parsed doc already carries its own <?xml ...?> declaration; XMLSerializer re-emits it
   // verbatim. Prepending another one here produced a file with two declarations -- invalid XML,
@@ -749,15 +755,22 @@ async function loadLosslessSection(game) {
   const xmlText = await window.api.losslessReadSettings();
   const exePathLower = game.exePath.trim().toLowerCase();
   let configured = false;
+  let currentMultiplier = null;
   try {
     const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
-    configured = Array.from(doc.querySelectorAll('GameProfiles > Profile')).some((p) => {
+    const profile = Array.from(doc.querySelectorAll('GameProfiles > Profile')).find((p) => {
       const pathEl = p.querySelector('Path');
-      const fgEl = p.querySelector('FrameGeneration');
-      return pathEl && pathEl.textContent.trim().toLowerCase() === exePathLower &&
-        fgEl && fgEl.textContent.trim() !== 'Off';
+      return pathEl && pathEl.textContent.trim().toLowerCase() === exePathLower;
     });
+    if (profile) {
+      const fgEl = profile.querySelector('FrameGeneration');
+      configured = !!fgEl && fgEl.textContent.trim() !== 'Off';
+      const multEl = profile.querySelector('LSFG3Multiplier');
+      if (multEl && multEl.textContent.trim()) currentMultiplier = multEl.textContent.trim();
+    }
   } catch {}
+
+  if (currentMultiplier) $('#game-lossless-multiplier').value = currentMultiplier;
 
   status.textContent = configured
     ? 'Configured -- Frame Generation is set for this game.'
@@ -768,12 +781,17 @@ $('#btn-lossless-configure').addEventListener('click', async () => {
   if (!editingGameId) return;
   const game = games.find((x) => x.id === editingGameId);
   const status = $('#game-lossless-status');
+  const multiplier = Number($('#game-lossless-multiplier').value);
   status.textContent = 'Configuring…';
   try {
-    const result = await configureLossless(game);
+    const result = await configureLossless(game, { multiplier });
+    const info = await window.api.losslessDetect();
+    if (info.installed) {
+      await window.api.losslessSetExePathInGameIni(game.exePath, info.exePath, game.name);
+    }
     toast(result.isNew
-      ? 'Added a Lossless Scaling profile for this game with Frame Generation on.'
-      : 'Updated this game\'s Lossless Scaling profile with Frame Generation on.');
+      ? `Added a Lossless Scaling profile for this game (${multiplier}x Frame Generation).`
+      : `Updated this game's Lossless Scaling profile (${multiplier}x Frame Generation).`);
   } catch (error) {
     toast(`Could not configure Lossless Scaling: ${error.message}`);
   }

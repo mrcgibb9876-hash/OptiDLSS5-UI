@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('api', {
   losslessReadSettings: () => ipcRenderer.invoke('lossless:readSettings'),
   losslessWriteSettings: (xmlText) => ipcRenderer.invoke('lossless:writeSettings', xmlText),
   losslessLaunch: () => ipcRenderer.invoke('lossless:launch'),
+  losslessSetExePathInGameIni: (exePath, losslessExePath, gameTitle) => ipcRenderer.invoke('lossless:setExePathInGameIni', { exePath, losslessExePath, gameTitle }),
 
   steamSearch: (term) => ipcRenderer.invoke('steam:search', term),
   validateRelease: (folder) => ipcRenderer.invoke('release:validate', folder),

@@ -116,8 +116,13 @@
 
       <div id="game-lossless-section" class="hidden">
         <label class="field-label">Frame Generation via Lossless Scaling</label>
-        <p class="field-hint">OptiScaler's own Frame Generation isn't available together with the DLSS5 Feeder (crashes on a real test -- see above). Lossless Scaling generates extra frames from outside the game entirely, so it never touches the swapchain ReShade and the Feeder share -- unaffected by that crash. Separate paid app; this only configures its per-game profile (Frame Generation on, Scaling off), it doesn't install it.</p>
+        <p class="field-hint">OptiScaler's own Frame Generation isn't available together with the DLSS5 Feeder (crashes on a real test -- see above). Lossless Scaling generates extra frames from outside the game entirely, so it never touches the swapchain ReShade and the Feeder share -- unaffected by that crash. Separate paid app; this only configures its per-game profile (Frame Generation on, Scaling off), it doesn't install it. Once configured, the on/off toggle and the amount live in this game's own in-game panel (DLSS 5 Neural Rendering, Alt+Home). <strong>Requires this game running Borderless or Windowed, not exclusive Fullscreen</strong> -- Lossless Scaling cannot capture an exclusive-fullscreen window at all; a DX12 game is usually fine regardless since DX12 has no true exclusive fullscreen.</p>
         <div class="field-row">
+          <select id="game-lossless-multiplier">
+            <option value="2">2x frames</option>
+            <option value="3">3x frames</option>
+            <option value="4">4x frames</option>
+          </select>
           <button id="btn-lossless-configure" class="btn btn-ghost">Configure for this game</button>
           <button id="btn-lossless-launch" class="btn btn-ghost hidden">Launch Lossless Scaling</button>
         </div>

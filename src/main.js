@@ -306,6 +306,28 @@ ipcMain.handle('lossless:launch', () => {
   }
 });
 
+// Points the in-game panel's own Lossless Scaling launch/close checkbox at the real exe -- that
+// panel never detects or configures Lossless Scaling itself, only this app does (see lossless.js).
+// Called right after configureLossless() succeeds, not on every section load, so the ini's pointer
+// and the actual per-game profile setup always land together -- an ExePath with no matching
+// profile would make the in-game checkbox launch Lossless Scaling for nothing.
+// gameTitle must be the exact <Title> text written into Lossless Scaling's own profile (see
+// configureLossless() in renderer.js) -- the in-game panel matches its own profile list by this
+// exact text via UI Automation, since a list entry there carries no other stable identifier.
+ipcMain.handle('lossless:setExePathInGameIni', (_evt, { exePath, losslessExePath, gameTitle }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const iniPath = path.join(dir, 'OptiScaler.ini');
+    if (!fs.existsSync(iniPath)) throw new Error('OptiScaler.ini not found -- install OptiScaler for this game first.');
+    ensureIniKey(iniPath, 'DlssNr', 'LosslessScalingExePath', losslessExePath);
+    if (gameTitle) ensureIniKey(iniPath, 'DlssNr', 'LosslessScalingGameTitle', gameTitle);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
 // force: true re-fetches and overwrites the whole stack (an update, not a first install).
 // licenseConfirmed: only meaningful when mvProviderId names a non-auto-fetchable provider
 // (LumeniteFX right now) -- the renderer only ever sends true here after the user has actually
@@ -727,6 +749,52 @@ function patchIniValues(iniPath, edits) {
 
   if (changed.length > 0) fs.writeFileSync(iniPath, lines.join(eol), 'utf-8');
   return changed;
+}
+
+// patchIniValues/patchIniDefaults above only ever update a line already present in the file --
+// exactly right for their own job (every key they touch ships in OptiScaler's own default ini
+// template, so it's always there to find), but wrong for a key added to Config.cpp this same
+// session: an already-installed game's ini predates it and has no such line at all, so those
+// functions silently do nothing. Ensures the key exists, appending a new line (and a new section
+// if needed) rather than requiring one to already be there. Found live: the first version of this
+// used patchIniValues and reported success while writing nothing, for exactly this reason.
+function ensureIniKey(iniPath, section, key, value) {
+  const original = fs.readFileSync(iniPath, 'utf-8');
+  const eol = original.includes('\r\n') ? '\r\n' : '\n';
+  const lines = original.split(/\r\n|\n/);
+  const sectionLower = section.toLowerCase();
+  const keyLower = key.toLowerCase();
+
+  let sectionStart = -1;
+  let sectionEnd = lines.length;
+  let currentSection = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const sectionMatch = lines[i].match(/^\s*\[([^\]]+)\]\s*$/);
+    if (sectionMatch) {
+      if (currentSection && currentSection.toLowerCase() === sectionLower) { sectionEnd = i; break; }
+      currentSection = sectionMatch[1];
+      if (currentSection.toLowerCase() === sectionLower) sectionStart = i;
+      continue;
+    }
+    if (currentSection && currentSection.toLowerCase() === sectionLower) {
+      const kvMatch = lines[i].match(/^(\s*)([^;#=\s][^=]*?)(\s*=\s*)(.*)$/);
+      if (kvMatch && kvMatch[2].trim().toLowerCase() === keyLower) {
+        if (kvMatch[4].trim() === String(value)) return false; // already correct
+        lines[i] = `${kvMatch[1]}${kvMatch[2]}${kvMatch[3]}${value}`;
+        fs.writeFileSync(iniPath, lines.join(eol), 'utf-8');
+        return true;
+      }
+    }
+  }
+
+  if (sectionStart === -1) {
+    lines.push('', `[${section}]`, `${key} = ${value}`);
+  } else {
+    lines.splice(sectionEnd, 0, `${key} = ${value}`);
+  }
+  fs.writeFileSync(iniPath, lines.join(eol), 'utf-8');
+  return true;
 }
 
 function patchIniDefaults(iniPath, edits) {
