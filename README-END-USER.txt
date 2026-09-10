@@ -139,6 +139,37 @@ has no other backend for those — the card will say "Not supported" rather
 than offer an install that can't work.
 
 ------------------------------------------
+FRAME GENERATION FOR GAMES WITH NO DLSS OF THEIR OWN
+------------------------------------------
+Some games have no native DLSS at all — the app deploys the DLSS5 Feeder
+for those (see the Edit Game screen; it explains itself there). OptiScaler's
+own Frame Generation (FSRFG) can't run together with the Feeder — it
+crashed on a real test, not a guess — and needs a D3D12 game either way.
+
+For those cases, or any DirectX 11 game, the app can instead set you up
+with Lossless Scaling as the Frame Generation source. Lossless Scaling
+is a SEPARATE PAID APP you need to own yourself:
+
+  https://store.steampowered.com/app/993090/Lossless_Scaling/
+
+This app does not install it and does not include it — Steam is where
+you get it. Once you own it:
+
+  1. In the Edit Game screen, under "Frame Generation via Lossless
+     Scaling", pick the amount (2x/3x/4x).
+  2. Click "Configure for this game" — this sets up its per-game profile.
+  3. Click "Launch Lossless Scaling" once, so it's running.
+
+After that, both the on/off toggle and the amount live in that game's own
+DLSS 5 Developer Controls panel (Alt+Home) — no need to alt-tab out
+during play.
+
+Lossless Scaling needs the game running Borderless or Windowed, NOT
+exclusive Fullscreen — it can't capture an exclusive-fullscreen window at
+all, which is a limitation on its own side. A DirectX 12 game is usually
+fine either way, since DirectX 12 doesn't have true exclusive fullscreen.
+
+------------------------------------------
 UPDATING OPTISCALER LATER
 ------------------------------------------
 Settings > "Check for Updates" pulls the newest release automatically.

@@ -737,7 +737,10 @@ async function loadLosslessSection(game) {
 
   const info = await window.api.losslessDetect();
   if (!info.installed) {
-    status.textContent = 'Lossless Scaling was not found (checked your Steam library).';
+    status.innerHTML = 'Lossless Scaling was not found (checked your Steam library). ' +
+      'A separate paid app you need to own yourself -- <a href="#" id="lossless-store-link">get it on Steam</a>.';
+    const storeLink = $('#lossless-store-link');
+    if (storeLink) storeLink.addEventListener('click', (e) => { e.preventDefault(); window.api.losslessOpenStorePage(); });
     configureBtn.disabled = true;
     launchBtn.classList.add('hidden');
     return;

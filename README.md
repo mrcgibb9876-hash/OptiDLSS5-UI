@@ -15,26 +15,46 @@ point the app at your games once and click Install.
 
 **The manager itself** — each card shows whether OptiScaler is active on that game (not a generic
 "Installed"), the Install button becomes Remove once it's there, and known trouble conditions
-surface right on the card:
+surface right on the card (a badge for the engine or graphics API it detected, or a warning like
+the missing-NR-file one below):
 
-![Game grid, showing per-game OptiScaler status and a live warning](docs/screenshots/manager-game-grid.png)
+![Game grid, showing per-game OptiScaler status, engine/API badges, and a live warning](docs/screenshots/manager-game-grid.png)
 
-**Each card is badged with the engine or graphics API it detected** — a quick answer to "will this
-work" without reading a sentence. Known engines (RE Engine, RED Engine) take the badge over the raw
-graphics API when both are known, since which tooling matters is more useful at a glance than
-DX/Vulkan:
+**Editing a game** covers per-game Neural Rendering source, Frame Generation, and — for a game with
+no native DLSS of its own — the DLSS5 Feeder deploy and its two Frame Generation options
+side by side (OptiScaler's own FSRFG where it can run, Lossless Scaling where it can't):
 
-![Game cards badged DX12, RED Engine, and RE Engine](docs/screenshots/engine-badges.png)
+![Edit Game modal, Feeder and Frame Generation section for a game with no native DLSS](docs/screenshots/edit-game-lossless.png)
 
 **In-game tuning** is OptiScaler's own native panel (`Alt+Home`), the DLSS 5 Developer Controls
-overlay — global model controls, per-model style/intensity, Frame Generation, and the colour/HDR
-pipeline, all live over the running game. It ships in light and dark themes:
+overlay — global model controls, per-model style/intensity, Frame Generation (including the
+Lossless Scaling row, live over the running game), and the colour/HDR pipeline. It ships in light
+and dark themes:
 
-![DLSS 5 Developer Controls overlay, open over a running game](docs/screenshots/dlss5-developer-controls.png)
+![DLSS 5 Developer Controls panel, dark theme, with the Lossless Scaling row active](docs/screenshots/dlssnr-panel-dark.png)
 
-![DLSS 5 Developer Controls panel, light and dark themes side by side](docs/screenshots/dlssnr-theme-comparison.png)
+![DLSS 5 Developer Controls panel, light theme, with the Lossless Scaling row active](docs/screenshots/dlssnr-panel-light.png)
 
 See [README-END-USER.txt](README-END-USER.txt) for the full key list and setup steps.
+
+## Frame Generation for games with no DLSS of their own
+
+OptiScaler's own Frame Generation (FSRFG) needs the game's swapchain to be D3D12, and can't run
+together with the DLSS5 Feeder at all — confirmed on a real crash, not a guess (the Feeder's own
+per-frame state isn't built to survive it). For a Feeder game, or any D3D11 game, the app instead
+offers [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) as the
+Frame Generation source: a separate app that generates extra frames from the game's own window
+from the outside, so it never touches the swapchain OptiScaler, ReShade, and the Feeder share.
+
+**Lossless Scaling is a separate paid app you need to own yourself** — Steam is its distribution —
+this app doesn't install it, only configures its per-game profile once you do. From the Edit Game
+modal: pick the amount (2x/3x/4x), **Configure for this game**, then **Launch Lossless Scaling**.
+After that, both the on/off toggle and the amount live in this game's own in-game panel
+(`Alt+Home`) — no need to alt-tab out during play.
+
+**Requires the game running Borderless or Windowed, not exclusive Fullscreen** — Lossless Scaling
+cannot capture an exclusive-fullscreen window at all, a limitation on its own side. A DX12 game is
+usually fine either way, since DX12 has no true exclusive fullscreen.
 
 ## What it does
 

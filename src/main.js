@@ -277,6 +277,10 @@ ipcMain.handle('optifg:set', async (_evt, { exePath, enabled }) => {
 // Lossless Scaling as an alternative Frame Generation path for Feeder games, since OptiScaler's
 // own FSRFG is blocked there -- see optiFgReadiness()'s Feeder gate above. See lossless.js for
 // why this sidesteps that whole crash class (it never touches the game's own Present/swapchain).
+ipcMain.handle('lossless:openStorePage', () => {
+  shell.openExternal('https://store.steampowered.com/app/993090/Lossless_Scaling/');
+});
+
 ipcMain.handle('lossless:detect', () => {
   try { return lossless.detect(); } catch (error) { return { installed: false, error: String(error && error.message ? error.message : error) }; }
 });
