@@ -30,6 +30,10 @@ contextBridge.exposeInMainWorld('api', {
   feederConfirmProviderLicense: (providerId) => ipcRenderer.invoke('feeder:confirmProviderLicense', providerId),
   feederDeploy: (exePath, mvProviderId, options) => ipcRenderer.invoke('feeder:deploy', { exePath, mvProviderId, ...options }),
 
+  lumaUeReadiness: (exePath) => ipcRenderer.invoke('lumaue:readiness', { exePath }),
+  lumaUeDeploy: (exePath, options) => ipcRenderer.invoke('lumaue:deploy', { exePath, ...options }),
+  lumaUeApplyAmdIntelWorkaround: (exePath) => ipcRenderer.invoke('lumaue:applyAmdIntelWorkaround', { exePath }),
+
   losslessDetect: () => ipcRenderer.invoke('lossless:detect'),
   losslessReadSettings: () => ipcRenderer.invoke('lossless:readSettings'),
   losslessWriteSettings: (xmlText) => ipcRenderer.invoke('lossless:writeSettings', xmlText),

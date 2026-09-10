@@ -129,6 +129,24 @@
         <span id="game-lossless-status" class="status-line"></span>
       </div>
 
+      <div id="game-lumaue-section" class="hidden">
+        <label class="field-label">Luma UE (adds DLSS to this game)</label>
+        <p class="field-hint">This game has no DLSS of its own -- <a href="https://github.com/Filoppi/Luma-Framework" target="_blank" rel="noopener">Luma Framework's</a> Unreal Engine mod replaces its stock TAA with DLAA, which is what gives OptiScaler's Neural Rendering pass a real DLSS call to hook. Untested by this app against a real install -- built from Luma's actual release files and the OptiScaler wiki's setup page for this game, not guessed, but never run against the game.</p>
+        <p id="game-lumaue-known-issue" class="field-hint status-bad"></p>
+        <label class="scan-checkbox-row">
+          <input id="game-lumaue-license-confirm" type="checkbox" />
+          <span id="game-lumaue-license-text"></span>
+        </label>
+        <div class="field-row">
+          <button id="btn-lumaue-deploy" class="btn btn-ghost">Deploy Luma UE</button>
+        </div>
+        <label class="scan-checkbox-row">
+          <input id="game-lumaue-amd-intel" type="checkbox" />
+          On AMD or Intel graphics, also apply the wiki's workaround (Spoofing.Dxgi=false, Dx11withDx12.DontUseNTShared=true)
+        </label>
+        <span id="game-lumaue-status" class="status-line"></span>
+      </div>
+
       <div class="modal-actions">
         <button id="btn-cancel-game" class="btn btn-ghost">Cancel</button>
         <button id="btn-save-game" class="btn btn-primary">Save Game</button>

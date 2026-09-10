@@ -12,6 +12,7 @@ const framegen = require('./framegen');
 const injector = require('./injector');
 const feeder = require('./feeder');
 const lossless = require('./lossless');
+const lumaue = require('./lumaue');
 const execFileAsync = promisify(execFile);
 
 const RELEASES_API = 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest';
@@ -202,6 +203,7 @@ ipcMain.handle('injector:launch', async (_evt, { exePath, releaseFolder } = {}) 
 });
 
 const feederCacheDir = () => path.join(userDataDir(), 'feeder-cache');
+const lumaUeCacheDir = () => path.join(userDataDir(), 'lumaue-cache');
 
 // Whether this game needs the Feeder at all (no native DLSS), and what's already deployed --
 // same "explain, don't just disable" posture as injector:readiness.
@@ -359,6 +361,60 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
       licenseConfirmed: !!licenseConfirmed,
     });
     return { ok: true, ...results };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// Same shape as feeder:readiness -- lumaue.lumaUeReadiness() itself explains why (wrong game,
+// or which files are still missing) rather than this handler doing any of that reasoning.
+ipcMain.handle('lumaue:readiness', async (_evt, { exePath }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) return { ok: false, error: 'Game .exe not found' };
+    const dir = gameDir(exePath);
+    return { ok: true, ...lumaue.lumaUeReadiness(dir, exePath) };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// licenseConfirmed: only ever true after the renderer has shown the user lumaue.LUMA_LICENSE_SUMMARY
+// and lumaue.LUMA_KNOWN_ISSUE in a dedicated dialog and they've explicitly agreed, same posture as
+// feeder:deploy's LumeniteFX confirmation. deployLumaUeStack() itself refuses without it regardless.
+ipcMain.handle('lumaue:deploy', async (_evt, { exePath, force, licenseConfirmed }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    if (!lumaue.isFallenOrder(exePath)) throw new Error('Luma UE is only offered for STAR WARS Jedi: Fallen Order');
+    const dir = gameDir(exePath);
+    const results = await lumaue.deployLumaUeStack(dir, {
+      cacheDir: lumaUeCacheDir(),
+      getRhiManifest,
+      compareVersions: compareStreamlineVersions,
+      ghHeaders: GITHUB_HEADERS,
+      force: !!force,
+      licenseConfirmed: !!licenseConfirmed,
+    });
+    return { ok: true, ...results };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// The AMD/Intel workaround the OptiScaler wiki names for this exact game -- a separate,
+// explicit opt-in rather than something autoConfigureGame silently forces. This app has no GPU
+// vendor detection (nothing else here has needed it), so guessing would risk applying an
+// Nvidia-only-relevant override on an Nvidia system for no reason; the user knows their own GPU.
+ipcMain.handle('lumaue:applyAmdIntelWorkaround', async (_evt, { exePath }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const iniPath = path.join(dir, 'OptiScaler.ini');
+    if (!fs.existsSync(iniPath)) throw new Error('OptiScaler.ini not found -- install OptiScaler for this game first');
+    const applied = patchIniValues(iniPath, [
+      { section: 'Spoofing', key: 'Dxgi', value: 'false' },
+      { section: 'Dx11withDx12', key: 'DontUseNTShared', value: 'true' },
+    ]);
+    return { ok: true, applied };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -1455,6 +1511,9 @@ async function autoConfigureGame(dir, exePath) {
     ? patchIniValues(iniPath, [...(optiFgOn ? OPTIFG_FORCED : DLSS5_ONLY_FORCED), ...keepGamesOwnDlss(api)])
     : [];
   if (feeder.feederDeployed(dir)) forced = [...forced, ...patchIniValues(iniPath, LOAD_RESHADE_FORCED)];
+  // Luma UE deploys its own ReShade64.dll the same non-proxying way the Feeder does (see
+  // lumaue.js's file header) -- OptiScaler needs the same explicit LoadReshade nudge to load it.
+  if (lumaue.lumaUeDeployed(dir)) forced = [...forced, ...patchIniValues(iniPath, LOAD_RESHADE_FORCED)];
   return {
     api, applied: [...applied, ...forced], streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix,
     profile: dlss5Only ? (optiFgOn ? 'dlss5-only+optifg' : 'dlss5-only') : 'full',

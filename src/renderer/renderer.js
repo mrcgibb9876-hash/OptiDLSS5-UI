@@ -329,6 +329,7 @@ async function openGameModal(game) {
   await loadFeederSection(game);
   await loadOptiFgSection(game);
   await loadLosslessSection(game);
+  await loadLumaUeSection(game);
 }
 
 let frameGenVersionsLoaded = false;
@@ -812,6 +813,62 @@ $('#btn-lossless-launch').addEventListener('click', async () => {
     const game = games.find((x) => x.id === editingGameId);
     loadLosslessSection(game);
   }
+});
+
+async function loadLumaUeSection(game) {
+  const section = $('#game-lumaue-section');
+  const status = $('#game-lumaue-status');
+  const deployBtn = $('#btn-lumaue-deploy');
+  const knownIssue = $('#game-lumaue-known-issue');
+  const licenseText = $('#game-lumaue-license-text');
+  const licenseCheckbox = $('#game-lumaue-license-confirm');
+  if (!game || !game.exePath) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  const readiness = await window.api.lumaUeReadiness(game.exePath);
+  if (!readiness.ok || !readiness.supported) {
+    section.classList.add('hidden');
+    return;
+  }
+  section.classList.remove('hidden');
+
+  knownIssue.textContent = readiness.knownIssue || '';
+  licenseText.textContent = readiness.licenseSummary || '';
+  deployBtn.disabled = !licenseCheckbox.checked;
+
+  status.textContent = readiness.complete
+    ? 'Deployed -- select DLSS in Luma\'s own overlay (Home key) in-game.'
+    : `Not yet deployed (ReShade64.dll: ${readiness.reshadeInstalled ? 'yes' : 'no'}, ` +
+      `addon: ${readiness.addonInstalled ? 'yes' : 'no'}, shaders: ${readiness.shadersInstalled ? 'yes' : 'no'}, ` +
+      `nvngx_dlss.dll: ${readiness.dlssInstalled ? 'yes' : 'no'}).`;
+}
+
+$('#game-lumaue-license-confirm').addEventListener('change', (e) => {
+  $('#btn-lumaue-deploy').disabled = !e.target.checked;
+});
+
+$('#btn-lumaue-deploy').addEventListener('click', async () => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  const status = $('#game-lumaue-status');
+  const licenseConfirmed = $('#game-lumaue-license-confirm').checked;
+  if (!licenseConfirmed) return;
+  status.textContent = 'Deploying…';
+  try {
+    const result = await window.api.lumaUeDeploy(game.exePath, { licenseConfirmed });
+    if (!result.ok) throw new Error(result.error || 'Deploy failed');
+    toast(result.deployed ? 'Deployed Luma UE for this game.' : 'Luma UE was already deployed.');
+    if ($('#game-lumaue-amd-intel').checked) {
+      const workaround = await window.api.lumaUeApplyAmdIntelWorkaround(game.exePath);
+      if (workaround.ok) toast('Applied the AMD/Intel workaround to OptiScaler.ini.');
+      else toast(`Could not apply the AMD/Intel workaround: ${workaround.error}`);
+    }
+  } catch (error) {
+    toast(`Could not deploy Luma UE: ${error.message}`);
+  }
+  loadLumaUeSection(game);
 });
 
 function closeGameModal() {
