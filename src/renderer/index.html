@@ -141,6 +141,7 @@
         </label>
         <div class="field-row">
           <button id="btn-lumaue-deploy" class="btn btn-ghost">Deploy Luma UE</button>
+          <button id="btn-lumaue-howto" class="btn btn-ghost">How to install</button>
         </div>
         <label class="scan-checkbox-row">
           <input id="game-lumaue-amd-intel" type="checkbox" />
@@ -152,6 +153,29 @@
       <div class="modal-actions">
         <button id="btn-cancel-game" class="btn btn-ghost">Cancel</button>
         <button id="btn-save-game" class="btn btn-primary">Save Game</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="lumaue-instructions-modal" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <h2>Installing Luma UE for STAR WARS Jedi: Fallen Order</h2>
+      <p class="field-hint">Deploying the files is only half of this -- the DLSS call OptiScaler needs won't exist until you also turn DLSS on inside Luma's own overlay, in-game. Follow all of these steps in order.</p>
+
+      <ol class="lumaue-steps">
+        <li><strong>Check the licence checkbox</strong> below, in the Luma UE section of this Edit Game screen. Luma Framework's licence needs your explicit confirmation before this app will fetch anything on your behalf -- it always downloads live from the official GitHub release, never a bundled copy.</li>
+        <li><strong>Click "Deploy Luma UE".</strong> This downloads and places everything Luma needs directly in the game's folder: its shader files, its own <code>dxgi.dll</code> renamed to <code>ReShade64.dll</code>, its compiled add-on, and <code>nvngx_dlss.dll</code>. OptiScaler itself must already be installed for this game first (use the Install button) -- Deploy only adds Luma on top of that.</li>
+        <li><strong>On AMD or Intel graphics</strong>, also check the workaround checkbox beneath Deploy (applies <code>Spoofing.Dxgi=false</code> and <code>Dx11withDx12.DontUseNTShared=true</code> to OptiScaler.ini, per the OptiScaler wiki's own setup page for this game). Skip it on NVIDIA.</li>
+        <li><strong>Launch the game</strong> normally (through this app or Steam) and get into actual gameplay, not just a menu or loading screen.</li>
+        <li><strong>Press the Home key in-game.</strong> This opens Luma's own overlay -- it is separate from OptiScaler's menu (Alt+Home) and won't appear unless deploy actually succeeded.</li>
+        <li><strong>Select DLSS as the upscaling method inside Luma's overlay.</strong> This is the step that actually matters: until DLSS is chosen here, the game keeps using its own stock TAA, no DLSS call ever happens, and OptiScaler's Neural Rendering panel will keep saying "waiting for the upscaler to run" indefinitely -- correctly, because nothing is running for it to hook yet.</li>
+        <li><strong>Open OptiScaler's own menu (Alt+Home)</strong> and check the DLSS 5 Neural Rendering panel to confirm it's picked up a real evaluate call.</li>
+      </ol>
+
+      <p class="field-hint status-bad">Known open upstream issue (Luma-Framework #122, unresolved): opening any in-game menu after this can cause brief character pop-in and visible noise. That's a Luma bug, not something wrong with your setup.</p>
+
+      <div class="modal-actions">
+        <button id="btn-close-lumaue-instructions" class="btn btn-primary">Got it</button>
       </div>
     </div>
   </div>

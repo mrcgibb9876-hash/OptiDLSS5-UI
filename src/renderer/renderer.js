@@ -866,7 +866,32 @@ async function loadLumaUeSection(game) {
     : `Not yet deployed (ReShade64.dll: ${readiness.reshadeInstalled ? 'yes' : 'no'}, ` +
       `addon: ${readiness.addonInstalled ? 'yes' : 'no'}, shaders: ${readiness.shadersInstalled ? 'yes' : 'no'}, ` +
       `nvngx_dlss.dll: ${readiness.dlssInstalled ? 'yes' : 'no'}).`;
+
+  // Unprompted, once per game: the deploy button alone turned out not to be enough -- a real
+  // tester deployed nothing at all and the log showed no trace of Luma ever having run, which
+  // reads the same as "waiting for the upscaler" from a completely different cause. Surfacing
+  // the full instructions automatically the first time this section is seen for a game that
+  // still needs them is meant to catch that before it happens again, not just be available for
+  // someone who already knows to go looking for a "how to" button.
+  if (!readiness.complete) {
+    const seenKey = `lumaue-instructions-seen-${game.id}`;
+    let alreadySeen = false;
+    try { alreadySeen = localStorage.getItem(seenKey) === '1'; } catch {}
+    if (!alreadySeen) {
+      openLumaUeInstructionsModal();
+      try { localStorage.setItem(seenKey, '1'); } catch {}
+    }
+  }
 }
+
+function openLumaUeInstructionsModal() {
+  $('#lumaue-instructions-modal').classList.remove('hidden');
+}
+
+$('#btn-lumaue-howto').addEventListener('click', openLumaUeInstructionsModal);
+$('#btn-close-lumaue-instructions').addEventListener('click', () => {
+  $('#lumaue-instructions-modal').classList.add('hidden');
+});
 
 $('#game-lumaue-license-confirm').addEventListener('change', (e) => {
   $('#btn-lumaue-deploy').disabled = !e.target.checked;

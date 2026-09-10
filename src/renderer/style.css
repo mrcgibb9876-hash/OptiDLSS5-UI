@@ -254,6 +254,21 @@ body {
   line-height: 1.4;
 }
 .field-row { display: flex; gap: 8px; }
+.lumaue-steps {
+  font-size: 12.5px;
+  color: var(--text);
+  line-height: 1.5;
+  margin: 0 0 14px;
+  padding-left: 20px;
+}
+.lumaue-steps li { margin-bottom: 8px; }
+.lumaue-steps code {
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 11.5px;
+}
 input[type="text"] {
   flex: 1;
   background: var(--bg-elev-2);
