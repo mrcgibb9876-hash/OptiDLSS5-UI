@@ -368,4 +368,11 @@ window.I18N.register("zh-CN", {
   "Another DLSS 5 toolchain is installed here ({tool}: {files}) -- two stacks hooking the same DLSS call crash the game. Remove it with its own uninstaller before using this one.": "这里已安装另一套 DLSS 5 工具链（{tool}：{files}）-- 两套堆栈挂接同一个 DLSS 调用会导致游戏崩溃。使用本工具前请先用其自带的卸载程序移除它。",
   "Another DLSS 5 toolchain is here": "这里有另一套 DLSS 5 工具链",
   "This folder already has {list}. Two stacks hooking the same DLSS call crash the game -- remove the other one with its own uninstaller first.": "此文件夹已包含 {list}。两套堆栈挂接同一个 DLSS 调用会导致游戏崩溃 -- 请先用其自带的卸载程序移除另一套。",
+  "Remove the other DLSS 5 toolchain…": "移除另一套 DLSS 5 工具链…",
+  "Delete the other toolchain's files? (1 of 2)": "删除另一套工具链的文件？（1/2）",
+  "This deletes {list} and everything else that tool is known to place here, and puts back that tool's own backups where they belong to the game. If it modified game files in place without leaving a backup, those cannot be restored -- the game may break, and verifying the game files through its store fixes that. Your own OptiScaler install here is left as is. A second confirmation lists every file.": "这将删除 {list} 以及该工具已知放在这里的所有其他内容，并把该工具自己的备份放回属于游戏的位置。如果它未留备份而直接修改了游戏文件，则无法恢复 -- 游戏可能损坏，通过商店验证游戏文件可以修复。你自己的 OptiScaler 安装保持不变。第二次确认会列出每个文件。",
+  "Continue": "继续",
+  "Could not remove the other toolchain: {error}": "无法移除另一套工具链：{error}",
+  "Other DLSS 5 toolchain removed.": "已移除另一套 DLSS 5 工具链。",
+  "If the game now fails to start, verify its files through its store.": "如果游戏现在无法启动，请通过商店验证其文件。",
 });

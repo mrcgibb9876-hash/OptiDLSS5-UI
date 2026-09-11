@@ -368,4 +368,11 @@ window.I18N.register("es", {
   "Another DLSS 5 toolchain is installed here ({tool}: {files}) -- two stacks hooking the same DLSS call crash the game. Remove it with its own uninstaller before using this one.": "Aquí hay instalada otra cadena de herramientas DLSS 5 ({tool}: {files}) -- dos pilas enganchando la misma llamada DLSS hacen que el juego se cierre. Quítala con su propio desinstalador antes de usar esta.",
   "Another DLSS 5 toolchain is here": "Aquí hay otra cadena de herramientas DLSS 5",
   "This folder already has {list}. Two stacks hooking the same DLSS call crash the game -- remove the other one with its own uninstaller first.": "Esta carpeta ya tiene {list}. Dos pilas enganchando la misma llamada DLSS hacen que el juego se cierre -- quita primero la otra con su propio desinstalador.",
+  "Remove the other DLSS 5 toolchain…": "Quitar la otra cadena de herramientas DLSS 5…",
+  "Delete the other toolchain's files? (1 of 2)": "¿Borrar los archivos de la otra cadena de herramientas? (1 de 2)",
+  "This deletes {list} and everything else that tool is known to place here, and puts back that tool's own backups where they belong to the game. If it modified game files in place without leaving a backup, those cannot be restored -- the game may break, and verifying the game files through its store fixes that. Your own OptiScaler install here is left as is. A second confirmation lists every file.": "Esto borra {list} y todo lo demás que se sabe que esa herramienta coloca aquí, y devuelve sus propias copias de seguridad donde pertenecen al juego. Si modificó archivos del juego sin dejar copia, esos no se pueden restaurar -- el juego puede romperse, y verificar los archivos del juego desde su tienda lo arregla. Tu propia instalación de OptiScaler aquí se deja como está. Una segunda confirmación lista cada archivo.",
+  "Continue": "Continuar",
+  "Could not remove the other toolchain: {error}": "No se pudo quitar la otra cadena de herramientas: {error}",
+  "Other DLSS 5 toolchain removed.": "Otra cadena de herramientas DLSS 5 quitada.",
+  "If the game now fails to start, verify its files through its store.": "Si el juego ya no arranca, verifica sus archivos desde su tienda.",
 });

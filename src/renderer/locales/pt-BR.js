@@ -368,4 +368,11 @@ window.I18N.register('pt-BR', {
   "Another DLSS 5 toolchain is installed here ({tool}: {files}) -- two stacks hooking the same DLSS call crash the game. Remove it with its own uninstaller before using this one.": "Há outra toolchain DLSS 5 instalada aqui ({tool}: {files}) -- duas pilhas capturando a mesma chamada DLSS travam o jogo. Remova-a com o próprio desinstalador dela antes de usar esta.",
   "Another DLSS 5 toolchain is here": "Há outra toolchain DLSS 5 aqui",
   "This folder already has {list}. Two stacks hooking the same DLSS call crash the game -- remove the other one with its own uninstaller first.": "Esta pasta já tem {list}. Duas pilhas capturando a mesma chamada DLSS travam o jogo -- remova primeiro a outra com o próprio desinstalador dela.",
+  "Remove the other DLSS 5 toolchain…": "Remover a outra toolchain DLSS 5…",
+  "Delete the other toolchain's files? (1 of 2)": "Apagar os arquivos da outra toolchain? (1 de 2)",
+  "This deletes {list} and everything else that tool is known to place here, and puts back that tool's own backups where they belong to the game. If it modified game files in place without leaving a backup, those cannot be restored -- the game may break, and verifying the game files through its store fixes that. Your own OptiScaler install here is left as is. A second confirmation lists every file.": "Isso apaga {list} e tudo mais que essa ferramenta é conhecida por colocar aqui, e devolve os backups dela onde pertencem ao jogo. Se ela modificou arquivos do jogo sem deixar backup, esses não podem ser restaurados -- o jogo pode quebrar, e verificar os arquivos do jogo pela loja resolve. Sua própria instalação do OptiScaler aqui fica como está. Uma segunda confirmação lista cada arquivo.",
+  "Continue": "Continuar",
+  "Could not remove the other toolchain: {error}": "Não foi possível remover a outra toolchain: {error}",
+  "Other DLSS 5 toolchain removed.": "Outra toolchain DLSS 5 removida.",
+  "If the game now fails to start, verify its files through its store.": "Se o jogo não iniciar mais, verifique os arquivos dele pela loja.",
 });

@@ -17,7 +17,7 @@ const nativeDlss = require('./native-dlss');
 const { recommendRoute, withApiOverride, API_OVERRIDE_VALUES } = require('./route');
 const gpu = require('./gpu');
 const amdnr = require('./amdnr');
-const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, resolveUnrealShippingExe, foreignToolchains } = require('./detect');
+const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const managerUpdate = require('./manager-update');
 let electronAutoUpdater = null;
@@ -1129,6 +1129,52 @@ ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
     return { ok: true, ...result };
   } catch (err) {
     return { ok: false, error: err.message };
+  }
+});
+
+// The explicit, double-confirmed removal of another DLSS 5 toolchain. The card already asked once
+// (warning 1 of 2, renderer); this shows the second, native confirmation with the exact file list
+// and then deletes only what the plan names. Never runs without both.
+ipcMain.handle('game:removeForeign', async (_evt, exePath) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const ours = feeder.feederDeployed(dir) || lumaue.lumaUeDeployed(dir);
+    const plan = await planForeignRemoval(dir, { ours });
+    if (!plan.found.length) return { ok: true, cancelled: false, removed: [], restored: [], notes: ['nothing recognised'] };
+    if (!plan.del.length && !plan.restore.length) return { ok: true, cancelled: false, removed: [], restored: [], notes: plan.notes };
+    const tools = plan.found.map((f) => f.tool).join(', ');
+    const res = await dialog.showMessageBox({
+      type: 'warning',
+      buttons: ['Delete these files', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      title: 'Warning 2 of 2 -- delete the other DLSS 5 toolchain',
+      message: `Delete ${plan.del.length} item(s) placed by ${tools}?`,
+      detail: `Will delete:\n  ${plan.del.join('\n  ')}` +
+        (plan.restore.length ? `\n\nWill restore from that tool's backups:\n  ${plan.restore.map((r) => r.to).join('\n  ')}` : '') +
+        '\n\nIf that tool modified game files in place without leaving a backup, those cannot be restored here and the game may break -- verify the game files through its store afterwards if it does. Your own OptiScaler install here is not touched.',
+    });
+    if (res.response !== 0) return { ok: true, cancelled: true };
+    const removed = [];
+    const restored = [];
+    for (const r of plan.restore) {
+      const backup = path.join(dir, r.backup);
+      const to = path.join(dir, r.to);
+      if (!fs.existsSync(backup)) continue;
+      await fsp.rm(to, { recursive: true, force: true });
+      await fsp.rename(backup, to);
+      restored.push(r.to);
+    }
+    for (const rel of plan.del) {
+      const p = path.join(dir, rel);
+      if (!fs.existsSync(p)) continue;
+      await fsp.rm(p, { recursive: true, force: true });
+      removed.push(rel);
+    }
+    return { ok: true, cancelled: false, removed, restored, notes: plan.notes };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
   }
 });
 

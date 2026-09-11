@@ -68,6 +68,7 @@ contextBridge.exposeInMainWorld('api', {
   openFolder: (exePath) => ipcRenderer.invoke('game:open-folder', exePath),
 
   confirmRemove: (gameName) => ipcRenderer.invoke('game:confirm-remove', gameName),
+  removeForeign: (exePath) => ipcRenderer.invoke('game:removeForeign', exePath),
 
   cacheSteamBanner: (appid, fallbackImageUrl) => ipcRenderer.invoke('banner:cache-steam', { appid, fallbackImageUrl }),
   importLocalBanner: (sourcePath) => ipcRenderer.invoke('banner:import-local', sourcePath),

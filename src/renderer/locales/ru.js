@@ -368,4 +368,11 @@ window.I18N.register("ru", {
   "Another DLSS 5 toolchain is installed here ({tool}: {files}) -- two stacks hooking the same DLSS call crash the game. Remove it with its own uninstaller before using this one.": "Здесь установлен другой набор инструментов DLSS 5 ({tool}: {files}) -- два стека, перехватывающих один вызов DLSS, приводят к вылету игры. Удалите его собственным деинсталлятором, прежде чем использовать этот.",
   "Another DLSS 5 toolchain is here": "Здесь есть другой набор инструментов DLSS 5",
   "This folder already has {list}. Two stacks hooking the same DLSS call crash the game -- remove the other one with its own uninstaller first.": "В этой папке уже есть {list}. Два стека, перехватывающих один вызов DLSS, приводят к вылету -- сначала удалите другой его собственным деинсталлятором.",
+  "Remove the other DLSS 5 toolchain…": "Удалить другой набор инструментов DLSS 5…",
+  "Delete the other toolchain's files? (1 of 2)": "Удалить файлы другого набора инструментов? (1 из 2)",
+  "This deletes {list} and everything else that tool is known to place here, and puts back that tool's own backups where they belong to the game. If it modified game files in place without leaving a backup, those cannot be restored -- the game may break, and verifying the game files through its store fixes that. Your own OptiScaler install here is left as is. A second confirmation lists every file.": "Будут удалены {list} и всё остальное, что этот инструмент, как известно, кладёт сюда, а его собственные резервные копии вернутся туда, где они принадлежат игре. Если он изменил файлы игры без резервной копии, восстановить их нельзя -- игра может сломаться, и проверка файлов игры через магазин это исправит. Ваша установка OptiScaler здесь останется как есть. Второе подтверждение перечислит каждый файл.",
+  "Continue": "Продолжить",
+  "Could not remove the other toolchain: {error}": "Не удалось удалить другой набор инструментов: {error}",
+  "Other DLSS 5 toolchain removed.": "Другой набор инструментов DLSS 5 удалён.",
+  "If the game now fails to start, verify its files through its store.": "Если игра теперь не запускается, проверьте её файлы через магазин.",
 });

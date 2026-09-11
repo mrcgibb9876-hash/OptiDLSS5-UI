@@ -368,4 +368,11 @@ window.I18N.register("ko", {
   "Another DLSS 5 toolchain is installed here ({tool}: {files}) -- two stacks hooking the same DLSS call crash the game. Remove it with its own uninstaller before using this one.": "여기에 다른 DLSS 5 툴체인이 설치되어 있습니다({tool}: {files}) -- 같은 DLSS 호출을 두 스택이 후킹하면 게임이 충돌합니다. 이 앱을 사용하기 전에 해당 툴체인의 제거 도구로 제거하세요.",
   "Another DLSS 5 toolchain is here": "다른 DLSS 5 툴체인이 있습니다",
   "This folder already has {list}. Two stacks hooking the same DLSS call crash the game -- remove the other one with its own uninstaller first.": "이 폴더에는 이미 {list}이(가) 있습니다. 같은 DLSS 호출을 두 스택이 후킹하면 게임이 충돌합니다 -- 먼저 다른 툴체인을 그 제거 도구로 제거하세요.",
+  "Remove the other DLSS 5 toolchain…": "다른 DLSS 5 툴체인 제거…",
+  "Delete the other toolchain's files? (1 of 2)": "다른 툴체인의 파일을 삭제할까요? (1/2)",
+  "This deletes {list} and everything else that tool is known to place here, and puts back that tool's own backups where they belong to the game. If it modified game files in place without leaving a backup, those cannot be restored -- the game may break, and verifying the game files through its store fixes that. Your own OptiScaler install here is left as is. A second confirmation lists every file.": "{list} 및 해당 도구가 여기에 두는 것으로 알려진 모든 파일을 삭제하고, 해당 도구의 백업 중 게임에 속하는 것은 되돌립니다. 백업 없이 게임 파일을 직접 수정했다면 복원할 수 없습니다 -- 게임이 망가질 수 있으며, 스토어에서 게임 파일 검증으로 해결됩니다. 여기의 OptiScaler 설치는 그대로 둡니다. 두 번째 확인에서 모든 파일을 나열합니다.",
+  "Continue": "계속",
+  "Could not remove the other toolchain: {error}": "다른 툴체인을 제거할 수 없습니다: {error}",
+  "Other DLSS 5 toolchain removed.": "다른 DLSS 5 툴체인이 제거되었습니다.",
+  "If the game now fails to start, verify its files through its store.": "게임이 이제 시작되지 않으면 스토어에서 게임 파일을 검증하세요.",
 });

@@ -113,6 +113,7 @@ async function renderGrid() {
         <div class="card-warning card-route-next hidden"></div>
         <div class="card-warning card-detect-warning hidden"></div>
         ${(status.warnings || []).map((w) => `<div class="card-warning" title="${escapeHtml(t(w.message, w.vars))}">⚠ ${escapeHtml(t(w.message, w.vars))}</div>`).join('')}
+        ${(status.foreign || []).length ? `<button class="btn btn-danger btn-small btn-remove-foreign" style="margin: 2px 0 6px;">${escapeHtml(t('Remove the other DLSS 5 toolchain…'))}</button>` : ''}
         <div class="card-actions">
           <button class="btn ${backends.optiscaler || (backends.leftovers || []).length ? 'btn-danger' : 'btn-primary'} btn-install">${escapeHtml(backends.optiscaler ? t('Remove OptiScaler') : (backends.leftovers || []).length ? t('Remove leftovers') : t('Install OptiScaler'))}</button>
           <button class="btn btn-ghost btn-setup" title="${escapeHtml(t('Optional -- the app already sets up the proxy DLL. Use this for OptiPatcher or spoofing options.'))}">${escapeHtml(t('Setup script'))}</button>
@@ -198,6 +199,28 @@ async function renderGrid() {
         installGame(game);
       }
     });
+    const removeForeignBtn = card.querySelector('.btn-remove-foreign');
+    if (removeForeignBtn) {
+      removeForeignBtn.addEventListener('click', () => {
+        // Warning 1 of 2 on the card; main.js shows warning 2 of 2 natively with the exact list.
+        const list = (status.foreign || []).map((f) => `${f.tool}: ${f.files.join(', ')}`).join('; ');
+        flipToConfirm(card, {
+          title: t('Delete the other toolchain\'s files? (1 of 2)'),
+          detail: t('This deletes {list} and everything else that tool is known to place here, and puts back that tool\'s own backups where they belong to the game. If it modified game files in place without leaving a backup, those cannot be restored -- the game may break, and verifying the game files through its store fixes that. Your own OptiScaler install here is left as is. A second confirmation lists every file.', { list }),
+          confirmLabel: t('Continue'),
+          danger: true,
+          onConfirm: async () => {
+            const res = await window.api.removeForeign(game.exePath);
+            if (!res.ok) { toast(t('Could not remove the other toolchain: {error}', { error: res.error })); return; }
+            if (res.cancelled) return;
+            const removed = res.removed.length ? t('Removed: {list}.', { list: res.removed.join(', ') }) : t('Nothing left to remove.');
+            const restored = res.restored.length ? ' ' + t('Restored: {list}.', { list: res.restored.join(', ') }) : '';
+            toast(`${t('Other DLSS 5 toolchain removed.')} ${removed}${restored} ${t('If the game now fails to start, verify its files through its store.')}`);
+            renderGrid();
+          },
+        });
+      });
+    }
     card.querySelector('.btn-setup').addEventListener('click', () => runSetup(game));
     card.querySelector('.btn-open').addEventListener('click', () => window.api.openFolder(game.exePath));
     card.querySelector('.btn-edit').addEventListener('click', () => openGameModal(game));

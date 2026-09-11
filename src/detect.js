@@ -733,6 +733,33 @@ const FOREIGN_TOOLCHAINS = [
   { tool: 'a RenoDX DLSS 5 add-on', pattern: /^renodx-dlss.*\.addon(64|32)?$/i },
 ];
 
+// What each recognised tool is known to place -- the explicit "remove the other toolchain"
+// action deletes exactly these (and only for a tool whose markers are present), restores that
+// tool's own backups where the backed-up name is one a game can own, and reverses DLSS5-Swapper's
+// manifest the way its own uninstall would. Nothing else in the folder is touched; a game file a
+// tool patched in place without a backup is beyond reach, which the UI says twice.
+const FOREIGN_REMOVALS = {
+  DLSS5oneclick: {
+    files: ['Core', 'docs', 'redist', 'INSTALL-DLSSNR.md', 'SHA256SUMS', 'README.md', 'LICENSE', 'dlss5-feed-crash.dmp',
+      'dlss5-feed.addon64', 'dlss5-feed.addon32', 'dlss5-feed.cfg', 'dlss5-feed.log', 'dlss5-feed-host64.exe',
+      'renodx-dlss5.addon64', 'renodx-dlss.addon64', 'nvngx_dlssnr_proxy.dll', 'host64'],
+    patterns: [/^get_streamline\.[a-z0-9]+$/i, /^read ?me( - dlss neural rendering)?\.(txt|md)$/i, /^ReShade[_ ]?Setup.*\.exe$/i, /^ReShade\.exe$/i],
+    backupSuffix: '.dlss5oneclick',
+  },
+  'DLSS5-Swapper': {
+    files: ['renodx-dlss5.addon64', 'renodx-dlss.addon64', 'host64', 'dlss5-feed-host64.exe', 'dlss5-feed.addon64', 'dlss5-feed.addon32', 'dlss5-feed.cfg', 'dlss5-feed.log'],
+    manifest: '_DLSS5_Backup',
+  },
+  'DLSSNR-Cost-Scaler': { files: ['nvngx_dlssnr_proxy.dll'], patterns: [/cost[_ -]?scaler/i] },
+  'a RenoDX DLSS 5 add-on': { patterns: [/^renodx-dlss.*\.addon(64|32)?$/i, /^renodx.*\.ini$/i] },
+};
+// A backed-up name a game could legitimately own comes back from the backup; anything else that
+// only a DLSS 5 tool would put there is deleted along with its backup.
+const NEVER_GAME_OWNED = /^(nvngx_dlssnr|nvngx\.dll_dlssnr|OptiScaler|!! EXTRACT|dlss5-feed|renodx|ReShade)/i;
+// This app's own payload is never part of a foreign removal while its install is present here --
+// another tool's backup of nvngx_dlssnr.dll must not take our NR model with it.
+const OUR_PAYLOAD = ['nvngx_dlssnr.dll', 'nvngx.dll_dlssnr.dll', 'OptiScaler.ini', 'OptiScaler.dll', 'OptiScaler', '!! EXTRACT ALL FILES TO GAME FOLDER !!', 'setup_windows.bat', 'setup_linux.sh', 'Licenses'];
+
 function foreignToolchains(dir) {
   let names = [];
   try { names = fs.readdirSync(dir); } catch { return []; }
@@ -856,4 +883,65 @@ function isDetectionStale(stored, dir) {
   return false;
 }
 
-module.exports = { DETECT_VERSION, detectGame, detectRenderApi, isDetectionStale, isReEngineGame, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, foreignToolchains };
+// Plans the removal without doing it, so both confirmations can show the exact list. `ours`
+// says whether this app's own ReShade-based stack (Feeder / Luma) is deployed here -- when it is
+// not, the shared ReShade files (ini, preset, log, shader folder, a ReShade proxy in a hook slot)
+// belong to the other toolchain and go too.
+async function planForeignRemoval(dir, { ours = false } = {}) {
+  const found = foreignToolchains(dir);
+  const del = new Set();
+  const restore = [];
+  const notes = [];
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch { return { found, del: [], restore, notes }; }
+  const exists = (rel) => fs.existsSync(path.join(dir, ...rel.split('/')));
+
+  for (const f of found) {
+    const spec = FOREIGN_REMOVALS[f.tool];
+    if (!spec) continue;
+    for (const rel of spec.files || []) if (exists(rel)) del.add(rel);
+    for (const p of spec.patterns || []) for (const n of names) if (p.test(n)) del.add(n);
+    if (spec.backupSuffix) {
+      for (const n of names) {
+        if (!n.endsWith(spec.backupSuffix)) continue;
+        const original = n.slice(0, -spec.backupSuffix.length);
+        if (NEVER_GAME_OWNED.test(original)) { del.add(n); del.add(original); }
+        else restore.push({ backup: n, to: original });
+      }
+    }
+    if (spec.manifest) {
+      // DLSS5-Swapper journals from the game root, which for an Unreal game is above the exe.
+      let base = dir;
+      for (let up = 0; up <= 3 && !fs.existsSync(path.join(base, spec.manifest, 'manifest.json')); up++) base = path.dirname(base);
+      const manifestPath = path.join(base, spec.manifest, 'manifest.json');
+      if (fs.existsSync(manifestPath)) {
+        try {
+          const m = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+          for (const rel of (m.added || []).filter((x) => typeof x === 'string')) {
+            const abs = path.join(base, rel);
+            if (fs.existsSync(abs)) del.add(path.relative(dir, abs));
+          }
+          for (const r of m.replaced || []) {
+            const rel = typeof r === 'string' ? r : r && r.rel;
+            if (!rel) continue;
+            const backup = path.join(base, spec.manifest, rel);
+            if (fs.existsSync(backup)) restore.push({ backup: path.relative(dir, backup), to: path.relative(dir, path.join(base, rel)) });
+          }
+          del.add(path.relative(dir, path.join(base, spec.manifest)));
+        } catch { notes.push(spec.manifest + '/manifest.json could not be read -- its journal was not reversed'); }
+      }
+    }
+  }
+
+  if (found.length && !ours) {
+    for (const n of ['ReShade.ini', 'ReShadePreset.ini', 'ReShade.log', 'reshade-shaders', 'ReShade64.dll']) if (exists(n)) del.add(n);
+    const hooks = await inspectHookDlls(dir);
+    if (hooks.reshadeProxy) del.add(hooks.reshadeProxy);
+  }
+  const oursInstalled = exists('.optiscaler-manager-install.json') || (exists('OptiScaler.ini') && exists('nvngx_dlssnr.dll'));
+  if (oursInstalled) for (const n of OUR_PAYLOAD) del.delete(n);
+  for (const r of restore) del.delete(r.backup);
+  return { found, del: [...del].sort(), restore, notes };
+}
+
+module.exports = { DETECT_VERSION, detectGame, detectRenderApi, isDetectionStale, isReEngineGame, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, foreignToolchains, planForeignRemoval };

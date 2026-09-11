@@ -368,4 +368,11 @@ window.I18N.register("de", {
   "Another DLSS 5 toolchain is installed here ({tool}: {files}) -- two stacks hooking the same DLSS call crash the game. Remove it with its own uninstaller before using this one.": "Hier ist eine weitere DLSS-5-Toolchain installiert ({tool}: {files}) -- zwei Stacks, die denselben DLSS-Aufruf abfangen, lassen das Spiel abstürzen. Entferne sie mit ihrem eigenen Deinstaller, bevor du diese hier nutzt.",
   "Another DLSS 5 toolchain is here": "Eine weitere DLSS-5-Toolchain ist hier",
   "This folder already has {list}. Two stacks hooking the same DLSS call crash the game -- remove the other one with its own uninstaller first.": "In diesem Ordner ist bereits {list}. Zwei Stacks, die denselben DLSS-Aufruf abfangen, lassen das Spiel abstürzen -- entferne zuerst die andere mit ihrem eigenen Deinstaller.",
+  "Remove the other DLSS 5 toolchain…": "Die andere DLSS-5-Toolchain entfernen…",
+  "Delete the other toolchain's files? (1 of 2)": "Dateien der anderen Toolchain löschen? (1 von 2)",
+  "This deletes {list} and everything else that tool is known to place here, and puts back that tool's own backups where they belong to the game. If it modified game files in place without leaving a backup, those cannot be restored -- the game may break, and verifying the game files through its store fixes that. Your own OptiScaler install here is left as is. A second confirmation lists every file.": "Das löscht {list} und alles andere, was dieses Tool hier bekanntermaßen ablegt, und stellt dessen eigene Sicherungen dort wieder her, wo sie zum Spiel gehören. Hat es Spieldateien direkt ohne Sicherung verändert, lassen sich diese nicht wiederherstellen -- das Spiel kann kaputtgehen, und eine Überprüfung der Spieldateien über den Store behebt das. Deine eigene OptiScaler-Installation hier bleibt unberührt. Eine zweite Bestätigung listet jede Datei auf.",
+  "Continue": "Weiter",
+  "Could not remove the other toolchain: {error}": "Die andere Toolchain konnte nicht entfernt werden: {error}",
+  "Other DLSS 5 toolchain removed.": "Andere DLSS-5-Toolchain entfernt.",
+  "If the game now fails to start, verify its files through its store.": "Falls das Spiel jetzt nicht mehr startet, überprüfe seine Dateien über den Store.",
 });
