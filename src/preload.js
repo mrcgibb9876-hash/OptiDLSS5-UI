@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld('api', {
   gameStatus: (exePath) => ipcRenderer.invoke('game:status', exePath),
   gameRoute: (exePath, detected) => ipcRenderer.invoke('game:route', { exePath, detected }),
   gpuInfo: () => ipcRenderer.invoke('gpu:info'),
+  setApiOverride: (exePath, api) => ipcRenderer.invoke('game:setApiOverride', { exePath, api }),
 
   amdNrStatus: (exePath, api) => ipcRenderer.invoke('amdnr:status', { exePath, api }),
   amdNrLatest: () => ipcRenderer.invoke('amdnr:latest'),

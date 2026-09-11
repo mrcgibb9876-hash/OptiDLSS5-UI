@@ -220,15 +220,22 @@ async function applyRecommendation(game, card, backends) {
     : detected.recommend === 'optiscaler' ? 'engine-badge-known'
     : 'engine-badge-unknown';
   const title = escapeHtml(detected.reason);
-  const engineText = detected.engine || (detected.apiBadge ? null : (detected.badge || 'Unknown'));
-  const chips = [];
-  if (engineText) chips.push(`<span class="engine-badge ${badgeClass}" title="${title}">${escapeHtml(engineText)}</span>`);
-  if (detected.apiBadge) chips.push(`<span class="engine-badge api-badge ${badgeClass}" title="${title}">${escapeHtml(detected.apiBadge)}</span>`);
-
   // The route tag: which stack this game should get (OptiScaler alone, + Feeder, + Luma UE), and
   // whether it is all there yet -- decided in main.js (route.js) from the folder and the cached
   // detection above, so the card answers "what do I click" before the Edit dialog ever opens.
+  // It also carries the user's per-game API choice, which the API chip shows in place of the guess.
   const route = await window.api.gameRoute(game.exePath, detected);
+
+  const engineText = detected.engine || (detected.apiBadge ? null : (detected.badge || 'Unknown'));
+  const chips = [];
+  if (engineText) chips.push(`<span class="engine-badge ${badgeClass}" title="${title}">${escapeHtml(engineText)}</span>`);
+  if (route.apiOverride) {
+    const chosenTitle = escapeHtml(`Set to ${API_LABEL[route.apiOverride]} in Edit (detection said ${detected.apiBadge || 'unknown'})`);
+    chips.push(`<span class="engine-badge api-badge engine-badge-known" title="${chosenTitle}">${API_LABEL[route.apiOverride]} \u2713</span>`);
+  } else if (detected.apiBadge) {
+    chips.push(`<span class="engine-badge api-badge ${badgeClass}" title="${title}">${escapeHtml(detected.apiBadge)}</span>`);
+  }
+
   const routeClass = route.route === 'unsupported' ? 'route-badge-unsupported'
     : route.route === 'unknown' ? 'route-badge-unknown'
     : route.complete ? 'route-badge-done'
@@ -261,6 +268,8 @@ async function applyRecommendation(game, card, backends) {
     install.classList.add('btn-primary');
   }
 }
+const API_LABEL = { dx12: 'DX12', dx11: 'DX11', vulkan: 'Vulkan' };
+
 function flipToConfirm(card, { title, detail, onConfirm, confirmLabel = 'Remove', danger = true }) {
   card.querySelector('.card-remove-title').textContent = title;
   card.querySelector('.card-remove-detail').textContent = detail;
@@ -428,6 +437,7 @@ async function openGameModal(game) {
   updateBannerPreview();
   gameModal.classList.remove('hidden');
   await loadRouteStatus(game);
+  await loadApiSection(game);
   await loadEngineProfileStatus(game);
   await loadFrameGenSection(game);
   await loadInjectorSection(game);
@@ -517,6 +527,67 @@ $('#btn-amdnr-run-setup').addEventListener('click', async () => {
   const game = games.find((x) => x.id === editingGameId);
   const res = await window.api.amdNrRunSetup(game.exePath);
   toast(res.ok ? 'Opened its installer in a console -- follow its prompts, then reopen Edit to re-check.' : res.error);
+});
+
+// The per-game graphics API choice -- see game:setApiOverride in main.js for what it drives.
+// Offered for every game with an exe (detection can be wrong on a single-API game too), and
+// called out when the game demonstrably ships more than one renderer.
+async function loadApiSection(game) {
+  const section = $('#game-api-section');
+  const select = $('#game-api-select');
+  const status = $('#game-api-status');
+  if (!game || !game.exePath) {
+    section.classList.add('hidden');
+    return;
+  }
+  const route = await window.api.gameRoute(game.exePath, game.detectedPath);
+  section.classList.remove('hidden');
+
+  const detectedLabel = (game.detectedPath && game.detectedPath.apiBadge) || 'not detected';
+  select.innerHTML = '';
+  const auto = document.createElement('option');
+  auto.value = '';
+  auto.textContent = `Auto (detected: ${detectedLabel})`;
+  select.appendChild(auto);
+  for (const api of ['dx12', 'dx11', 'vulkan']) {
+    const opt = document.createElement('option');
+    opt.value = api;
+    opt.textContent = API_LABEL[api];
+    select.appendChild(opt);
+  }
+  select.value = route.apiOverride || '';
+
+  const multi = (route.detectedApis || []).length > 1;
+  status.className = `status-line ${route.apiOverride ? 'status-ok' : ''}`.trim();
+  status.textContent = route.apiOverride
+    ? `Set to ${API_LABEL[route.apiOverride]} -- everything API-dependent follows this, not the detected ${detectedLabel}.`
+    : multi
+      ? `This game ships ${detectedLabel}: detection picked ${API_LABEL[route.detectedApi] || 'the first'}; choose the one you run if that is not it.`
+      : '';
+}
+
+$('#game-api-select').addEventListener('change', async (e) => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  const api = e.target.value || null;
+  const status = $('#game-api-status');
+  status.textContent = 'Applying…';
+  const res = await window.api.setApiOverride(game.exePath, api);
+  if (!res.ok) {
+    toast(`Could not set the graphics API: ${res.error}`);
+  } else {
+    const applied = res.applied && res.applied.length > 0 ? ` Re-configured OptiScaler.ini: ${res.applied.map((x) => x.key).join(', ')}.` : '';
+    toast(api ? `This game is now treated as ${API_LABEL[api]}.${applied}` : `Back to the detected graphics API.${applied}`);
+  }
+  // Every section below the choice depends on it.
+  await loadRouteStatus(game);
+  await loadApiSection(game);
+  await loadInjectorSection(game);
+  await loadFeederSection(game);
+  await loadOptiFgSection(game);
+  await loadLosslessSection(game);
+  await loadAmdNrSection(game);
+  renderGrid();
 });
 
 // The same route the card tags, spelled out: which stack this game gets and what is still to do.

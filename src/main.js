@@ -13,7 +13,7 @@ const injector = require('./injector');
 const feeder = require('./feeder');
 const lossless = require('./lossless');
 const lumaue = require('./lumaue');
-const { recommendRoute } = require('./route');
+const { recommendRoute, withApiOverride, API_OVERRIDE_VALUES } = require('./route');
 const gpu = require('./gpu');
 const amdnr = require('./amdnr');
 const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame } = require('./detect');
@@ -242,7 +242,7 @@ ipcMain.handle('feeder:readiness', async (_evt, exePath) => {
   if ((lumaue.isFallenOrder(exePath) || lumaue.lumaUeDeployed(dir)) && !feeder.feederDeployed(dir)) {
     return { ready: false, needed: false, reason: 'This game uses Luma UE for its DLSS call, not the Feeder -- see the Luma UE section.' };
   }
-  const api = await detectRenderApi(dir, exePath);
+  const api = await resolveApi(dir, exePath);
   return { needed: true, ...feeder.feederReadiness(dir, api) };
 });
 
@@ -288,7 +288,7 @@ ipcMain.handle('feeder:checkUpdate', async (_evt, exePath) => {
 ipcMain.handle('optifg:readiness', async (_evt, exePath) => {
   if (!exePath || !fs.existsSync(exePath)) return { supported: false, reason: 'Game .exe not found' };
   const dir = gameDir(exePath);
-  const api = await detectRenderApi(dir, exePath);
+  const api = await resolveApi(dir, exePath);
   return { api, ...optiFgReadiness(dir, api) };
 });
 
@@ -436,7 +436,7 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
-    const api = await detectRenderApi(dir, exePath);
+    const api = await resolveApi(dir, exePath);
     const results = await feeder.deployFeederStack(dir, api, mvProviderId, {
       cacheDir: feederCacheDir(),
       getRhiManifest,
@@ -673,6 +673,50 @@ function gameDir(exePath) {
   return path.dirname(exePath);
 }
 
+// ── Per-game graphics API choice ─────────────────────────────────────────────
+// Where Winds Meet links DX11 in its exe and ships a DX12 path beside it (see detect.js's
+// folderApiEvidence); detection has to name one primary and names what the exe says. Which one
+// the game actually runs is a setting in its own video options -- and every API-dependent
+// decision here follows it: the upscaler key autoConfigureGame writes, whether the Feeder or
+// OptiScaler's own Frame Generation apply, whether DLSS NR on AMD is offered. So a game that
+// ships more than one gets a choice. Stored beside the exe like the other per-game markers, so
+// every entry point (install, sync, deploy, the card) sees the same answer.
+const API_OVERRIDE_MARKER = '.dlss5ui-api.json';
+
+function readApiOverride(dir) {
+  const marker = readJson(path.join(dir, API_OVERRIDE_MARKER), null);
+  return marker && API_OVERRIDE_VALUES.includes(marker.api) ? marker.api : null;
+}
+
+function writeApiOverride(dir, api) {
+  const file = path.join(dir, API_OVERRIDE_MARKER);
+  if (!api) {
+    if (fs.existsSync(file)) fs.rmSync(file);
+    return;
+  }
+  writeJson(file, { api, setAt: new Date().toISOString() });
+}
+
+// The primary API every handler should act on: the user's choice if there is one, else detection.
+async function resolveApi(dir, exePath) {
+  return readApiOverride(dir) || detectRenderApi(dir, exePath);
+}
+
+ipcMain.handle('game:setApiOverride', async (_evt, { exePath, api }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    if (api && !API_OVERRIDE_VALUES.includes(api)) throw new Error(`${api} is not a graphics API this app knows`);
+    const dir = gameDir(exePath);
+    writeApiOverride(dir, api || null);
+    // An installed game's ini follows the choice right away (upscaler key, FG gate), the same
+    // way optifg:set re-runs the configuration rather than waiting for the next sync.
+    const configured = fs.existsSync(path.join(dir, 'OptiScaler.ini')) ? await autoConfigureGame(dir, exePath) : null;
+    return { ok: true, api: api || null, applied: configured ? configured.applied : [] };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
 function detectInstalledBackends(dir) {
   const has = (name) => fs.existsSync(path.join(dir, name));
   const optiscaler = has('OptiScaler.ini') && has('nvngx_dlssnr.dll');
@@ -698,7 +742,15 @@ ipcMain.handle('game:route', async (_evt, { exePath, detected }) => {
     return { route: 'unknown', label: 'Exe missing', reason: 'Game .exe not found', steps: [], complete: false, nextStep: null };
   }
   const { vendor } = await getGpuInfo();
-  return recommendRoute(gameDir(exePath), exePath, detected || {}, vendor);
+  const dir = gameDir(exePath);
+  const effective = withApiOverride(detected || {}, readApiOverride(dir));
+  return {
+    ...recommendRoute(dir, exePath, effective, vendor),
+    apiOverride: effective.apiOverride,
+    effectiveApi: effective.api || null,
+    detectedApi: (detected && detected.api) || null,
+    detectedApis: (detected && detected.apis) || [],
+  };
 });
 
 // ── DLSS NR on AMD (amdnr.js) ────────────────────────────────────────────────
@@ -710,7 +762,7 @@ ipcMain.handle('amdnr:status', async (_evt, { exePath, api }) => {
   const { vendor } = await getGpuInfo();
   const status = amdnr.amdNrStatus(dir);
   const nrDllVersion = status.nrDllPresent ? await framegen.readDllVersion(execFileAsync, path.join(dir, 'nvngx_dlssnr.dll')) : null;
-  return { ok: true, ...status, nrDllVersion, ...amdnr.amdNrEligibility(vendor, api || null) };
+  return { ok: true, ...status, nrDllVersion, ...amdnr.amdNrEligibility(vendor, readApiOverride(dir) || api || null) };
 });
 
 ipcMain.handle('amdnr:latest', async () => {
@@ -1596,7 +1648,7 @@ async function autoConfigureGame(dir, exePath) {
   const iniPath = path.join(dir, 'OptiScaler.ini');
   if (!fs.existsSync(iniPath)) return { api: null, applied: [] };
 
-  const { api, apis } = await detectGame(dir, exePath);
+  const { api, apis } = withApiOverride(await detectGame(dir, exePath), readApiOverride(dir));
   const dlss5Only = hasNativeDlss(dir);
   // hasNativeDlss() just checks for nvngx_dlss.dll on disk -- for a Feeder game that file was
   // placed by the Feeder deploy itself, not the game, so this alone can't tell native DLSS
