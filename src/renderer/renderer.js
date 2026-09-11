@@ -1881,6 +1881,8 @@ window.addEventListener('focus', () => {
   games = data.games || [];
   settings = data.settings || { releaseFolder: '', nrDllPath: '', installedVersion: '' };
   try { gpu = (await window.api.gpuInfo()) || gpu; } catch {}
+  // Vendor colours: the default green is NVIDIA's; an AMD card gets AMD red (style.css, body.vendor-amd).
+  document.body.classList.toggle('vendor-amd', gpu.vendor === 'amd');
   await refreshBannerVisibility();
   await renderGrid();
   await ensureBundledEngine();
