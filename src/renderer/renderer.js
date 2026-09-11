@@ -9,9 +9,9 @@ let pendingManagerUpdate = null;
 let gpu = { vendor: 'unknown', name: null, driverVersion: null };
 
 function gpuLabel() {
-  const vendorName = { nvidia: 'NVIDIA', amd: 'AMD', intel: 'Intel' }[gpu.vendor] || 'Unknown vendor';
+  const vendorName = { nvidia: 'NVIDIA', amd: 'AMD', intel: 'Intel' }[gpu.vendor] || t('Unknown vendor');
   const name = gpu.name || vendorName;
-  return gpu.driverVersion ? `${name} (driver ${gpu.driverVersion})` : name;
+  return gpu.driverVersion ? t('{name} (driver {version})', { name, version: gpu.driverVersion }) : name;
 }
 
 const $ = (sel) => document.querySelector(sel);
@@ -84,10 +84,10 @@ async function renderGrid() {
 
     const backends = status.backends || { optiscaler: false };
     let badgeClass = 'badge-none';
-    let badgeText = 'Not installed';
+    let badgeText = t('Not installed');
     if (status.exeMissing) {
       badgeClass = 'badge-missing';
-      badgeText = 'Exe missing';
+      badgeText = t('Exe missing');
     } else if (backends.optiscaler) {
       badgeClass = 'badge-installed';
       badgeText = 'OptiScaler';
@@ -95,7 +95,7 @@ async function renderGrid() {
       // On an AMD card a lone nvngx_dlssnr.dll is the DLSS-NR-on-AMD layout, not a half-done
       // OptiScaler install -- the route chip carries that state; this badge stays "Not installed".
       badgeClass = 'badge-partial';
-      badgeText = status.hasNr ? 'Missing OptiScaler files' : 'Missing NR file';
+      badgeText = status.hasNr ? t('Missing OptiScaler files') : t('Missing NR file');
     }
 
     card.innerHTML = `
@@ -109,17 +109,17 @@ async function renderGrid() {
       <div class="card-body">
         <div class="card-title">${escapeHtml(game.name)}</div>
         <div class="card-path" title="${escapeHtml(game.exePath)}">${escapeHtml(game.exePath)}</div>
-        <div class="card-path card-recommend" title="Which install path suits this game">Checking graphics API…</div>
+        <div class="card-path card-recommend" title="${escapeHtml(t('Which install path suits this game'))}">${escapeHtml(t('Checking graphics API…'))}</div>
         <div class="card-warning card-route-next hidden"></div>
         ${(status.warnings || []).map((w) => `<div class="card-warning" title="${escapeHtml(w.message)}">⚠ ${escapeHtml(w.message)}</div>`).join('')}
         <div class="card-actions">
-          <button class="btn ${backends.optiscaler ? 'btn-danger' : 'btn-primary'} btn-install">${backends.optiscaler ? 'Remove OptiScaler' : 'Install OptiScaler'}</button>
-          <button class="btn btn-ghost btn-setup" title="Optional -- the app already sets up the proxy DLL. Use this for OptiPatcher or spoofing options.">Setup script</button>
+          <button class="btn ${backends.optiscaler ? 'btn-danger' : 'btn-primary'} btn-install">${escapeHtml(backends.optiscaler ? t('Remove OptiScaler') : t('Install OptiScaler'))}</button>
+          <button class="btn btn-ghost btn-setup" title="${escapeHtml(t('Optional -- the app already sets up the proxy DLL. Use this for OptiPatcher or spoofing options.'))}">${escapeHtml(t('Setup script'))}</button>
         </div>
         <div class="card-actions-row2">
-          <button class="btn btn-ghost btn-open">Open Folder</button>
-          <button class="btn btn-ghost btn-edit">Edit</button>
-          <button class="btn btn-ghost btn-danger btn-remove">Remove</button>
+          <button class="btn btn-ghost btn-open">${escapeHtml(t('Open Folder'))}</button>
+          <button class="btn btn-ghost btn-edit">${escapeHtml(t('Edit'))}</button>
+          <button class="btn btn-ghost btn-danger btn-remove">${escapeHtml(t('Remove'))}</button>
         </div>
       </div>
       </div>
@@ -127,8 +127,8 @@ async function renderGrid() {
         <div class="card-remove-title"></div>
         <div class="card-remove-detail"></div>
         <div class="card-remove-actions">
-          <button class="btn btn-ghost btn-flip-cancel">Cancel</button>
-          <button class="btn btn-danger btn-flip-confirm">Remove</button>
+          <button class="btn btn-ghost btn-flip-cancel">${escapeHtml(t('Cancel'))}</button>
+          <button class="btn btn-danger btn-flip-confirm">${escapeHtml(t('Remove'))}</button>
         </div>
       </div>
       </div>
@@ -162,11 +162,11 @@ async function renderGrid() {
     card.querySelector('.btn-install').addEventListener('click', () => {
       if (backends.optiscaler) {
         flipToConfirm(card, {
-          title: 'Remove OptiScaler?',
-          detail: 'Removes the files this app installed and puts back anything it renamed. No terminal.',
+          title: t('Remove OptiScaler?'),
+          detail: t('Removes the files this app installed and puts back anything it renamed. No terminal.'),
           onConfirm: async () => {
             const res = await window.api.runUninstall(game.exePath);
-            toast(res.ok ? describeUninstall(res) : `Couldn't remove OptiScaler: ${res.error}`);
+            toast(res.ok ? describeUninstall(res) : t("Couldn't remove OptiScaler: {error}", { error: res.error }));
             renderGrid();
           }
         });
@@ -174,11 +174,11 @@ async function renderGrid() {
         // Installs fine, renders nothing new: OptiScaler's NR pass needs NVIDIA's NGX runtime.
         // Said before the click lands, not after, so an "OptiScaler" badge never reads as NR working.
         flipToConfirm(card, {
-          title: 'Install OptiScaler on this GPU?',
-          detail: `This is an ${gpu.vendor === 'amd' ? 'AMD' : 'Intel'} card: OptiScaler installs and its upscaler swap works, but its ` +
-            `Neural Rendering will not run here (needs NVIDIA).${gpu.vendor === 'amd' ? ' For NR on AMD, see "DLSS 5 Neural Rendering on AMD" under Edit.' : ''}`,
+          title: t('Install OptiScaler on this GPU?'),
+          detail: t('This is an {vendor} card: OptiScaler installs and its upscaler swap works, but its Neural Rendering will not run here (needs NVIDIA).', { vendor: gpu.vendor === 'amd' ? 'AMD' : 'Intel' }) +
+            (gpu.vendor === 'amd' ? ' ' + t('For NR on AMD, see "DLSS 5 Neural Rendering on AMD" under Edit.') : ''),
           onConfirm: () => installGame(game),
-          confirmLabel: 'Install anyway',
+          confirmLabel: t('Install anyway'),
           danger: false,
         });
       } else {
@@ -212,7 +212,7 @@ async function applyRecommendation(game, card, backends) {
     game.detectedPath = fresh;
     window.api.saveGames(games);
   }
-  detected = detected || fresh || { recommend: 'unknown', reason: 'not detected yet' };
+  detected = detected || fresh || { recommend: 'unknown', reason: t('not detected yet') };
 
   if (!line) return;
   const canRecommendInstall = !backends.optiscaler;
@@ -226,11 +226,11 @@ async function applyRecommendation(game, card, backends) {
   // It also carries the user's per-game API choice, which the API chip shows in place of the guess.
   const route = await window.api.gameRoute(game.exePath, detected);
 
-  const engineText = detected.engine || (detected.apiBadge ? null : (detected.badge || 'Unknown'));
+  const engineText = detected.engine || (detected.apiBadge ? null : (detected.badge || t('Unknown')));
   const chips = [];
   if (engineText) chips.push(`<span class="engine-badge ${badgeClass}" title="${title}">${escapeHtml(engineText)}</span>`);
   if (route.apiOverride) {
-    const chosenTitle = escapeHtml(`Set to ${API_LABEL[route.apiOverride]} in Edit (detection said ${detected.apiBadge || 'unknown'})`);
+    const chosenTitle = escapeHtml(t('Set to {api} in Edit (detection said {detected})', { api: API_LABEL[route.apiOverride], detected: detected.apiBadge || t('unknown') }));
     chips.push(`<span class="engine-badge api-badge engine-badge-known" title="${chosenTitle}">${API_LABEL[route.apiOverride]} \u2713</span>`);
   } else if (detected.apiBadge) {
     chips.push(`<span class="engine-badge api-badge ${badgeClass}" title="${title}">${escapeHtml(detected.apiBadge)}</span>`);
@@ -240,8 +240,8 @@ async function applyRecommendation(game, card, backends) {
     : route.route === 'unknown' ? 'route-badge-unknown'
     : route.complete ? 'route-badge-done'
     : 'route-badge-todo';
-  const routeText = route.complete ? `\u2713 ${route.label}` : route.label;
-  const routeTitle = escapeHtml(route.nextStep && route.optiInstalled ? `${route.reason} Next: ${route.nextStep}.` : route.reason);
+  const routeText = route.complete ? `\u2713 ${t(route.label)}` : t(route.label);
+  const routeTitle = escapeHtml(route.nextStep && route.optiInstalled ? `${t(route.reason, route.reasonVars)} ${t('Next: {step}.', { step: t(route.nextStep) })}` : t(route.reason, route.reasonVars));
   chips.push(`<span class="engine-badge route-badge ${routeClass}" title="${routeTitle}">${escapeHtml(routeText)}</span>`);
 
   line.innerHTML = chips.join(' ');
@@ -253,13 +253,13 @@ async function applyRecommendation(game, card, backends) {
   if (nextEl) {
     const showNext = route.optiInstalled && !route.complete && route.nextStep;
     nextEl.classList.toggle('hidden', !showNext);
-    if (showNext) nextEl.textContent = `\u26a0 Next: ${route.nextStep}`;
+    if (showNext) nextEl.textContent = `\u26a0 ${t('Next: {step}', { step: t(route.nextStep) })}`;
   }
 
   if (canRecommendInstall && route.route === 'feeder' && !route.feederDeployed) {
-    install.textContent = 'Install OptiScaler + Feeder';
+    install.textContent = t('Install OptiScaler + Feeder');
   } else if (canRecommendInstall && route.route === 'lumaue') {
-    install.textContent = 'Install OptiScaler (then Luma UE)';
+    install.textContent = t('Install OptiScaler (then Luma UE)');
   }
 
   if (detected.recommend === 'unsupported' || route.route === 'unsupported') {
@@ -270,7 +270,7 @@ async function applyRecommendation(game, card, backends) {
 }
 const API_LABEL = { dx12: 'DX12', dx11: 'DX11', vulkan: 'Vulkan' };
 
-function flipToConfirm(card, { title, detail, onConfirm, confirmLabel = 'Remove', danger = true }) {
+function flipToConfirm(card, { title, detail, onConfirm, confirmLabel = t('Remove'), danger = true }) {
   card.querySelector('.card-remove-title').textContent = title;
   card.querySelector('.card-remove-detail').textContent = detail;
   const confirmBtn = card.querySelector('.btn-flip-confirm');
@@ -290,13 +290,13 @@ function escapeHtml(str) {
 async function installGame(game) {
   const valid = await window.api.validateRelease(settings.releaseFolder);
   if (!valid.valid) {
-    toast(`Set up the OptiScaler release folder in Settings first (${valid.reason}).`);
+    toast(t('Set up the OptiScaler release folder in Settings first ({reason}).', { reason: valid.reason }));
     openSettingsModal();
     return;
   }
   const nrValid = await window.api.validateNrDll(settings.nrDllPath);
   if (!nrValid.valid) {
-    toast(`DLSS NR file problem: ${nrValid.reason}`);
+    toast(t('DLSS NR file problem: {reason}', { reason: nrValid.reason }));
     openSettingsModal();
     return;
   }
@@ -316,21 +316,21 @@ async function installGame(game) {
   }
   const route = await window.api.gameRoute(game.exePath, game.detectedPath);
   if (route.route === 'feeder' && !route.feederDeployed) {
-    toast('Deploying the DLSS5 Feeder first (ReShade, add-on, motion-vector shader, nvngx_dlss.dll)…');
+    toast(t('Deploying the DLSS5 Feeder first (ReShade, add-on, motion-vector shader, nvngx_dlss.dll)…'));
     const providers = await window.api.feederMvProviders();
     const provider = providers.find((p) => p.default && p.autoFetchable) || providers.find((p) => p.autoFetchable);
     const deployed = provider
       ? await window.api.feederDeploy(game.exePath, provider.id, { force: false, licenseConfirmed: false })
-      : { ok: false, error: 'no auto-fetchable motion-vector provider' };
+      : { ok: false, error: t('no auto-fetchable motion-vector provider') };
     if (!deployed.ok) {
-      toast(`Could not deploy the DLSS5 Feeder: ${deployed.error}. OptiScaler was not installed -- without the Feeder it would have no DLSS call to hook. Retry once you are online.`);
+      toast(t('Could not deploy the DLSS5 Feeder: {error}. OptiScaler was not installed -- without the Feeder it would have no DLSS call to hook. Retry once you are online.', { error: deployed.error }));
       renderGrid();
       return;
     }
-    feederNote = ` Deployed the DLSS5 Feeder first (${provider.displayName}).`;
+    feederNote = ' ' + t('Deployed the DLSS5 Feeder first ({provider}).', { provider: provider.displayName });
   }
 
-  toast('Installing…');
+  toast(t('Installing…'));
   const res = await window.api.installGame({
     exePath: game.exePath,
     releaseFolder: settings.releaseFolder,
@@ -338,27 +338,27 @@ async function installGame(game) {
   });
   if (res.ok) {
     const mb = (res.nrDllBytes / 1024 / 1024).toFixed(0);
-    const proxyNote = res.proxyUpdated ? ` Also refreshed the active ${res.proxyUpdated}.` : '';
+    const proxyNote = res.proxyUpdated ? ' ' + t('Also refreshed the active {file}.', { file: res.proxyUpdated }) : '';
     const configNote = res.autoConfigured && res.autoConfigured.length > 0
-      ? ` Auto-configured for ${res.api || 'detected API'}: ${res.autoConfigured.map((e) => e.key).join(', ')}.`
+      ? ' ' + t('Auto-configured for {api}: {keys}.', { api: res.api || t('detected API'), keys: res.autoConfigured.map((e) => e.key).join(', ') })
       : '';
     const streamlineNote = res.streamline && res.streamline.deployed
-      ? ` Deployed Streamline ${res.streamline.version || ''} for DLSS Frame Gen.`.replace('  ', ' ')
+      ? ' ' + t('Deployed Streamline {version} for DLSS Frame Gen.', { version: res.streamline.version || '' }).replace('  ', ' ')
       : '';
-    const reEngineNote = res.reEngine ? ' Detected RE Engine (Capcom).' : '';
+    const reEngineNote = res.reEngine ? ' ' + t('Detected RE Engine (Capcom).') : '';
     // Named so it's obvious why the upscaler wasn't touched and FrameGen was forced off --
     // the game already does its own DLSS (and DLSS-G where it has it); OptiScaler is only
     // adding Neural Rendering on top, not replacing anything.
     const profileNote = res.profile === 'dlss5-only'
-      ? ' Native DLSS detected -- used the "DLSS 5 only" profile (Neural Rendering on the game’s own DLSS, upscaler/frame-gen untouched).'
+      ? ' ' + t('Native DLSS detected -- used the "DLSS 5 only" profile (Neural Rendering on the game’s own DLSS, upscaler/frame-gen untouched).')
       : '';
 
     // The rename is the step that actually hooks the game, so it gets said out loud -- and if it
     // could not happen, that is the difference between "installed" and "installed but inert".
     const proxyCreatedNote = res.proxy && res.proxy.created
-      ? ` Hooked it up as ${res.proxy.proxy}${res.proxy.backedUp ? ` (backed up the original as ${res.proxy.backedUp})` : ''}.`
+      ? ' ' + t('Hooked it up as {proxy}{backup}.', { proxy: res.proxy.proxy, backup: res.proxy.backedUp ? ' ' + t('(backed up the original as {file})', { file: res.proxy.backedUp }) : '' })
       : res.proxyError
-        ? ` NOTE: could not set up the proxy DLL -- ${res.proxyError} Use "Run Setup" to do it by hand.`
+        ? ' ' + t('NOTE: could not set up the proxy DLL -- {error} Use "Run Setup" to do it by hand.', { error: res.proxyError })
         : '';
 
     // Worth naming rather than folding into a count: two of these are settings that crash the game
@@ -366,28 +366,28 @@ async function installGame(game) {
     // version of this app, so "corrected" is the honest word for what happened.
     const hotfix = res.reEngineHotfix || [];
     const hotfixNote = hotfix.length
-      ? ` Applied the RE Engine hotfix (${hotfix.map((h) => `${h.key}=${h.value}`).join(', ')}).`
+      ? ' ' + t('Applied the RE Engine hotfix ({keys}).', { keys: hotfix.map((h) => `${h.key}=${h.value}`).join(', ') })
       : '';
     // On the install path a REFramework failure now stops the install outright, so this only ever
     // reports the good cases. The error branch stays for the sync path, which patches an existing
     // install and must not pretend a missing prerequisite is fine.
     const reframeworkNote = res.reframework && res.reframework.installed
-      ? ' Installed REFramework (required for OptiScaler on RE Engine).'
-      : res.reframework && res.reframework.alreadyPresent ? ' REFramework already present.'
+      ? ' ' + t('Installed REFramework (required for OptiScaler on RE Engine).')
+      : res.reframework && res.reframework.alreadyPresent ? ' ' + t('REFramework already present.')
       : res.reframework && res.reframework.error
-        ? ` WARNING: REFramework is missing (${res.reframework.error}) -- OptiScaler will not run on this game until it is there.`
+        ? ' ' + t('WARNING: REFramework is missing ({error}) -- OptiScaler will not run on this game until it is there.', { error: res.reframework.error })
         : '';
     // Only fires once REFramework has actually generated its config from a prior run of the game --
     // there is nothing to fix on a brand new install.
     const reframeworkConfigNote = res.reframeworkConfig && res.reframeworkConfig.length > 0
-      ? ' Set REFramework’s menu key to Insert (it had drifted to Numpad0, unreachable on a laptop) and enlarged its overlay text.'
+      ? ' ' + t('Set REFramework’s menu key to Insert (it had drifted to Numpad0, unreachable on a laptop) and enlarged its overlay text.')
       : '';
     const lumaNote = route.route === 'lumaue' && !route.lumaDeployed
-      ? ' Next: open Edit and deploy Luma UE -- OptiScaler has no DLSS call to hook in this game until Luma supplies one.'
+      ? ' ' + t('Next: open Edit and deploy Luma UE -- OptiScaler has no DLSS call to hook in this game until Luma supplies one.')
       : '';
-    toast(`Installed.${feederNote} Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}${proxyCreatedNote}${configNote}${streamlineNote}${reEngineNote}${profileNote}${hotfixNote}${reframeworkNote}${reframeworkConfigNote}${lumaNote}`);
+    toast(`${t('Installed.')}${feederNote} ${t('Copied nvngx_dlssnr.dll ({mb} MB) to {dir}', { mb, dir: res.dir })}${proxyNote}${proxyCreatedNote}${configNote}${streamlineNote}${reEngineNote}${profileNote}${hotfixNote}${reframeworkNote}${reframeworkConfigNote}${lumaNote}`);
   } else {
-    toast(`Install failed: ${res.error}`);
+    toast(t('Install failed: {error}', { error: res.error }));
   }
   renderGrid();
 }
@@ -395,9 +395,9 @@ async function installGame(game) {
 // Says what was actually done rather than what was started. The old flow could only report that a
 // terminal had opened, which is why the badge and the folder could disagree.
 function describeUninstall(res) {
-  const removed = (res.removed || []).length ? ` Removed: ${res.removed.join(', ')}.` : ' Nothing left to remove.';
-  const kept = (res.kept || []).length ? ` Left alone: ${res.kept.join('; ')}.` : '';
-  return `OptiScaler removed.${removed}${kept}`;
+  const removed = (res.removed || []).length ? ' ' + t('Removed: {list}.', { list: res.removed.join(', ') }) : ' ' + t('Nothing left to remove.');
+  const kept = (res.kept || []).length ? ' ' + t('Left alone: {list}.', { list: res.kept.join('; ') }) : '';
+  return `${t('OptiScaler removed.')}${removed}${kept}`;
 }
 
 // The escape hatch. Installing no longer needs this -- the app does the rename itself -- but the
@@ -414,7 +414,7 @@ async function removeGame(game) {
 
   if (choice === 'remove-and-forget') {
     const res = await window.api.runUninstall(game.exePath);
-    toast(res.ok ? describeUninstall(res) : `Couldn't remove OptiScaler: ${res.error}. Removed from the list anyway.`);
+    toast(res.ok ? describeUninstall(res) : t("Couldn't remove OptiScaler: {error}. Removed from the list anyway.", { error: res.error }));
   }
 
   games = games.filter((g) => g.id !== game.id);
@@ -425,7 +425,7 @@ const gameModal = $('#game-modal');
 
 async function openGameModal(game) {
   editingGameId = game ? game.id : null;
-  $('#game-modal-title').textContent = game ? 'Edit Game' : 'Add Game';
+  $('#game-modal-title').textContent = game ? t('Edit Game') : t('Add Game');
   $('#game-exe').value = game ? game.exePath : '';
   $('#game-name').value = game ? game.name : '';
   pendingBanner = {
@@ -476,33 +476,38 @@ async function loadAmdNrSection(game) {
   runBtn.classList.toggle('hidden', !st.setupPresent);
   fetchBtn.disabled = false;
   fetchBtn.textContent = st.nrDllPresent && st.nrDllVersion && !st.nrDllVersion.startsWith(st.wantedNrModel)
-    ? `Replace nvngx_dlssnr.dll with ${st.wantedNrModel} (backs up the current one)`
-    : `Fetch nvngx_dlssnr.dll ${st.wantedNrModel}`;
+    ? t('Replace nvngx_dlssnr.dll with {version} (backs up the current one)', { version: st.wantedNrModel })
+    : t('Fetch nvngx_dlssnr.dll {version}', { version: st.wantedNrModel });
+  fetchBtn.dataset.replace = st.nrDllPresent && st.nrDllVersion && !st.nrDllVersion.startsWith(st.wantedNrModel) ? '1' : '';
 
   const parts = [];
-  if (!st.supported) parts.push(st.reason);
+  if (!st.supported) parts.push(t(st.reason, st.reasonVars));
   parts.push(st.logPresent
-    ? `Its installer has run in this folder${st.toolVersionHint ? ` (${st.toolVersionHint} per its log)` : ''}.`
+    ? t('Its installer has run in this folder{hint}.', { hint: st.toolVersionHint ? ' ' + t('({version} per its log)', { version: st.toolVersionHint }) : '' })
     : st.setupPresent
-      ? 'dlssnr_on_amd_setup.exe is in the folder but has not been run yet -- click "Run its installer".'
-      : 'Not in this game\'s folder yet -- download dlssnr_on_amd_setup.exe from the release page and put it beside the game exe.');
+      ? t('dlssnr_on_amd_setup.exe is in the folder but has not been run yet -- click "Run its installer".')
+      : t("Not in this game's folder yet -- download dlssnr_on_amd_setup.exe from the release page and put it beside the game exe."));
   parts.push(st.nrDllPresent
-    ? `nvngx_dlssnr.dll: ${st.nrDllVersion || 'unknown version'}${st.nrDllVersion && !st.nrDllVersion.startsWith(st.wantedNrModel) ? ` (the tool asks for ${st.wantedNrModel}.0)` : ''}.`
-    : `nvngx_dlssnr.dll: missing -- the tool needs ${st.wantedNrModel}.0 beside the exe.`);
+    ? t('nvngx_dlssnr.dll: {version}{note}.', { version: st.nrDllVersion || t('unknown version'), note: st.nrDllVersion && !st.nrDllVersion.startsWith(st.wantedNrModel) ? ' ' + t('(the tool asks for {wanted}.0)', { wanted: st.wantedNrModel }) : '' })
+    : t('nvngx_dlssnr.dll: missing -- the tool needs {wanted}.0 beside the exe.', { wanted: st.wantedNrModel }));
   const modelOk = st.nrDllPresent && (!st.nrDllVersion || st.nrDllVersion.startsWith(st.wantedNrModel));
   status.className = `status-line ${!st.supported ? 'status-bad' : st.logPresent && modelOk ? 'status-ok' : ''}`.trim();
   status.textContent = parts.join(' ');
 
-  latest.textContent = 'Checking the latest release…';
+  latest.textContent = t('Checking the latest release…');
   const rel = await window.api.amdNrLatest();
   if (!rel.ok) {
-    latest.textContent = `Could not check the latest release (${rel.error}).`;
+    latest.textContent = t('Could not check the latest release ({error}).', { error: rel.error });
     return;
   }
   const when = rel.publishedAt ? new Date(rel.publishedAt).toLocaleDateString() : '';
   const newer = st.toolVersionHint && rel.tag && st.toolVersionHint.replace(/^v/, '') !== rel.tag.replace(/^v/, '');
   latest.className = `status-line ${newer ? 'status-ok' : ''}`.trim();
-  latest.textContent = `Latest upstream release: ${rel.tag}${when ? ` (${when})` : ''}${newer ? ` -- newer than the ${st.toolVersionHint} in this folder; re-run the new installer here (U to update).` : ''}`;
+  latest.textContent = t('Latest upstream release: {tag}{when}{newer}', {
+    tag: rel.tag,
+    when: when ? ` (${when})` : '',
+    newer: newer ? ' ' + t('-- newer than the {installed} in this folder; re-run the new installer here (U to update).', { installed: st.toolVersionHint }) : '',
+  });
 }
 
 $('#btn-amdnr-release-page').addEventListener('click', () => window.api.amdNrOpenReleasePage());
@@ -511,13 +516,13 @@ $('#btn-amdnr-fetch-model').addEventListener('click', async () => {
   if (!editingGameId) return;
   const game = games.find((x) => x.id === editingGameId);
   const status = $('#game-amdnr-status');
-  const replace = $('#btn-amdnr-fetch-model').textContent.startsWith('Replace');
-  status.textContent = 'Fetching the 310.8.0 DLSS NR model (about 165 MB)…';
+  const replace = $('#btn-amdnr-fetch-model').dataset.replace === '1';
+  status.textContent = t('Fetching the 310.8.0 DLSS NR model (about 165 MB)…');
   const res = await window.api.amdNrDeployNrModel(game.exePath, { replace });
   if (res.ok && res.deployed) {
-    toast(`Placed nvngx_dlssnr.dll ${res.version} beside the game exe${res.backedUp ? ` (previous copy kept as ${res.backedUp})` : ''}.`);
+    toast(t('Placed nvngx_dlssnr.dll {version} beside the game exe{backup}.', { version: res.version, backup: res.backedUp ? ' ' + t('(previous copy kept as {file})', { file: res.backedUp }) : '' }));
   } else {
-    toast(res.ok ? `Nothing changed: ${res.reason}` : `Could not fetch the model file: ${res.error}`);
+    toast(res.ok ? t('Nothing changed: {reason}', { reason: res.reason }) : t('Could not fetch the model file: {error}', { error: res.error }));
   }
   loadAmdNrSection(game);
 });
@@ -526,7 +531,7 @@ $('#btn-amdnr-run-setup').addEventListener('click', async () => {
   if (!editingGameId) return;
   const game = games.find((x) => x.id === editingGameId);
   const res = await window.api.amdNrRunSetup(game.exePath);
-  toast(res.ok ? 'Opened its installer in a console -- follow its prompts, then reopen Edit to re-check.' : res.error);
+  toast(res.ok ? t('Opened its installer in a console -- follow its prompts, then reopen Edit to re-check.') : res.error);
 });
 
 // The per-game graphics API choice -- see game:setApiOverride in main.js for what it drives.
@@ -543,11 +548,11 @@ async function loadApiSection(game) {
   const route = await window.api.gameRoute(game.exePath, game.detectedPath);
   section.classList.remove('hidden');
 
-  const detectedLabel = (game.detectedPath && game.detectedPath.apiBadge) || 'not detected';
+  const detectedLabel = (game.detectedPath && game.detectedPath.apiBadge) || t('not detected');
   select.innerHTML = '';
   const auto = document.createElement('option');
   auto.value = '';
-  auto.textContent = `Auto (detected: ${detectedLabel})`;
+  auto.textContent = t('Auto (detected: {api})', { api: detectedLabel });
   select.appendChild(auto);
   for (const api of ['dx12', 'dx11', 'vulkan']) {
     const opt = document.createElement('option');
@@ -560,9 +565,9 @@ async function loadApiSection(game) {
   const multi = (route.detectedApis || []).length > 1;
   status.className = `status-line ${route.apiOverride ? 'status-ok' : ''}`.trim();
   status.textContent = route.apiOverride
-    ? `Set to ${API_LABEL[route.apiOverride]} -- everything API-dependent follows this, not the detected ${detectedLabel}.`
+    ? t('Set to {api} -- everything API-dependent follows this, not the detected {detected}.', { api: API_LABEL[route.apiOverride], detected: detectedLabel })
     : multi
-      ? `This game ships ${detectedLabel}: detection picked ${API_LABEL[route.detectedApi] || 'the first'}; choose the one you run if that is not it.`
+      ? t('This game ships {detected}: detection picked {picked}; choose the one you run if that is not it.', { detected: detectedLabel, picked: API_LABEL[route.detectedApi] || t('the first') })
       : '';
 }
 
@@ -571,13 +576,13 @@ $('#game-api-select').addEventListener('change', async (e) => {
   const game = games.find((x) => x.id === editingGameId);
   const api = e.target.value || null;
   const status = $('#game-api-status');
-  status.textContent = 'Applying…';
+  status.textContent = t('Applying…');
   const res = await window.api.setApiOverride(game.exePath, api);
   if (!res.ok) {
-    toast(`Could not set the graphics API: ${res.error}`);
+    toast(t('Could not set the graphics API: {error}', { error: res.error }));
   } else {
-    const applied = res.applied && res.applied.length > 0 ? ` Re-configured OptiScaler.ini: ${res.applied.map((x) => x.key).join(', ')}.` : '';
-    toast(api ? `This game is now treated as ${API_LABEL[api]}.${applied}` : `Back to the detected graphics API.${applied}`);
+    const applied = res.applied && res.applied.length > 0 ? ' ' + t('Re-configured OptiScaler.ini: {keys}.', { keys: res.applied.map((x) => x.key).join(', ') }) : '';
+    toast((api ? t('This game is now treated as {api}.', { api: API_LABEL[api] }) : t('Back to the detected graphics API.')) + applied);
   }
   // Every section below the choice depends on it.
   await loadRouteStatus(game);
@@ -600,8 +605,8 @@ async function loadRouteStatus(game) {
   const route = await window.api.gameRoute(game.exePath, game.detectedPath);
   el.classList.remove('hidden');
   el.className = `status-line ${route.route === 'unsupported' ? 'status-bad' : route.complete ? 'status-ok' : ''}`.trim();
-  const progress = route.complete ? 'All set.' : route.nextStep ? `Next: ${route.nextStep}.` : '';
-  el.textContent = `Recommended: ${route.label}. ${route.reason} ${progress}`.trim();
+  const progress = route.complete ? t('All set.') : route.nextStep ? t('Next: {step}.', { step: t(route.nextStep) }) : '';
+  el.textContent = `${t('Recommended: {label}.', { label: t(route.label) })} ${t(route.reason, route.reasonVars)} ${progress}`.trim();
 }
 
 // Turns a "blind install" into an informed one: says whether OptiScaler_DLSSNR's own engine has
@@ -619,10 +624,10 @@ async function loadEngineProfileStatus(game) {
   el.classList.remove('hidden');
   if (res.known) {
     el.className = 'status-line status-ok';
-    el.textContent = 'OptiScaler has a known compatibility profile built in for this exe.';
+    el.textContent = t('OptiScaler has a known compatibility profile built in for this exe.');
   } else {
     el.className = 'status-line';
-    el.textContent = 'No compiled-in compatibility profile for this exe -- default OptiScaler configuration.';
+    el.textContent = t('No compiled-in compatibility profile for this exe -- default OptiScaler configuration.');
   }
 }
 
@@ -664,22 +669,22 @@ async function loadFrameGenSection(game) {
   status.className = 'status-line';
   // For an Unreal game the DLL lives under the plugin tree, not beside the exe -- say where.
   const where = state.relativeTo && state.relativeTo !== state.dll ? ` (${state.relativeTo})` : '';
-  status.textContent = `${state.dll}${where}: currently ${state.currentVersion || 'unknown version'}` +
-    (state.swapped ? ' (swapped by this app -- original backed up, Restore puts it back)' : '');
+  status.textContent = t('{dll}{where}: currently {version}', { dll: state.dll, where, version: state.currentVersion || t('unknown version') }) +
+    (state.swapped ? ' ' + t('(swapped by this app -- original backed up, Restore puts it back)') : '');
 }
 
 $('#btn-framegen-swap').addEventListener('click', async () => {
   if (!editingGameId) return;
   const version = $('#game-framegen-version').value;
-  if (!version) return toast('Pick a version first.');
+  if (!version) return toast(t('Pick a version first.'));
   const game = games.find((x) => x.id === editingGameId);
   const status = $('#game-framegen-status');
-  status.textContent = 'Applying…';
+  status.textContent = t('Applying…');
   const res = await window.api.frameGenSwap(game.exePath, version);
   if (res.ok && res.swapped) {
-    toast(`Swapped ${res.dll} to ${version} (original backed up).`);
+    toast(t('Swapped {dll} to {version} (original backed up).', { dll: res.dll, version }));
   } else {
-    toast(res.ok ? `Could not swap: ${res.reason}` : `Swap failed: ${res.error}`);
+    toast(res.ok ? t('Could not swap: {reason}', { reason: res.reason }) : t('Swap failed: {error}', { error: res.error }));
   }
   loadFrameGenSection(game);
 });
@@ -689,9 +694,9 @@ $('#btn-framegen-restore').addEventListener('click', async () => {
   const game = games.find((x) => x.id === editingGameId);
   const res = await window.api.frameGenRestore(game.exePath);
   if (res.ok && res.restored) {
-    toast(`Restored ${res.dll} to the game's original.`);
+    toast(t("Restored {dll} to the game's original.", { dll: res.dll }));
   } else {
-    toast(res.ok ? `Nothing to restore: ${res.reason}` : `Restore failed: ${res.error}`);
+    toast(res.ok ? t('Nothing to restore: {reason}', { reason: res.reason }) : t('Restore failed: {error}', { error: res.error }));
   }
   loadFrameGenSection(game);
 });
@@ -761,16 +766,16 @@ $('#btn-injector-copy').addEventListener('click', async () => {
   const value = $('#game-injector-launch-option').value;
   if (!value) return;
   await navigator.clipboard.writeText(value);
-  toast('Launch option copied -- paste it into Steam → Properties → Launch Options.');
+  toast(t('Launch option copied -- paste it into Steam → Properties → Launch Options.'));
 });
 
 $('#btn-injector-launch-now').addEventListener('click', async () => {
   if (!editingGameId) return;
   const game = games.find((x) => x.id === editingGameId);
   const status = $('#game-injector-status');
-  status.textContent = 'Launching…';
+  status.textContent = t('Launching…');
   const res = await window.api.injectorLaunch(game.exePath, settings.releaseFolder);
-  status.textContent = res.ok ? 'Launched through the injector.' : `Launch failed: ${res.error}`;
+  status.textContent = res.ok ? t('Launched through the injector.') : t('Launch failed: {error}', { error: res.error });
 });
 
 let feederProvidersLoaded = false;
@@ -799,7 +804,7 @@ async function loadFeederSection(game) {
 
   if (!readiness.supported) {
     status.className = 'status-line';
-    status.textContent = readiness.reason;
+    status.textContent = t(readiness.reason, readiness.reasonVars);
     $('#btn-feeder-deploy').disabled = true;
     updateBtn.classList.add('hidden');
     return;
@@ -822,30 +827,30 @@ async function loadFeederSection(game) {
 
   const missing = [
     readiness.reshadeInstalled ? null : 'ReShade',
-    readiness.addonInstalled ? null : 'Feeder add-on',
+    readiness.addonInstalled ? null : t('Feeder add-on'),
     readiness.fxInstalled ? null : 'DLSS5_Feed.fx',
     readiness.headersInstalled ? null : 'ReShade.fxh/ReShadeUI.fxh',
     readiness.dlssInstalled ? null : 'nvngx_dlss.dll',
-    readiness.dlssnrInstalled ? null : 'nvngx_dlssnr.dll (install this yourself first)',
+    readiness.dlssnrInstalled ? null : t('nvngx_dlssnr.dll (install this yourself first)'),
   ].filter(Boolean);
 
   status.className = 'status-line';
   updateBtn.classList.add('hidden');
 
   if (!readiness.complete) {
-    status.textContent = `${missing.join(', ')} missing.`;
+    status.textContent = t('{list} missing.', { list: missing.join(', ') });
     return;
   }
 
-  status.textContent = 'Feeder stack fully deployed. Checking for updates…';
+  status.textContent = t('Feeder stack fully deployed. Checking for updates…');
   const update = await window.api.feederCheckUpdate(game.exePath);
   if (update.ok && update.checked && !update.upToDate) {
-    status.textContent = `Feeder stack deployed (${update.currentVersion} -- ${update.latestVersion} available).`;
+    status.textContent = t('Feeder stack deployed ({current} -- {latest} available).', { current: update.currentVersion, latest: update.latestVersion });
     updateBtn.classList.remove('hidden');
   } else if (update.ok && update.checked) {
-    status.textContent = `Feeder stack up to date (${update.currentVersion}).`;
+    status.textContent = t('Feeder stack up to date ({current}).', { current: update.currentVersion });
   } else {
-    status.textContent = 'Feeder stack fully deployed.';
+    status.textContent = t('Feeder stack fully deployed.');
   }
 }
 
@@ -861,19 +866,19 @@ async function deployFeederStack(game, providerId, force) {
   if (provider && !provider.autoFetchable) {
     licenseConfirmed = await window.api.feederConfirmProviderLicense(providerId);
     if (!licenseConfirmed) {
-      status.textContent = 'Cancelled -- licence not confirmed.';
+      status.textContent = t('Cancelled -- licence not confirmed.');
       return;
     }
   }
 
-  status.textContent = force ? 'Updating…' : 'Deploying…';
+  status.textContent = force ? t('Updating…') : t('Deploying…');
   const res = await window.api.feederDeploy(game.exePath, providerId, { force, licenseConfirmed });
   if (res.ok) {
     toast(force
-      ? 'Feeder stack updated.'
-      : 'Feeder stack deployed. Install OptiScaler normally (Install button) to finish -- not the injector.');
+      ? t('Feeder stack updated.')
+      : t('Feeder stack deployed. Install OptiScaler normally (Install button) to finish -- not the injector.'));
   } else {
-    toast(`${force ? 'Update' : 'Deploy'} failed: ${res.error}`);
+    toast(force ? t('Update failed: {error}', { error: res.error }) : t('Deploy failed: {error}', { error: res.error }));
   }
   loadFeederSection(game);
 }
@@ -914,7 +919,7 @@ async function loadOptiFgSection(game) {
     checkbox.checked = false;
     checkbox.disabled = true;
     status.className = 'status-line';
-    status.textContent = readiness.reason;
+    status.textContent = t(readiness.reason, readiness.reasonVars);
     return;
   }
 
@@ -922,20 +927,20 @@ async function loadOptiFgSection(game) {
   checkbox.checked = !!readiness.enabled;
   status.className = 'status-line';
   status.textContent = readiness.enabled
-    ? 'On -- applied to OptiScaler.ini.'
-    : 'Off.';
+    ? t('On -- applied to OptiScaler.ini.')
+    : t('Off.');
 }
 
 $('#game-optifg-toggle').addEventListener('change', async (e) => {
   if (!editingGameId) return;
   const game = games.find((x) => x.id === editingGameId);
   const status = $('#game-optifg-status');
-  status.textContent = 'Applying…';
+  status.textContent = t('Applying…');
   const res = await window.api.optiFgSet(game.exePath, e.target.checked);
   if (res.ok) {
-    toast(e.target.checked ? 'OptiScaler Frame Generation (FSRFG) enabled.' : 'OptiScaler Frame Generation disabled.');
+    toast(e.target.checked ? t('OptiScaler Frame Generation (FSRFG) enabled.') : t('OptiScaler Frame Generation disabled.'));
   } else {
-    toast(`Could not change Frame Generation: ${res.error}`);
+    toast(t('Could not change Frame Generation: {error}', { error: res.error }));
   }
   loadOptiFgSection(game);
 });
@@ -950,17 +955,17 @@ $('#game-optifg-toggle').addEventListener('change', async (e) => {
 async function configureLossless(game, { frameGenMode = 'LSFG3', mode = 'FIXED', multiplier = 2, target = 120 } = {}) {
   const xmlText = await window.api.losslessReadSettings();
   if (!xmlText) {
-    throw new Error("Lossless Scaling hasn't been run yet -- launch it once first, then try again.");
+    throw new Error(t("Lossless Scaling hasn't been run yet -- launch it once first, then try again."));
   }
 
   const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
   if (doc.querySelector('parsererror')) {
-    throw new Error("Could not parse Lossless Scaling's settings file -- it may be from an unexpected version.");
+    throw new Error(t("Could not parse Lossless Scaling's settings file -- it may be from an unexpected version."));
   }
 
   const profilesEl = doc.querySelector('GameProfiles');
   if (!profilesEl) {
-    throw new Error('Unexpected Lossless Scaling settings format (no GameProfiles section).');
+    throw new Error(t('Unexpected Lossless Scaling settings format (no GameProfiles section).'));
   }
 
   const profiles = Array.from(profilesEl.querySelectorAll('Profile'));
@@ -982,7 +987,7 @@ async function configureLossless(game, { frameGenMode = 'LSFG3', mode = 'FIXED',
   let isNew = false;
   if (!profile) {
     const template = profiles[0];
-    if (!template) throw new Error('No existing Lossless Scaling profile to use as a template.');
+    if (!template) throw new Error(t('No existing Lossless Scaling profile to use as a template.'));
     isNew = true;
     profile = template.cloneNode(true);
     profilesEl.appendChild(profile);
@@ -1021,7 +1026,7 @@ async function configureLossless(game, { frameGenMode = 'LSFG3', mode = 'FIXED',
   // and the actual cause of a "could not parse" failure on the very next read. Found live.
   const newXml = new XMLSerializer().serializeToString(doc);
   const writeResult = await window.api.losslessWriteSettings(newXml);
-  if (!writeResult.ok) throw new Error(writeResult.error || 'Failed to write Lossless Scaling settings.');
+  if (!writeResult.ok) throw new Error(writeResult.error || t('Failed to write Lossless Scaling settings.'));
 
   return { isNew };
 }
@@ -1055,8 +1060,7 @@ async function loadLosslessSection(game) {
 
   const info = await window.api.losslessDetect();
   if (!info.installed) {
-    status.innerHTML = 'Lossless Scaling was not found (checked your Steam library). ' +
-      'A separate paid app you need to own yourself -- <a href="#" id="lossless-store-link">get it on Steam</a>.';
+    status.innerHTML = t('Lossless Scaling was not found (checked your Steam library). A separate paid app you need to own yourself -- <a href="#" id="lossless-store-link">get it on Steam</a>.');
     const storeLink = $('#lossless-store-link');
     if (storeLink) storeLink.addEventListener('click', (e) => { e.preventDefault(); window.api.losslessOpenStorePage(); });
     configureBtn.disabled = true;
@@ -1064,7 +1068,7 @@ async function loadLosslessSection(game) {
     return;
   }
   if (!info.hasRunOnce) {
-    status.textContent = "Installed, but hasn't been run yet -- launch it once first.";
+    status.textContent = t("Installed, but hasn't been run yet -- launch it once first.");
     configureBtn.disabled = true;
     launchBtn.classList.remove('hidden');
     return;
@@ -1106,9 +1110,9 @@ async function loadLosslessSection(game) {
 
   status.textContent = configured
     ? (currentMode === 'ADAPTIVE'
-      ? `Configured -- Adaptive Frame Generation, holding ${currentTarget || '?'} fps.`
-      : `Configured -- ${currentMultiplier || '?'}x Frame Generation.`)
-    : 'Not yet configured for this game.';
+      ? t('Configured -- Adaptive Frame Generation, holding {target} fps.', { target: currentTarget || '?' })
+      : t('Configured -- {multiplier}x Frame Generation.', { multiplier: currentMultiplier || '?' }))
+    : t('Not yet configured for this game.');
 }
 
 function syncLosslessModeInputs() {
@@ -1125,19 +1129,19 @@ $('#btn-lossless-configure').addEventListener('click', async () => {
   const mode = $('#game-lossless-mode').value === 'ADAPTIVE' ? 'ADAPTIVE' : 'FIXED';
   const multiplier = [2, 3, 4].includes(Number($('#game-lossless-multiplier').value)) ? Number($('#game-lossless-multiplier').value) : 2;
   const target = Math.min(480, Math.max(30, Math.round(Number($('#game-lossless-target').value) || 120)));
-  status.textContent = 'Configuring…';
+  status.textContent = t('Configuring…');
   try {
     const result = await configureLossless(game, { mode, multiplier, target });
     const info = await window.api.losslessDetect();
     if (info.installed) {
       const iniRes = await window.api.losslessSetExePathInGameIni(game.exePath, info.exePath, game.name, { mode, multiplier, target });
-      if (!iniRes.ok) toast(`Profile saved, but the in-game panel link was not written: ${iniRes.error}`);
-      else if (iniRes.deferred) toast('Profile saved. The in-game panel link will be written when OptiScaler is installed for this game.');
+      if (!iniRes.ok) toast(t('Profile saved, but the in-game panel link was not written: {error}', { error: iniRes.error }));
+      else if (iniRes.deferred) toast(t('Profile saved. The in-game panel link will be written when OptiScaler is installed for this game.'));
     }
-    const what = mode === 'ADAPTIVE' ? `Adaptive Frame Generation, target ${target} fps` : `${multiplier}x Frame Generation`;
+    const what = mode === 'ADAPTIVE' ? t('Adaptive Frame Generation, target {target} fps', { target }) : t('{multiplier}x Frame Generation', { multiplier });
     toast(result.isNew
-      ? `Added a Lossless Scaling profile for this game (${what}).`
-      : `Updated this game's Lossless Scaling profile (${what}).`);
+      ? t('Added a Lossless Scaling profile for this game ({what}).', { what })
+      : t("Updated this game's Lossless Scaling profile ({what}).", { what }));
 
     // Only one frame generator at a time: two of them stack their generated frames. OptiScaler's
     // own FG is ours to switch off; the game's native DLSS Frame Generation is a game setting the
@@ -1146,12 +1150,12 @@ $('#btn-lossless-configure').addEventListener('click', async () => {
     if (optiFg.supported && optiFg.enabled) {
       const off = await window.api.optiFgSet(game.exePath, false);
       toast(off.ok
-        ? "Turned OptiScaler's own Frame Generation off for this game -- it can't run together with Lossless Scaling."
-        : `Could not turn OptiScaler's own Frame Generation off: ${off.error}`);
+        ? t("Turned OptiScaler's own Frame Generation off for this game -- it can't run together with Lossless Scaling.")
+        : t("Could not turn OptiScaler's own Frame Generation off: {error}", { error: off.error }));
       loadOptiFgSection(game);
     }
   } catch (error) {
-    toast(`Could not configure Lossless Scaling: ${error.message}`);
+    toast(t('Could not configure Lossless Scaling: {error}', { error: error.message }));
   }
   loadLosslessSection(game);
 });
@@ -1159,9 +1163,9 @@ $('#btn-lossless-configure').addEventListener('click', async () => {
 $('#btn-lossless-launch').addEventListener('click', async () => {
   const res = await window.api.losslessLaunch();
   if (res.ok) {
-    toast('Launched Lossless Scaling.');
+    toast(t('Launched Lossless Scaling.'));
   } else {
-    toast(`Could not launch Lossless Scaling: ${res.error}`);
+    toast(t('Could not launch Lossless Scaling: {error}', { error: res.error }));
   }
   if (editingGameId) {
     const game = games.find((x) => x.id === editingGameId);
@@ -1195,11 +1199,12 @@ async function loadLumaUeSection(game) {
   // still a checkbox the user can untick.
   if (gpu.vendor === 'amd' || gpu.vendor === 'intel') $('#game-lumaue-amd-intel').checked = true;
 
+  const yn = (v) => (v ? t('yes') : t('no'));
   status.textContent = readiness.complete
-    ? 'Deployed -- select DLSS in Luma\'s own overlay (Home key) in-game.'
-    : `Not yet deployed (ReShade64.dll: ${readiness.reshadeInstalled ? 'yes' : 'no'}, ` +
-      `addon: ${readiness.addonInstalled ? 'yes' : 'no'}, shaders: ${readiness.shadersInstalled ? 'yes' : 'no'}, ` +
-      `nvngx_dlss.dll: ${readiness.dlssInstalled ? 'yes' : 'no'}).`;
+    ? t("Deployed -- select DLSS in Luma's own overlay (Home key) in-game.")
+    : t('Not yet deployed (ReShade64.dll: {reshade}, addon: {addon}, shaders: {shaders}, nvngx_dlss.dll: {dlss}).', {
+      reshade: yn(readiness.reshadeInstalled), addon: yn(readiness.addonInstalled), shaders: yn(readiness.shadersInstalled), dlss: yn(readiness.dlssInstalled),
+    });
 
   // Unprompted, once per game: the deploy button alone turned out not to be enough -- a real
   // tester deployed nothing at all and the log showed no trace of Luma ever having run, which
@@ -1237,23 +1242,23 @@ $('#btn-lumaue-deploy').addEventListener('click', async () => {
   const status = $('#game-lumaue-status');
   const licenseConfirmed = $('#game-lumaue-license-confirm').checked;
   if (!licenseConfirmed) return;
-  status.textContent = 'Deploying…';
+  status.textContent = t('Deploying…');
   try {
     const result = await window.api.lumaUeDeploy(game.exePath, { licenseConfirmed });
-    if (!result.ok) throw new Error(result.error || 'Deploy failed');
-    toast(result.deployed ? 'Deployed Luma UE for this game.' : 'Luma UE was already deployed.');
+    if (!result.ok) throw new Error(result.error || t('Deploy failed'));
+    toast(result.deployed ? t('Deployed Luma UE for this game.') : t('Luma UE was already deployed.'));
     if (!result.optiScalerInstalled) {
-      toast('OptiScaler is not installed for this game yet -- click Install on its card; Luma only loads through OptiScaler.');
+      toast(t('OptiScaler is not installed for this game yet -- click Install on its card; Luma only loads through OptiScaler.'));
     } else if (result.autoConfigured && result.autoConfigured.some((e) => e.key === 'LoadReshade')) {
-      toast('Set [Plugins] LoadReshade=true in OptiScaler.ini so OptiScaler loads Luma.');
+      toast(t('Set [Plugins] LoadReshade=true in OptiScaler.ini so OptiScaler loads Luma.'));
     }
     if ($('#game-lumaue-amd-intel').checked) {
       const workaround = await window.api.lumaUeApplyAmdIntelWorkaround(game.exePath);
-      if (workaround.ok) toast('Applied the AMD/Intel workaround to OptiScaler.ini.');
-      else toast(`Could not apply the AMD/Intel workaround: ${workaround.error}`);
+      if (workaround.ok) toast(t('Applied the AMD/Intel workaround to OptiScaler.ini.'));
+      else toast(t('Could not apply the AMD/Intel workaround: {error}', { error: workaround.error }));
     }
   } catch (error) {
-    toast(`Could not deploy Luma UE: ${error.message}`);
+    toast(t('Could not deploy Luma UE: {error}', { error: error.message }));
   }
   loadLumaUeSection(game);
 });
@@ -1306,11 +1311,11 @@ async function doSteamSearch() {
   const term = $('#steam-search-term').value.trim();
   if (!term) return;
   const results = $('#steam-results');
-  results.innerHTML = '<div class="steam-result-item">Searching...</div>';
+  results.innerHTML = `<div class="steam-result-item">${escapeHtml(t('Searching...'))}</div>`;
   const items = await window.api.steamSearch(term);
   results.innerHTML = '';
   if (items.length === 0) {
-    results.innerHTML = '<div class="steam-result-item">No matches found.</div>';
+    results.innerHTML = `<div class="steam-result-item">${escapeHtml(t('No matches found.'))}</div>`;
     return;
   }
   for (const item of items) {
@@ -1330,8 +1335,8 @@ async function doSteamSearch() {
 $('#btn-save-game').addEventListener('click', async () => {
   const exePath = $('#game-exe').value.trim();
   const name = $('#game-name').value.trim();
-  if (!exePath) return toast('Pick the game .exe first.');
-  if (!name) return toast('Give the game a name.');
+  if (!exePath) return toast(t('Pick the game .exe first.'));
+  if (!name) return toast(t('Give the game a name.'));
 
   const launchMode = $('#game-launch-mode').value === 'injector' ? 'injector' : 'proxy';
 
@@ -1359,13 +1364,14 @@ $('#btn-save-game').addEventListener('click', async () => {
 const settingsModal = $('#settings-modal');
 
 function openSettingsModal() {
-  $('#settings-gpu-status').textContent = `GPU: ${gpuLabel()}` +
-    (gpu.vendor === 'amd' ? ' -- Neural Rendering here goes through DLSS-NR-on-AMD (see a game\'s Edit dialog), not OptiScaler.'
-      : gpu.vendor === 'intel' ? ' -- no Neural Rendering route on Intel; OptiScaler still installs for its upscaler swap.'
-      : gpu.vendor === 'unknown' ? ' -- could not identify the GPU; assuming NVIDIA.' : '');
+  $('#settings-gpu-status').textContent = t('GPU: {gpu}', { gpu: gpuLabel() }) +
+    (gpu.vendor === 'amd' ? ' ' + t("-- Neural Rendering here goes through DLSS-NR-on-AMD (see a game's Edit dialog), not OptiScaler.")
+      : gpu.vendor === 'intel' ? ' ' + t('-- no Neural Rendering route on Intel; OptiScaler still installs for its upscaler swap.')
+      : gpu.vendor === 'unknown' ? ' ' + t('-- could not identify the GPU; assuming NVIDIA.') : '');
+  $('#settings-language').value = settings.language || 'auto';
   $('#settings-release-folder').value = settings.releaseFolder || '';
   $('#settings-nr-dll').value = settings.nrDllPath || '';
-  $('#update-status').textContent = settings.installedVersion ? `Installed: ${settings.installedVersion}` : '';
+  $('#update-status').textContent = settings.installedVersion ? t('Installed: {version}', { version: settings.installedVersion }) : '';
   $('#update-status').className = 'status-line';
   $('#btn-install-update').classList.add('hidden');
   pendingUpdate = null;
@@ -1384,7 +1390,7 @@ async function loadStreamlineVersions() {
 
   if (!streamlineVersionsLoaded) {
     status.className = 'status-line';
-    status.textContent = 'Checking what RHI has published…';
+    status.textContent = t('Checking what RHI has published…');
     const res = await window.api.streamlineVersions();
     if (res && res.ok && res.versions.length > 0) {
       for (const v of res.versions) {
@@ -1395,10 +1401,10 @@ async function loadStreamlineVersions() {
       }
       streamlineVersionsLoaded = true;
       status.className = 'status-line status-ok';
-      status.textContent = `Newest available: ${res.versions[0]}`;
+      status.textContent = t('Newest available: {version}', { version: res.versions[0] });
     } else {
       status.className = 'status-line';
-      status.textContent = 'Could not reach the version list — "Latest" still works, it just resolves at install time.';
+      status.textContent = t('Could not reach the version list — "Latest" still works, it just resolves at install time.');
     }
   }
 
@@ -1416,6 +1422,21 @@ $('#settings-streamline-version').addEventListener('change', async (e) => {
   await window.api.saveSettings(settings);
 });
 
+// UI language. 'auto' follows the OS (I18N.detect); a chosen language is stored and wins. Static
+// text re-translates in place; everything drawn by code re-renders on the next grid/dialog pass.
+function applyLanguage() {
+  const wanted = settings.language && settings.language !== 'auto' ? settings.language : I18N.detect();
+  I18N.setLocale(wanted);
+}
+
+$('#settings-language').addEventListener('change', async (e) => {
+  settings.language = e.target.value || 'auto';
+  await window.api.saveSettings(settings);
+  applyLanguage();
+  openSettingsModal();
+  renderGrid();
+});
+
 async function checkReleaseStatus() {
   const el = $('#release-status');
   if (!settings.releaseFolder) {
@@ -1423,7 +1444,7 @@ async function checkReleaseStatus() {
     return;
   }
   const res = await window.api.validateRelease(settings.releaseFolder);
-  el.textContent = res.valid ? 'Looks good — setup_windows.bat found.' : `Not valid: ${res.reason}`;
+  el.textContent = res.valid ? t('Looks good — setup_windows.bat found.') : t('Not valid: {reason}', { reason: res.reason });
   el.className = `status-line ${res.valid ? 'status-ok' : 'status-bad'}`;
 }
 
@@ -1434,12 +1455,15 @@ async function checkNrDllStatus() {
     return;
   }
   const res = await window.api.validateNrDll(settings.nrDllPath);
-  el.textContent = res.valid ? `Looks good — ${res.sizeMB} MB.` : `Not valid: ${res.reason}`;
+  el.textContent = res.valid ? t('Looks good — {mb} MB.', { mb: res.sizeMB }) : t('Not valid: {reason}', { reason: res.reason });
   el.className = `status-line ${res.valid ? 'status-ok' : 'status-bad'}`;
 }
 
 $('#btn-settings').addEventListener('click', openSettingsModal);
-$('#settings-banner-link').addEventListener('click', (e) => {
+// Delegated: the banner's inner HTML is re-rendered on a language change, so a listener bound to
+// the link itself would be lost with the old element.
+settingsBanner.addEventListener('click', (e) => {
+  if (!e.target.closest('#settings-banner-link')) return;
   e.preventDefault();
   openSettingsModal();
 });
@@ -1462,7 +1486,7 @@ async function persistNrDll(p) {
 }
 
 $('#btn-browse-release').addEventListener('click', async () => {
-  const p = await window.api.pickFolder('Select the extracted OptiScaler_DLSSNR release folder');
+  const p = await window.api.pickFolder(t('Select the extracted OptiScaler_DLSSNR release folder'));
   if (p) persistReleaseFolder(p);
 });
 $('#settings-release-folder').addEventListener('change', (e) => persistReleaseFolder(e.target.value.trim()));
@@ -1504,22 +1528,24 @@ async function autoSyncStaleGames() {
     }
     if (res.updated) updated.push(game.name);
     if (res.autoConfigured && res.autoConfigured.length > 0) {
-      configured.push(`${game.name} (${res.api || 'detected'}: ${res.autoConfigured.map((e) => e.key).join(', ')})`);
+      configured.push(`${game.name} (${res.api || t('detected')}: ${res.autoConfigured.map((e) => e.key).join(', ')})`);
     }
     if (res.streamline && res.streamline.deployed) streamlined.push(game.name);
   }
 
   if (updated.length > 0) {
-    toast(`Auto-updated OptiScaler in ${updated.length} game${updated.length > 1 ? 's' : ''}: ${updated.join(', ')}`);
+    toast(updated.length > 1
+      ? t('Auto-updated OptiScaler in {count} games: {list}', { count: updated.length, list: updated.join(', ') })
+      : t('Auto-updated OptiScaler in 1 game: {list}', { list: updated.join(', ') }));
   }
   if (configured.length > 0) {
-    toast(`Auto-configured: ${configured.join('; ')}`);
+    toast(t('Auto-configured: {list}', { list: configured.join('; ') }));
   }
   if (streamlined.length > 0) {
-    toast(`Deployed the Streamline SDK (needed for DLSS Frame Gen) to: ${streamlined.join(', ')}`);
+    toast(t('Deployed the Streamline SDK (needed for DLSS Frame Gen) to: {list}', { list: streamlined.join(', ') }));
   }
   if (failed.length > 0) {
-    toast(`Could not auto-update: ${failed.join(', ')} — close the game and retry.`);
+    toast(t('Could not auto-update: {list} — close the game and retry.', { list: failed.join(', ') }));
   }
 }
 // Numeric per segment; a suffix like "-hotfix" or "10a" counts as its leading number, so a
@@ -1557,7 +1583,7 @@ async function ensureBundledEngine() {
 
   const res = await window.api.installUpdate({ localZip: bundled.zipPath, tag: bundled.tag });
   if (!res.ok) {
-    toast(`Could not set up the bundled OptiScaler engine: ${res.error}`);
+    toast(t('Could not set up the bundled OptiScaler engine: {error}', { error: res.error }));
     return false;
   }
   settings.releaseFolder = res.folder;
@@ -1565,7 +1591,7 @@ async function ensureBundledEngine() {
   await window.api.saveSettings(settings);
   refreshBannerVisibility();
   checkReleaseStatus();
-  toast(`OptiScaler engine ${bundled.tag} set up from the installer -- nothing to download.`);
+  toast(t('OptiScaler engine {tag} set up from the installer -- nothing to download.', { tag: bundled.tag }));
   return true;
 }
 
@@ -1573,10 +1599,10 @@ async function ensureBundledEngine() {
 // hand. RHI publishes it, so fetch it unless a valid copy is already set.
 async function ensureNrModel({ force = false } = {}) {
   if (!force && settings.nrDllPath && (await window.api.validateNrDll(settings.nrDllPath)).valid) return false;
-  toast('Fetching the DLSS NR model file (about 165 MB)…');
+  toast(t('Fetching the DLSS NR model file (about 165 MB)…'));
   const res = await window.api.autoFetchNrDll();
   if (!res.ok) {
-    toast(`Could not fetch the DLSS NR model automatically: ${res.error}`);
+    toast(t('Could not fetch the DLSS NR model automatically: {error}', { error: res.error }));
     return false;
   }
   settings.nrDllPath = res.path;
@@ -1584,7 +1610,7 @@ async function ensureNrModel({ force = false } = {}) {
   $('#settings-nr-dll').value = res.path;
   checkNrDllStatus();
   refreshBannerVisibility();
-  toast(`DLSS NR model ${res.version} fetched (${res.sizeMB} MB).`);
+  toast(t('DLSS NR model {version} fetched ({mb} MB).', { version: res.version, mb: res.sizeMB }));
   return true;
 }
 
@@ -1602,7 +1628,7 @@ async function autoUpdateOptiScalerRelease() {
     tag: res.tag
   });
   if (!installRes.ok) {
-    toast(`Auto-update to ${res.tag} failed: ${installRes.error}`);
+    toast(t('Auto-update to {tag} failed: {error}', { tag: res.tag, error: installRes.error }));
     return;
   }
 
@@ -1612,7 +1638,7 @@ async function autoUpdateOptiScalerRelease() {
   await window.api.saveSettings(settings);
   refreshBannerVisibility();
   checkReleaseStatus();
-  toast(hadRelease ? `OptiScaler engine auto-updated to ${res.tag}.` : `Fetched the OptiScaler engine (${res.tag}) automatically.`);
+  toast(hadRelease ? t('OptiScaler engine auto-updated to {tag}.', { tag: res.tag }) : t('Fetched the OptiScaler engine ({tag}) automatically.', { tag: res.tag }));
   autoSyncStaleGames();
 }
 $('#btn-check-updates').addEventListener('click', async () => {
@@ -1622,7 +1648,7 @@ $('#btn-check-updates').addEventListener('click', async () => {
   const mismatchEl = $('#manager-update-mismatch');
   btn.disabled = true;
   statusEl.className = 'status-line';
-  statusEl.textContent = 'Checking…';
+  statusEl.textContent = t('Checking…');
   managerStatusEl.textContent = '';
   mismatchEl.classList.add('hidden');
   $('#btn-install-update').classList.add('hidden');
@@ -1633,7 +1659,7 @@ $('#btn-check-updates').addEventListener('click', async () => {
   let engineNeedsUpdate = false;
   if (!res.ok) {
     statusEl.className = 'status-line status-bad';
-    statusEl.textContent = `Check failed: ${res.error}`;
+    statusEl.textContent = t('Check failed: {error}', { error: res.error });
     pendingUpdate = null;
   } else {
     pendingUpdate = res;
@@ -1642,27 +1668,27 @@ $('#btn-check-updates').addEventListener('click', async () => {
     engineNeedsUpdate = !settings.installedVersion || compareTags(settings.installedVersion, res.tag) < 0;
     if (!engineNeedsUpdate) {
       statusEl.className = 'status-line status-ok';
-      statusEl.textContent = `Engine up to date (${res.tag}).`;
+      statusEl.textContent = t('Engine up to date ({tag}).', { tag: res.tag });
     } else {
       statusEl.className = 'status-line';
       statusEl.textContent = settings.installedVersion
-        ? `Engine update available: ${res.tag} (installed: ${settings.installedVersion})`
-        : `Latest engine release: ${res.tag} — not installed yet.`;
+        ? t('Engine update available: {tag} (installed: {installed})', { tag: res.tag, installed: settings.installedVersion })
+        : t('Latest engine release: {tag} — not installed yet.', { tag: res.tag });
     }
   }
 
   let managerNeedsUpdate = false;
   if (!managerRes.ok) {
     managerStatusEl.className = 'status-line status-bad';
-    managerStatusEl.textContent = `Manager check failed: ${managerRes.error}`;
+    managerStatusEl.textContent = t('Manager check failed: {error}', { error: managerRes.error });
     pendingManagerUpdate = null;
   } else {
     pendingManagerUpdate = managerRes.upToDate ? null : managerRes;
     managerNeedsUpdate = !managerRes.upToDate;
     managerStatusEl.className = managerRes.upToDate ? 'status-line status-ok' : 'status-line';
     managerStatusEl.textContent = managerRes.upToDate
-      ? `Manager up to date (v${managerRes.currentVersion}).`
-      : `Manager update available: ${managerRes.latestVersion} (running v${managerRes.currentVersion}).`;
+      ? t('Manager up to date (v{version}).', { version: managerRes.currentVersion })
+      : t('Manager update available: {latest} (running v{current}).', { latest: managerRes.latestVersion, current: managerRes.currentVersion });
 
     // The real compatibility signal: does the engine actually installed right now match the one
     // THIS Manager build shipped with and was tested against -- not just "are both independently
@@ -1672,9 +1698,9 @@ $('#btn-check-updates').addEventListener('click', async () => {
     // the normal state after any engine release, since launch auto-updates past the bundle.
     if (managerRes.bundledEngineTag && settings.installedVersion && compareTags(settings.installedVersion, managerRes.bundledEngineTag) < 0) {
       mismatchEl.classList.remove('hidden');
-      mismatchEl.textContent = `Version mismatch: this Manager (v${managerRes.currentVersion}) shipped tested with engine ` +
-        `${managerRes.bundledEngineTag}, but the older ${settings.installedVersion} is installed. Update the engine above ` +
-        `to bring them back in sync.`;
+      mismatchEl.textContent = t('Version mismatch: this Manager (v{manager}) shipped tested with engine {bundled}, but the older {installed} is installed. Update the engine above to bring them back in sync.', {
+        manager: managerRes.currentVersion, bundled: managerRes.bundledEngineTag, installed: settings.installedVersion,
+      });
     }
   }
 
@@ -1684,9 +1710,9 @@ $('#btn-check-updates').addEventListener('click', async () => {
   const installBtn = $('#btn-install-update');
   if (engineNeedsUpdate || managerNeedsUpdate) {
     installBtn.classList.remove('hidden');
-    installBtn.textContent = engineNeedsUpdate && managerNeedsUpdate ? 'Update Both'
-      : managerNeedsUpdate ? 'Get New Manager'
-      : 'Update Engine';
+    installBtn.textContent = engineNeedsUpdate && managerNeedsUpdate ? t('Update Both')
+      : managerNeedsUpdate ? t('Get New Manager')
+      : t('Update Engine');
   } else {
     installBtn.classList.add('hidden');
   }
@@ -1700,7 +1726,7 @@ $('#btn-install-update').addEventListener('click', async () => {
   if (pendingUpdate && settings.installedVersion !== pendingUpdate.tag) {
     btn.disabled = true;
     statusEl.className = 'status-line';
-    statusEl.textContent = `Downloading ${pendingUpdate.tag}…`;
+    statusEl.textContent = t('Downloading {tag}…', { tag: pendingUpdate.tag });
 
     const res = await window.api.installUpdate({
       downloadUrl: pendingUpdate.downloadUrl,
@@ -1712,7 +1738,7 @@ $('#btn-install-update').addEventListener('click', async () => {
 
     if (!res.ok) {
       statusEl.className = 'status-line status-bad';
-      statusEl.textContent = `Update failed: ${res.error}`;
+      statusEl.textContent = t('Update failed: {error}', { error: res.error });
       return;
     }
 
@@ -1721,10 +1747,10 @@ $('#btn-install-update').addEventListener('click', async () => {
     await window.api.saveSettings(settings);
     $('#settings-release-folder').value = res.folder;
     statusEl.className = 'status-line status-ok';
-    statusEl.textContent = `Installed ${res.tag}.`;
+    statusEl.textContent = t('Installed {tag}.', { tag: res.tag });
     checkReleaseStatus();
     refreshBannerVisibility();
-    toast(`OptiScaler engine updated to ${res.tag}`);
+    toast(t('OptiScaler engine updated to {tag}', { tag: res.tag }));
     autoSyncStaleGames();
   }
 
@@ -1734,8 +1760,8 @@ $('#btn-install-update').addEventListener('click', async () => {
   if (pendingManagerUpdate) {
     await window.api.openManagerReleasePage();
     managerStatusEl.className = 'status-line';
-    managerStatusEl.textContent = `Opened the release page for ${pendingManagerUpdate.latestVersion} -- install it and relaunch.`;
-    toast(`Grab Manager ${pendingManagerUpdate.latestVersion} from the page that just opened, then relaunch.`);
+    managerStatusEl.textContent = t('Opened the release page for {version} -- install it and relaunch.', { version: pendingManagerUpdate.latestVersion });
+    toast(t('Grab Manager {version} from the page that just opened, then relaunch.', { version: pendingManagerUpdate.latestVersion }));
   }
 
   btn.classList.add('hidden');
@@ -1770,7 +1796,7 @@ $('#btn-run-scan').addEventListener('click', async () => {
 
   btn.disabled = true;
   statusEl.className = 'status-line';
-  statusEl.textContent = scanDrives ? 'Scanning every drive -- this can take a while…' : 'Scanning…';
+  statusEl.textContent = scanDrives ? t('Scanning every drive -- this can take a while…') : t('Scanning…');
   resultsEl.innerHTML = '';
   $('#btn-add-scanned').classList.add('hidden');
 
@@ -1783,7 +1809,7 @@ $('#btn-run-scan').addEventListener('click', async () => {
 
   if (!res.ok) {
     statusEl.className = 'status-line status-bad';
-    statusEl.textContent = `Scan failed: ${res.error}`;
+    statusEl.textContent = t('Scan failed: {error}', { error: res.error });
     return;
   }
 
@@ -1793,12 +1819,12 @@ $('#btn-run-scan').addEventListener('click', async () => {
 
   if (scanResults.length === 0) {
     statusEl.className = 'status-line';
-    statusEl.textContent = 'No new games found.';
+    statusEl.textContent = t('No new games found.');
     return;
   }
 
   statusEl.className = 'status-line status-ok';
-  statusEl.textContent = `Found ${scanResults.length} game${scanResults.length > 1 ? 's' : ''}.`;
+  statusEl.textContent = scanResults.length > 1 ? t('Found {count} games.', { count: scanResults.length }) : t('Found 1 game.');
 
   scanResults.forEach((game, i) => {
     const row = document.createElement('div');
@@ -1815,7 +1841,7 @@ $('#btn-run-scan').addEventListener('click', async () => {
         <div class="scan-result-name">${escapeHtml(game.name)}</div>
         <div class="scan-result-source">${escapeHtml(game.launcher)}</div>
         <div class="scan-result-path">${escapeHtml(game.exePath)}</div>
-        ${altOptions.length > 1 ? '<p class="field-hint" style="margin: 4px 0 0;">Picked wrong exe? Choose another below.</p>' : ''}
+        ${altOptions.length > 1 ? `<p class="field-hint" style="margin: 4px 0 0;">${escapeHtml(t('Picked wrong exe? Choose another below.'))}</p>` : ''}
         ${altSelect}
       </div>
     `;
@@ -1865,7 +1891,7 @@ $('#btn-add-scanned').addEventListener('click', async () => {
 
   if (added > 0) {
     await window.api.saveGames(games);
-    toast(`Added ${added} game${added > 1 ? 's' : ''}.`);
+    toast(added > 1 ? t('Added {count} games.', { count: added }) : t('Added 1 game.'));
     renderGrid();
   }
 
@@ -1880,6 +1906,7 @@ window.addEventListener('focus', () => {
   const data = await window.api.loadData();
   games = data.games || [];
   settings = data.settings || { releaseFolder: '', nrDllPath: '', installedVersion: '' };
+  applyLanguage();
   try { gpu = (await window.api.gpuInfo()) || gpu; } catch {}
   // Vendor colours: the default green is NVIDIA's; an AMD card gets AMD red (style.css, body.vendor-amd).
   document.body.classList.toggle('vendor-amd', gpu.vendor === 'amd');

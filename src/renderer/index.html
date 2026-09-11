@@ -12,13 +12,13 @@
       <span class="brand-name">OptiDLSS5-UI</span>
     </div>
     <div class="topbar-actions">
-      <button id="btn-settings" class="btn btn-ghost">Settings</button>
-      <button id="btn-scan-games" class="btn btn-ghost">Scan for Games</button>
-      <button id="btn-add-game" class="btn btn-primary">+ Add Game</button>
+      <button id="btn-settings" class="btn btn-ghost" data-i18n>Settings</button>
+      <button id="btn-scan-games" class="btn btn-ghost" data-i18n>Scan for Games</button>
+      <button id="btn-add-game" class="btn btn-primary" data-i18n>+ Add Game</button>
     </div>
   </header>
 
-  <div id="settings-banner" class="settings-banner hidden">
+  <div id="settings-banner" class="settings-banner hidden" data-i18n>
     The OptiScaler engine and DLSS NR model are set up automatically on first launch. If that did not finish (offline?), open
     <a id="settings-banner-link" href="#">Settings</a> to fetch them or set the paths by hand before installing to games.
   </div>
@@ -26,24 +26,24 @@
   <main id="game-grid" class="game-grid"></main>
 
   <div id="empty-state" class="empty-state hidden">
-    <p>No games added yet.</p>
-    <button id="btn-add-game-empty" class="btn btn-primary">+ Add your first game</button>
+    <p data-i18n>No games added yet.</p>
+    <button id="btn-add-game-empty" class="btn btn-primary" data-i18n>+ Add your first game</button>
   </div>
 
   <div id="game-modal" class="modal-overlay hidden">
     <div class="modal">
-      <h2 id="game-modal-title">Add Game</h2>
+      <h2 id="game-modal-title" data-i18n>Add Game</h2>
 
-      <label class="field-label">Game .exe</label>
+      <label class="field-label" data-i18n>Game .exe</label>
       <div class="field-row">
-        <input id="game-exe" type="text" placeholder="Browse for the game's .exe, or paste a path..." />
-        <button id="btn-browse-exe" class="btn btn-ghost">Browse</button>
+        <input id="game-exe" type="text" data-i18n-placeholder placeholder="Browse for the game's .exe, or paste a path..." />
+        <button id="btn-browse-exe" class="btn btn-ghost" data-i18n>Browse</button>
       </div>
 
-      <label class="field-label">Display name</label>
-      <input id="game-name" type="text" placeholder="Game name" />
+      <label class="field-label" data-i18n>Display name</label>
+      <input id="game-name" type="text" data-i18n-placeholder placeholder="Game name" />
 
-      <label class="field-label">Banner</label>
+      <label class="field-label" data-i18n>Banner</label>
       <div class="banner-picker">
         <div class="banner-preview-wrap">
           <img id="banner-preview" class="banner-preview hidden" alt="" />
@@ -51,11 +51,11 @@
         </div>
         <div class="banner-actions">
           <div class="field-row">
-            <input id="steam-search-term" type="text" placeholder="Search Steam for banner art..." />
-            <button id="btn-steam-search" class="btn btn-ghost">Search</button>
+            <input id="steam-search-term" type="text" data-i18n-placeholder placeholder="Search Steam for banner art..." />
+            <button id="btn-steam-search" class="btn btn-ghost" data-i18n>Search</button>
           </div>
           <div id="steam-results" class="steam-results"></div>
-          <button id="btn-browse-image" class="btn btn-ghost btn-small">Use local image instead</button>
+          <button id="btn-browse-image" class="btn btn-ghost btn-small" data-i18n>Use local image instead</button>
         </div>
       </div>
 
@@ -63,8 +63,8 @@
       <div id="game-engine-profile-status" class="status-line hidden"></div>
 
       <div id="game-api-section" class="hidden">
-        <label class="field-label">Graphics API this game runs with</label>
-        <p class="field-hint">Some games ship more than one renderer -- Where Winds Meet links DX11 in its exe and carries a DX12 path beside it -- and detection can only name one. The upscaler key, the DLSS5 Feeder, OptiScaler's own Frame Generation and DLSS NR on AMD all follow this, so pick what the game's own video settings actually use. Applied to OptiScaler.ini straight away if it is installed.</p>
+        <label class="field-label" data-i18n>Graphics API this game runs with</label>
+        <p class="field-hint" data-i18n>Some games ship more than one renderer -- Where Winds Meet links DX11 in its exe and carries a DX12 path beside it -- and detection can only name one. The upscaler key, the DLSS5 Feeder, OptiScaler's own Frame Generation and DLSS NR on AMD all follow this, so pick what the game's own video settings actually use. Applied to OptiScaler.ini straight away if it is installed.</p>
         <div class="field-row">
           <select id="game-api-select"></select>
         </div>
@@ -72,47 +72,47 @@
       </div>
 
       <div id="game-framegen-section" class="hidden">
-        <label class="field-label">DLSS Frame Generation version</label>
-        <p class="field-hint">The game's own frame gen, not OptiScaler's -- this only versions the DLL it already loads (nvngx_dlssg.dll).</p>
+        <label class="field-label" data-i18n>DLSS Frame Generation version</label>
+        <p class="field-hint" data-i18n>The game's own frame gen, not OptiScaler's -- this only versions the DLL it already loads (nvngx_dlssg.dll).</p>
         <div class="field-row">
           <select id="game-framegen-version">
-            <option value="">Game default (don't touch)</option>
+            <option value="" data-i18n>Game default (don't touch)</option>
           </select>
-          <button id="btn-framegen-swap" class="btn btn-ghost">Apply</button>
-          <button id="btn-framegen-restore" class="btn btn-ghost">Restore original</button>
+          <button id="btn-framegen-swap" class="btn btn-ghost" data-i18n>Apply</button>
+          <button id="btn-framegen-restore" class="btn btn-ghost" data-i18n>Restore original</button>
         </div>
         <span id="game-framegen-status" class="status-line"></span>
       </div>
 
       <div id="game-injector-section" class="hidden">
-        <label class="field-label">Launch mode</label>
-        <p class="field-hint">Injector loads OptiScaler without renaming a file on disk, so ReShade keeps its own dxgi.dll -- both run. Single-player only; refuses a game shipping a known anti-cheat.</p>
+        <label class="field-label" data-i18n>Launch mode</label>
+        <p class="field-hint" data-i18n>Injector loads OptiScaler without renaming a file on disk, so ReShade keeps its own dxgi.dll -- both run. Single-player only; refuses a game shipping a known anti-cheat.</p>
         <div class="field-row">
           <select id="game-launch-mode">
-            <option value="proxy">Proxy file (default)</option>
-            <option value="injector">Injector</option>
+            <option value="proxy" data-i18n>Proxy file (default)</option>
+            <option value="injector" data-i18n>Injector</option>
           </select>
         </div>
         <div id="game-injector-steam" class="hidden">
-          <p class="field-hint">Paste this into Steam &rarr; this game &rarr; Properties &rarr; Launch Options:</p>
+          <p class="field-hint" data-i18n>Paste this into Steam &rarr; this game &rarr; Properties &rarr; Launch Options:</p>
           <div class="field-row">
             <input id="game-injector-launch-option" type="text" readonly />
-            <button id="btn-injector-copy" class="btn btn-ghost">Copy</button>
+            <button id="btn-injector-copy" class="btn btn-ghost" data-i18n>Copy</button>
           </div>
         </div>
         <div id="game-injector-direct" class="hidden field-row">
-          <button id="btn-injector-launch-now" class="btn btn-ghost">Launch now</button>
+          <button id="btn-injector-launch-now" class="btn btn-ghost" data-i18n>Launch now</button>
         </div>
         <span id="game-injector-status" class="status-line"></span>
       </div>
 
       <div id="game-feeder-section" class="hidden">
-        <label class="field-label">Neural Rendering source: DLSS5 Feeder</label>
-        <p class="field-hint">This game has no native DLSS, so there's no DLSS call for OptiScaler to add Neural Rendering to. The Feeder synthesises one from ReShade's own depth and motion vectors -- estimated, so it ghosts more in fast motion than a native-DLSS-fed game. Deploys ReShade (as a plain ReShade64.dll, not a proxy), the Feeder add-on, and a motion-vector shader here; install OptiScaler normally afterward (Install button) -- it loads ReShade itself once installed, not the other way round.</p>
+        <label class="field-label" data-i18n>Neural Rendering source: DLSS5 Feeder</label>
+        <p class="field-hint" data-i18n>This game has no native DLSS, so there's no DLSS call for OptiScaler to add Neural Rendering to. The Feeder synthesises one from ReShade's own depth and motion vectors -- estimated, so it ghosts more in fast motion than a native-DLSS-fed game. Deploys ReShade (as a plain ReShade64.dll, not a proxy), the Feeder add-on, and a motion-vector shader here; install OptiScaler normally afterward (Install button) -- it loads ReShade itself once installed, not the other way round.</p>
         <div class="field-row">
           <select id="game-feeder-mv-provider"></select>
-          <button id="btn-feeder-deploy" class="btn btn-ghost">Deploy</button>
-          <button id="btn-feeder-update" class="btn btn-ghost hidden">Update</button>
+          <button id="btn-feeder-deploy" class="btn btn-ghost" data-i18n>Deploy</button>
+          <button id="btn-feeder-update" class="btn btn-ghost hidden" data-i18n>Update</button>
         </div>
         <span id="game-feeder-status" class="status-line"></span>
       </div>
@@ -120,165 +120,176 @@
       <div id="game-optifg-section" class="hidden">
         <label class="field-label">
           <input type="checkbox" id="game-optifg-toggle" />
-          OptiScaler Frame Generation (FSRFG)
+          <span data-i18n>OptiScaler Frame Generation (FSRFG)</span>
         </label>
-        <p class="field-hint">Only reachable on a D3D12 game with no frame gen of its own -- OptiScaler's own FG needs the game's swapchain to be D3D12, no way around that. AMD's own tech (FSR3), not NVIDIA's -- doesn't need Streamline. Estimated motion vectors, same as Neural Rendering here, so expect more artifacting than a native DLSS-G game.</p>
+        <p class="field-hint" data-i18n>Only reachable on a D3D12 game with no frame gen of its own -- OptiScaler's own FG needs the game's swapchain to be D3D12, no way around that. AMD's own tech (FSR3), not NVIDIA's -- doesn't need Streamline. Estimated motion vectors, same as Neural Rendering here, so expect more artifacting than a native DLSS-G game.</p>
         <span id="game-optifg-status" class="status-line"></span>
       </div>
 
       <div id="game-lossless-section" class="hidden">
-        <label class="field-label">Frame Generation via Lossless Scaling</label>
-        <p class="field-hint">Lossless Scaling generates extra frames from outside the game entirely -- it never touches the game's swapchain, so it works for games that have no DLSS of their own -- DX11 titles, DLSS5 Feeder and Luma UE games -- where neither the game nor OptiScaler's own Frame Generation can run. It is not offered for games with native DLSS: those have NVIDIA's own Frame Generation in their video settings (versioned above). Separate paid app; this only configures its per-game profile (Frame Generation on, Scaling off), it doesn't install it. <strong>Fixed</strong> multiplies every frame; <strong>Adaptive</strong> generates only as many frames as needed to hold the target FPS you set. <strong>One frame generator at a time:</strong> configuring this turns OptiScaler's own Frame Generation off for this game, and the game's own DLSS Frame Generation must be off in its video settings while Lossless Scaling runs -- two generators stack their frames. Once configured, the on/off toggle (and the amount, in Fixed mode) live in this game's own in-game panel (DLSS 5 Neural Rendering, Alt+Home). <strong>Requires this game running Borderless or Windowed, not exclusive Fullscreen</strong> -- Lossless Scaling cannot capture an exclusive-fullscreen window at all; a DX12 game is usually fine regardless since DX12 has no true exclusive fullscreen.</p>
+        <label class="field-label" data-i18n>Frame Generation via Lossless Scaling</label>
+        <p class="field-hint" data-i18n>Lossless Scaling generates extra frames from outside the game entirely -- it never touches the game's swapchain, so it works for games that have no DLSS of their own -- DX11 titles, DLSS5 Feeder and Luma UE games -- where neither the game nor OptiScaler's own Frame Generation can run. It is not offered for games with native DLSS: those have NVIDIA's own Frame Generation in their video settings (versioned above). Separate paid app; this only configures its per-game profile (Frame Generation on, Scaling off), it doesn't install it. <strong>Fixed</strong> multiplies every frame; <strong>Adaptive</strong> generates only as many frames as needed to hold the target FPS you set. <strong>One frame generator at a time:</strong> configuring this turns OptiScaler's own Frame Generation off for this game, and the game's own DLSS Frame Generation must be off in its video settings while Lossless Scaling runs -- two generators stack their frames. Once configured, the on/off toggle (and the amount, in Fixed mode) live in this game's own in-game panel (DLSS 5 Neural Rendering, Alt+Home). <strong>Requires this game running Borderless or Windowed, not exclusive Fullscreen</strong> -- Lossless Scaling cannot capture an exclusive-fullscreen window at all; a DX12 game is usually fine regardless since DX12 has no true exclusive fullscreen.</p>
         <div class="field-row">
           <select id="game-lossless-mode">
-            <option value="FIXED">Fixed multiplier</option>
-            <option value="ADAPTIVE">Adaptive (target FPS)</option>
+            <option value="FIXED" data-i18n>Fixed multiplier</option>
+            <option value="ADAPTIVE" data-i18n>Adaptive (target FPS)</option>
           </select>
           <select id="game-lossless-multiplier">
-            <option value="2">2x frames</option>
-            <option value="3">3x frames</option>
-            <option value="4">4x frames</option>
+            <option value="2" data-i18n>2x frames</option>
+            <option value="3" data-i18n>3x frames</option>
+            <option value="4" data-i18n>4x frames</option>
           </select>
-          <input id="game-lossless-target" type="number" min="30" max="480" step="1" value="120" title="Target FPS for Adaptive mode" class="hidden" style="width: 110px;" />
-          <button id="btn-lossless-configure" class="btn btn-ghost">Configure for this game</button>
-          <button id="btn-lossless-launch" class="btn btn-ghost hidden">Launch Lossless Scaling</button>
+          <input id="game-lossless-target" type="number" min="30" max="480" step="1" value="120" data-i18n-title title="Target FPS for Adaptive mode" class="hidden" style="width: 110px;" />
+          <button id="btn-lossless-configure" class="btn btn-ghost" data-i18n>Configure for this game</button>
+          <button id="btn-lossless-launch" class="btn btn-ghost hidden" data-i18n>Launch Lossless Scaling</button>
         </div>
         <span id="game-lossless-status" class="status-line"></span>
       </div>
 
       <div id="game-amdnr-section" class="hidden">
-        <label class="field-label">DLSS 5 Neural Rendering on AMD</label>
-        <p class="field-hint">This machine has an AMD card. OptiScaler's own Neural Rendering needs NVIDIA's NGX runtime, so it installs here but never renders anything new. <a href="https://github.com/danielblnc/DLSS-NR-on-AMD" target="_blank" rel="noopener">DLSS-NR-on-AMD</a> (danielblnc, alpha) is the route instead: a from-scratch NR runtime for RX 7000/9000 that hooks the game's own FSR 3/4. Needs Windows 11, Adrenalin 26.1.1 or newer, a DX12 game with FSR turned on in its settings, and no anti-cheat. Its licence forbids bundling or redistributing it, so this app does not download it: <strong>get <code>dlssnr_on_amd_setup.exe</code> from the release page, put it beside the game exe, and run it</strong>. This app fetches the model file it asks for (plain 310.8.0, not the modified build the NVIDIA path uses), tells you when a new release is out, and runs the installer for you once it is in the folder. For a DLSS-only game with no FSR, OptiScaler can supply FSR -- untested together with this tool.</p>
+        <label class="field-label" data-i18n>DLSS 5 Neural Rendering on AMD</label>
+        <p class="field-hint" data-i18n>This machine has an AMD card. OptiScaler's own Neural Rendering needs NVIDIA's NGX runtime, so it installs here but never renders anything new. <a href="https://github.com/danielblnc/DLSS-NR-on-AMD" target="_blank" rel="noopener">DLSS-NR-on-AMD</a> (danielblnc, alpha) is the route instead: a from-scratch NR runtime for RX 7000/9000 that hooks the game's own FSR 3/4. Needs Windows 11, Adrenalin 26.1.1 or newer, a DX12 game with FSR turned on in its settings, and no anti-cheat. Its licence forbids bundling or redistributing it, so this app does not download it: <strong>get <code>dlssnr_on_amd_setup.exe</code> from the release page, put it beside the game exe, and run it</strong>. This app fetches the model file it asks for (plain 310.8.0, not the modified build the NVIDIA path uses), tells you when a new release is out, and runs the installer for you once it is in the folder. For a DLSS-only game with no FSR, OptiScaler can supply FSR -- untested together with this tool.</p>
         <div class="field-row">
-          <button id="btn-amdnr-release-page" class="btn btn-ghost">Open release page</button>
-          <button id="btn-amdnr-fetch-model" class="btn btn-ghost">Fetch nvngx_dlssnr.dll 310.8.0</button>
-          <button id="btn-amdnr-run-setup" class="btn btn-ghost hidden">Run its installer</button>
+          <button id="btn-amdnr-release-page" class="btn btn-ghost" data-i18n>Open release page</button>
+          <button id="btn-amdnr-fetch-model" class="btn btn-ghost" data-i18n>Fetch nvngx_dlssnr.dll 310.8.0</button>
+          <button id="btn-amdnr-run-setup" class="btn btn-ghost hidden" data-i18n>Run its installer</button>
         </div>
         <span id="game-amdnr-status" class="status-line"></span>
         <span id="game-amdnr-latest" class="status-line"></span>
       </div>
 
       <div id="game-lumaue-section" class="hidden">
-        <label class="field-label">Luma UE (adds DLSS to this game)</label>
-        <p class="field-hint">This game has no DLSS of its own -- <a href="https://github.com/Filoppi/Luma-Framework" target="_blank" rel="noopener">Luma Framework's</a> Unreal Engine mod replaces its stock TAA with DLAA, which is what gives OptiScaler's Neural Rendering pass a real DLSS call to hook. Untested by this app against a real install -- built from Luma's actual release files and the OptiScaler wiki's setup page for this game, not guessed, but never run against the game.</p>
+        <label class="field-label" data-i18n>Luma UE (adds DLSS to this game)</label>
+        <p class="field-hint" data-i18n>This game has no DLSS of its own -- <a href="https://github.com/Filoppi/Luma-Framework" target="_blank" rel="noopener">Luma Framework's</a> Unreal Engine mod replaces its stock TAA with DLAA, which is what gives OptiScaler's Neural Rendering pass a real DLSS call to hook. Untested by this app against a real install -- built from Luma's actual release files and the OptiScaler wiki's setup page for this game, not guessed, but never run against the game.</p>
         <p id="game-lumaue-known-issue" class="field-hint status-bad"></p>
         <label class="scan-checkbox-row">
           <input id="game-lumaue-license-confirm" type="checkbox" />
           <span id="game-lumaue-license-text"></span>
         </label>
         <div class="field-row">
-          <button id="btn-lumaue-deploy" class="btn btn-ghost">Deploy Luma UE</button>
-          <button id="btn-lumaue-howto" class="btn btn-ghost">How to install</button>
+          <button id="btn-lumaue-deploy" class="btn btn-ghost" data-i18n>Deploy Luma UE</button>
+          <button id="btn-lumaue-howto" class="btn btn-ghost" data-i18n>How to install</button>
         </div>
         <label class="scan-checkbox-row">
           <input id="game-lumaue-amd-intel" type="checkbox" />
-          On AMD or Intel graphics, also apply the wiki's workaround (Spoofing.Dxgi=false, Dx11withDx12.DontUseNTShared=true)
+          <span data-i18n>On AMD or Intel graphics, also apply the wiki's workaround (Spoofing.Dxgi=false, Dx11withDx12.DontUseNTShared=true)</span>
         </label>
         <span id="game-lumaue-status" class="status-line"></span>
       </div>
 
       <div class="modal-actions">
-        <button id="btn-cancel-game" class="btn btn-ghost">Cancel</button>
-        <button id="btn-save-game" class="btn btn-primary">Save Game</button>
+        <button id="btn-cancel-game" class="btn btn-ghost" data-i18n>Cancel</button>
+        <button id="btn-save-game" class="btn btn-primary" data-i18n>Save Game</button>
       </div>
     </div>
   </div>
 
   <div id="lumaue-instructions-modal" class="modal-overlay hidden">
     <div class="modal modal-wide">
-      <h2>Installing Luma UE for STAR WARS Jedi: Fallen Order</h2>
-      <p class="field-hint">Deploying the files is only half of this -- the DLSS call OptiScaler needs won't exist until you also turn DLSS on inside Luma's own overlay, in-game. Follow all of these steps in order.</p>
+      <h2 data-i18n>Installing Luma UE for STAR WARS Jedi: Fallen Order</h2>
+      <p class="field-hint" data-i18n>Deploying the files is only half of this -- the DLSS call OptiScaler needs won't exist until you also turn DLSS on inside Luma's own overlay, in-game. Follow all of these steps in order.</p>
 
       <ol class="lumaue-steps">
-        <li><strong>Check the licence checkbox</strong> below, in the Luma UE section of this Edit Game screen. Luma Framework's licence needs your explicit confirmation before this app will fetch anything on your behalf -- it always downloads live from the official GitHub release, never a bundled copy.</li>
-        <li><strong>Click "Deploy Luma UE".</strong> This downloads and places everything Luma needs directly in the game's folder: its shader files, its own <code>dxgi.dll</code> renamed to <code>ReShade64.dll</code>, its compiled add-on, and <code>nvngx_dlss.dll</code>. OptiScaler itself must already be installed for this game first (use the Install button) -- Deploy only adds Luma on top of that.</li>
-        <li><strong>On AMD or Intel graphics</strong>, also check the workaround checkbox beneath Deploy (applies <code>Spoofing.Dxgi=false</code> and <code>Dx11withDx12.DontUseNTShared=true</code> to OptiScaler.ini, per the OptiScaler wiki's own setup page for this game). Skip it on NVIDIA.</li>
-        <li><strong>Launch the game</strong> normally (through this app or Steam) and get into actual gameplay, not just a menu or loading screen.</li>
-        <li><strong>Press the Home key in-game.</strong> This opens Luma's own overlay -- it is separate from OptiScaler's menu (Alt+Home) and won't appear unless deploy actually succeeded.</li>
-        <li><strong>Select DLSS as the upscaling method inside Luma's overlay.</strong> This is the step that actually matters: until DLSS is chosen here, the game keeps using its own stock TAA, no DLSS call ever happens, and OptiScaler's Neural Rendering panel will keep saying "waiting for the upscaler to run" indefinitely -- correctly, because nothing is running for it to hook yet.</li>
-        <li><strong>Open OptiScaler's own menu (Alt+Home)</strong> and check the DLSS 5 Neural Rendering panel to confirm it's picked up a real evaluate call.</li>
+        <li data-i18n><strong>Check the licence checkbox</strong> below, in the Luma UE section of this Edit Game screen. Luma Framework's licence needs your explicit confirmation before this app will fetch anything on your behalf -- it always downloads live from the official GitHub release, never a bundled copy.</li>
+        <li data-i18n><strong>Click "Deploy Luma UE".</strong> This downloads and places everything Luma needs directly in the game's folder: its shader files, its own <code>dxgi.dll</code> renamed to <code>ReShade64.dll</code>, its compiled add-on, and <code>nvngx_dlss.dll</code>. OptiScaler itself must already be installed for this game first (use the Install button) -- Deploy only adds Luma on top of that.</li>
+        <li data-i18n><strong>On AMD or Intel graphics</strong>, also check the workaround checkbox beneath Deploy (applies <code>Spoofing.Dxgi=false</code> and <code>Dx11withDx12.DontUseNTShared=true</code> to OptiScaler.ini, per the OptiScaler wiki's own setup page for this game). Skip it on NVIDIA.</li>
+        <li data-i18n><strong>Launch the game</strong> normally (through this app or Steam) and get into actual gameplay, not just a menu or loading screen.</li>
+        <li data-i18n><strong>Press the Home key in-game.</strong> This opens Luma's own overlay -- it is separate from OptiScaler's menu (Alt+Home) and won't appear unless deploy actually succeeded.</li>
+        <li data-i18n><strong>Select DLSS as the upscaling method inside Luma's overlay.</strong> This is the step that actually matters: until DLSS is chosen here, the game keeps using its own stock TAA, no DLSS call ever happens, and OptiScaler's Neural Rendering panel will keep saying "waiting for the upscaler to run" indefinitely -- correctly, because nothing is running for it to hook yet.</li>
+        <li data-i18n><strong>Open OptiScaler's own menu (Alt+Home)</strong> and check the DLSS 5 Neural Rendering panel to confirm it's picked up a real evaluate call.</li>
       </ol>
 
-      <p class="field-hint status-bad">Known open upstream issue (Luma-Framework #122, unresolved): opening any in-game menu after this can cause brief character pop-in and visible noise. That's a Luma bug, not something wrong with your setup.</p>
+      <p class="field-hint status-bad" data-i18n>Known open upstream issue (Luma-Framework #122, unresolved): opening any in-game menu after this can cause brief character pop-in and visible noise. That's a Luma bug, not something wrong with your setup.</p>
 
       <div class="modal-actions">
-        <button id="btn-close-lumaue-instructions" class="btn btn-primary">Got it</button>
+        <button id="btn-close-lumaue-instructions" class="btn btn-primary" data-i18n>Got it</button>
       </div>
     </div>
   </div>
 
   <div id="scan-modal" class="modal-overlay hidden">
     <div class="modal modal-wide">
-      <h2>Scan for Games</h2>
-      <p class="field-hint">Reads Steam's library folders (every drive), plus Epic and GOG. Proposes an exe for each game it finds -- you confirm before anything is added.</p>
+      <h2 data-i18n>Scan for Games</h2>
+      <p class="field-hint" data-i18n>Reads Steam's library folders (every drive), plus Epic and GOG. Proposes an exe for each game it finds -- you confirm before anything is added.</p>
 
       <label class="scan-checkbox-row">
         <input id="scan-drives" type="checkbox" />
-        Also sweep every fixed drive for games outside those libraries (slower)
+        <span data-i18n>Also sweep every fixed drive for games outside those libraries (slower)</span>
       </label>
 
       <div class="modal-actions" style="margin-top: 12px;">
-        <button id="btn-run-scan" class="btn btn-primary">Scan</button>
+        <button id="btn-run-scan" class="btn btn-primary" data-i18n>Scan</button>
         <span id="scan-status" class="status-line" style="align-self: center;"></span>
       </div>
 
       <div id="scan-results" class="scan-results"></div>
 
       <div class="modal-actions">
-        <button id="btn-cancel-scan" class="btn btn-ghost">Close</button>
-        <button id="btn-add-scanned" class="btn btn-primary hidden">Add Selected</button>
+        <button id="btn-cancel-scan" class="btn btn-ghost" data-i18n>Close</button>
+        <button id="btn-add-scanned" class="btn btn-primary hidden" data-i18n>Add Selected</button>
       </div>
     </div>
   </div>
 
   <div id="settings-modal" class="modal-overlay hidden">
     <div class="modal">
-      <h2>Settings</h2>
+      <h2 data-i18n>Settings</h2>
+
+      <label class="field-label" data-i18n>Language</label>
+      <div class="field-row">
+        <select id="settings-language">
+          <option value="auto" data-i18n>Auto (follow Windows)</option>
+          <option value="en">English</option>
+          <option value="pt-BR">Português (Brasil)</option>
+        </select>
+      </div>
 
       <div id="settings-gpu-status" class="status-line" style="margin-bottom: 8px;"></div>
 
-      <label class="field-label">OptiScaler (DLSSNR) release folder</label>
-      <p class="field-hint">Set up automatically: the engine ships inside this app's installer and is extracted on first launch, then kept current from GitHub. Only change this to use your own build (the folder containing setup_windows.bat).</p>
+      <label class="field-label" data-i18n>OptiScaler (DLSSNR) release folder</label>
+      <p class="field-hint" data-i18n>Set up automatically: the engine ships inside this app's installer and is extracted on first launch, then kept current from GitHub. Only change this to use your own build (the folder containing setup_windows.bat).</p>
       <div class="field-row">
-        <input id="settings-release-folder" type="text" placeholder="Not set — browse or paste a path" />
-        <button id="btn-browse-release" class="btn btn-ghost">Browse</button>
+        <input id="settings-release-folder" type="text" data-i18n-placeholder placeholder="Not set — browse or paste a path" />
+        <button id="btn-browse-release" class="btn btn-ghost" data-i18n>Browse</button>
       </div>
       <div id="release-status" class="status-line"></div>
 
       <div class="field-row" style="margin-top: 12px;">
-        <button id="btn-check-updates" class="btn btn-ghost">Check for Updates</button>
+        <button id="btn-check-updates" class="btn btn-ghost" data-i18n>Check for Updates</button>
         <span id="update-status" class="status-line" style="align-self: center;"></span>
       </div>
-      <button id="btn-install-update" class="btn btn-primary btn-small hidden" style="margin-top: 8px;">Update Now</button>
+      <button id="btn-install-update" class="btn btn-primary btn-small hidden" style="margin-top: 8px;" data-i18n>Update Now</button>
       <div id="manager-update-status" class="status-line" style="margin-top: 4px;"></div>
       <div id="manager-update-mismatch" class="status-line status-bad hidden" style="margin-top: 4px;"></div>
 
-      <label class="field-label">Nvidia DLSS NR model file (nvngx_dlssnr.dll)</label>
-      <p class="field-hint">Fetched automatically on first launch (from RHI's published package). One copy gets placed in each game's folder. Browse only if you want to supply your own copy from an NVIDIA driver.</p>
+      <label class="field-label" data-i18n>Nvidia DLSS NR model file (nvngx_dlssnr.dll)</label>
+      <p class="field-hint" data-i18n>Fetched automatically on first launch (from RHI's published package). One copy gets placed in each game's folder. Browse only if you want to supply your own copy from an NVIDIA driver.</p>
       <div class="field-row">
-        <input id="settings-nr-dll" type="text" placeholder="Not set — fetch, browse or paste a path" />
-        <button id="btn-fetch-nr-dll" class="btn btn-ghost">Fetch automatically</button>
-        <button id="btn-browse-nr-dll" class="btn btn-ghost">Browse</button>
+        <input id="settings-nr-dll" type="text" data-i18n-placeholder placeholder="Not set — fetch, browse or paste a path" />
+        <button id="btn-fetch-nr-dll" class="btn btn-ghost" data-i18n>Fetch automatically</button>
+        <button id="btn-browse-nr-dll" class="btn btn-ghost" data-i18n>Browse</button>
       </div>
       <div id="nr-dll-status" class="status-line"></div>
 
-      <label class="field-label">Streamline version</label>
-      <p class="field-hint">The streamline folder OptiScaler's DLSS-G Frame Gen needs is downloaded for you, so nvngx_dlssnr.dll above is the only file you have to supply yourself. "Latest" tracks the newest build RHI publishes; pick a specific one if a game misbehaves on the newest.</p>
+      <label class="field-label" data-i18n>Streamline version</label>
+      <p class="field-hint" data-i18n>The streamline folder OptiScaler's DLSS-G Frame Gen needs is downloaded for you, so nvngx_dlssnr.dll above is the only file you have to supply yourself. "Latest" tracks the newest build RHI publishes; pick a specific one if a game misbehaves on the newest.</p>
       <div class="field-row">
         <select id="settings-streamline-version">
-          <option value="latest">Latest (recommended)</option>
+          <option value="latest" data-i18n>Latest (recommended)</option>
         </select>
       </div>
       <div id="streamline-version-status" class="status-line"></div>
 
       <div class="modal-actions">
-        <button id="btn-close-settings" class="btn btn-primary">Done</button>
+        <button id="btn-close-settings" class="btn btn-primary" data-i18n>Done</button>
       </div>
     </div>
   </div>
 
   <div id="toast" class="toast hidden"></div>
 
+  <script src="i18n.js"></script>
+  <script src="locales/pt-BR.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

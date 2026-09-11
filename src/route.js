@@ -75,10 +75,10 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
   // flips the moment a Feeder or Luma deploy places nvngx_dlss.dll -- hence the two markers.
   const shippedDlss = !feeder.needsFeeder(dir) && !feederDeployed && !lumaDeployed;
 
-  const finish = (route, label, reason, steps) => {
+  const finish = (route, label, reason, steps, reasonVars = null) => {
     const next = steps.find((s) => !s.done) || null;
     return {
-      route, label, reason, steps, gpuVendor,
+      route, label, reason, reasonVars, steps, gpuVendor,
       optiInstalled, feederDeployed, lumaDeployed,
       complete: steps.length > 0 && !next,
       nextStep: next ? next.label : null,
@@ -91,7 +91,8 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
     const gate = amdnr.amdNrEligibility(gpuVendor, api);
     if (!gate.supported && detected.recommend !== 'unsupported' && api) {
       return finish('unsupported', 'No NR route on AMD',
-        `${gate.reason} OptiScaler still installs here for its upscaler swap, but its Neural Rendering needs an NVIDIA GPU.`, []);
+        `${gate.reason} OptiScaler still installs here for its upscaler swap, but its Neural Rendering needs an NVIDIA GPU.`, [],
+        gate.reasonVars || null);
     }
     if (gate.supported) {
       const st = amdnr.amdNrStatus(dir);

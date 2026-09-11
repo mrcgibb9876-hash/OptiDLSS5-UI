@@ -64,7 +64,8 @@ function amdNrEligibility(gpuVendor, api) {
     return { supported: false, reason: 'DLSS NR on AMD is for AMD Radeon RX 7000/9000 cards only.' };
   }
   if (api !== 'dx12') {
-    return { supported: false, reason: `DLSS NR on AMD is DX12-only for now (Vulkan is planned upstream) -- this game is ${api || 'not yet detected'}.` };
+    // Key + vars rather than a baked string, so the renderer can translate it (i18n.js).
+    return { supported: false, reason: 'DLSS NR on AMD is DX12-only for now (Vulkan is planned upstream) -- this game is {api}.', reasonVars: { api: api || 'not yet detected' } };
   }
   return { supported: true };
 }

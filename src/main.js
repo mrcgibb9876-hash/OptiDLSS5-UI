@@ -1627,7 +1627,7 @@ function setOptiFgEnabled(dir, enabled) {
 // copied there by game:install same as everything else in the release folder).
 function optiFgReadiness(dir, api) {
   if (api !== 'dx12') {
-    return { supported: false, reason: `OptiScaler's own Frame Generation needs the game's swapchain to be D3D12 -- this game is ${api || 'not yet detected'}.` };
+    return { supported: false, reason: "OptiScaler's own Frame Generation needs the game's swapchain to be D3D12 -- this game is {api}.", reasonVars: { api: api || 'not yet detected' } };
   }
   // Crashes on a real game: our exported NGX Shutdown1 forwards into NVIDIA's real
   // _nvngx.dll while the Feeder's own private DX12 NGX session is still live, and NVIDIA's
