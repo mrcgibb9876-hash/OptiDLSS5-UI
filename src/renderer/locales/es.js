@@ -356,4 +356,10 @@ window.I18N.register("es", {
   "Deploy Luma UE (removes the Feeder first)": "Desplegar Luma UE (quita primero el Feeder)",
   "Luma UE is for Unreal Engine 4 games rendering with DirectX 11 and no DLSS of their own -- this game reads as {engine} on {api}, so the DLSS5 Feeder is the route here.": "Luma UE es para juegos de Unreal Engine 4 que renderizan con DirectX 11 y no tienen DLSS propio -- este juego se detecta como {engine} con {api}, así que aquí la ruta es el DLSS5 Feeder.",
   "Luma's Unreal Engine mod is generic for UE4 DirectX 11 games; this app has verified it on STAR WARS Jedi: Fallen Order. Elsewhere, confirm Luma's overlay (Home) appears and DLSS can be selected in it.": "El mod de Unreal Engine de Luma es genérico para juegos UE4 con DirectX 11; esta app lo ha verificado en STAR WARS Jedi: Fallen Order. En otros juegos, comprueba que aparezca la superposición de Luma (Inicio) y que se pueda seleccionar DLSS ahí.",
+  "Restart to update": "Reiniciar para actualizar",
+  "Downloading Manager v{version}… {percent}%": "Descargando Manager v{version}… {percent}%",
+  "Manager v{version} is ready -- restart to update.": "Manager v{version} está listo -- reinicia para actualizar.",
+  "Downloading Manager {version} in the background -- you will be asked to restart when it is ready.": "Descargando Manager {version} en segundo plano -- se te pedirá reiniciar cuando esté listo.",
+  "Update Manager": "Actualizar Manager",
+  "The update is not ready yet.": "La actualización aún no está lista.",
 });

@@ -19,6 +19,9 @@ const gpu = require('./gpu');
 const amdnr = require('./amdnr');
 const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, resolveUnrealShippingExe } = require('./detect');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
+const managerUpdate = require('./manager-update');
+let electronAutoUpdater = null;
+try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
 const ENGINE_KNOWN_GAMES = new Set(require('./engine-known-games.json').exeNames);
 const execFileAsync = promisify(execFile);
 
@@ -70,6 +73,17 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+  // The Manager's own updater: checks its GitHub releases after launch and every few hours,
+  // downloads in the background, installs on quit; the renderer shows "Restart to update".
+  managerUpdate.setup({
+    app,
+    autoUpdater: electronAutoUpdater,
+    onChange: (state) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        try { win.webContents.send('manager-update', state); } catch {}
+      }
+    },
+  });
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -2118,6 +2132,12 @@ ipcMain.handle('update:checkManager', async () => {
 ipcMain.handle('update:openManagerReleasePage', () => {
   shell.openExternal(`https://github.com/${MANAGER_REPO}/releases/latest`);
 });
+
+// The self-updater (src/manager-update.js): state for the banner, a manual check that also
+// downloads, and the restart that installs what was downloaded.
+ipcMain.handle('update:managerState', () => managerUpdate.snapshot());
+ipcMain.handle('update:managerCheck', () => managerUpdate.check());
+ipcMain.handle('update:managerRestart', () => managerUpdate.restart());
 
 // Closes the "blind install" gap without this app guessing at settings it hasn't verified:
 // tells the user whether OptiScaler_DLSSNR's own engine has ever been specifically tuned for

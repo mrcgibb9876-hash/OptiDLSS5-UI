@@ -76,6 +76,10 @@ contextBridge.exposeInMainWorld('api', {
   installUpdate: (payload) => ipcRenderer.invoke('update:install', payload),
   checkManagerUpdate: () => ipcRenderer.invoke('update:checkManager'),
   openManagerReleasePage: () => ipcRenderer.invoke('update:openManagerReleasePage'),
+  managerUpdateState: () => ipcRenderer.invoke('update:managerState'),
+  managerUpdateCheck: () => ipcRenderer.invoke('update:managerCheck'),
+  managerUpdateRestart: () => ipcRenderer.invoke('update:managerRestart'),
+  onManagerUpdate: (cb) => { ipcRenderer.on('manager-update', (_evt, state) => cb(state)); },
 
   engineHasKnownProfile: (exePath) => ipcRenderer.invoke('engine:hasKnownProfile', { exePath })
 });

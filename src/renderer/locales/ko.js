@@ -356,4 +356,10 @@ window.I18N.register("ko", {
   "Deploy Luma UE (removes the Feeder first)": "Luma UE 배포 (Feeder를 먼저 제거)",
   "Luma UE is for Unreal Engine 4 games rendering with DirectX 11 and no DLSS of their own -- this game reads as {engine} on {api}, so the DLSS5 Feeder is the route here.": "Luma UE는 DirectX 11로 렌더링하고 자체 DLSS가 없는 Unreal Engine 4 게임용입니다 -- 이 게임은 {engine}({api})로 인식되므로 여기서는 DLSS5 Feeder가 경로입니다.",
   "Luma's Unreal Engine mod is generic for UE4 DirectX 11 games; this app has verified it on STAR WARS Jedi: Fallen Order. Elsewhere, confirm Luma's overlay (Home) appears and DLSS can be selected in it.": "Luma의 Unreal Engine 모드는 UE4 DirectX 11 게임에 범용으로 적용됩니다. 이 앱은 STAR WARS Jedi: Fallen Order에서 검증했습니다. 다른 게임에서는 Luma 오버레이(Home)가 나타나고 거기서 DLSS를 선택할 수 있는지 확인하세요.",
+  "Restart to update": "다시 시작하여 업데이트",
+  "Downloading Manager v{version}… {percent}%": "Manager v{version} 다운로드 중… {percent}%",
+  "Manager v{version} is ready -- restart to update.": "Manager v{version}이(가) 준비되었습니다 -- 다시 시작하면 업데이트됩니다.",
+  "Downloading Manager {version} in the background -- you will be asked to restart when it is ready.": "Manager {version}을(를) 백그라운드에서 다운로드하는 중 -- 준비되면 다시 시작하라는 안내가 표시됩니다.",
+  "Update Manager": "Manager 업데이트",
+  "The update is not ready yet.": "업데이트가 아직 준비되지 않았습니다.",
 });

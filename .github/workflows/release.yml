@@ -89,8 +89,10 @@ jobs:
         $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
 
         $expected = @(
-          "dist\OptiDLSS5-UI Setup $version.exe",
-          "dist\OptiDLSS5-UI $version.exe"
+          "dist\OptiDLSS5-UI-Setup-$version.exe",
+          "dist\OptiDLSS5-UI-Portable-$version.exe",
+          "dist\latest.yml",
+          "dist\OptiDLSS5-UI-Setup-$version.exe.blockmap"
         )
 
         foreach ($file in $expected) {
@@ -133,8 +135,12 @@ jobs:
         tag_name: ${{ inputs.tag }}
         name: ${{ inputs.title }}
         prerelease: ${{ inputs.prerelease }}
+        # latest.yml + the blockmap are what the Manager's own updater (electron-updater, GitHub
+        # provider) reads to find and delta-download the next build -- see src/manager-update.js.
         files: |
           dist/*.exe
+          dist/*.blockmap
+          dist/latest.yml
           dist/OptiScaler_DLSSNR-*.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

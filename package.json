@@ -38,6 +38,11 @@
         "to": "engine"
       }
     ],
+    "publish": {
+      "provider": "github",
+      "owner": "mrcgibb9876-hash",
+      "repo": "OptiDLSS5-UI"
+    },
     "win": {
       "target": [
         {
@@ -55,7 +60,11 @@
       ],
       "signAndEditExecutable": false
     },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
+    },
     "nsis": {
+      "artifactName": "${productName}-Setup-${version}.${ext}",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": false,
@@ -63,5 +72,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

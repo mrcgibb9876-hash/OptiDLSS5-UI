@@ -1716,6 +1716,33 @@ async function ensureNrModel({ force = false } = {}) {
   return true;
 }
 
+// The Manager's own update, as pushed by main.js (src/manager-update.js): a banner while it
+// downloads, and "Restart to update" once it is on disk. Nothing to click for the download
+// itself -- it happens on its own, and even an ignored banner installs on the next quit.
+function renderManagerUpdate(state) {
+  const banner = $('#manager-update-banner');
+  const text = $('#manager-update-banner-text');
+  const restartBtn = $('#btn-manager-restart');
+  if (!state || !state.supported) { banner.classList.add('hidden'); return; }
+  if (state.phase === 'downloading' || state.phase === 'available') {
+    banner.classList.remove('hidden');
+    restartBtn.classList.add('hidden');
+    text.textContent = t('Downloading Manager v{version}… {percent}%', { version: state.version || '?', percent: state.percent || 0 });
+  } else if (state.phase === 'downloaded') {
+    banner.classList.remove('hidden');
+    restartBtn.classList.remove('hidden');
+    text.textContent = t('Manager v{version} is ready -- restart to update.', { version: state.version || '?' });
+  } else {
+    banner.classList.add('hidden');
+  }
+}
+
+$('#btn-manager-restart').addEventListener('click', async () => {
+  $('#btn-manager-restart').disabled = true;
+  const ok = await window.api.managerUpdateRestart();
+  if (!ok) { $('#btn-manager-restart').disabled = false; toast(t('The update is not ready yet.')); }
+});
+
 async function autoUpdateOptiScalerRelease() {
   const bundled = await window.api.bundledEngine();
   if (await usingCustomReleaseFolder(bundled.managedFolder)) return;
@@ -1813,7 +1840,7 @@ $('#btn-check-updates').addEventListener('click', async () => {
   if (engineNeedsUpdate || managerNeedsUpdate) {
     installBtn.classList.remove('hidden');
     installBtn.textContent = engineNeedsUpdate && managerNeedsUpdate ? t('Update Both')
-      : managerNeedsUpdate ? t('Get New Manager')
+      : managerNeedsUpdate ? t('Update Manager')
       : t('Update Engine');
   } else {
     installBtn.classList.add('hidden');
@@ -1856,14 +1883,21 @@ $('#btn-install-update').addEventListener('click', async () => {
     autoSyncStaleGames();
   }
 
-  // No self-replacing installer for the Manager itself (deliberately -- see update:checkManager's
-  // own comment in main.js) -- the closest this can do in one click is open the release page for
-  // you rather than making you notice and click the separate status line yourself.
+  // The Manager updates itself (src/manager-update.js) where it can -- the installer build. The
+  // portable exe and a source checkout cannot replace themselves, so those still get the
+  // release page.
   if (pendingManagerUpdate) {
-    await window.api.openManagerReleasePage();
-    managerStatusEl.className = 'status-line';
-    managerStatusEl.textContent = t('Opened the release page for {version} -- install it and relaunch.', { version: pendingManagerUpdate.latestVersion });
-    toast(t('Grab Manager {version} from the page that just opened, then relaunch.', { version: pendingManagerUpdate.latestVersion }));
+    const st = await window.api.managerUpdateState();
+    if (st.supported) {
+      managerStatusEl.className = 'status-line';
+      managerStatusEl.textContent = t('Downloading Manager {version} in the background -- you will be asked to restart when it is ready.', { version: pendingManagerUpdate.latestVersion });
+      window.api.managerUpdateCheck();
+    } else {
+      await window.api.openManagerReleasePage();
+      managerStatusEl.className = 'status-line';
+      managerStatusEl.textContent = t('Opened the release page for {version} -- install it and relaunch.', { version: pendingManagerUpdate.latestVersion });
+      toast(t('Grab Manager {version} from the page that just opened, then relaunch.', { version: pendingManagerUpdate.latestVersion }));
+    }
   }
 
   btn.classList.add('hidden');
@@ -2017,6 +2051,12 @@ window.addEventListener('focus', () => {
   await ensureBundledEngine();
   await autoUpdateOptiScalerRelease();
   autoSyncStaleGames();
+  // Both halves keep themselves current while the app stays open: the engine re-checks its
+  // releases every few hours (same path as the launch check), and the Manager's own updater
+  // reports through the banner.
+  setInterval(() => autoUpdateOptiScalerRelease().catch(() => {}), 6 * 60 * 60 * 1000);
+  window.api.onManagerUpdate(renderManagerUpdate);
+  renderManagerUpdate(await window.api.managerUpdateState());
   // Not awaited: a 165 MB download must not hold up the per-game sync that does not need it.
   ensureNrModel();
 })();
