@@ -4,6 +4,15 @@ let editingGameId = null;
 let pendingBanner = { appid: null, localPath: null };
 let pendingUpdate = null;
 let pendingManagerUpdate = null;
+// Filled in at init from gpu:info (see gpu.js). 'unknown' behaves like NVIDIA -- the app's
+// behaviour before detection existed.
+let gpu = { vendor: 'unknown', name: null, driverVersion: null };
+
+function gpuLabel() {
+  const vendorName = { nvidia: 'NVIDIA', amd: 'AMD', intel: 'Intel' }[gpu.vendor] || 'Unknown vendor';
+  const name = gpu.name || vendorName;
+  return gpu.driverVersion ? `${name} (driver ${gpu.driverVersion})` : name;
+}
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -82,7 +91,9 @@ async function renderGrid() {
     } else if (backends.optiscaler) {
       badgeClass = 'badge-installed';
       badgeText = 'OptiScaler';
-    } else if (status.hasIni || status.hasNr) {
+    } else if (status.hasIni || (status.hasNr && gpu.vendor !== 'amd')) {
+      // On an AMD card a lone nvngx_dlssnr.dll is the DLSS-NR-on-AMD layout, not a half-done
+      // OptiScaler install -- the route chip carries that state; this badge stays "Not installed".
       badgeClass = 'badge-partial';
       badgeText = status.hasNr ? 'Missing OptiScaler files' : 'Missing NR file';
     }
@@ -158,6 +169,17 @@ async function renderGrid() {
             toast(res.ok ? describeUninstall(res) : `Couldn't remove OptiScaler: ${res.error}`);
             renderGrid();
           }
+        });
+      } else if (gpu.vendor === 'amd' || gpu.vendor === 'intel') {
+        // Installs fine, renders nothing new: OptiScaler's NR pass needs NVIDIA's NGX runtime.
+        // Said before the click lands, not after, so an "OptiScaler" badge never reads as NR working.
+        flipToConfirm(card, {
+          title: 'Install OptiScaler on this GPU?',
+          detail: `This is an ${gpu.vendor === 'amd' ? 'AMD' : 'Intel'} card: OptiScaler installs and its upscaler swap works, but its ` +
+            `Neural Rendering will not run here (needs NVIDIA).${gpu.vendor === 'amd' ? ' For NR on AMD, see "DLSS 5 Neural Rendering on AMD" under Edit.' : ''}`,
+          onConfirm: () => installGame(game),
+          confirmLabel: 'Install anyway',
+          danger: false,
         });
       } else {
         installGame(game);
@@ -239,9 +261,13 @@ async function applyRecommendation(game, card, backends) {
     install.classList.add('btn-primary');
   }
 }
-function flipToConfirm(card, { title, detail, onConfirm }) {
+function flipToConfirm(card, { title, detail, onConfirm, confirmLabel = 'Remove', danger = true }) {
   card.querySelector('.card-remove-title').textContent = title;
   card.querySelector('.card-remove-detail').textContent = detail;
+  const confirmBtn = card.querySelector('.btn-flip-confirm');
+  confirmBtn.textContent = confirmLabel;
+  confirmBtn.classList.toggle('btn-danger', danger);
+  confirmBtn.classList.toggle('btn-primary', !danger);
   card._onFlipConfirm = onConfirm;
   card.classList.add('flipped');
 }
@@ -408,8 +434,90 @@ async function openGameModal(game) {
   await loadFeederSection(game);
   await loadOptiFgSection(game);
   await loadLosslessSection(game);
+  await loadAmdNrSection(game);
   await loadLumaUeSection(game);
 }
+
+// DLSS NR on AMD -- shown only on an AMD card (see amdnr.js for the whole picture and for why
+// this section never downloads the tool itself).
+async function loadAmdNrSection(game) {
+  const section = $('#game-amdnr-section');
+  const status = $('#game-amdnr-status');
+  const latest = $('#game-amdnr-latest');
+  const fetchBtn = $('#btn-amdnr-fetch-model');
+  const runBtn = $('#btn-amdnr-run-setup');
+  if (!game || !game.exePath || gpu.vendor !== 'amd') {
+    section.classList.add('hidden');
+    return;
+  }
+  section.classList.remove('hidden');
+  latest.textContent = '';
+
+  const api = game.detectedPath ? game.detectedPath.api : null;
+  const st = await window.api.amdNrStatus(game.exePath, api);
+  if (!st.ok) {
+    status.className = 'status-line status-bad';
+    status.textContent = st.error;
+    fetchBtn.disabled = true;
+    runBtn.classList.add('hidden');
+    return;
+  }
+
+  runBtn.classList.toggle('hidden', !st.setupPresent);
+  fetchBtn.disabled = false;
+  fetchBtn.textContent = st.nrDllPresent && st.nrDllVersion && !st.nrDllVersion.startsWith(st.wantedNrModel)
+    ? `Replace nvngx_dlssnr.dll with ${st.wantedNrModel} (backs up the current one)`
+    : `Fetch nvngx_dlssnr.dll ${st.wantedNrModel}`;
+
+  const parts = [];
+  if (!st.supported) parts.push(st.reason);
+  parts.push(st.logPresent
+    ? `Its installer has run in this folder${st.toolVersionHint ? ` (${st.toolVersionHint} per its log)` : ''}.`
+    : st.setupPresent
+      ? 'dlssnr_on_amd_setup.exe is in the folder but has not been run yet -- click "Run its installer".'
+      : 'Not in this game\'s folder yet -- download dlssnr_on_amd_setup.exe from the release page and put it beside the game exe.');
+  parts.push(st.nrDllPresent
+    ? `nvngx_dlssnr.dll: ${st.nrDllVersion || 'unknown version'}${st.nrDllVersion && !st.nrDllVersion.startsWith(st.wantedNrModel) ? ` (the tool asks for ${st.wantedNrModel}.0)` : ''}.`
+    : `nvngx_dlssnr.dll: missing -- the tool needs ${st.wantedNrModel}.0 beside the exe.`);
+  const modelOk = st.nrDllPresent && (!st.nrDllVersion || st.nrDllVersion.startsWith(st.wantedNrModel));
+  status.className = `status-line ${!st.supported ? 'status-bad' : st.logPresent && modelOk ? 'status-ok' : ''}`.trim();
+  status.textContent = parts.join(' ');
+
+  latest.textContent = 'Checking the latest release…';
+  const rel = await window.api.amdNrLatest();
+  if (!rel.ok) {
+    latest.textContent = `Could not check the latest release (${rel.error}).`;
+    return;
+  }
+  const when = rel.publishedAt ? new Date(rel.publishedAt).toLocaleDateString() : '';
+  const newer = st.toolVersionHint && rel.tag && st.toolVersionHint.replace(/^v/, '') !== rel.tag.replace(/^v/, '');
+  latest.className = `status-line ${newer ? 'status-ok' : ''}`.trim();
+  latest.textContent = `Latest upstream release: ${rel.tag}${when ? ` (${when})` : ''}${newer ? ` -- newer than the ${st.toolVersionHint} in this folder; re-run the new installer here (U to update).` : ''}`;
+}
+
+$('#btn-amdnr-release-page').addEventListener('click', () => window.api.amdNrOpenReleasePage());
+
+$('#btn-amdnr-fetch-model').addEventListener('click', async () => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  const status = $('#game-amdnr-status');
+  const replace = $('#btn-amdnr-fetch-model').textContent.startsWith('Replace');
+  status.textContent = 'Fetching the 310.8.0 DLSS NR model (about 165 MB)…';
+  const res = await window.api.amdNrDeployNrModel(game.exePath, { replace });
+  if (res.ok && res.deployed) {
+    toast(`Placed nvngx_dlssnr.dll ${res.version} beside the game exe${res.backedUp ? ` (previous copy kept as ${res.backedUp})` : ''}.`);
+  } else {
+    toast(res.ok ? `Nothing changed: ${res.reason}` : `Could not fetch the model file: ${res.error}`);
+  }
+  loadAmdNrSection(game);
+});
+
+$('#btn-amdnr-run-setup').addEventListener('click', async () => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  const res = await window.api.amdNrRunSetup(game.exePath);
+  toast(res.ok ? 'Opened its installer in a console -- follow its prompts, then reopen Edit to re-check.' : res.error);
+});
 
 // The same route the card tags, spelled out: which stack this game gets and what is still to do.
 async function loadRouteStatus(game) {
@@ -1012,6 +1120,9 @@ async function loadLumaUeSection(game) {
   knownIssue.textContent = readiness.knownIssue || '';
   licenseText.textContent = readiness.licenseSummary || '';
   deployBtn.disabled = !licenseCheckbox.checked;
+  // The workaround used to be a blind question; now the GPU is known it is pre-answered, and
+  // still a checkbox the user can untick.
+  if (gpu.vendor === 'amd' || gpu.vendor === 'intel') $('#game-lumaue-amd-intel').checked = true;
 
   status.textContent = readiness.complete
     ? 'Deployed -- select DLSS in Luma\'s own overlay (Home key) in-game.'
@@ -1177,6 +1288,10 @@ $('#btn-save-game').addEventListener('click', async () => {
 const settingsModal = $('#settings-modal');
 
 function openSettingsModal() {
+  $('#settings-gpu-status').textContent = `GPU: ${gpuLabel()}` +
+    (gpu.vendor === 'amd' ? ' -- Neural Rendering here goes through DLSS-NR-on-AMD (see a game\'s Edit dialog), not OptiScaler.'
+      : gpu.vendor === 'intel' ? ' -- no Neural Rendering route on Intel; OptiScaler still installs for its upscaler swap.'
+      : gpu.vendor === 'unknown' ? ' -- could not identify the GPU; assuming NVIDIA.' : '');
   $('#settings-release-folder').value = settings.releaseFolder || '';
   $('#settings-nr-dll').value = settings.nrDllPath || '';
   $('#update-status').textContent = settings.installedVersion ? `Installed: ${settings.installedVersion}` : '';
@@ -1694,6 +1809,7 @@ window.addEventListener('focus', () => {
   const data = await window.api.loadData();
   games = data.games || [];
   settings = data.settings || { releaseFolder: '', nrDllPath: '', installedVersion: '' };
+  try { gpu = (await window.api.gpuInfo()) || gpu; } catch {}
   await refreshBannerVisibility();
   await renderGrid();
   await ensureBundledEngine();

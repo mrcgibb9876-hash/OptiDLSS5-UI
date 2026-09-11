@@ -18,6 +18,13 @@
 //                Vulkan game (the Feeder is a ReShade add-on, which needs DX11/DX12).
 //   unknown      No DLSS of its own and the API could not be detected, so it is not yet clear
 //                whether the Feeder can run here.
+//   amdnr        This machine runs an AMD card. None of the routes above produce Neural
+//                Rendering there (OptiScaler's NR pass needs NVIDIA's NGX runtime); the only
+//                route is danielblnc's DLSS-NR-on-AMD, which replaces our stack rather than
+//                joining it -- see amdnr.js. DX12 games only; anything else is unsupported on
+//                AMD, and Intel has no NR route at all. OptiScaler itself still installs on any
+//                GPU (its upscaler swap and FSR frame gen are vendor-neutral), so the button
+//                stays, with a warning.
 //
 // "Ships its own DLSS" means the game had it before this app touched the folder: both the Feeder
 // and Luma deploys place nvngx_dlss.dll into a game that had none, and their deploy markers are
@@ -33,12 +40,13 @@ const fs = require('node:fs');
 
 const feeder = require('./feeder');
 const lumaue = require('./lumaue');
+const amdnr = require('./amdnr');
 
 function optiScalerInstalled(dir) {
   return fs.existsSync(path.join(dir, 'OptiScaler.ini')) && fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'));
 }
 
-function recommendRoute(dir, exePath, detected = {}) {
+function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
   const api = detected.api || null;
   const feederDeployed = feeder.feederDeployed(dir);
   const lumaDeployed = lumaue.lumaUeDeployed(dir);
@@ -50,12 +58,40 @@ function recommendRoute(dir, exePath, detected = {}) {
   const finish = (route, label, reason, steps) => {
     const next = steps.find((s) => !s.done) || null;
     return {
-      route, label, reason, steps,
+      route, label, reason, steps, gpuVendor,
       optiInstalled, feederDeployed, lumaDeployed,
       complete: steps.length > 0 && !next,
       nextStep: next ? next.label : null,
     };
   };
+
+  // Vendor first: on a non-NVIDIA card the NVIDIA-stack routes below all end in an install that
+  // runs but renders nothing new, whatever the game's own DLSS situation is.
+  if (gpuVendor === 'amd') {
+    const gate = amdnr.amdNrEligibility(gpuVendor, api);
+    if (!gate.supported && detected.recommend !== 'unsupported' && api) {
+      return finish('unsupported', 'No NR route on AMD',
+        `${gate.reason} OptiScaler still installs here for its upscaler swap, but its Neural Rendering needs an NVIDIA GPU.`, []);
+    }
+    if (gate.supported) {
+      const st = amdnr.amdNrStatus(dir);
+      return finish('amdnr', 'DLSS NR on AMD',
+        'This is an AMD card: OptiScaler\'s own Neural Rendering needs NVIDIA\'s NGX runtime, so the route here is ' +
+        'danielblnc\'s DLSS-NR-on-AMD instead (alpha; DX12 game running FSR 3/4, Windows 11, Adrenalin 26.1.1+, ' +
+        'no anti-cheat). Get its installer from the official release page, run it in this game\'s folder, and ' +
+        'put the plain 310.8.0 nvngx_dlssnr.dll beside it -- Edit fetches that file for you.',
+        [
+          { key: 'amdnr-tool', label: 'Get DLSS NR on AMD from its release page and run its installer in this folder (Edit)', done: st.toolPresent },
+          { key: 'amdnr-model', label: 'Fetch nvngx_dlssnr.dll 310.8.0 into the game folder (Edit)', done: st.nrDllPresent },
+        ]);
+    }
+  } else if (gpuVendor === 'intel') {
+    if (detected.recommend !== 'unsupported' && api) {
+      return finish('unsupported', 'No NR route on Intel',
+        'Neural Rendering needs an NVIDIA GPU (or an AMD RX 7000/9000 via DLSS-NR-on-AMD). OptiScaler still installs ' +
+        'here for its upscaler swap, but its Neural Rendering pass will not run.', []);
+    }
+  }
 
   if (detected.recommend === 'unsupported') {
     return finish('unsupported', 'Not supported',

@@ -137,6 +137,18 @@
         <span id="game-lossless-status" class="status-line"></span>
       </div>
 
+      <div id="game-amdnr-section" class="hidden">
+        <label class="field-label">DLSS 5 Neural Rendering on AMD</label>
+        <p class="field-hint">This machine has an AMD card. OptiScaler's own Neural Rendering needs NVIDIA's NGX runtime, so it installs here but never renders anything new. <a href="https://github.com/danielblnc/DLSS-NR-on-AMD" target="_blank" rel="noopener">DLSS-NR-on-AMD</a> (danielblnc, alpha) is the route instead: a from-scratch NR runtime for RX 7000/9000 that hooks the game's own FSR 3/4. Needs Windows 11, Adrenalin 26.1.1 or newer, a DX12 game with FSR turned on in its settings, and no anti-cheat. Its licence forbids bundling or redistributing it, so this app does not download it: <strong>get <code>dlssnr_on_amd_setup.exe</code> from the release page, put it beside the game exe, and run it</strong>. This app fetches the model file it asks for (plain 310.8.0, not the modified build the NVIDIA path uses), tells you when a new release is out, and runs the installer for you once it is in the folder. For a DLSS-only game with no FSR, OptiScaler can supply FSR -- untested together with this tool.</p>
+        <div class="field-row">
+          <button id="btn-amdnr-release-page" class="btn btn-ghost">Open release page</button>
+          <button id="btn-amdnr-fetch-model" class="btn btn-ghost">Fetch nvngx_dlssnr.dll 310.8.0</button>
+          <button id="btn-amdnr-run-setup" class="btn btn-ghost hidden">Run its installer</button>
+        </div>
+        <span id="game-amdnr-status" class="status-line"></span>
+        <span id="game-amdnr-latest" class="status-line"></span>
+      </div>
+
       <div id="game-lumaue-section" class="hidden">
         <label class="field-label">Luma UE (adds DLSS to this game)</label>
         <p class="field-hint">This game has no DLSS of its own -- <a href="https://github.com/Filoppi/Luma-Framework" target="_blank" rel="noopener">Luma Framework's</a> Unreal Engine mod replaces its stock TAA with DLAA, which is what gives OptiScaler's Neural Rendering pass a real DLSS call to hook. Untested by this app against a real install -- built from Luma's actual release files and the OptiScaler wiki's setup page for this game, not guessed, but never run against the game.</p>
@@ -213,6 +225,8 @@
   <div id="settings-modal" class="modal-overlay hidden">
     <div class="modal">
       <h2>Settings</h2>
+
+      <div id="settings-gpu-status" class="status-line" style="margin-bottom: 8px;"></div>
 
       <label class="field-label">OptiScaler (DLSSNR) release folder</label>
       <p class="field-hint">Set up automatically: the engine ships inside this app's installer and is extracted on first launch, then kept current from GitHub. Only change this to use your own build (the folder containing setup_windows.bat).</p>

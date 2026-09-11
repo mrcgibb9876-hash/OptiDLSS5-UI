@@ -14,6 +14,8 @@ const feeder = require('./feeder');
 const lossless = require('./lossless');
 const lumaue = require('./lumaue');
 const { recommendRoute } = require('./route');
+const gpu = require('./gpu');
+const amdnr = require('./amdnr');
 const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame } = require('./detect');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const ENGINE_KNOWN_GAMES = new Set(require('./engine-known-games.json').exeNames);
@@ -21,6 +23,15 @@ const execFileAsync = promisify(execFile);
 
 const RELEASES_API = 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest';
 const GITHUB_HEADERS = { 'User-Agent': 'OptiDLSS5-UI', Accept: 'application/vnd.github+json' };
+
+// Detected once per run, on first use (the GPU process is up by the time any IPC arrives).
+// See gpu.js for what the vendor changes.
+let gpuInfoMemo = null;
+function getGpuInfo() {
+  if (!gpuInfoMemo) gpuInfoMemo = gpu.detectGpu(app, execFileAsync);
+  return gpuInfoMemo;
+}
+ipcMain.handle('gpu:info', () => getGpuInfo());
 
 const userDataDir = () => app.getPath('userData');
 const gamesFile = () => path.join(userDataDir(), 'games.json');
@@ -682,11 +693,65 @@ ipcMain.handle('game:status', (_evt, exePath) => {
 
 // The one-line answer the card tags and the Install button acts on -- see route.js. `detected`
 // is the cached detection the renderer already holds for this game, so this never rescans the exe.
-ipcMain.handle('game:route', (_evt, { exePath, detected }) => {
+ipcMain.handle('game:route', async (_evt, { exePath, detected }) => {
   if (!exePath || !fs.existsSync(exePath)) {
     return { route: 'unknown', label: 'Exe missing', reason: 'Game .exe not found', steps: [], complete: false, nextStep: null };
   }
-  return recommendRoute(gameDir(exePath), exePath, detected || {});
+  const { vendor } = await getGpuInfo();
+  return recommendRoute(gameDir(exePath), exePath, detected || {}, vendor);
+});
+
+// ── DLSS NR on AMD (amdnr.js) ────────────────────────────────────────────────
+// Phase 1: detect, explain, fetch the model file, link to the release page, run an installer
+// the user already downloaded. Never downloads the tool itself -- see amdnr.js for why.
+ipcMain.handle('amdnr:status', async (_evt, { exePath, api }) => {
+  if (!exePath || !fs.existsSync(exePath)) return { ok: false, error: 'Game .exe not found' };
+  const dir = gameDir(exePath);
+  const { vendor } = await getGpuInfo();
+  const status = amdnr.amdNrStatus(dir);
+  const nrDllVersion = status.nrDllPresent ? await framegen.readDllVersion(execFileAsync, path.join(dir, 'nvngx_dlssnr.dll')) : null;
+  return { ok: true, ...status, nrDllVersion, ...amdnr.amdNrEligibility(vendor, api || null) };
+});
+
+ipcMain.handle('amdnr:latest', async () => {
+  try {
+    return { ok: true, ...(await amdnr.latestRelease(GITHUB_HEADERS)) };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+ipcMain.handle('amdnr:openReleasePage', () => {
+  shell.openExternal(amdnr.AMDNR_RELEASE_PAGE);
+});
+
+// The plain 310.8.0 model build, into this game's folder. Shares the NVIDIA path's nr-model
+// cache directory (different file name, so the SF build and this one never collide).
+ipcMain.handle('amdnr:deployNrModel', async (_evt, { exePath, replace }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const cached = await amdnr.ensureAmdNrModelCache({ getRhiManifest, cacheDir: nrModelCacheDir(), ghHeaders: GITHUB_HEADERS });
+    const result = await amdnr.deployAmdNrModel(dir, cached, { replace: !!replace });
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// Same shape as game:run-setup: the tool's own installer is interactive, so it gets a console
+// the user answers in. Only ever runs a file already sitting in the game folder.
+ipcMain.handle('amdnr:runSetup', (_evt, exePath) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const setup = path.join(dir, amdnr.AMDNR_SETUP_EXE);
+    if (!fs.existsSync(setup)) throw new Error(`${amdnr.AMDNR_SETUP_EXE} is not in the game folder -- download it from the release page and put it beside the game exe first`);
+    spawn('cmd.exe', ['/c', 'start', '""', 'cmd.exe', '/k', amdnr.AMDNR_SETUP_EXE], { cwd: dir, detached: true, stdio: 'ignore', shell: false }).unref();
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
 });
 
 ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath, proxyName }) => {
