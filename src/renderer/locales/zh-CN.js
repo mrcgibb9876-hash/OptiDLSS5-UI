@@ -349,4 +349,7 @@ window.I18N.register("zh-CN", {
   "Could not remove the DLSS5 Feeder: {error}": "无法移除 DLSS5 Feeder：{error}",
   "No DLSS of its own; the DLSS5 Feeder deployed here is doing that job. Luma UE is the alternative for this game (it replaces the stock TAA with real DLAA, so no estimated motion vectors): remove the Feeder in Edit first, then deploy Luma UE there. Frame Generation: Lossless Scaling.": "没有自带 DLSS；这里部署的 DLSS5 Feeder 正在承担这一工作。Luma UE 是这款游戏的替代方案（它用真正的 DLAA 取代原生 TAA，因此没有估算的运动矢量）：先在“编辑”中移除 Feeder，然后在那里部署 Luma UE。帧生成：Lossless Scaling。",
   "Remove the DLSS5 Feeder first (its section above has Remove) -- Luma UE and the Feeder are both ReShade add-ons supplying the DLSS call, and only one can run.": "请先移除 DLSS5 Feeder（上方其区域有“移除”）-- Luma UE 和 Feeder 都是提供 DLSS 调用的 ReShade 插件，只能运行一个。",
+  "Anti-cheat present ({file}) -- OptiScaler is for single-player games; using it in a game that goes online risks a ban.": "检测到反作弊（{file}）-- OptiScaler 面向单机游戏；在会联网的游戏中使用有封号风险。",
+  "ReShade is already installed here as {file}. Install replaces it with OptiScaler -- pick Launch mode: Injector in Edit to keep both.": "此处已安装 ReShade（{file}）。安装会用 OptiScaler 替换它 -- 在“编辑”中选择启动模式：Injector 可同时保留两者。",
+  "{file} v{version} beside the exe predates Shader Model 5.1, so OptiScaler's shaders can silently fail to compile -- rename it and Windows' own copy loads instead.": "exe 旁的 {file} v{version} 早于 Shader Model 5.1，OptiScaler 的着色器可能静默编译失败 -- 将其重命名后会改为加载 Windows 自带副本。",
 });

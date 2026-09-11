@@ -111,6 +111,7 @@ async function renderGrid() {
         <div class="card-path" title="${escapeHtml(game.exePath)}">${escapeHtml(game.exePath)}</div>
         <div class="card-path card-recommend" title="${escapeHtml(t('Which install path suits this game'))}">${escapeHtml(t('Checking graphics API…'))}</div>
         <div class="card-warning card-route-next hidden"></div>
+        <div class="card-warning card-detect-warning hidden"></div>
         ${(status.warnings || []).map((w) => `<div class="card-warning" title="${escapeHtml(w.message)}">⚠ ${escapeHtml(w.message)}</div>`).join('')}
         <div class="card-actions">
           <button class="btn ${backends.optiscaler ? 'btn-danger' : 'btn-primary'} btn-install">${escapeHtml(backends.optiscaler ? t('Remove OptiScaler') : t('Install OptiScaler'))}</button>
@@ -245,6 +246,19 @@ async function applyRecommendation(game, card, backends) {
   chips.push(`<span class="engine-badge route-badge ${routeClass}" title="${routeTitle}">${escapeHtml(routeText)}</span>`);
 
   line.innerHTML = chips.join(' ');
+
+  // What detection found beside the exe that the person should know before installing: none
+  // of these block anything, all of them have bitten real installs.
+  const detectWarnings = [];
+  if (detected.antiCheat) detectWarnings.push(t('Anti-cheat present ({file}) -- OptiScaler is for single-player games; using it in a game that goes online risks a ban.', { file: detected.antiCheat }));
+  if (detected.reshadeProxy) detectWarnings.push(t('ReShade is already installed here as {file}. Install replaces it with OptiScaler -- pick Launch mode: Injector in Edit to keep both.', { file: detected.reshadeProxy }));
+  if (detected.oldShaderCompiler) detectWarnings.push(t('{file} v{version} beside the exe predates Shader Model 5.1, so OptiScaler\'s shaders can silently fail to compile -- rename it and Windows\' own copy loads instead.', { file: detected.oldShaderCompiler.file, version: detected.oldShaderCompiler.version }));
+  const warnEl = card.querySelector('.card-detect-warning');
+  if (warnEl) {
+    warnEl.classList.toggle('hidden', detectWarnings.length === 0);
+    warnEl.textContent = detectWarnings.map((w) => `\u26a0 ${w}`).join('  ');
+    warnEl.title = detectWarnings.join('\n');
+  }
 
   // OptiScaler is in but the rest of its route is not (a Feeder game installed before the
   // one-click flow existed, or Luma UE still waiting on its licence confirmation): say so on

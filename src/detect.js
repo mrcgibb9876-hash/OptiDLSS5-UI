@@ -21,7 +21,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { findUnrealPluginFile } = require('./framegen');
 
-const DETECT_VERSION = 4;
+const DETECT_VERSION = 5;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
@@ -134,7 +134,11 @@ async function peImports(filePath) {
     if (dirBase < 0) return [];
     const importRva = pe.readUInt32LE(dirBase + 8);
     const importSize = pe.readUInt32LE(dirBase + 12);
-    if (!importRva) return [];
+    // Delay-load directory (index 13): plenty of games bind d3d12.dll that way, and it never
+    // shows in the ordinary import table.
+    const delayRva = pe.readUInt32LE(dirBase + 13 * 8);
+    const delaySize = pe.readUInt32LE(dirBase + 13 * 8 + 4);
+    if (!importRva && !delayRva) return [];
 
     const sectionBytes = await readAt(peOffset + 24 + optionalSize, sectionCount * 40);
     const sections = [];
@@ -152,21 +156,26 @@ async function peImports(filePath) {
       return -1;
     };
 
-    const descOffset = rvaToOffset(importRva);
-    if (descOffset < 0) return [];
-    const descriptors = await readAt(descOffset, Math.min(importSize || 20 * 512, 20 * 512));
     const names = [];
-    for (let i = 0; i + 20 <= descriptors.length; i += 20) {
-      const nameRva = descriptors.readUInt32LE(i + 12);
-      const firstThunk = descriptors.readUInt32LE(i + 16);
-      if (!nameRva && !firstThunk) break;
-      const nameOffset = rvaToOffset(nameRva);
-      if (nameOffset < 0) continue;
-      const raw = await readAt(nameOffset, 64);
-      const end = raw.indexOf(0);
-      names.push(raw.subarray(0, end < 0 ? raw.length : end).toString('latin1').toLowerCase());
-    }
-    return names;
+    const readTable = async (rva, size, stride, nameField, thunkField) => {
+      if (!rva) return;
+      const descOffset = rvaToOffset(rva);
+      if (descOffset < 0) return;
+      const descriptors = await readAt(descOffset, Math.min(size || stride * 512, stride * 512));
+      for (let i = 0; i + stride <= descriptors.length; i += stride) {
+        const nameRva = descriptors.readUInt32LE(i + nameField);
+        const thunk = descriptors.readUInt32LE(i + thunkField);
+        if (!nameRva && !thunk) break;
+        const nameOffset = rvaToOffset(nameRva);
+        if (nameOffset < 0) continue;
+        const raw = await readAt(nameOffset, 64);
+        const end = raw.indexOf(0);
+        names.push(raw.subarray(0, end < 0 ? raw.length : end).toString('latin1').toLowerCase());
+      }
+    };
+    await readTable(importRva, importSize, 20, 12, 16);
+    await readTable(delayRva, delaySize, 32, 4, 12);
+    return [...new Set(names)];
   } catch {
     return [];
   } finally {
@@ -174,12 +183,114 @@ async function peImports(filePath) {
   }
 }
 
+// PE32 (0x10b) or PE32+ (0x20b) from the optional-header magic: a 32-bit game cannot load
+// OptiScaler or the 64-bit Feeder add-on at all, so it is refused up front instead of failing
+// at launch. null when the file is not a readable PE (a GDK-encrypted exe, say).
+async function peBitness(filePath) {
+  let fh;
+  try { fh = await fsp.open(filePath, 'r'); } catch { return null; }
+  try {
+    const dos = Buffer.alloc(64);
+    if ((await fh.read(dos, 0, 64, 0)).bytesRead < 64 || dos.readUInt16LE(0) !== 0x5a4d) return null;
+    const peOffset = dos.readUInt32LE(60);
+    const pe = Buffer.alloc(26);
+    if ((await fh.read(pe, 0, 26, peOffset)).bytesRead < 26 || pe.readUInt32LE(0) !== 0x4550) return null;
+    const magic = pe.readUInt16LE(24);
+    return magic === 0x20b ? 64 : magic === 0x10b ? 32 : null;
+  } catch {
+    return null;
+  } finally {
+    await fh.close();
+  }
+}
+
+// VS_FIXEDFILEINFO out of the RT_VERSION resource, "6.3.9600.16384" style -- ported from
+// DLSS5-Swapper's pe.js. Synchronous and bounded (a few small reads); used for one file.
+function readFileVersion(filePath) {
+  let fd;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const readAt = (offset, length) => {
+      const b = Buffer.alloc(length);
+      const n = fs.readSync(fd, b, 0, length, offset);
+      return b.subarray(0, n);
+    };
+    const dos = readAt(0, 64);
+    if (dos.length < 64 || dos.readUInt16LE(0) !== 0x5a4d) return null;
+    const peOffset = dos.readUInt32LE(60);
+    const coff = readAt(peOffset, 24);
+    if (coff.length < 24 || coff.readUInt32LE(0) !== 0x4550) return null;
+    const sectionCount = coff.readUInt16LE(6);
+    const optionalSize = coff.readUInt16LE(20);
+    const opt = readAt(peOffset + 24, optionalSize);
+    const magic = opt.readUInt16LE(0);
+    const ddOff = magic === 0x20b ? 112 : magic === 0x10b ? 96 : -1;
+    if (ddOff < 0 || opt.length < ddOff + 3 * 8) return null;
+    const resRva = opt.readUInt32LE(ddOff + 2 * 8);
+    if (!resRva) return null;
+    const secTable = readAt(peOffset + 24 + optionalSize, sectionCount * 40);
+    const sections = [];
+    for (let i = 0; i + 40 <= secTable.length; i += 40) {
+      sections.push({ va: secTable.readUInt32LE(i + 12), size: Math.max(secTable.readUInt32LE(i + 8), secTable.readUInt32LE(i + 16)), raw: secTable.readUInt32LE(i + 20) });
+    }
+    const rvaToOffset = (rva) => {
+      for (const s of sections) if (rva >= s.va && rva < s.va + s.size) return s.raw + (rva - s.va);
+      return -1;
+    };
+    const base = rvaToOffset(resRva);
+    if (base < 0) return null;
+    const entriesOf = (dirOff) => {
+      const hdr = readAt(base + dirOff, 16);
+      if (hdr.length < 16) return [];
+      const count = hdr.readUInt16LE(12) + hdr.readUInt16LE(14);
+      const raw = readAt(base + dirOff + 16, count * 8);
+      const out = [];
+      for (let i = 0; i + 8 <= raw.length; i += 8) out.push({ id: raw.readUInt32LE(i), offset: raw.readUInt32LE(i + 4) });
+      return out;
+    };
+    const type = entriesOf(0).find((e) => (e.id & 0x7fffffff) === 16 && (e.offset & 0x80000000));
+    if (!type) return null;
+    const name = entriesOf(type.offset & 0x7fffffff)[0];
+    if (!name || !(name.offset & 0x80000000)) return null;
+    const lang = entriesOf(name.offset & 0x7fffffff)[0];
+    if (!lang) return null;
+    const data = readAt(base + lang.offset, 16);
+    if (data.length < 16) return null;
+    const dataOff = rvaToOffset(data.readUInt32LE(0));
+    const dataSize = data.readUInt32LE(4);
+    if (dataOff < 0 || !dataSize) return null;
+    const blob = readAt(dataOff, Math.min(dataSize, 64 * 1024));
+    const sig = blob.indexOf(Buffer.from([0xbd, 0x04, 0xef, 0xfe]));
+    if (sig < 0 || sig + 16 > blob.length) return null;
+    const ms = blob.readUInt32LE(sig + 8);
+    const ls = blob.readUInt32LE(sig + 12);
+    const fixed = [ms >>> 16, ms & 0xffff, ls >>> 16, ls & 0xffff].join('.');
+    return fixed === '0.0.0.0' ? null : fixed;
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) try { fs.closeSync(fd); } catch {}
+  }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Generic API evidence
+
+// Entry points a game asks for by name when it resolves Direct3D at runtime: a protected build
+// (GTA V Enhanced) has no import and may keep the DLL name out of reach, but the function name
+// it passes to GetProcAddress is still a plain string. D3D12SDKPath/D3D12SDKVersion are the
+// Agility SDK exports -- a game that exports them renders with DX12, no ambiguity.
+const ENTRY_POINTS = [
+  ['dx12', 'D3D12CreateDevice'], ['dx11', 'D3D11CreateDevice'], ['vulkan', 'vkCreateInstance'],
+  ['dx10', 'D3D10CreateDevice'], ['dx9', 'Direct3DCreate9'], ['opengl', 'wglCreateContext'],
+];
+const AGILITY_EXPORTS = ['D3D12SDKPath', 'D3D12SDKVersion'];
 
 const API_NEEDLES = [
   ...MODERN_APIS.map((api) => makeNeedle(api, API_DLL[api])),
   ...OLD_API_DLLS.flatMap(([api, dlls]) => dlls.map((dll, i) => makeNeedle(`${api}#${i}`, dll))),
+  ...ENTRY_POINTS.map(([api, fn]) => makeNeedle(`ep:${api}`, fn, { exactCase: true })),
+  ...AGILITY_EXPORTS.map((fn, i) => makeNeedle(`agility#${i}`, fn, { exactCase: true })),
 ];
 const OPTISCALER_NEEDLE = makeNeedle('__optiscaler', 'OptiScaler');
 
@@ -187,12 +298,99 @@ function apisFromEvidence(imports, hits) {
   const modern = new Set();
   const old = new Set();
   for (const api of MODERN_APIS) {
-    if (imports.includes(API_DLL[api]) || hits.has(api)) modern.add(api);
+    if (imports.includes(API_DLL[api]) || hits.has(api) || hits.has(`ep:${api}`)) modern.add(api);
   }
   for (const [api, dlls] of OLD_API_DLLS) {
-    if (dlls.some((dll, i) => imports.includes(dll) || hits.has(`${api}#${i}`))) old.add(api);
+    if (dlls.some((dll, i) => imports.includes(dll) || hits.has(`${api}#${i}`)) || hits.has(`ep:${api}`)) old.add(api);
   }
-  return { modern, old };
+  const agility = AGILITY_EXPORTS.some((_, i) => hits.has(`agility#${i}`));
+  return { modern, old, agility };
+}
+
+// Some games ship one executable per renderer (farcry3_d3d11.exe, witcher3 in bin\\x64_dx12) --
+// when the name itself says which API and the binary knows that API, the name wins the tie.
+function apiFromFileName(exePath) {
+  const name = path.basename(exePath).toLowerCase();
+  if (/(?:^|[_-])(?:d3d|dx)12(?:[_-]|\.|$)/.test(name)) return 'dx12';
+  if (/(?:^|[_-])(?:d3d|dx)11(?:[_-]|\.|$)/.test(name)) return 'dx11';
+  if (/(?:^|[_-])vulkan(?:[_-]|\.|$)/.test(name)) return 'vulkan';
+  return null;
+}
+
+// The Direct3D DLLs beside the exe, read once for three answers: a DXVK/vkd3d translation
+// layer (the game asks for Direct3D, the frame is presented by Vulkan -- that is the renderer
+// to report and install for), a ReShade proxy already living in the slot OptiScaler would take
+// (Install would replace it -- Launch mode: Injector keeps both), and OptiScaler's own proxy,
+// which is neither. Names only; the version resource is not consulted, the strings are enough.
+const HOOK_DLLS = ['dxgi.dll', 'd3d12.dll', 'd3d11.dll', 'd3d9.dll', 'opengl32.dll', 'dinput8.dll'];
+const HOOK_NEEDLES = ['DXVK', 'vkd3d', 'vkGetInstanceProcAddr', 'ReShade', 'OptiScaler'].map((t) => makeNeedle(t, t, { exactCase: true }));
+
+async function inspectHookDlls(dir) {
+  const out = { vulkanWrapper: null, reshadeProxy: null };
+  for (const name of HOOK_DLLS) {
+    const file = path.join(dir, name);
+    if (!fs.existsSync(file)) continue;
+    const hits = await scanFile(file, HOOK_NEEDLES, { maxBytes: SIBLING_SCAN_MAX_BYTES });
+    if (hits.has('OptiScaler')) continue;
+    if (!out.vulkanWrapper && !hits.has('ReShade') && hits.has('vkGetInstanceProcAddr') && (hits.has('DXVK') || hits.has('vkd3d'))) {
+      out.vulkanWrapper = { file: name, kind: hits.has('DXVK') ? 'DXVK' : 'vkd3d' };
+    }
+    if (!out.reshadeProxy && hits.has('ReShade')) out.reshadeProxy = name;
+  }
+  return out;
+}
+
+// Anti-cheat beside the exe or in the game root: never a block (single-player games ship it
+// too), but OptiScaler's own banner says "do not use in multiplayer games", and a card that
+// shows the risk is the honest thing. Direct children of the exe folder and up to three
+// ancestors only -- the game root is at most that far up in every layout this app knows.
+const ANTI_CHEAT = /easyanticheat|battleye|eaanticheat|(?:^|[-_])(?:eac|be)launcher|start_protected_game|beservice|beclient|vanguard|xigncode|gameguard|nprotect|ace-base|anticheat/i;
+// Where the climb stops: a folder that holds games rather than being one. A loose installer
+// parked in D:\Games is not evidence about any game under it.
+const LIBRARY_ROOT = /^(games?|my ?games|steamlibrary|steamapps|common|gog ?games|epic ?games|xbox ?games|origin ?games|ea ?games|repacks?|emulation|downloads|program files(?: \(x86\))?|[a-z]:\\?)$/i;
+
+function antiCheatPresent(dir) {
+  let current = dir;
+  for (let up = 0; up <= 3; up++) {
+    if (LIBRARY_ROOT.test(path.basename(current) || current)) break;
+    let entries = [];
+    try { entries = fs.readdirSync(current); } catch { entries = []; }
+    const hit = entries.find((name) => ANTI_CHEAT.test(name));
+    if (hit) return hit;
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return null;
+}
+
+// A D3DCompiler_47.dll beside the exe that predates Windows 10 (Spider-Man Remastered ships
+// 6.3.9600 from Windows 8.1) is what the loader hands OptiScaler's D3DCompile, and Shader Model
+// 5.1 is unknown to it: the pass then compiles to nothing while everything reports success.
+function oldShaderCompiler(dir) {
+  const file = path.join(dir, 'D3DCompiler_47.dll');
+  if (!fs.existsSync(file)) return null;
+  const version = readFileVersion(file);
+  const major = /^(\d+)\./.exec(String(version || ''));
+  if (!major || Number(major[1]) >= 10) return null;
+  return { file: 'D3DCompiler_47.dll', version };
+}
+
+// RDR2's executable is byte-for-byte the same under DX12 and Vulkan; its own settings file is
+// the only place the answer exists. One-way: only an explicit Vulkan setting moves the answer.
+function rdr2Renderer() {
+  const home = process.env.USERPROFILE || os.homedir();
+  const rel = path.join('Rockstar Games', 'Red Dead Redemption 2', 'Settings', 'system.xml');
+  const roots = [path.join(home, 'Documents'), path.join(home, 'OneDrive', 'Documents')];
+  if (process.env.OneDrive) roots.push(path.join(process.env.OneDrive, 'Documents'));
+  for (const root of roots) {
+    let text;
+    try { text = fs.readFileSync(path.join(root, rel), 'utf8'); } catch { continue; }
+    const setting = /<API[^>]*>([^<]*)<\/API>/i.exec(text);
+    if (setting && /vulkan/i.test(setting[1])) return { api: 'vulkan', apis: ['vulkan', 'dx12'], old: [], reason: 'Vulkan -- what RDR2\'s own system.xml says it renders with' };
+    if (setting) return { api: 'dx12', apis: ['dx12', 'vulkan'], old: [], reason: 'DX12 -- what RDR2\'s own system.xml says it renders with' };
+  }
+  return { api: 'dx12', apis: ['dx12', 'vulkan'], old: [], reason: 'DX12 -- RDR2\'s default renderer (its system.xml was not found)' };
 }
 
 function pickModern(modern, imports) {
@@ -257,11 +455,13 @@ function folderApiEvidence(dir) {
 
 async function genericApiDetection(dir, exePath, exe) {
   if (exe.modern.size > 0) {
-    const api = pickModern(exe.modern, exe.imports);
+    const named = apiFromFileName(exePath);
+    const api = named && exe.modern.has(named) ? named : pickModern(exe.modern, exe.imports);
     const linked = exe.imports.includes(API_DLL[api]);
+    const how = named === api ? 'named by the executable\'s file name' : linked ? 'linked by the executable' : 'referenced in the executable';
     return {
-      api, apis: [...new Set([...exe.modern, ...folderApiEvidence(dir)])], old: [...exe.old],
-      reason: `${API_LABEL[api]} -- ${linked ? 'linked by' : 'referenced in'} the executable`,
+      api, apis: [...new Set([api, ...exe.modern, ...folderApiEvidence(dir)])], old: [...exe.old], agility: exe.agility,
+      reason: `${API_LABEL[api]} -- ${how}`,
     };
   }
   if (exe.old.size > 0) {
@@ -446,6 +646,9 @@ function unrealStaticApi(dir, found, engine) {
   const apis = found.apis || [];
   if (!(apis.includes('dx11') && apis.includes('dx12'))) return found;
   const dx12First = ['dx12', ...apis.filter((a) => a !== 'dx12')];
+  if (found.agility) {
+    return { ...found, api: 'dx12', apis: dx12First, reason: 'DX12 -- the executable exports the Agility SDK path/version (D3D12SDKPath/D3D12SDKVersion), which only a DX12 renderer does' };
+  }
   const agility = agilitySdkPath(dir);
   if (agility) {
     return { ...found, api: 'dx12', apis: dx12First, reason: `DX12 -- ships the Agility SDK (${path.relative(dir, agility)}), which only a DX12 renderer uses` };
@@ -533,8 +736,17 @@ async function detectGame(dir, exePath) {
   let found;
   if (engine.id === 'unity') found = await detectUnity(dir, exePath);
   else if (engine.id === 'red') found = detectRedEngine(dir, exePath);
+  else if (/^rdr2\.exe$/i.test(path.basename(exePath))) found = rdr2Renderer();
   if (!found) found = await genericApiDetection(dir, exePath, exe || (await scanExecutable(exePath)));
   if (engine.id === 'unreal') found = unrealStaticApi(dir, found, engine);
+
+  const [bitness, hooks] = await Promise.all([peBitness(exePath), inspectHookDlls(dir)]);
+  if (hooks.vulkanWrapper && found.api && found.api !== 'vulkan') {
+    found = {
+      ...found, api: 'vulkan', apis: [...new Set(['vulkan', ...(found.apis || [])])], uncertain: false,
+      reason: `Vulkan -- ${hooks.vulkanWrapper.file} beside the executable is ${hooks.vulkanWrapper.kind}, which presents the game's Direct3D through Vulkan`,
+    };
+  }
 
   const runtime = await optiScalerRuntimeApi(dir);
   if (runtime) {
@@ -560,7 +772,10 @@ async function detectGame(dir, exePath) {
 
   let recommend = 'unknown';
   let reason = found.reason;
-  if (found.api) {
+  if (bitness === 32) {
+    recommend = 'unsupported';
+    reason = `32-bit executable -- OptiScaler and the DLSS5 Feeder add-on this app deploys are 64-bit only (${reason})`;
+  } else if (found.api) {
     recommend = 'optiscaler';
     reason = `${reason} -- OptiScaler hooks this directly`;
   } else if (oldOnly) {
@@ -582,6 +797,11 @@ async function detectGame(dir, exePath) {
     recommend,
     reason,
     uncertain: !!found.uncertain,
+    bitness,
+    vulkanWrapper: hooks.vulkanWrapper,
+    reshadeProxy: hooks.reshadeProxy,
+    antiCheat: antiCheatPresent(dir),
+    oldShaderCompiler: oldShaderCompiler(dir),
     runtimeApi: found.runtimeApi || null,
     // What OptiScaler.log looked like when this was decided -- a later run of the game is new
     // evidence, and isDetectionStale re-runs detection when the log has changed since.
@@ -608,4 +828,4 @@ function isDetectionStale(stored, dir) {
   return false;
 }
 
-module.exports = { DETECT_VERSION, detectGame, detectRenderApi, isDetectionStale, isReEngineGame, peImports, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe };
+module.exports = { DETECT_VERSION, detectGame, detectRenderApi, isDetectionStale, isReEngineGame, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName };

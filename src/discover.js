@@ -4,11 +4,25 @@ const path = require('path');
 
 const { discover } = require('./library');
 const { resolveUnrealShippingExe } = require('./detect');
-const NOT_A_GAME_EXE = /^(unins|setup|install|vcredist|dxsetup|dotnet|oalinst|crashpad|launcher_installer)/i;
+// Installers, launchers, anti-cheat helpers, script extenders: never the game itself.
+const NOT_A_GAME_EXE = /^(unins|setup|install|vcredist|vc_redist|dxsetup|dxwebsetup|dotnet|dotnetfx|oalinst|crashpad|crashreport|crashhandler|launcher_installer|easyanticheat|eac|battleye|be_service|activation|patch|update|touchup|rapidcrc|autorun|autoplay|quicksfv|readme|config|cleanup|modorganizer|redlauncher|skse\d*_loader|steamerrorreporter|dgvoodoocpl|reshade_setup|gamelaunchhelper)/i;
 const NOT_THE_GAME = /(launcher|crashreport|crashhandler|redist|touchup|activation|eac|easyanticheat|battleye|be_service|steam_api|dxwebsetup|helper|updater|report|benchmark|editor|server|dedicated)/i;
 const GOOD_DIRS = /(?:^|[\\/])(binaries[\\/]win64|binaries[\\/]win32|bin[\\/]x64|bin[\\/]win64|bin|x64|win64|game)(?:[\\/]|$)/i;
 
-function walkExes(root, maxDepth = 4) {
+// Asset trees hold tens of thousands of files and never the exe; installers, redistributables
+// and anti-cheat folders hold exes that are never the game; backups hold copies nobody should
+// install into. Skipping them is what lets a packaged Unreal game be walked deep enough to
+// reach <Project>\Binaries\Win64 without every library refresh crawling its Content folder.
+const SKIP_DIRS = new Set([
+    'content', 'paks', 'movies', 'screenshots', 'saved', 'logs', 'mods', 'downloads', 'overwrite', 'profiles',
+    '_redist', 'prerequisites', 'directx', 'redist', 'redistributable', 'redistributables', '_commonredist', 'dotnet',
+    'installer_resources', 'installer', 'installers', 'support', '_support', 'vcredist', 'directx_redist',
+    'eaanticheat', 'easyanticheat', 'battleye',
+    'backup', 'backups', '_backup', 'bak', 'old', 'original', 'originals',
+    '_dlss5_backup', 'reshade-shaders', 'node_modules', '.git',
+]);
+
+function walkExes(root, maxDepth = 8) {
     const out = [];
 
     const visit = (dir, depth) => {
@@ -25,7 +39,7 @@ function walkExes(root, maxDepth = 4) {
 
             if (entry.isFile() && /\.exe$/i.test(entry.name)) {
                 out.push(full);
-            } else if (entry.isDirectory() && depth > 0) {
+            } else if (entry.isDirectory() && depth > 0 && !SKIP_DIRS.has(entry.name.toLowerCase())) {
                 visit(full, depth - 1);
             }
         }
@@ -33,6 +47,27 @@ function walkExes(root, maxDepth = 4) {
 
     visit(root, maxDepth);
     return out;
+}
+
+// A Microsoft Store / Xbox app install names its executable in MicrosoftGame.config, and the
+// exe itself may be encrypted past what any PE reader can see -- the manifest is the
+// authority there. gamelaunchhelper.exe is the Store's own stub, never the game.
+function xboxDeclaredExe(gameDir) {
+    for (const dir of [gameDir, path.join(gameDir, 'Content')]) {
+        let entries = [];
+        try { entries = fs.readdirSync(dir); } catch { continue; }
+        const config = entries.find((f) => f.toLowerCase() === 'microsoftgame.config');
+        if (!config) continue;
+        let text;
+        try { text = fs.readFileSync(path.join(dir, config), 'utf8'); } catch { continue; }
+        for (const match of text.matchAll(/<Executable\b([^>]*)\/?\s*>/gi)) {
+            const name = /\bName\s*=\s*["']([^"']+)["']/i.exec(match[1]);
+            if (!name || /^gamelaunchhelper\.exe$/i.test(path.basename(name[1]))) continue;
+            const full = path.resolve(dir, name[1].replace(/[\\/]/g, path.sep));
+            if (fs.existsSync(full)) return full;
+        }
+    }
+    return null;
 }
 function score(exePath, gameDir, gameName) {
     const rel = path.relative(gameDir, exePath).toLowerCase();
@@ -62,6 +97,10 @@ function score(exePath, gameDir, gameName) {
     return s;
 }
 function chooseExe(gameDir, gameName) {
+    const declared = xboxDeclaredExe(gameDir);
+    if (declared) {
+        return { exePath: resolveUnrealShippingExe(declared), alternatives: walkExes(gameDir).filter((e) => e !== declared).slice(0, 7) };
+    }
     const candidates = walkExes(gameDir)
         .map((exe) => ({ exe, s: score(exe, gameDir, gameName) }))
         .filter((c) => c.s > -1000)
