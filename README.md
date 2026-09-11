@@ -113,6 +113,16 @@ panel's own Appearance section has the same selector for a per-game choice. Chin
 with the fonts Windows ships (Microsoft YaHei, Malgun Gothic); nothing extra is bundled. OptiScaler's
 own shared menu stays English.
 
+The same three games, seven ways. Mock-ups rendered from the real UI with stub data, like the AMD
+ones above.
+
+| | |
+|---|---|
+| ![Mock-up: game grid in English](docs/screenshots/mockup-lang-en.png) English | ![Mock-up: game grid in Brazilian Portuguese](docs/screenshots/mockup-lang-pt-BR.png) Português (Brasil) |
+| ![Mock-up: game grid in Russian](docs/screenshots/mockup-lang-ru.png) Русский | ![Mock-up: game grid in Korean](docs/screenshots/mockup-lang-ko.png) 한국어 |
+| ![Mock-up: game grid in Simplified Chinese](docs/screenshots/mockup-lang-zh-CN.png) 简体中文 | ![Mock-up: game grid in Spanish](docs/screenshots/mockup-lang-es.png) Español |
+| ![Mock-up: game grid in German](docs/screenshots/mockup-lang-de.png) Deutsch | |
+
 Translations welcome. The existing files were written by the maintainer's tooling, not by native
 speakers, so corrections to any of them are as useful as new languages. To add one, copy
 `src/renderer/locales/pt-BR.js`, translate the right-hand side of each line (keep the `{placeholders}`
