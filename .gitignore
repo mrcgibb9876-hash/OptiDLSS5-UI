@@ -3,3 +3,4 @@ dist/
 .claude/settings.local.json
 tools/DLSS5Injector/*.exe
 tools/DLSS5Injector/*.obj
+engine/

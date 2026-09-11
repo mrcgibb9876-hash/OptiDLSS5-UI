@@ -56,13 +56,20 @@ async function refreshBannerVisibility() {
   settingsBanner.classList.toggle('hidden', !!configured);
 }
 
+// renderGrid awaits per card, and is re-entered from window focus, settings close and
+// install/uninstall completions -- two overlapping runs would each append their own set of cards.
+// The newest run wins; older ones stop at their next await.
+let renderGeneration = 0;
+
 async function renderGrid() {
+  const generation = ++renderGeneration;
   grid.innerHTML = '';
   emptyState.classList.toggle('hidden', games.length > 0);
   grid.classList.toggle('hidden', games.length === 0);
 
   for (const game of games) {
     const status = await window.api.gameStatus(game.exePath);
+    if (generation !== renderGeneration) return;
     const card = document.createElement('div');
     card.className = 'card';
 
@@ -679,7 +686,7 @@ $('#game-optifg-toggle').addEventListener('change', async (e) => {
 // ever touches Title/Path/FrameGeneration/ScalingType; every other field -- and every other
 // profile in the file -- passes through untouched. See lossless.js for why this file, not a
 // hand-rolled default profile, is the safe source of truth for the rest of the schema.
-async function configureLossless(game, { frameGenMode = 'LSFG3', multiplier = 2 } = {}) {
+async function configureLossless(game, { frameGenMode = 'LSFG3', mode = 'FIXED', multiplier = 2, target = 120 } = {}) {
   const xmlText = await window.api.losslessReadSettings();
   if (!xmlText) {
     throw new Error("Lossless Scaling hasn't been run yet -- launch it once first, then try again.");
@@ -733,8 +740,11 @@ async function configureLossless(game, { frameGenMode = 'LSFG3', multiplier = 2 
   setField('Path', game.exePath);
   setField('FrameGeneration', frameGenMode);
   setField('ScalingType', 'Off');
-  setField('LSFG3Mode1', 'FIXED');
+  // FIXED multiplies every frame by LSFG3Multiplier; ADAPTIVE generates only what it takes to
+  // hold LSFG3Target fps. Both fields are written either way so switching modes later is clean.
+  setField('LSFG3Mode1', mode === 'ADAPTIVE' ? 'ADAPTIVE' : 'FIXED');
   setField('LSFG3Multiplier', String(multiplier));
+  setField('LSFG3Target', String(target));
   // Without this, Lossless Scaling only applies the profile once the user manually selects this
   // game's window in its own UI -- AutoScale is what makes "just launch it" (the in-game checkbox's
   // whole point) actually turn Frame Generation on.
@@ -760,12 +770,15 @@ async function loadLosslessSection(game) {
     return;
   }
 
-  const feederStatus = await window.api.feederReadiness(game.exePath);
-  if (!feederStatus.needed) {
-    section.classList.add('hidden');
-    return;
-  }
+  // Offered for every game, not just Feeder ones: it runs outside the game entirely, so nothing
+  // about the game's own renderer rules it out, and it is sometimes simply the better option.
   section.classList.remove('hidden');
+  // Back to defaults before this game's profile (if any) is read, so the last game's choices
+  // never leak into an unconfigured one.
+  $('#game-lossless-mode').value = 'FIXED';
+  $('#game-lossless-multiplier').value = '2';
+  $('#game-lossless-target').value = '120';
+  syncLosslessModeInputs();
 
   const info = await window.api.losslessDetect();
   if (!info.installed) {
@@ -791,6 +804,8 @@ async function loadLosslessSection(game) {
   const exePathLower = game.exePath.trim().toLowerCase();
   let configured = false;
   let currentMultiplier = null;
+  let currentMode = null;
+  let currentTarget = null;
   try {
     const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
     const profile = Array.from(doc.querySelectorAll('GameProfiles > Profile')).find((p) => {
@@ -798,35 +813,70 @@ async function loadLosslessSection(game) {
       return pathEl && pathEl.textContent.trim().toLowerCase() === exePathLower;
     });
     if (profile) {
-      const fgEl = profile.querySelector('FrameGeneration');
-      configured = !!fgEl && fgEl.textContent.trim() !== 'Off';
-      const multEl = profile.querySelector('LSFG3Multiplier');
-      if (multEl && multEl.textContent.trim()) currentMultiplier = multEl.textContent.trim();
+      const text = (name) => {
+        const el = profile.querySelector(name);
+        return el ? el.textContent.trim() : '';
+      };
+      configured = !!text('FrameGeneration') && text('FrameGeneration') !== 'Off';
+      currentMultiplier = text('LSFG3Multiplier') || null;
+      currentMode = text('LSFG3Mode1') || null;
+      currentTarget = text('LSFG3Target') || null;
     }
   } catch {}
 
-  if (currentMultiplier) $('#game-lossless-multiplier').value = currentMultiplier;
+  // Lossless Scaling's own UI allows multipliers this select does not offer (up to 20x); an
+  // unmatched value would leave the select blank and read back as 0.
+  if (['2', '3', '4'].includes(currentMultiplier)) $('#game-lossless-multiplier').value = currentMultiplier;
+  if (currentMode) $('#game-lossless-mode').value = currentMode === 'ADAPTIVE' ? 'ADAPTIVE' : 'FIXED';
+  if (currentTarget && Number(currentTarget) >= 30) $('#game-lossless-target').value = currentTarget;
+  syncLosslessModeInputs();
 
   status.textContent = configured
-    ? 'Configured -- Frame Generation is set for this game.'
+    ? (currentMode === 'ADAPTIVE'
+      ? `Configured -- Adaptive Frame Generation, holding ${currentTarget || '?'} fps.`
+      : `Configured -- ${currentMultiplier || '?'}x Frame Generation.`)
     : 'Not yet configured for this game.';
 }
+
+function syncLosslessModeInputs() {
+  const adaptive = $('#game-lossless-mode').value === 'ADAPTIVE';
+  $('#game-lossless-multiplier').classList.toggle('hidden', adaptive);
+  $('#game-lossless-target').classList.toggle('hidden', !adaptive);
+}
+$('#game-lossless-mode').addEventListener('change', syncLosslessModeInputs);
 
 $('#btn-lossless-configure').addEventListener('click', async () => {
   if (!editingGameId) return;
   const game = games.find((x) => x.id === editingGameId);
   const status = $('#game-lossless-status');
-  const multiplier = Number($('#game-lossless-multiplier').value);
+  const mode = $('#game-lossless-mode').value === 'ADAPTIVE' ? 'ADAPTIVE' : 'FIXED';
+  const multiplier = [2, 3, 4].includes(Number($('#game-lossless-multiplier').value)) ? Number($('#game-lossless-multiplier').value) : 2;
+  const target = Math.min(480, Math.max(30, Math.round(Number($('#game-lossless-target').value) || 120)));
   status.textContent = 'Configuring…';
   try {
-    const result = await configureLossless(game, { multiplier });
+    const result = await configureLossless(game, { mode, multiplier, target });
     const info = await window.api.losslessDetect();
     if (info.installed) {
-      await window.api.losslessSetExePathInGameIni(game.exePath, info.exePath, game.name);
+      const iniRes = await window.api.losslessSetExePathInGameIni(game.exePath, info.exePath, game.name, { mode, multiplier, target });
+      if (!iniRes.ok) toast(`Profile saved, but the in-game panel link was not written: ${iniRes.error}`);
+      else if (iniRes.deferred) toast('Profile saved. The in-game panel link will be written when OptiScaler is installed for this game.');
     }
+    const what = mode === 'ADAPTIVE' ? `Adaptive Frame Generation, target ${target} fps` : `${multiplier}x Frame Generation`;
     toast(result.isNew
-      ? `Added a Lossless Scaling profile for this game (${multiplier}x Frame Generation).`
-      : `Updated this game's Lossless Scaling profile (${multiplier}x Frame Generation).`);
+      ? `Added a Lossless Scaling profile for this game (${what}).`
+      : `Updated this game's Lossless Scaling profile (${what}).`);
+
+    // Only one frame generator at a time: two of them stack their generated frames. OptiScaler's
+    // own FG is ours to switch off; the game's native DLSS Frame Generation is a game setting the
+    // hint above (and the in-game panel) tells the user to turn off themselves.
+    const optiFg = await window.api.optiFgReadiness(game.exePath);
+    if (optiFg.supported && optiFg.enabled) {
+      const off = await window.api.optiFgSet(game.exePath, false);
+      toast(off.ok
+        ? "Turned OptiScaler's own Frame Generation off for this game -- it can't run together with Lossless Scaling."
+        : `Could not turn OptiScaler's own Frame Generation off: ${off.error}`);
+      loadOptiFgSection(game);
+    }
   } catch (error) {
     toast(`Could not configure Lossless Scaling: ${error.message}`);
   }
@@ -916,6 +966,11 @@ $('#btn-lumaue-deploy').addEventListener('click', async () => {
     const result = await window.api.lumaUeDeploy(game.exePath, { licenseConfirmed });
     if (!result.ok) throw new Error(result.error || 'Deploy failed');
     toast(result.deployed ? 'Deployed Luma UE for this game.' : 'Luma UE was already deployed.');
+    if (!result.optiScalerInstalled) {
+      toast('OptiScaler is not installed for this game yet -- click Install on its card; Luma only loads through OptiScaler.');
+    } else if (result.autoConfigured && result.autoConfigured.some((e) => e.key === 'LoadReshade')) {
+      toast('Set [Plugins] LoadReshade=true in OptiScaler.ini so OptiScaler loads Luma.');
+    }
     if ($('#game-lumaue-amd-intel').checked) {
       const workaround = await window.api.lumaUeApplyAmdIntelWorkaround(game.exePath);
       if (workaround.ok) toast('Applied the AMD/Intel workaround to OptiScaler.ini.');
@@ -1136,6 +1191,15 @@ $('#btn-browse-nr-dll').addEventListener('click', async () => {
   const p = await window.api.pickDll();
   if (p) persistNrDll(p);
 });
+$('#btn-fetch-nr-dll').addEventListener('click', async () => {
+  const btn = $('#btn-fetch-nr-dll');
+  btn.disabled = true;
+  try {
+    await ensureNrModel({ force: true });
+  } finally {
+    btn.disabled = false;
+  }
+});
 $('#settings-nr-dll').addEventListener('change', (e) => persistNrDll(e.target.value.trim()));
 
 $('#btn-close-settings').addEventListener('click', async () => {
@@ -1178,15 +1242,84 @@ async function autoSyncStaleGames() {
     toast(`Could not auto-update: ${failed.join(', ')} — close the game and retry.`);
   }
 }
+// Numeric per segment; a suffix like "-hotfix" or "10a" counts as its leading number, so a
+// suffixed tag is never mistaken for an older one.
+function compareTags(a, b) {
+  const parse = (t) => String(t || '').replace(/^v/i, '').split('.').map((s) => parseInt(s, 10) || 0);
+  const pa = parse(a);
+  const pb = parse(b);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+// The installer carries the engine zip it was released with. Extract it whenever there is no
+// usable engine yet, or the one on disk is older than the bundle -- no network involved, so a
+// fresh install works offline and never waits on GitHub. The online check below still runs
+// afterwards for anything newer.
+// A valid release folder that is not the app's own managed one is the user's own build: the
+// app reads from it and never replaces it -- neither with the bundle nor with a GitHub update.
+async function usingCustomReleaseFolder(managedFolder) {
+  if (!settings.releaseFolder) return false;
+  const norm = (p) => String(p || '').replace(/[\\/]+$/, '').toLowerCase();
+  if (norm(settings.releaseFolder) === norm(managedFolder)) return false;
+  return (await window.api.validateRelease(settings.releaseFolder)).valid;
+}
+
+async function ensureBundledEngine() {
+  const bundled = await window.api.bundledEngine();
+  if (!bundled || !bundled.tag) return false;
+  if (await usingCustomReleaseFolder(bundled.managedFolder)) return false;
+  const releaseValid = !!settings.releaseFolder && (await window.api.validateRelease(settings.releaseFolder)).valid;
+  if (releaseValid && settings.installedVersion && compareTags(settings.installedVersion, bundled.tag) >= 0) return false;
+
+  const res = await window.api.installUpdate({ localZip: bundled.zipPath, tag: bundled.tag });
+  if (!res.ok) {
+    toast(`Could not set up the bundled OptiScaler engine: ${res.error}`);
+    return false;
+  }
+  settings.releaseFolder = res.folder;
+  settings.installedVersion = bundled.tag;
+  await window.api.saveSettings(settings);
+  refreshBannerVisibility();
+  checkReleaseStatus();
+  toast(`OptiScaler engine ${bundled.tag} set up from the installer -- nothing to download.`);
+  return true;
+}
+
+// The NR model used to be the one file people had to dig out of an NVIDIA driver archive by
+// hand. RHI publishes it, so fetch it unless a valid copy is already set.
+async function ensureNrModel({ force = false } = {}) {
+  if (!force && settings.nrDllPath && (await window.api.validateNrDll(settings.nrDllPath)).valid) return false;
+  toast('Fetching the DLSS NR model file (about 165 MB)…');
+  const res = await window.api.autoFetchNrDll();
+  if (!res.ok) {
+    toast(`Could not fetch the DLSS NR model automatically: ${res.error}`);
+    return false;
+  }
+  settings.nrDllPath = res.path;
+  await window.api.saveSettings(settings);
+  $('#settings-nr-dll').value = res.path;
+  checkNrDllStatus();
+  refreshBannerVisibility();
+  toast(`DLSS NR model ${res.version} fetched (${res.sizeMB} MB).`);
+  return true;
+}
+
 async function autoUpdateOptiScalerRelease() {
+  const bundled = await window.api.bundledEngine();
+  if (await usingCustomReleaseFolder(bundled.managedFolder)) return;
   const res = await window.api.checkUpdate();
   if (!res.ok || settings.installedVersion === res.tag) return;
+  // Never step backwards from the bundled engine because GitHub's "latest" lags behind it.
+  if (settings.installedVersion && compareTags(settings.installedVersion, res.tag) > 0) return;
 
   const installRes = await window.api.installUpdate({
     downloadUrl: res.downloadUrl,
     assetName: res.assetName,
-    tag: res.tag,
-    targetFolder: settings.releaseFolder
+    tag: res.tag
   });
   if (!installRes.ok) {
     toast(`Auto-update to ${res.tag} failed: ${installRes.error}`);
@@ -1224,7 +1357,9 @@ $('#btn-check-updates').addEventListener('click', async () => {
     pendingUpdate = null;
   } else {
     pendingUpdate = res;
-    engineNeedsUpdate = settings.installedVersion !== res.tag;
+    // Older than GitHub's latest, not merely different: a Manager whose bundle is ahead of the
+    // latest release must not offer a downgrade.
+    engineNeedsUpdate = !settings.installedVersion || compareTags(settings.installedVersion, res.tag) < 0;
     if (!engineNeedsUpdate) {
       statusEl.className = 'status-line status-ok';
       statusEl.textContent = `Engine up to date (${res.tag}).`;
@@ -1253,11 +1388,13 @@ $('#btn-check-updates').addEventListener('click', async () => {
     // THIS Manager build shipped with and was tested against -- not just "are both independently
     // latest", which two asynchronously-released repos don't guarantee. See update:checkManager's
     // own comment in main.js for why.
-    if (managerRes.bundledEngineTag && settings.installedVersion && settings.installedVersion !== managerRes.bundledEngineTag) {
+    // Only an engine OLDER than the one this Manager shipped with is a real mismatch -- newer is
+    // the normal state after any engine release, since launch auto-updates past the bundle.
+    if (managerRes.bundledEngineTag && settings.installedVersion && compareTags(settings.installedVersion, managerRes.bundledEngineTag) < 0) {
       mismatchEl.classList.remove('hidden');
       mismatchEl.textContent = `Version mismatch: this Manager (v${managerRes.currentVersion}) shipped tested with engine ` +
-        `${managerRes.bundledEngineTag}, but ${settings.installedVersion} is installed. Update the engine to ` +
-        `${managerRes.bundledEngineTag} above, or update the Manager itself, to bring them back in sync.`;
+        `${managerRes.bundledEngineTag}, but the older ${settings.installedVersion} is installed. Update the engine above ` +
+        `to bring them back in sync.`;
     }
   }
 
@@ -1288,8 +1425,7 @@ $('#btn-install-update').addEventListener('click', async () => {
     const res = await window.api.installUpdate({
       downloadUrl: pendingUpdate.downloadUrl,
       assetName: pendingUpdate.assetName,
-      tag: pendingUpdate.tag,
-      targetFolder: settings.releaseFolder
+      tag: pendingUpdate.tag
     });
 
     btn.disabled = false;
@@ -1466,6 +1602,9 @@ window.addEventListener('focus', () => {
   settings = data.settings || { releaseFolder: '', nrDllPath: '', installedVersion: '' };
   await refreshBannerVisibility();
   await renderGrid();
+  await ensureBundledEngine();
   await autoUpdateOptiScalerRelease();
   autoSyncStaleGames();
+  // Not awaited: a 165 MB download must not hold up the per-game sync that does not need it.
+  ensureNrModel();
 })();

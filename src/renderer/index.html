@@ -19,8 +19,8 @@
   </header>
 
   <div id="settings-banner" class="settings-banner hidden">
-    Set your OptiScaler release folder and DLSS NR file in
-    <a id="settings-banner-link" href="#">Settings</a> before installing to games.
+    The OptiScaler engine and DLSS NR model are set up automatically on first launch. If that did not finish (offline?), open
+    <a id="settings-banner-link" href="#">Settings</a> to fetch them or set the paths by hand before installing to games.
   </div>
 
   <main id="game-grid" class="game-grid"></main>
@@ -118,13 +118,18 @@
 
       <div id="game-lossless-section" class="hidden">
         <label class="field-label">Frame Generation via Lossless Scaling</label>
-        <p class="field-hint">OptiScaler's own Frame Generation isn't available together with the DLSS5 Feeder (crashes on a real test -- see above). Lossless Scaling generates extra frames from outside the game entirely, so it never touches the swapchain ReShade and the Feeder share -- unaffected by that crash. Separate paid app; this only configures its per-game profile (Frame Generation on, Scaling off), it doesn't install it. Once configured, the on/off toggle and the amount live in this game's own in-game panel (DLSS 5 Neural Rendering, Alt+Home). <strong>Requires this game running Borderless or Windowed, not exclusive Fullscreen</strong> -- Lossless Scaling cannot capture an exclusive-fullscreen window at all; a DX12 game is usually fine regardless since DX12 has no true exclusive fullscreen.</p>
+        <p class="field-hint">Lossless Scaling generates extra frames from outside the game entirely -- it never touches the game's swapchain, so it works for any game here, including DX11 titles and DLSS5 Feeder games where OptiScaler's own Frame Generation can't run, and is sometimes the better choice regardless. Separate paid app; this only configures its per-game profile (Frame Generation on, Scaling off), it doesn't install it. <strong>Fixed</strong> multiplies every frame; <strong>Adaptive</strong> generates only as many frames as needed to hold the target FPS you set. <strong>One frame generator at a time:</strong> configuring this turns OptiScaler's own Frame Generation off for this game, and the game's own DLSS Frame Generation must be off in its video settings while Lossless Scaling runs -- two generators stack their frames. Once configured, the on/off toggle (and the amount, in Fixed mode) live in this game's own in-game panel (DLSS 5 Neural Rendering, Alt+Home). <strong>Requires this game running Borderless or Windowed, not exclusive Fullscreen</strong> -- Lossless Scaling cannot capture an exclusive-fullscreen window at all; a DX12 game is usually fine regardless since DX12 has no true exclusive fullscreen.</p>
         <div class="field-row">
+          <select id="game-lossless-mode">
+            <option value="FIXED">Fixed multiplier</option>
+            <option value="ADAPTIVE">Adaptive (target FPS)</option>
+          </select>
           <select id="game-lossless-multiplier">
             <option value="2">2x frames</option>
             <option value="3">3x frames</option>
             <option value="4">4x frames</option>
           </select>
+          <input id="game-lossless-target" type="number" min="30" max="480" step="1" value="120" title="Target FPS for Adaptive mode" class="hidden" style="width: 110px;" />
           <button id="btn-lossless-configure" class="btn btn-ghost">Configure for this game</button>
           <button id="btn-lossless-launch" class="btn btn-ghost hidden">Launch Lossless Scaling</button>
         </div>
@@ -209,7 +214,7 @@
       <h2>Settings</h2>
 
       <label class="field-label">OptiScaler (DLSSNR) release folder</label>
-      <p class="field-hint">Point this at the folder where you extracted the OptiScaler_DLSSNR release zip (the one containing setup_windows.bat).</p>
+      <p class="field-hint">Set up automatically: the engine ships inside this app's installer and is extracted on first launch, then kept current from GitHub. Only change this to use your own build (the folder containing setup_windows.bat).</p>
       <div class="field-row">
         <input id="settings-release-folder" type="text" placeholder="Not set — browse or paste a path" />
         <button id="btn-browse-release" class="btn btn-ghost">Browse</button>
@@ -225,9 +230,10 @@
       <div id="manager-update-mismatch" class="status-line status-bad hidden" style="margin-top: 4px;"></div>
 
       <label class="field-label">Nvidia DLSS NR model file (nvngx_dlssnr.dll)</label>
-      <p class="field-hint">This comes from an NVIDIA driver package, not the OptiScaler release. One copy gets placed in each game's folder.</p>
+      <p class="field-hint">Fetched automatically on first launch (from RHI's published package). One copy gets placed in each game's folder. Browse only if you want to supply your own copy from an NVIDIA driver.</p>
       <div class="field-row">
-        <input id="settings-nr-dll" type="text" placeholder="Not set — browse or paste a path" />
+        <input id="settings-nr-dll" type="text" placeholder="Not set — fetch, browse or paste a path" />
+        <button id="btn-fetch-nr-dll" class="btn btn-ghost">Fetch automatically</button>
         <button id="btn-browse-nr-dll" class="btn btn-ghost">Browse</button>
       </div>
       <div id="nr-dll-status" class="status-line"></div>

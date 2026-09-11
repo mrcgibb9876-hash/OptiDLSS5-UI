@@ -46,11 +46,14 @@ offers [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Sca
 Frame Generation source: a separate app that generates extra frames from the game's own window
 from the outside, so it never touches the swapchain OptiScaler, ReShade, and the Feeder share.
 
-**Lossless Scaling is a separate paid app you need to own yourself** — Steam is its distribution —
-this app doesn't install it, only configures its per-game profile once you do. From the Edit Game
-modal: pick the amount (2x/3x/4x), **Configure for this game**, then **Launch Lossless Scaling**.
-After that, both the on/off toggle and the amount live in this game's own in-game panel
-(`Alt+Home`) — no need to alt-tab out during play.
+It is offered for **every** game, not just Feeder or DX11 ones — sometimes it is simply the better
+choice. **Lossless Scaling is a separate paid app you need to own yourself** — Steam is its
+distribution — this app doesn't install it, only configures its per-game profile once you do. From
+the Edit Game modal: pick **Fixed** (2x/3x/4x every frame) or **Adaptive** (a target FPS it
+generates just enough frames to hold), **Configure for this game**, then **Launch Lossless
+Scaling**. After that, the on/off toggle (and the multiplier, in Fixed mode) lives in this game's
+own in-game panel (`Alt+Home`) — no need to alt-tab out during play; in Adaptive mode the panel
+shows the target it is holding.
 
 **Requires the game running Borderless or Windowed, not exclusive Fullscreen** — Lossless Scaling
 cannot capture an exclusive-fullscreen window at all, a limitation on its own side. A DX12 game is
@@ -72,9 +75,13 @@ checkbox you tick rather than on first run.
 folder, tracks what's installed against what's current, and re-runs OptiScaler's own setup script
 in a console you confirm yourself.
 
-**Fetches the OptiScaler_DLSSNR engine build automatically** on first launch and on every "Check
-for Updates" in Settings. It's also attached directly to this app's own GitHub releases (as
-`OptiScaler_DLSSNR-<version>.zip`), so a manual download never means visiting a second repo.
+**Ships the OptiScaler_DLSSNR engine build inside the installer** (`release.yml` fetches the
+fork's latest release into `engine/` before packaging; it lands in `resources/engine/`), extracts
+it on first launch, and keeps it current from GitHub on every launch and "Check for Updates". The
+same zip is also attached to this app's own GitHub releases (as `OptiScaler_DLSSNR-<version>.zip`)
+for anyone setting the release folder by hand. **The DLSS NR model file** (`nvngx_dlssnr.dll`,
+the one piece NVIDIA only ships inside driver packages) is fetched automatically too, from the
+same RHI manifest the Feeder already uses -- a fresh install needs no manual downloads at all.
 
 ## What OptiScaler covers, and what it doesn't
 

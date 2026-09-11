@@ -533,6 +533,7 @@ async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifes
 
 module.exports = {
   MV_PROVIDERS,
+  downloadToCache,
   mvProviderList,
   needsFeeder,
   feederDeployed,

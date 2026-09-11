@@ -17,8 +17,9 @@ REQUIREMENTS
 - For DLSS Neural Rendering specifically: an NVIDIA RTX 50-series GPU and
   NVIDIA driver 616.56 or newer. (Older/other GPUs can still use OptiScaler
   for upscaling — the Neural Rendering feature is what needs an RTX 50 card.)
-- Internet connection (for pulling the OptiScaler release, banner art, and
-  update checks)
+- Internet connection on first launch (for the DLSS NR model file, banner
+  art, and update checks). The OptiScaler engine itself ships inside the
+  installer, so it needs no download.
 
 ------------------------------------------
 STEP 1 — Install the app
@@ -32,53 +33,35 @@ same per-user location either way, so both versions share the same game
 list and settings.)
 
 ------------------------------------------
-STEP 2 — Get the OptiScaler_DLSSNR files
+STEP 2 — The OptiScaler_DLSSNR engine (automatic)
 ------------------------------------------
-Open the app, click "Settings", then either:
+Nothing to do. The engine build this app was released with ships inside
+the installer, and the app unpacks it the first time it opens — no second
+download, no second repo. After that, Settings > "Check for Updates" keeps
+it current from GitHub (and the app also checks on its own at launch).
 
-  A) Click "Check for Updates" — this downloads the latest release directly
-     from the GitHub repo and sets everything up automatically. Easiest
-     option, and how you should also pull future updates.
-
-  OR
-
-  B) Manually download the engine zip. It's attached directly to this app's
-     own GitHub release (same page as the installer, named
-     OptiScaler_DLSSNR-<version>.zip) so you don't need to visit a second
-     repo. Extract it anywhere, then click "Browse" next to "OptiScaler
-     (DLSSNR) release folder" and point it at the extracted folder (the one
-     that directly contains setup_windows.bat).
+If you ever want a different build, the same zip is attached to this app's
+GitHub release as OptiScaler_DLSSNR-<version>.zip: extract it anywhere and
+point Settings > "OptiScaler (DLSSNR) release folder" at the folder that
+directly contains setup_windows.bat.
 
 ------------------------------------------
-STEP 3 — Get the NVIDIA DLSS NR model file
+STEP 3 — The NVIDIA DLSS NR model file (automatic)
 ------------------------------------------
-This is a separate ~165 MB file called "nvngx_dlssnr.dll" that NVIDIA does
-NOT include in the OptiScaler release — it comes from an NVIDIA driver
-package, and the OptiScaler project's own setup script is explicit that you
-have to supply it yourself.
+This is a separate ~165 MB file called "nvngx_dlssnr.dll" that NVIDIA only
+ships inside driver packages. The app fetches it for you on first launch
+(you'll see a toast while it downloads) and sets it in Settings > "Nvidia
+DLSS NR model file". Settings also has a "Fetch automatically" button if
+you ever need to redo that.
 
-Watch out for a near-identical filename trap the project itself warns
-about: the OptiScaler release ships a small ~13 KB file called
-"nvngx.dll_dlssnr.dll" (note the DIFFERENT dot placement) — that is NOT the
-same file and will not work if used in place of the real one. The real
-model file is ~165 MB. The app checks the file size when you set it in
-Settings and will warn you if it looks like the wrong one.
-
-Extracting nvngx_dlssnr.dll from an NVIDIA driver package (exact folder
-layout can shift between driver versions, so treat this as a starting
-point, not gospel):
-  1. Download the relevant NVIDIA driver installer (.exe) — don't run it.
-  2. Extract it with an archive tool such as 7-Zip (right-click > 7-Zip >
-     Extract to...). Driver installers are just archives internally.
-  3. Look through the extracted contents for a file named
-     "nvngx_dlssnr.dll" (roughly 165 MB). It's typically nested under a
-     Display.Driver-type subfolder.
-  4. If you get stuck, check the OptiScaler_DLSSNR repo's release notes or
-     discussion threads — the maintainer documents current extraction
-     steps there, and that guidance is more current than this file.
-
-Once you have it, in the app go to Settings > "Nvidia DLSS NR model file"
-and browse to it.
+Prefer your own copy? Browse to it instead. Watch out for a near-identical
+filename trap: the OptiScaler release ships a small ~13 KB file called
+"nvngx.dll_dlssnr.dll" (note the DIFFERENT dot placement) — that is NOT
+the model and will not work. The real one is ~165 MB; the app checks the
+size and warns if it looks wrong. To extract it from a driver yourself:
+download the NVIDIA driver installer (.exe) without running it, open it
+with 7-Zip, and look for nvngx_dlssnr.dll (usually under a Display.Driver
+subfolder).
 
 ------------------------------------------
 STEP 4 — Add your games
@@ -146,23 +129,28 @@ for those (see the Edit Game screen; it explains itself there). OptiScaler's
 own Frame Generation (FSRFG) can't run together with the Feeder — it
 crashed on a real test, not a guess — and needs a D3D12 game either way.
 
-For those cases, or any DirectX 11 game, the app can instead set you up
-with Lossless Scaling as the Frame Generation source. Lossless Scaling
-is a SEPARATE PAID APP you need to own yourself:
+For any game at all — Feeder games, DirectX 11 games, or simply where you
+prefer it — the app can set you up with Lossless Scaling as the Frame
+Generation source. Lossless Scaling is a SEPARATE PAID APP you need to
+own yourself:
 
   https://store.steampowered.com/app/993090/Lossless_Scaling/
 
 This app does not install it and does not include it — Steam is where
-you get it. Once you own it:
+you get it. Once you own it, in the Edit Game screen under "Frame
+Generation via Lossless Scaling":
 
-  1. In the Edit Game screen, under "Frame Generation via Lossless
-     Scaling", pick the amount (2x/3x/4x).
+  1. Pick a mode:
+       Fixed multiplier  — every real frame becomes 2x/3x/4x frames.
+       Adaptive          — set a target FPS; Lossless Scaling generates
+                           only as many frames as it takes to hold it.
   2. Click "Configure for this game" — this sets up its per-game profile.
   3. Click "Launch Lossless Scaling" once, so it's running.
 
-After that, both the on/off toggle and the amount live in that game's own
-DLSS 5 Developer Controls panel (Alt+Home) — no need to alt-tab out
-during play.
+After that, the on/off toggle (and the amount, in Fixed mode) lives in
+that game's own DLSS 5 Developer Controls panel (Alt+Home) — no need to
+alt-tab out during play. In Adaptive mode the panel shows the target it
+is holding; change the target here in the app.
 
 Lossless Scaling needs the game running Borderless or Windowed, NOT
 exclusive Fullscreen — it can't capture an exclusive-fullscreen window at

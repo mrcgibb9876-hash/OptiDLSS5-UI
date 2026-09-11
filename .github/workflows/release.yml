@@ -59,6 +59,27 @@ jobs:
         cl /std:c++17 /EHsc /O2 /Fe:DLSS5Injector.exe DLSS5Injector.cpp
         if not exist DLSS5Injector.exe exit /b 1
 
+    # Bundled into the installer (package.json extraResources: engine/ -> resources/engine/), so a
+    # fresh install has the engine on disk before it ever touches the network. The app extracts
+    # it on first launch and still checks GitHub for anything newer.
+    - name: Fetch the OptiScaler_DLSSNR engine build to bundle
+      shell: pwsh
+      run: |
+        $headers = @{ 'User-Agent' = 'OptiDLSS5-UI-release'; Accept = 'application/vnd.github+json' }
+        $release = Invoke-RestMethod -Headers $headers -Uri 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest'
+        $asset = $release.assets | Where-Object { $_.name -like '*.zip' } | Select-Object -First 1
+
+        if (-not $asset) {
+          Write-Error "No .zip asset found on OptiScaler_DLSSNR's latest release ($($release.tag_name))."
+          exit 1
+        }
+
+        New-Item -ItemType Directory -Force engine | Out-Null
+        Invoke-WebRequest -Headers $headers -Uri $asset.browser_download_url -OutFile engine\OptiScaler_DLSSNR.zip
+        Set-Content -Path engine\VERSION -Value $release.tag_name -NoNewline -Encoding ascii
+        $mb = [math]::Round((Get-Item engine\OptiScaler_DLSSNR.zip).Length / 1MB, 1)
+        Write-Output "engine\OptiScaler_DLSSNR.zip  ($mb MB, $($release.tag_name), from $($asset.name))"
+
     - name: Build
       run: npm run dist
 
@@ -93,22 +114,18 @@ jobs:
           exit 1
         }
 
-    - name: Fetch the OptiScaler_DLSSNR engine build
+    - name: Check the engine made it into the package, and attach it as its own asset too
       shell: pwsh
       run: |
-        $headers = @{ 'User-Agent' = 'OptiDLSS5-UI-release'; Accept = 'application/vnd.github+json' }
-        $release = Invoke-RestMethod -Headers $headers -Uri 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest'
-        $asset = $release.assets | Where-Object { $_.name -like '*.zip' } | Select-Object -First 1
-
-        if (-not $asset) {
-          Write-Error "No .zip asset found on OptiScaler_DLSSNR's latest release ($($release.tag_name))."
+        if (-Not (Test-Path "dist\win-unpacked\resources\engine\OptiScaler_DLSSNR.zip")) {
+          Write-Error "engine\OptiScaler_DLSSNR.zip did not make it into the packaged app -- first launch would have nothing to set up."
           exit 1
         }
 
-        $dest = "dist\OptiScaler_DLSSNR-$($release.tag_name).zip"
-        Invoke-WebRequest -Headers $headers -Uri $asset.browser_download_url -OutFile $dest
-        $mb = [math]::Round((Get-Item $dest).Length / 1MB, 1)
-        Write-Output "$dest  ($mb MB, from $($asset.name))"
+        # Same zip, also downloadable on its own for anyone setting the release folder by hand.
+        $tag = (Get-Content engine\VERSION -Raw).Trim()
+        Copy-Item engine\OptiScaler_DLSSNR.zip "dist\OptiScaler_DLSSNR-$tag.zip"
+        Write-Output "dist\OptiScaler_DLSSNR-$tag.zip"
 
     - name: Publish
       uses: softprops/action-gh-release@v2

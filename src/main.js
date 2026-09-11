@@ -14,6 +14,7 @@ const feeder = require('./feeder');
 const lossless = require('./lossless');
 const lumaue = require('./lumaue');
 const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame } = require('./detect');
+const { openZip, findEntry, extractEntryTo } = require('./zip');
 const ENGINE_KNOWN_GAMES = new Set(require('./engine-known-games.json').exeNames);
 const execFileAsync = promisify(execFile);
 
@@ -329,15 +330,43 @@ ipcMain.handle('lossless:launch', () => {
 // gameTitle must be the exact <Title> text written into Lossless Scaling's own profile (see
 // configureLossless() in renderer.js) -- the in-game panel matches its own profile list by this
 // exact text via UI Automation, since a list entry there carries no other stable identifier.
-ipcMain.handle('lossless:setExePathInGameIni', (_evt, { exePath, losslessExePath, gameTitle }) => {
+// The in-game panel's link to this game's Lossless Scaling profile lives in OptiScaler.ini, but
+// game:install copies the release ini over the folder wholesale and Lossless can now be configured
+// before OptiScaler is even installed. So the source of truth is a per-game marker beside the
+// exe, and autoConfigureGame re-applies it every time it runs (install, sync, deploy).
+const LOSSLESS_MARKER = '.dlss5ui-lossless.json';
+
+function applyLosslessMarker(dir) {
+  const iniPath = path.join(dir, 'OptiScaler.ini');
+  const marker = readJson(path.join(dir, LOSSLESS_MARKER), null);
+  if (!marker || !marker.exePath || !fs.existsSync(iniPath)) return [];
+  const applied = [];
+  const set = (key, value) => {
+    if (ensureIniKey(iniPath, 'DlssNr', key, value)) applied.push({ section: 'DlssNr', key, value });
+  };
+  set('LosslessScalingExePath', marker.exePath);
+  if (marker.gameTitle) set('LosslessScalingGameTitle', marker.gameTitle);
+  set('LosslessScalingMode', marker.mode === 'ADAPTIVE' ? 'ADAPTIVE' : 'FIXED');
+  if (Number.isInteger(marker.multiplier) && marker.multiplier >= 2) set('LosslessScalingMultiplier', String(marker.multiplier));
+  if (Number.isInteger(marker.target) && marker.target >= 30) set('LosslessScalingTarget', String(marker.target));
+  return applied;
+}
+
+ipcMain.handle('lossless:setExePathInGameIni', (_evt, { exePath, losslessExePath, gameTitle, mode, multiplier, target }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
-    const iniPath = path.join(dir, 'OptiScaler.ini');
-    if (!fs.existsSync(iniPath)) throw new Error('OptiScaler.ini not found -- install OptiScaler for this game first.');
-    ensureIniKey(iniPath, 'DlssNr', 'LosslessScalingExePath', losslessExePath);
-    if (gameTitle) ensureIniKey(iniPath, 'DlssNr', 'LosslessScalingGameTitle', gameTitle);
-    return { ok: true };
+    writeJson(path.join(dir, LOSSLESS_MARKER), {
+      exePath: losslessExePath,
+      gameTitle: gameTitle || null,
+      mode: mode === 'ADAPTIVE' ? 'ADAPTIVE' : 'FIXED',
+      multiplier: Number(multiplier),
+      target: Number(target),
+      updatedAt: new Date().toISOString(),
+    });
+    if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: true, deferred: true };
+    applyLosslessMarker(dir);
+    return { ok: true, deferred: false };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -396,7 +425,13 @@ ipcMain.handle('lumaue:deploy', async (_evt, { exePath, force, licenseConfirmed 
       force: !!force,
       licenseConfirmed: !!licenseConfirmed,
     });
-    return { ok: true, ...results };
+    // The deploy places Luma's ReShade as a plain ReShade64.dll; nothing loads it until
+    // OptiScaler.ini says [Plugins] LoadReshade=true. autoConfigureGame forces that once Luma is
+    // on disk, but it only used to run on Install and at app start -- deploying Luma into an
+    // already-installed game left ReShade unloaded (no Luma overlay, no DLSS call, the NR panel
+    // stuck on "waiting") until the next launch of this app. Run it now.
+    const configured = fs.existsSync(path.join(dir, 'OptiScaler.ini')) ? await autoConfigureGame(dir, exePath) : null;
+    return { ok: true, ...results, autoConfigured: configured ? configured.applied : [], optiScalerInstalled: !!configured };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -519,6 +554,57 @@ ipcMain.handle('release:validate', (_evt, folder) => {
   }
   return { valid: true };
 });
+
+function nrModelCacheDir() {
+  return path.join(userDataDir(), 'nr-model');
+}
+
+// NVIDIA only ships the NR model inside driver packages, but RHI republishes it in the same
+// manifest (its dlssnr list) the Feeder already trusts for nvngx_dlss.dll -- so the one file the
+// setup guide used to make people dig out of a driver archive by hand can be fetched instead.
+let nrFetchInFlight = null;
+
+// One download at a time: the startup fetch and the Settings button share the same cache paths,
+// so a second concurrent call joins the first instead of racing it for the same .part file.
+ipcMain.handle('nrdll:autoFetch', () => {
+  if (!nrFetchInFlight) {
+    nrFetchInFlight = fetchNrModel().finally(() => { nrFetchInFlight = null; });
+  }
+  return nrFetchInFlight;
+});
+
+async function fetchNrModel() {
+  let zipPath = null;
+  try {
+    const manifest = await getRhiManifest();
+    const list = Array.isArray(manifest && manifest.dlssnr) ? manifest.dlssnr : [];
+    if (list.length === 0) throw new Error("RHI's manifest lists no DLSS NR model build (offline, or none published yet)");
+    const newest = [...list].sort((a, b) => compareStreamlineVersions(b.version, a.version))[0];
+    const safe = String(newest.version).replace(/[^0-9A-Za-z.-]/g, '_');
+    const dest = path.join(nrModelCacheDir(), `nvngx_dlssnr_${safe}.dll`);
+
+    if (!fs.existsSync(dest)) {
+      zipPath = await feeder.downloadToCache(newest.url, nrModelCacheDir(), `nvngx_dlssnr_${safe}.zip`, GITHUB_HEADERS);
+      const zip = openZip(zipPath);
+      const entry = findEntry(zip, /(^|\/)nvngx_dlssnr\.dll$/i);
+      if (!entry) throw new Error('nvngx_dlssnr.dll not found inside the RHI package');
+      extractEntryTo(zip, entry, `${dest}.part`);
+      await fsp.rename(`${dest}.part`, dest);
+    }
+
+    const sizeMB = Math.round(fs.statSync(dest).size / 1024 / 1024);
+    if (sizeMB < 50) {
+      await fsp.rm(dest, { force: true });
+      throw new Error(`The downloaded file is only ${sizeMB} MB -- not the real ~165 MB model`);
+    }
+    return { ok: true, path: dest, version: newest.version, sizeMB };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  } finally {
+    // Success or failure, the zip goes: downloadToCache would hand a bad one back on every retry.
+    if (zipPath) fsp.rm(zipPath, { force: true }).catch(() => {});
+  }
+}
 
 ipcMain.handle('nrdll:validate', (_evt, filePath) => {
   if (!filePath) return { valid: false, reason: 'No file set' };
@@ -1412,6 +1498,12 @@ async function autoConfigureGame(dir, exePath) {
     edits.push({ section: 'DlssNr', key: 'Enabled', value: 'true' });
   }
 
+  // OptiScaler's own default is no log file at all, and its "auto" level is Trace. Every support
+  // question about this app starts with "what does OptiScaler.log say" -- so a log, at Info.
+  // Defaults only: a level someone set by hand (Debug for a repro) is left alone.
+  edits.push({ section: 'Log', key: 'LogToFile', value: 'true' });
+  edits.push({ section: 'Log', key: 'LogLevel', value: '2' });
+
   const reEngine = isReEngineGame(dir);
   let reframework = null;
   let reframeworkConfig = [];
@@ -1445,6 +1537,7 @@ async function autoConfigureGame(dir, exePath) {
   // Luma UE deploys its own ReShade64.dll the same non-proxying way the Feeder does (see
   // lumaue.js's file header) -- OptiScaler needs the same explicit LoadReshade nudge to load it.
   if (lumaue.lumaUeDeployed(dir)) forced = [...forced, ...patchIniValues(iniPath, LOAD_RESHADE_FORCED)];
+  forced = [...forced, ...applyLosslessMarker(dir)];
   return {
     api, applied: [...applied, ...forced], streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix,
     profile: dlss5Only ? (optiFgOn ? 'dlss5-only+optifg' : 'dlss5-only') : 'full',
@@ -1727,13 +1820,18 @@ ipcMain.handle('update:checkManager', async () => {
     const currentVersion = app.getVersion();
     const currentTag = `v${currentVersion}`;
 
-    let bundledEngineTag = null;
-    const ownRes = await fetch(`https://api.github.com/repos/${MANAGER_REPO}/releases/tags/${encodeURIComponent(currentTag)}`, { headers: GITHUB_HEADERS });
-    if (ownRes.ok) {
-      const ownRelease = await ownRes.json();
-      const zipAsset = (ownRelease.assets || []).find((a) => /^OptiScaler_DLSSNR-.*\.zip$/i.test(a.name));
-      const m = zipAsset && zipAsset.name.match(/^OptiScaler_DLSSNR-(.+)\.zip$/i);
-      if (m) bundledEngineTag = m[1];
+    // The engine zip ships inside the installer now, with its tag beside it -- no network needed
+    // to know what this build was tested with. The release-asset lookup stays as the fallback for
+    // builds made before the bundle existed.
+    let bundledEngineTag = (bundledEngine() || {}).tag || null;
+    if (!bundledEngineTag) {
+      const ownRes = await fetch(`https://api.github.com/repos/${MANAGER_REPO}/releases/tags/${encodeURIComponent(currentTag)}`, { headers: GITHUB_HEADERS });
+      if (ownRes.ok) {
+        const ownRelease = await ownRes.json();
+        const zipAsset = (ownRelease.assets || []).find((a) => /^OptiScaler_DLSSNR-.*\.zip$/i.test(a.name));
+        const m = zipAsset && zipAsset.name.match(/^OptiScaler_DLSSNR-(.+)\.zip$/i);
+        if (m) bundledEngineTag = m[1];
+      }
     }
 
     const latestRes = await fetch(`https://api.github.com/repos/${MANAGER_REPO}/releases/latest`, { headers: GITHUB_HEADERS });
@@ -1782,35 +1880,63 @@ function findReleaseRoot(folder) {
   return null;
 }
 
-ipcMain.handle('update:install', async (_evt, { downloadUrl, assetName, tag, targetFolder }) => {
+// The engine zip electron-builder packed beside the app (release.yml fetches it into engine/
+// before the build), plus the tag it was cut from. Null when running from source without one.
+function bundledEngine() {
+  const root = app.isPackaged ? path.join(process.resourcesPath, 'engine') : path.join(__dirname, '..', 'engine');
+  const zipPath = path.join(root, 'OptiScaler_DLSSNR.zip');
+  const versionFile = path.join(root, 'VERSION');
+  if (!fs.existsSync(zipPath) || !fs.existsSync(versionFile)) return null;
+  const tag = fs.readFileSync(versionFile, 'utf-8').trim();
+  return tag ? { tag, zipPath } : null;
+}
+
+// The one folder this app owns and may overwrite. A release folder the user pointed Settings at
+// (their own build) is theirs: read from, never extracted into or deleted.
+function managedReleaseFolder() {
+  return path.join(userDataDir(), 'OptiScalerRelease');
+}
+
+ipcMain.handle('update:bundledEngine', () => ({ ...(bundledEngine() || {}), managedFolder: managedReleaseFolder() }));
+
+// localZip: extract an already-downloaded zip (the bundled engine) instead of fetching downloadUrl.
+// Always lands in the managed folder, and the live copy is only replaced once the new one has
+// extracted and validated -- a truncated zip or a blocked Expand-Archive leaves a working engine
+// exactly as it was.
+ipcMain.handle('update:install', async (_evt, { downloadUrl, localZip, tag }) => {
   let tmpZip;
+  const dest = managedReleaseFolder();
+  const staging = `${dest}.new`;
   try {
-    const dest = targetFolder && targetFolder.trim()
-      ? targetFolder.trim()
-      : path.join(userDataDir(), 'OptiScalerRelease');
+    let zipPath = localZip;
+    if (!zipPath) {
+      const res = await fetch(downloadUrl, { headers: GITHUB_HEADERS });
+      if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
+      const buf = Buffer.from(await res.arrayBuffer());
 
-    const res = await fetch(downloadUrl, { headers: GITHUB_HEADERS });
-    if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
-    const buf = Buffer.from(await res.arrayBuffer());
+      tmpZip = path.join(os.tmpdir(), `optiscaler-update-${Date.now()}.zip`);
+      await fsp.writeFile(tmpZip, buf);
+      zipPath = tmpZip;
+    }
 
-    tmpZip = path.join(os.tmpdir(), `optiscaler-update-${Date.now()}.zip`);
-    await fsp.writeFile(tmpZip, buf);
-
-    await fsp.rm(dest, { recursive: true, force: true });
-    await fsp.mkdir(dest, { recursive: true });
+    await fsp.rm(staging, { recursive: true, force: true });
+    await fsp.mkdir(staging, { recursive: true });
 
     await execFileAsync('powershell.exe', [
       '-NoProfile', '-NonInteractive', '-Command',
       'Expand-Archive -LiteralPath $env:OSM_ZIP -DestinationPath $env:OSM_DEST -Force'
-    ], { env: { ...process.env, OSM_ZIP: tmpZip, OSM_DEST: dest } });
+    ], { env: { ...process.env, OSM_ZIP: zipPath, OSM_DEST: staging } });
 
-    const root = findReleaseRoot(dest);
-    if (!root) throw new Error('Extracted update, but setup_windows.bat was not found inside it');
+    if (!findReleaseRoot(staging)) throw new Error('Extracted update, but setup_windows.bat was not found inside it');
 
-    return { ok: true, folder: root, tag };
+    await fsp.rm(dest, { recursive: true, force: true });
+    await fsp.rename(staging, dest);
+
+    return { ok: true, folder: findReleaseRoot(dest), tag };
   } catch (err) {
     return { ok: false, error: err.message };
   } finally {
     if (tmpZip) fsp.rm(tmpZip, { force: true }).catch(() => {});
+    fsp.rm(staging, { recursive: true, force: true }).catch(() => {});
   }
 });

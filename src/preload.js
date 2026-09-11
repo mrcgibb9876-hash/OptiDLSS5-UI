@@ -39,11 +39,13 @@ contextBridge.exposeInMainWorld('api', {
   losslessWriteSettings: (xmlText) => ipcRenderer.invoke('lossless:writeSettings', xmlText),
   losslessLaunch: () => ipcRenderer.invoke('lossless:launch'),
   losslessOpenStorePage: () => ipcRenderer.invoke('lossless:openStorePage'),
-  losslessSetExePathInGameIni: (exePath, losslessExePath, gameTitle) => ipcRenderer.invoke('lossless:setExePathInGameIni', { exePath, losslessExePath, gameTitle }),
+  losslessSetExePathInGameIni: (exePath, losslessExePath, gameTitle, profile = {}) => ipcRenderer.invoke('lossless:setExePathInGameIni', { exePath, losslessExePath, gameTitle, ...profile }),
 
   steamSearch: (term) => ipcRenderer.invoke('steam:search', term),
   validateRelease: (folder) => ipcRenderer.invoke('release:validate', folder),
   validateNrDll: (filePath) => ipcRenderer.invoke('nrdll:validate', filePath),
+  autoFetchNrDll: () => ipcRenderer.invoke('nrdll:autoFetch'),
+  bundledEngine: () => ipcRenderer.invoke('update:bundledEngine'),
 
   gameStatus: (exePath) => ipcRenderer.invoke('game:status', exePath),
   detectPath: (exePath) => ipcRenderer.invoke('game:detect-path', exePath),
