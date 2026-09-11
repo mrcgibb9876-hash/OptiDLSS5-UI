@@ -426,10 +426,14 @@ function applyLosslessMarker(dir) {
   set('LosslessScalingMode', marker.mode === 'ADAPTIVE' ? 'ADAPTIVE' : 'FIXED');
   if (Number.isInteger(marker.multiplier) && marker.multiplier >= 2) set('LosslessScalingMultiplier', String(marker.multiplier));
   if (Number.isInteger(marker.target) && marker.target >= 30) set('LosslessScalingTarget', String(marker.target));
+  // The in-game panel synthesizes Lossless Scaling's own toggle hotkey (read from its Settings.xml)
+  // to turn Frame Gen on/off without ever showing its window. Default Ctrl+Alt+S = mods 3, vk 0x53.
+  if (Number.isInteger(marker.hotkeyMods)) set('LosslessScalingHotkeyMods', String(marker.hotkeyMods));
+  if (Number.isInteger(marker.hotkeyVk)) set('LosslessScalingHotkeyVk', String(marker.hotkeyVk));
   return applied;
 }
 
-ipcMain.handle('lossless:setExePathInGameIni', (_evt, { exePath, losslessExePath, gameTitle, mode, multiplier, target }) => {
+ipcMain.handle('lossless:setExePathInGameIni', (_evt, { exePath, losslessExePath, gameTitle, mode, multiplier, target, hotkeyMods, hotkeyVk }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
@@ -443,6 +447,8 @@ ipcMain.handle('lossless:setExePathInGameIni', (_evt, { exePath, losslessExePath
       mode: mode === 'ADAPTIVE' ? 'ADAPTIVE' : 'FIXED',
       multiplier: Number(multiplier),
       target: Number(target),
+      hotkeyMods: Number.isInteger(hotkeyMods) ? hotkeyMods : 3,
+      hotkeyVk: Number.isInteger(hotkeyVk) ? hotkeyVk : 0x53,
       updatedAt: new Date().toISOString(),
     });
     if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: true, deferred: true };

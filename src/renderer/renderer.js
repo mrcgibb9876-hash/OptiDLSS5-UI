@@ -1021,6 +1021,26 @@ async function configureLossless(game, { frameGenMode = 'LSFG3', mode = 'FIXED',
   // whole point) actually turn Frame Generation on.
   setField('AutoScale', 'true');
 
+  // Root-level (not per-profile) settings, so the in-game panel can drive Lossless Scaling without
+  // its window ever appearing. Tray settings keep it out of sight; StartAsAdmin=false makes it run
+  // at the game's own integrity level -- the in-game toggle hotkey works either way, but a medium-
+  // integrity Lossless Scaling is also the one the panel can restart (to apply a live multiplier
+  // change) and never has the game's synthesized input blocked by Windows' cross-integrity
+  // protection. It still scales elevated games fine, since desktop-duplication capture doesn't care
+  // about the captured window's integrity level.
+  const settingsRoot = doc.documentElement; // <Settings>
+  const setRootField = (name, value) => {
+    let el = Array.from(settingsRoot.children).find((c) => c.tagName === name);
+    if (!el) {
+      el = doc.createElement(name);
+      settingsRoot.insertBefore(el, profilesEl);
+    }
+    el.textContent = value;
+  };
+  setRootField('StartAsAdmin', 'false');
+  setRootField('MinimizeToTray', 'true');
+  setRootField('CloseToTray', 'true');
+
   // The parsed doc already carries its own <?xml ...?> declaration; XMLSerializer re-emits it
   // verbatim. Prepending another one here produced a file with two declarations -- invalid XML,
   // and the actual cause of a "could not parse" failure on the very next read. Found live.
@@ -1028,7 +1048,43 @@ async function configureLossless(game, { frameGenMode = 'LSFG3', mode = 'FIXED',
   const writeResult = await window.api.losslessWriteSettings(newXml);
   if (!writeResult.ok) throw new Error(writeResult.error || t('Failed to write Lossless Scaling settings.'));
 
-  return { isNew };
+  return { isNew, hotkey: readLosslessHotkey(doc) };
+}
+
+// Reads Lossless Scaling's own global Frame-Generation toggle chord out of Settings.xml
+// (<Hotkey> is a WPF Key name like "S"; <HotkeyModifierKeys> is space-separated, e.g. "Alt Control")
+// and turns it into the {mods, vk} the in-game panel synthesizes. Defaults to Ctrl+Alt+S -- Lossless
+// Scaling's own default -- when the fields are missing or unrecognised.
+function readLosslessHotkey(doc) {
+  const root = doc.documentElement;
+  const childText = (name) => {
+    const el = Array.from(root.children).find((c) => c.tagName === name);
+    return el ? el.textContent.trim() : '';
+  };
+  const keyName = childText('Hotkey') || 'S';
+  const modText = childText('HotkeyModifierKeys') || 'Alt Control';
+
+  let mods = 0;
+  if (/\bControl\b/i.test(modText)) mods |= 1;
+  if (/\bAlt\b/i.test(modText)) mods |= 2;
+  if (/\bShift\b/i.test(modText)) mods |= 4;
+  if (/\bWindows\b/i.test(modText)) mods |= 8;
+  if (!mods) mods = 3; // Ctrl+Alt
+
+  return { mods, vk: wpfKeyToVk(keyName) };
+}
+
+// Maps the common WPF Key enum names to Win32 virtual-key codes. Covers letters, digits (D0-D9 and
+// NumPad0-9) and F1-F24 -- everything a Lossless Scaling toggle hotkey realistically uses; anything
+// else falls back to 'S' (0x53), which with the Ctrl+Alt default reproduces its stock chord.
+function wpfKeyToVk(name) {
+  if (!name) return 0x53;
+  if (/^[A-Z]$/i.test(name)) return name.toUpperCase().charCodeAt(0);
+  let m;
+  if ((m = /^D([0-9])$/.exec(name))) return 0x30 + Number(m[1]);
+  if ((m = /^NumPad([0-9])$/i.exec(name))) return 0x60 + Number(m[1]);
+  if ((m = /^F([1-9]|1[0-9]|2[0-4])$/i.exec(name))) return 0x70 + (Number(m[1]) - 1);
+  return 0x53;
 }
 
 async function loadLosslessSection(game) {
@@ -1134,7 +1190,8 @@ $('#btn-lossless-configure').addEventListener('click', async () => {
     const result = await configureLossless(game, { mode, multiplier, target });
     const info = await window.api.losslessDetect();
     if (info.installed) {
-      const iniRes = await window.api.losslessSetExePathInGameIni(game.exePath, info.exePath, game.name, { mode, multiplier, target });
+      const hk = result.hotkey || { mods: 3, vk: 0x53 };
+      const iniRes = await window.api.losslessSetExePathInGameIni(game.exePath, info.exePath, game.name, { mode, multiplier, target, hotkeyMods: hk.mods, hotkeyVk: hk.vk });
       if (!iniRes.ok) toast(t('Profile saved, but the in-game panel link was not written: {error}', { error: iniRes.error }));
       else if (iniRes.deferred) toast(t('Profile saved. The in-game panel link will be written when OptiScaler is installed for this game.'));
     }
