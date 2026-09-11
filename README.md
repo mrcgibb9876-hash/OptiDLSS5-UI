@@ -35,7 +35,68 @@ and dark themes:
 
 ![DLSS 5 Developer Controls panel, light theme, with the Lossless Scaling row active](docs/screenshots/dlssnr-panel-light.png)
 
+**On an AMD card** the app detects the GPU and routes differently (see
+[DLSS NR on AMD](#dlss-nr-on-amd-rx-7000--9000) below). Each DX12 card gets a "DLSS NR on AMD" tag,
+a DX11 game says there is no Neural Rendering route on AMD yet, and Install warns that OptiScaler's
+own Neural Rendering will not run on this GPU before it does anything. These three are **mock-ups
+rendered from the real app code with stubbed data**, not captures from an AMD machine -- phase 1
+was built without one, and screenshots from a real RX 7000/9000 are welcome:
+
+![Mock-up: game grid on an AMD card -- route tags, the install warning flipped open, and a game with the AMD tool fully set up](docs/screenshots/mockup-amd-game-grid.png)
+
+**The Edit Game dialog on an AMD card** adds a "DLSS 5 Neural Rendering on AMD" section: whether
+the tool's installer has run in this folder and which version its log names, whether the model file
+it asks for (`nvngx_dlssnr.dll` 310.8.0) is beside the exe, and whether a newer upstream release is
+out. The buttons open the official release page, fetch that model file, and run the installer once
+you have placed it:
+
+![Mock-up: Edit Game on an AMD card, DLSS NR on AMD section](docs/screenshots/mockup-amd-edit-game.png)
+
+**Games that ship more than one renderer** (Where Winds Meet links DX11 in its exe and carries a
+DX12 path beside it) get a "Graphics API this game runs with" choice. Detection can only name one;
+you pick what the game's own video settings actually use, and the upscaler key, the Feeder,
+OptiScaler's Frame Generation and DLSS NR on AMD all follow it. The card's API chip shows the
+choice with a tick:
+
+![Mock-up: Edit Game with the graphics API set to DX12 for Where Winds Meet](docs/screenshots/mockup-graphics-api-choice.png)
+
 See [README-END-USER.txt](README-END-USER.txt) for the full key list and setup steps.
+
+## DLSS NR on AMD (RX 7000 / 9000)
+
+OptiScaler_DLSSNR's Neural Rendering pass runs through NVIDIA's NGX runtime, which only exists with
+an NVIDIA driver. On an AMD or Intel card every route this app offers installs cleanly and then
+renders nothing new. Since v1.15.0 the app knows which GPU it is on (read from Electron's own GPU
+process, shown in Settings) and says so up front: OptiScaler still installs on any GPU -- its
+upscaler swap and FSR frame generation are vendor-neutral -- but the card flips to a warning first,
+and Intel gets a plain "no Neural Rendering route" tag.
+
+For AMD there *is* a route: [DLSS-NR-on-AMD](https://github.com/danielblnc/DLSS-NR-on-AMD) by
+danielblnc, a from-scratch reimplementation of the Neural Rendering runtime for RDNA3/RDNA4 (HIP
+kernels, its own game integration) that hooks the game's own FSR 3/4 and runs NVIDIA's model file
+on top. It **replaces** this app's NVIDIA stack rather than joining it: the game runs FSR, the
+tool's proxy DLL sits beside the exe, and your own `nvngx_dlssnr.dll` goes next to it. It is alpha
+(daily releases, open crash reports on several games) and needs Windows 11, Adrenalin 26.1.1 or
+newer, a DX12 game with FSR turned on, and no anti-cheat. Vulkan is planned upstream.
+
+**What this app does for it today (phase 1):**
+
+- routes every DX12 game on an AMD card to it, with the reason on the card and in Edit;
+- detects an install in the game folder (its setup exe and its log, the only file names its README
+  documents) and reads the version from the log;
+- fetches the model file the tool asks for -- the **unmodified 310.8.0** build -- from RHI's
+  manifest by exact version, and offers a backed-up replace when a different version is there;
+- checks the tool's latest GitHub release and says when a newer one is out;
+- opens the official release page, and runs the installer in a console once it is in the folder;
+- pre-ticks Luma's AMD/Intel ini workaround.
+
+**What it deliberately does not do: download the tool.** Its licence forbids redistributing or
+bundling it with "another mod, tool, launcher, installer, package, or download" and says to link
+to the release page instead, and its installer is interactive with no documented silent switch.
+The author has been asked about both ([DLSS-NR-on-AMD #151](https://github.com/danielblnc/DLSS-NR-on-AMD/issues/151));
+until then you download `dlssnr_on_amd_setup.exe` yourself, put it beside the game exe, and the
+app does everything around that. Whether it runs alongside OptiScaler (as the FSR provider for a
+DLSS-only game) is unverified upstream.
 
 ## Frame Generation for games with no DLSS of their own
 
@@ -106,13 +167,20 @@ stay pinned to our own `OptiScaler_DLSSNR` fork.
 **REFramework** is fetched from `praydog/REFramework-nightly` for RE Engine games, where OptiScaler
 does nothing without it. The install fails rather than half-succeeds if it can't be got.
 
-**The NVIDIA runtime is the exception.** `nvngx_dlssnr.dll` comes out of a driver, it's NVIDIA's,
-and it is not ours to redistribute — which is the same reason `package_release.ps1` leaves it out of
-the OptiScaler release and the notes tell you to supply your own.
+**The DLSS NR model file** (`nvngx_dlssnr.dll`) is NVIDIA's and only ships inside driver packages,
+which is why `package_release.ps1` leaves it out of the OptiScaler release. It is not bundled here
+either; the app fetches it on first launch from the same RHI manifest the Feeder uses, or you can
+point Settings at your own copy from a driver. Two builds exist in that manifest and the app uses
+both, on purpose:
 
-So the app refuses to install until you've pointed it at a copy in Settings. It never fetches one on
-your behalf. It is the only file you have to find yourself — everything else above arrives on its
-own.
+- **310.8.SF** (what the NVIDIA path deploys by default) is [ShortFuse](https://github.com/ShortFuse)'s
+  modified build that extends Neural Rendering to RTX 20, 30 and 40 Series cards; NVIDIA's own
+  build only runs on RTX 50. It reports itself as 310.8.1. Worth knowing: it is a third-party
+  modification of an NVIDIA DLL.
+- **310.8.0**, the unmodified build, is what DLSS-NR-on-AMD documents, so that is the one the AMD
+  section fetches, by exact version.
+
+**DLSS-NR-on-AMD itself is never downloaded** -- see the section above for why.
 
 ## In-game keys
 
@@ -147,4 +215,26 @@ Electron 33, Windows x64. No native modules.
 asks. It is held byte-identical to its upstream so it can be refreshed without a merge — the
 adaptation for this app lives in `src/discover.js` instead.
 
-[OptiScaler](https://github.com/optiscaler/OptiScaler) is the upstream this all rests on.
+[OptiScaler](https://github.com/optiscaler/OptiScaler) is the upstream this all rests on, through
+the [OptiScaler_DLSSNR](https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR) fork that adds the
+Neural Rendering pass and the in-game panel.
+
+Everything the app fetches on your behalf comes from someone else's work, live from their own
+releases and never mirrored here:
+
+| Project | Used for | Licence |
+|---|---|---|
+| [DLSS-NR-on-AMD](https://github.com/danielblnc/DLSS-NR-on-AMD) (Daniel Blanco) | Neural Rendering on RX 7000/9000 -- detected, linked and configured around; not downloaded | Custom, personal non-commercial; no redistribution or bundling |
+| [RHI](https://github.com/RankFTW/RHI) (RankFTW) | `dlss_manifest.json`: Streamline, DLSS, DLSS-G and NR model packages (read, not linked against) | GPL-3.0 |
+| ShortFuse's `nvngx_dlssnr.dll` 310.8.SF (via RHI) | Neural Rendering on RTX 20/30/40 | Modified NVIDIA DLL, as published by RHI |
+| [DLSS5-Feeder](https://github.com/jlrouzies-fr/DLSS5-Feeder) (jlrouzies-fr) | A synthesised DLSS call for games with no DLSS of their own | MIT |
+| [ReShade](https://reshade.me) (crosire) and [reshade-shaders](https://github.com/crosire/reshade-shaders) | Host for the Feeder and Luma add-ons; `ReShade.fxh`/`ReShadeUI.fxh` | BSD 3-Clause |
+| [ReshadeMotionEstimation](https://github.com/JakobPCoder/ReshadeMotionEstimation) (JakobPCoder) | Default motion-vector provider for the Feeder | CC BY-NC 4.0 |
+| [LumeniteFX](https://github.com/umar-afzaal/LumeniteFX) (umar-afzaal) | Optional motion-vector provider; fetched live from the official repo only after per-action consent | AGNYA (all rights reserved) |
+| [Luma-Framework](https://github.com/Filoppi/Luma-Framework) (Filoppi) | DLAA in place of TAA for STAR WARS Jedi: Fallen Order; fetched live after per-action consent | Custom MIT variant |
+| [REFramework](https://github.com/praydog/REFramework) (praydog) | Required on RE Engine games | MIT |
+| [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) (THS) | Frame Generation for games with no DLSS of their own; configured, never installed | Paid, Steam |
+| [DLSS5-Swapper](https://github.com/rakanki911/DLSS5-Swapper) (Rakan Alkhaldi) | `src/library.js`, as above | MIT |
+
+NVIDIA's DLSS is NVIDIA's; this project is not affiliated with or endorsed by NVIDIA, AMD, or any of
+the projects above.
