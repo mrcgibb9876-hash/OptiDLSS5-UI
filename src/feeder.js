@@ -435,12 +435,12 @@ function configurePreset(dir, providerId) {
 // ReShade.ini: make sure add-on loading and the shaders folder are actually enabled. A fresh
 // ReShade64.dll deploy has no ini yet; an existing one (the user already had ReShade for other
 // effects) is merged into, never replaced.
-function configureReShadeIni(dir) {
+function configureReShadeIni(dir, { effectSearchPaths = '.\\reshade-shaders\\Shaders\\**' } = {}) {
   const iniPath = path.join(dir, 'ReShade.ini');
   const existing = fs.existsSync(iniPath) ? fs.readFileSync(iniPath, 'utf8') : '';
   let next = existing;
   next = setIniKey(next, 'ADDON', 'AddonPath', '.\\');
-  next = setIniKey(next, 'GENERAL', 'EffectSearchPaths', '.\\reshade-shaders\\Shaders\\**');
+  next = setIniKey(next, 'GENERAL', 'EffectSearchPaths', effectSearchPaths);
   if (!getIniKey(next, 'GENERAL', 'PresetPath')) next = setIniKey(next, 'GENERAL', 'PresetPath', '.\\ReShadePreset.ini');
   // Marks ReShade's own first-run tutorial as already complete, so its "ReShade is now
   // installed successfully! Press Home to start the tutorial" banner never shows. This app's

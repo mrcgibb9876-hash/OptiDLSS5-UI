@@ -204,7 +204,9 @@ async function deployLumaUeStack(dir, { cacheDir, getRhiManifest, compareVersion
   extractEntryTo(zip, addonEntry, path.join(dir, LUMA_ADDON_DEST_NAME));
 
   const dlss = await feeder.deployNvngxDlss(dir, getRhiManifest, compareVersions, cacheDir, ghHeaders);
-  const ini = feeder.configureReShadeIni(dir);
+  // Luma ships no .fx effects (its shaders live under Luma\); pointing ReShade at the Feeder's
+  // reshade-shaders folder only logs "Failed to resolve search path" every launch.
+  const ini = feeder.configureReShadeIni(dir, { effectSearchPaths: '.\\' });
 
   fs.writeFileSync(
     path.join(dir, LUMA_DEPLOY_MARKER),

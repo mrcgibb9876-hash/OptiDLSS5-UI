@@ -1660,11 +1660,18 @@ const DLSS5_ONLY_FORCED = [
 const UPSCALER_KEY_FOR_API = { dx12: 'Dx12Upscaler', dx11: 'Dx11Upscaler', vulkan: 'VulkanUpscaler' };
 // Every API the game can run on gets its key, not just the one it defaults to: a Unity or Unreal
 // game that also ships a DX12 path must keep its DLSS there too, and an unused key is harmless.
+// The Neural Rendering pass runs in D3D12 (and Vulkan) only. A DLSS call that arrives through
+// the D3D11 NGX entry points -- Luma UE on Fallen Order, or any native D3D11 DLSS game -- has to
+// be lifted onto a D3D12 command list first, which is exactly what OptiScaler's dlss_12
+// (DLSSFeature_Dx11On12, the Dx11wDx12 interop path) does; plain dlss (DLSSFeature_Dx11) runs
+// native D3D11 DLSS and the NR pass never gets a chance to run. Found live (Fallen Order +
+// Luma, 2026-09-11): the feature was created, nothing evaluated, the panel said "waiting".
+const UPSCALER_VALUE_FOR_API = { dx11: 'dlss_12', dx12: 'dlss', vulkan: 'dlss' };
+
 function keepGamesOwnDlss(apis) {
   return apis
-    .map((api) => UPSCALER_KEY_FOR_API[api])
-    .filter(Boolean)
-    .map((key) => ({ section: 'Upscalers', key, value: 'dlss' }));
+    .filter((api) => UPSCALER_KEY_FOR_API[api])
+    .map((api) => ({ section: 'Upscalers', key: UPSCALER_KEY_FOR_API[api], value: UPSCALER_VALUE_FOR_API[api] || 'dlss' }));
 }
 
 // The one value that MUST be forced for a Feeder game: OptiScaler has to explicitly load
