@@ -105,7 +105,13 @@ German. It follows Windows by default (any Portuguese locale gets pt-BR, any Chi
 zh-CN, and so on) and Settings has a Language selector to pin one. Every string the manager draws
 goes through `src/renderer/i18n.js`; a language is one flat file under `src/renderer/locales/`
 mapping the English text to its translation. Anything a file does not cover falls back to English.
-The in-game panel is OptiScaler's and stays English.
+
+The in-game DLSS 5 panel (Alt+Home) speaks the same seven languages from engine v1.0.11. It follows
+Windows by default too; when you pin a language in the manager's Settings, the manager writes
+`[DlssNr] Language` into every installed game's `OptiScaler.ini` so the panel follows suit, and the
+panel's own Appearance section has the same selector for a per-game choice. Chinese and Korean draw
+with the fonts Windows ships (Microsoft YaHei, Malgun Gothic); nothing extra is bundled. OptiScaler's
+own shared menu stays English.
 
 Translations welcome. The existing files were written by the maintainer's tooling, not by native
 speakers, so corrections to any of them are as useful as new languages. To add one, copy
