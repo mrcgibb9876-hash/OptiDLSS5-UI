@@ -21,7 +21,7 @@ the missing-NR-file one below):
 ![Game grid, showing per-game OptiScaler status, engine/API badges, and a live warning](docs/screenshots/manager-game-grid.png)
 
 **Editing a game** covers per-game Neural Rendering source, Frame Generation, and — for a game with
-no native DLSS of its own — the DLSS5 Feeder deploy and its two Frame Generation options
+no native DLSS of its own (checked beside the exe and, for an Unreal game, under the plugin tree where UE keeps it — a game that ships DLSS there is never offered the Feeder) — the DLSS5 Feeder deploy and its two Frame Generation options
 side by side (OptiScaler's own FSRFG where it can run, Lossless Scaling where it can't):
 
 ![Edit Game modal, Feeder and Frame Generation section for a game with no native DLSS](docs/screenshots/edit-game-lossless.png)

@@ -341,4 +341,10 @@ window.I18N.register("zh-CN", {
   "This game already has native DLSS -- use the DLSS 5 only profile instead, not the Feeder.": "此游戏已有原生 DLSS -- 请改用“仅 DLSS 5”配置，而不是 Feeder。",
   "This game uses Luma UE for its DLSS call, not the Feeder -- see the Luma UE section.": "此游戏使用 Luma UE 提供 DLSS 调用，而不是 Feeder -- 请见 Luma UE 部分。",
   "not yet detected": "尚未检测到",
+  "This game ships its own DLSS ({file}), so the Feeder must not run here -- the two crash together. Remove it; OptiScaler then hooks the game's own DLSS.": "这款游戏自带 DLSS（{file}），Feeder 不能在这里运行 -- 两者同时存在会崩溃。请移除它；之后 OptiScaler 会挂接游戏自带的 DLSS。",
+  "This game ships its own DLSS, but the DLSS5 Feeder was deployed here too (an older version of this app could not see DLSS kept under an Unreal plugin folder). The two crash together -- remove the Feeder from Edit, then OptiScaler alone adds Neural Rendering on top of the game's own DLSS.": "这款游戏自带 DLSS，但 DLSS5 Feeder 也被部署到了这里（旧版本的本应用看不到 Unreal 插件文件夹中的 DLSS）。两者同时存在会崩溃 -- 请在“编辑”中移除 Feeder，然后仅靠 OptiScaler 就能在游戏自带 DLSS 之上添加 Neural Rendering。",
+  "Remove the DLSS5 Feeder (Edit)": "移除 DLSS5 Feeder（编辑）",
+  "Removing the DLSS5 Feeder…": "正在移除 DLSS5 Feeder…",
+  "DLSS5 Feeder removed ({list}).": "已移除 DLSS5 Feeder（{list}）。",
+  "Could not remove the DLSS5 Feeder: {error}": "无法移除 DLSS5 Feeder：{error}",
 });

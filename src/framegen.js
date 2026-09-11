@@ -58,6 +58,13 @@ function findGameFrameGenDll(dir) {
 }
 
 function findUnrealPluginFrameGenDll(exeDir) {
+  return findUnrealPluginFile(exeDir, FG_DLL_NAMES);
+}
+
+// The same bounded walk for any file name(s) NVIDIA's UE plugins keep in their tree -- see
+// native-dlss.js, which asks for nvngx_dlss.dll / sl.interposer.dll this way because a UE
+// game's own DLSS lives there and nowhere near the exe. names: lower-case file names.
+function findUnrealPluginFile(exeDir, names) {
   let root = exeDir;
   for (let up = 0; up <= ANCESTORS_TO_CHECK; up++) {
     // Only a folder that IS a UE root counts -- one with an Engine/ directory. Without this
@@ -66,7 +73,7 @@ function findUnrealPluginFrameGenDll(exeDir) {
     // the library would be searched -- finding some other game's DLL and offering to swap it.
     if (isDir(path.join(root, 'Engine'))) {
       for (const pluginsDir of pluginRootsUnder(root)) {
-        const hit = walkForDll(pluginsDir, 0);
+        const hit = walkForDll(pluginsDir, 0, names);
         if (hit) return hit;
       }
     }
@@ -93,16 +100,16 @@ function pluginRootsUnder(root) {
   return out;
 }
 
-function walkForDll(dir, depth) {
+function walkForDll(dir, depth, names) {
   if (depth > PLUGIN_WALK_MAX_DEPTH) return null;
   let entries = [];
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return null; }
   for (const e of entries) {
-    if (e.isFile() && FG_DLL_NAMES.includes(e.name.toLowerCase())) return path.join(dir, e.name);
+    if (e.isFile() && names.includes(e.name.toLowerCase())) return path.join(dir, e.name);
   }
   for (const e of entries) {
     if (!e.isDirectory()) continue;
-    const hit = walkForDll(path.join(dir, e.name), depth + 1);
+    const hit = walkForDll(path.join(dir, e.name), depth + 1, names);
     if (hit) return hit;
   }
   return null;
@@ -224,6 +231,7 @@ module.exports = {
   FG_DLL_NAMES,
   getFrameGenReleases,
   findGameFrameGenDll,
+  findUnrealPluginFile,
   readDllVersion,
   ensureFrameGenDllCache,
   swapFrameGenDll,

@@ -341,4 +341,10 @@ window.I18N.register("ko", {
   "This game already has native DLSS -- use the DLSS 5 only profile instead, not the Feeder.": "이 게임에는 이미 네이티브 DLSS가 있습니다 -- Feeder가 아닌 DLSS 5 전용 프로필을 사용하세요.",
   "This game uses Luma UE for its DLSS call, not the Feeder -- see the Luma UE section.": "이 게임은 DLSS 호출에 Feeder가 아닌 Luma UE를 사용합니다 -- Luma UE 섹션을 보세요.",
   "not yet detected": "아직 감지되지 않음",
+  "This game ships its own DLSS ({file}), so the Feeder must not run here -- the two crash together. Remove it; OptiScaler then hooks the game's own DLSS.": "이 게임은 자체 DLSS({file})를 포함하므로 Feeder를 여기서 실행하면 안 됩니다 -- 둘이 함께 있으면 충돌합니다. 제거하세요. 그러면 OptiScaler가 게임 자체 DLSS에 연결됩니다.",
+  "This game ships its own DLSS, but the DLSS5 Feeder was deployed here too (an older version of this app could not see DLSS kept under an Unreal plugin folder). The two crash together -- remove the Feeder from Edit, then OptiScaler alone adds Neural Rendering on top of the game's own DLSS.": "이 게임은 자체 DLSS를 포함하지만 DLSS5 Feeder도 여기에 배포되었습니다(이전 버전의 앱은 Unreal 플러그인 폴더에 있는 DLSS를 보지 못했습니다). 둘이 함께 있으면 충돌합니다 -- 편집에서 Feeder를 제거하면 OptiScaler만으로 게임 자체 DLSS 위에 Neural Rendering을 추가합니다.",
+  "Remove the DLSS5 Feeder (Edit)": "DLSS5 Feeder 제거 (편집)",
+  "Removing the DLSS5 Feeder…": "DLSS5 Feeder 제거 중…",
+  "DLSS5 Feeder removed ({list}).": "DLSS5 Feeder 제거됨({list}).",
+  "Could not remove the DLSS5 Feeder: {error}": "DLSS5 Feeder를 제거할 수 없습니다: {error}",
 });

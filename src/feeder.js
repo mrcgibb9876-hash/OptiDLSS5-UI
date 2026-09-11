@@ -44,6 +44,7 @@ const os = require('node:os');
 
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const { setIniKey, getIniKey } = require('./ini-merge');
+const nativeDlss = require('./native-dlss');
 
 const FEEDER_RELEASES_API = 'https://api.github.com/repos/jlrouzies-fr/DLSS5-Feeder/releases/latest';
 const FEEDER_ASSET_PATTERN = /^DLSS5-Feeder-.*\.zip$/i;
@@ -122,6 +123,9 @@ const MV_PROVIDERS = {
     // came out right once by that path and can't be trusted to every time).
     techniqueFile: 'MotionEstimation.fx',
     techniqueName: 'DRME',
+    // Everything deployMvProvider() extracts from that repo (its .fx and .fxh files), so
+    // removeFeederStack() can take exactly these back out and nothing else.
+    files: ['MotionEstimation.fx', 'MotionEstimation.fxh', 'MotionEstimationUI.fxh', 'MotionVectors.fxh'],
     default: true,
   },
   'lumenite-kernel': {
@@ -148,6 +152,7 @@ const MV_PROVIDERS = {
     // Same ordering requirement as reshade-motion-estimation above.
     techniqueFile: 'lumenite_Kernel.fx',
     techniqueName: 'Lumenite_Kernel',
+    files: [LUMENITEFX_KERNEL_FILE, ...LUMENITEFX_KERNEL_INCLUDES],
     default: false,
   },
 };
@@ -158,14 +163,13 @@ function mvProviderList() {
 
 // --- detection ----------------------------------------------------------------------
 
-// The inverse of hasNativeDlss() in main.js (not imported from there to avoid main.js<->this
-// module becoming circular -- every other module in this app that needs a main.js-side check
-// takes it as a parameter or duplicates the two-line fs check; this does the same). A game
-// needing the Feeder has neither a Streamline interposer nor its own nvngx_dlss.dll.
+// The inverse of hasNativeDlss() -- shared through native-dlss.js rather than imported from
+// main.js (which would make main.js<->this module circular). A game needing the Feeder has
+// neither a Streamline interposer nor its own nvngx_dlss.dll, beside the exe OR anywhere in
+// an Unreal plugin tree -- the second half is what an exe-folder-only check missed, and it
+// put the Feeder on top of a game's real DLSS (see native-dlss.js).
 function needsFeeder(dir) {
-  return !fs.existsSync(path.join(dir, 'sl.interposer.dll')) &&
-    !fs.existsSync(path.join(dir, 'sl.interposer.dll.original')) &&
-    !fs.existsSync(path.join(dir, 'nvngx_dlss.dll'));
+  return !nativeDlss.hasNativeDlss(dir);
 }
 
 // Stable marker that a Feeder deploy has actually happened here -- unlike needsFeeder(), this
@@ -525,10 +529,60 @@ async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifes
   const previousMarker = readFeederDeployMarker(dir);
   const feederVersion = results.addon.version || (previousMarker && previousMarker.feederVersion) || null;
   if (feederVersion) {
-    writeFeederDeployMarker(dir, { feederVersion, mvProviderId: providerId, deployedAt: new Date().toISOString() });
+    // placedNvngxDlss: whether THIS app put nvngx_dlss.dll here (as opposed to skipping one
+    // already present) -- removeFeederStack() only takes back what was placed.
+    const placedNvngxDlss = results.dlss.deployed || !!(previousMarker && previousMarker.placedNvngxDlss);
+    writeFeederDeployMarker(dir, { feederVersion, mvProviderId: providerId, placedNvngxDlss, deployedAt: new Date().toISOString() });
   }
 
   return results;
+}
+
+// Reverses deployFeederStack(): the add-on and its files, the shaders it placed (exactly the
+// ones the deploy lists, never the user's own effects), ReShade itself unless keepReShade
+// (Luma UE deploys the same plain ReShade64.dll and still needs it), and nvngx_dlss.dll when
+// this app placed it or the game ships its own elsewhere (the Unreal-plugin case: the copy
+// beside the exe is the duplicate that crashes the game's own DLSS). Does NOT touch
+// OptiScaler.ini -- main.js's feeder:remove resets [Plugins] LoadReshade and re-runs the
+// profile, for the same reason deployFeederStack() leaves the ini to main.js.
+async function removeFeederStack(dir, { keepReShade = false } = {}) {
+  const removed = [];
+  const kept = [];
+  const marker = readFeederDeployMarker(dir);
+  const rm = async (rel) => {
+    const p = path.join(dir, rel);
+    if (!fs.existsSync(p)) return;
+    await fsp.rm(p, { force: true });
+    removed.push(rel);
+  };
+
+  for (const name of ['dlss5-feed.addon64', 'dlss5-feed.cfg', 'dlss5-feed.log']) await rm(name);
+
+  const shaderDir = path.join('reshade-shaders', 'Shaders');
+  const shaders = ['DLSS5_Feed.fx', ...RESHADE_COMMON_HEADERS];
+  for (const provider of Object.values(MV_PROVIDERS)) shaders.push(...provider.files);
+  for (const rel of shaders) await rm(path.join(shaderDir, ...rel.split('/')));
+  // Only the folders the deploy created, and only once nothing else is left in them.
+  for (const rel of [path.join(shaderDir, 'include'), shaderDir, 'reshade-shaders']) {
+    const p = path.join(dir, rel);
+    try { if (fs.readdirSync(p).length === 0) fs.rmdirSync(p); } catch {}
+  }
+
+  if (keepReShade) {
+    kept.push(RESHADE_DLL_NAME + ' (Luma UE still needs it)');
+  } else {
+    for (const name of [RESHADE_DLL_NAME, 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log']) await rm(name);
+  }
+
+  const shipped = nativeDlss.shippedDlssPath(dir);
+  if (shipped || !(marker && marker.placedNvngxDlss === false)) {
+    await rm('nvngx_dlss.dll');
+  } else {
+    kept.push('nvngx_dlss.dll (was already here before the Feeder)');
+  }
+
+  await rm(FEEDER_DEPLOY_MARKER);
+  return { removed, kept, shippedDlss: shipped };
 }
 
 module.exports = {
@@ -539,6 +593,7 @@ module.exports = {
   feederDeployed,
   feederReadiness,
   feederUpdateCheck,
+  removeFeederStack,
   deployReShade,
   deployReShadeCommonHeaders,
   deployFeederAddon,

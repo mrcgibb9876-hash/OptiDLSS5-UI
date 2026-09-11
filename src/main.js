@@ -13,6 +13,7 @@ const injector = require('./injector');
 const feeder = require('./feeder');
 const lossless = require('./lossless');
 const lumaue = require('./lumaue');
+const nativeDlss = require('./native-dlss');
 const { recommendRoute, withApiOverride, API_OVERRIDE_VALUES } = require('./route');
 const gpu = require('./gpu');
 const amdnr = require('./amdnr');
@@ -260,6 +261,17 @@ const lumaUeCacheDir = () => path.join(userDataDir(), 'lumaue-cache');
 ipcMain.handle('feeder:readiness', async (_evt, exePath) => {
   if (!exePath || !fs.existsSync(exePath)) return { ready: false, reason: 'Game .exe not found' };
   const dir = gameDir(exePath);
+  // A Feeder on a game that ships DLSS (an older version of this app could not see DLSS kept
+  // under an Unreal plugin folder): the section stays open, but only to remove it -- the
+  // Feeder's synthetic DLSS call and the game's real one crash together (Code Vein 2, 2026-09-11).
+  const shipped = nativeDlss.shippedDlssPath(dir);
+  if (shipped && feeder.feederDeployed(dir)) {
+    return {
+      ready: false, needed: true, supported: false, misdeployed: true,
+      reason: 'This game ships its own DLSS ({file}), so the Feeder must not run here -- the two crash together. Remove it; OptiScaler then hooks the game\'s own DLSS.',
+      reasonVars: { file: shipped },
+    };
+  }
   if (!feeder.needsFeeder(dir) && !feeder.feederDeployed(dir)) {
     return { ready: false, needed: false, reason: 'This game already has native DLSS -- use the DLSS 5 only profile instead, not the Feeder.' };
   }
@@ -395,7 +407,7 @@ const LOSSLESS_MARKER = '.dlss5ui-lossless.json';
 // autoConfigureGame's isFeederGame guard exists for). Those games stay eligible: for them
 // Lossless is the only Frame Generation route there is.
 function losslessEligibility(dir) {
-  const synthesised = feeder.needsFeeder(dir) || feeder.feederDeployed(dir) || lumaue.lumaUeDeployed(dir);
+  const synthesised = isFeederGame(dir) || lumaue.lumaUeDeployed(dir);
   if (hasNativeDlss(dir) && !synthesised) {
     return {
       eligible: false,
@@ -479,6 +491,29 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
       licenseConfirmed: !!licenseConfirmed,
     });
     return { ok: true, ...results };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// Undoes feeder:deploy for one game. Two callers: a mis-deployed Feeder on a game that ships
+// its own DLSS (feeder:readiness's misdeployed), and a user simply done with it. Resets
+// [Plugins] LoadReshade (unless Luma UE still needs ReShade loaded) and re-runs the profile,
+// so a game that ships DLSS comes out on the DLSS 5 only profile it should have had.
+ipcMain.handle('feeder:remove', async (_evt, exePath) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const keepReShade = lumaue.lumaUeDeployed(dir);
+    const result = await feeder.removeFeederStack(dir, { keepReShade });
+    const iniPath = path.join(dir, 'OptiScaler.ini');
+    let ini = [];
+    if (fs.existsSync(iniPath)) {
+      if (!keepReShade) ini = patchIniValues(iniPath, [{ section: 'Plugins', key: 'LoadReshade', value: 'auto' }]);
+      const { applied } = await autoConfigureGame(dir, exePath);
+      ini = [...ini, ...(applied || [])];
+    }
+    return { ok: true, ...result, ini };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -911,7 +946,7 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
     // 2026-09-09): the Feeder couldn't find an injected OptiScaler at all ("this game never
     // loaded a DLL of that name"), and two independent proxies (even different DLL names) meant
     // ReShade's own Present hook never engaged. Do not reintroduce the injector here.
-    const feederGame = feeder.needsFeeder(dir) || feeder.feederDeployed(dir);
+    const feederGame = isFeederGame(dir);
 
     let proxy = null;
     let proxyError = null;
@@ -1584,10 +1619,19 @@ function fixREFrameworkConfig(dir) {
 // frame gen is not just unnecessary, forcing FrameGen on is the Cyberpunk crash. A game with
 // none of these signals gets the full config below -- OptiScaler is doing the upscaling
 // there, so it needs to be told which upscaler to use.
+// See native-dlss.js: beside the exe OR under an Unreal plugin tree -- the exe-folder-only
+// check this used to be put the Feeder on top of Code Vein 2's real DLSS (2026-09-11).
 function hasNativeDlss(dir) {
-  return fs.existsSync(path.join(dir, 'sl.interposer.dll')) ||
-    fs.existsSync(path.join(dir, 'sl.interposer.dll.original')) ||
-    fs.existsSync(path.join(dir, 'nvngx_dlss.dll'));
+  return nativeDlss.hasNativeDlss(dir);
+}
+
+// A game the Feeder is (or was) the DLSS source for. needsFeeder() flips false once the deploy
+// places nvngx_dlss.dll, so the deploy marker keeps it true afterwards -- but never for a game
+// that ships its own DLSS: a Feeder there is a mis-deploy (see feeder:readiness), and treating
+// it as a Feeder game would keep forcing [Plugins] LoadReshade=true, i.e. keep loading the
+// add-on that crashes it.
+function isFeederGame(dir) {
+  return !nativeDlss.shipsNativeDlss(dir) && (feeder.needsFeeder(dir) || feeder.feederDeployed(dir));
 }
 
 // The one value that MUST be forced for a "DLSS 5 only" game: a full install from before the
@@ -1666,7 +1710,7 @@ function optiFgReadiness(dir, api) {
   // _nvngx.dll while the Feeder's own private DX12 NGX session is still live, and NVIDIA's
   // side null-derefs. Confirmed via a symbolicated minidump (Bodycam, 2026-09-09) -- not a
   // theoretical risk. Block the combo until that interaction is actually fixed.
-  if (feeder.needsFeeder(dir) || feeder.feederDeployed(dir)) {
+  if (isFeederGame(dir)) {
     return { supported: false, reason: 'Not available together with the DLSS5 Feeder yet -- this combination crashed on a real test (confirmed via a symbolicated crash dump). Blocked until fixed.' };
   }
   const ffxLoader = path.join(dir, 'OptiScaler', 'amd_fidelityfx_loader_dx12.dll');
@@ -1687,8 +1731,8 @@ async function autoConfigureGame(dir, exePath) {
   // placed by the Feeder deploy itself, not the game, so this alone can't tell native DLSS
   // apart from Feeder-supplied. Excluded explicitly: Feeder + FSRFG crashed on a real game
   // (confirmed via a symbolicated minidump) -- see optiFgReadiness's own guard above.
-  const isFeederGame = feeder.needsFeeder(dir) || feeder.feederDeployed(dir);
-  const optiFgOn = dlss5Only && api === 'dx12' && !isFeederGame && isOptiFgEnabled(dir);
+  const feederGame = isFeederGame(dir);
+  const optiFgOn = dlss5Only && api === 'dx12' && !feederGame && isOptiFgEnabled(dir);
   const edits = [];
 
   if (!dlss5Only) edits.push(...keepGamesOwnDlss(apis));
@@ -1735,7 +1779,7 @@ async function autoConfigureGame(dir, exePath) {
   let forced = dlss5Only
     ? patchIniValues(iniPath, [...(optiFgOn ? OPTIFG_FORCED : DLSS5_ONLY_FORCED), ...keepGamesOwnDlss(apis)])
     : [];
-  if (feeder.feederDeployed(dir)) forced = [...forced, ...patchIniValues(iniPath, LOAD_RESHADE_FORCED)];
+  if (feederGame && feeder.feederDeployed(dir)) forced = [...forced, ...patchIniValues(iniPath, LOAD_RESHADE_FORCED)];
   // Luma UE deploys its own ReShade64.dll the same non-proxying way the Feeder does (see
   // lumaue.js's file header) -- OptiScaler needs the same explicit LoadReshade nudge to load it.
   if (lumaue.lumaUeDeployed(dir)) forced = [...forced, ...patchIniValues(iniPath, LOAD_RESHADE_FORCED)];

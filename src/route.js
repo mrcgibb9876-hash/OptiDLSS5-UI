@@ -41,6 +41,7 @@ const fs = require('node:fs');
 const feeder = require('./feeder');
 const lumaue = require('./lumaue');
 const amdnr = require('./amdnr');
+const nativeDlss = require('./native-dlss');
 
 // A user's per-game API choice laid over the detection result: the chosen API becomes the
 // primary, joins the list of APIs the game runs on (so keepGamesOwnDlss writes its upscaler key
@@ -71,15 +72,21 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
   const feederDeployed = feeder.feederDeployed(dir);
   const lumaDeployed = lumaue.lumaUeDeployed(dir);
   const optiInstalled = optiScalerInstalled(dir);
-  // needsFeeder() is exactly the inverse of hasNativeDlss() in main.js (same three files), and
-  // flips the moment a Feeder or Luma deploy places nvngx_dlss.dll -- hence the two markers.
-  const shippedDlss = !feeder.needsFeeder(dir) && !feederDeployed && !lumaDeployed;
+  // shipsNativeDlss: the game's own Streamline/DLSS files (beside the exe or in an Unreal
+  // plugin tree) -- evidence no deploy of ours can fake, so it wins over the markers. Otherwise
+  // needsFeeder() is the inverse of hasNativeDlss() and flips the moment a Feeder or Luma
+  // deploy places nvngx_dlss.dll -- hence the two markers.
+  const shipsDlss = nativeDlss.shipsNativeDlss(dir);
+  const shippedDlss = shipsDlss || (!feeder.needsFeeder(dir) && !feederDeployed && !lumaDeployed);
+  // A Feeder on a game that ships DLSS: an older version of this app could not see DLSS kept
+  // under an Unreal plugin folder and deployed it anyway. The two crash together.
+  const feederMisdeployed = shipsDlss && feederDeployed;
 
   const finish = (route, label, reason, steps, reasonVars = null) => {
     const next = steps.find((s) => !s.done) || null;
     return {
       route, label, reason, reasonVars, steps, gpuVendor,
-      optiInstalled, feederDeployed, lumaDeployed,
+      optiInstalled, feederDeployed, lumaDeployed, feederMisdeployed,
       complete: steps.length > 0 && !next,
       nextStep: next ? next.label : null,
     };
@@ -117,6 +124,17 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
   if (detected.recommend === 'unsupported') {
     return finish('unsupported', 'Not supported',
       `${detected.reason || 'This game only uses a graphics API OptiScaler cannot hook (DX9/DX10/OpenGL).'}`, []);
+  }
+
+  if (feederMisdeployed) {
+    return finish('optiscaler', 'OptiScaler',
+      'This game ships its own DLSS, but the DLSS5 Feeder was deployed here too (an older version of this app ' +
+      'could not see DLSS kept under an Unreal plugin folder). The two crash together -- remove the Feeder from ' +
+      'Edit, then OptiScaler alone adds Neural Rendering on top of the game\'s own DLSS.',
+      [
+        { key: 'feeder-remove', label: 'Remove the DLSS5 Feeder (Edit)', done: false },
+        { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
+      ]);
   }
 
   if (shippedDlss) {

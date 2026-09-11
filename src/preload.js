@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('api', {
   feederCheckUpdate: (exePath) => ipcRenderer.invoke('feeder:checkUpdate', exePath),
   feederConfirmProviderLicense: (providerId) => ipcRenderer.invoke('feeder:confirmProviderLicense', providerId),
   feederDeploy: (exePath, mvProviderId, options) => ipcRenderer.invoke('feeder:deploy', { exePath, mvProviderId, ...options }),
+  feederRemove: (exePath) => ipcRenderer.invoke('feeder:remove', exePath),
 
   lumaUeReadiness: (exePath) => ipcRenderer.invoke('lumaue:readiness', { exePath }),
   lumaUeDeploy: (exePath, options) => ipcRenderer.invoke('lumaue:deploy', { exePath, ...options }),

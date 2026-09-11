@@ -341,4 +341,10 @@ window.I18N.register("es", {
   "This game already has native DLSS -- use the DLSS 5 only profile instead, not the Feeder.": "Este juego ya tiene DLSS nativo -- usa el perfil solo DLSS 5 en su lugar, no el Feeder.",
   "This game uses Luma UE for its DLSS call, not the Feeder -- see the Luma UE section.": "Este juego usa Luma UE para su llamada DLSS, no el Feeder -- mira la sección Luma UE.",
   "not yet detected": "aún sin detectar",
+  "This game ships its own DLSS ({file}), so the Feeder must not run here -- the two crash together. Remove it; OptiScaler then hooks the game's own DLSS.": "Este juego trae su propio DLSS ({file}), así que el Feeder no debe ejecutarse aquí -- los dos juntos hacen que se cierre. Quítalo; OptiScaler se engancha entonces al DLSS propio del juego.",
+  "This game ships its own DLSS, but the DLSS5 Feeder was deployed here too (an older version of this app could not see DLSS kept under an Unreal plugin folder). The two crash together -- remove the Feeder from Edit, then OptiScaler alone adds Neural Rendering on top of the game's own DLSS.": "Este juego trae su propio DLSS, pero el DLSS5 Feeder también se desplegó aquí (una versión anterior de esta app no veía el DLSS guardado en una carpeta de plugin de Unreal). Los dos juntos hacen que se cierre -- quita el Feeder desde Editar y OptiScaler por sí solo añade Neural Rendering sobre el DLSS propio del juego.",
+  "Remove the DLSS5 Feeder (Edit)": "Quitar el DLSS5 Feeder (Editar)",
+  "Removing the DLSS5 Feeder…": "Quitando el DLSS5 Feeder…",
+  "DLSS5 Feeder removed ({list}).": "DLSS5 Feeder quitado ({list}).",
+  "Could not remove the DLSS5 Feeder: {error}": "No se pudo quitar el DLSS5 Feeder: {error}",
 });

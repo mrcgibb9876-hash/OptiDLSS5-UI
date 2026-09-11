@@ -796,11 +796,15 @@ async function loadFeederSection(game) {
   const readiness = await window.api.feederReadiness(game.exePath);
   const status = $('#game-feeder-status');
   const updateBtn = $('#btn-feeder-update');
+  const removeBtn = $('#btn-feeder-remove');
   if (!readiness.needed) {
     section.classList.add('hidden');
     return;
   }
   section.classList.remove('hidden');
+  // Remove is there whenever the add-on is on disk -- and is the ONLY control for a Feeder
+  // that landed on a game that ships its own DLSS (misdeployed: the two crash together).
+  removeBtn.classList.toggle('hidden', !(readiness.misdeployed || readiness.addonInstalled));
 
   if (!readiness.supported) {
     status.className = 'status-line';
@@ -893,6 +897,24 @@ $('#btn-feeder-update').addEventListener('click', () => {
   if (!editingGameId) return;
   const game = games.find((x) => x.id === editingGameId);
   deployFeederStack(game, $('#game-feeder-mv-provider').value, true);
+});
+
+$('#btn-feeder-remove').addEventListener('click', async () => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  $('#game-feeder-status').textContent = t('Removing the DLSS5 Feeder…');
+  const res = await window.api.feederRemove(game.exePath);
+  if (res.ok) {
+    toast(t('DLSS5 Feeder removed ({list}).', { list: res.removed.join(', ') }));
+  } else {
+    toast(t('Could not remove the DLSS5 Feeder: {error}', { error: res.error }));
+  }
+  // Everything that keyed off "Feeder game" changes with it: the route tag, OptiFG, Lossless.
+  await loadRouteStatus(game);
+  await loadFeederSection(game);
+  await loadOptiFgSection(game);
+  await loadLosslessSection(game);
+  renderGrid();
 });
 
 // Scoped to Feeder games for now -- that's the only case this was actually verified against
