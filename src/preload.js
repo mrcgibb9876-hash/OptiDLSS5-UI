@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('api', {
   bundledEngine: () => ipcRenderer.invoke('update:bundledEngine'),
 
   gameStatus: (exePath) => ipcRenderer.invoke('game:status', exePath),
+  gameRoute: (exePath, detected) => ipcRenderer.invoke('game:route', { exePath, detected }),
   detectPath: (exePath) => ipcRenderer.invoke('game:detect-path', exePath),
   detectPathIfStale: (exePath, stored) => ipcRenderer.invoke('game:detect-path-if-stale', { exePath, stored }),
   installGame: (payload) => ipcRenderer.invoke('game:install', payload),

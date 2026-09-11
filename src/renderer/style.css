@@ -180,6 +180,14 @@ body {
 .engine-badge-unsupported { background: rgba(229,72,77,0.16); color: #e5484d; border: 1px solid rgba(229,72,77,0.4); }
 .engine-badge-unknown { background: rgba(255,255,255,0.08); color: var(--text-dim); border: 1px solid rgba(255,255,255,0.15); }
 .api-badge { font-weight: 600; opacity: 0.9; }
+/* The route tag: what this game should get, and whether it is all there yet. */
+.route-badge-todo { background: rgba(88,166,255,0.16); color: #8ec5ff; border: 1px solid rgba(88,166,255,0.45); }
+.route-badge-done { background: rgba(118,185,0,0.18); color: #9ed94f; border: 1px solid rgba(118,185,0,0.4); }
+.route-badge-unsupported { background: rgba(229,72,77,0.16); color: #e5484d; border: 1px solid rgba(229,72,77,0.4); }
+.route-badge-unknown { background: rgba(255,255,255,0.08); color: var(--text-dim); border: 1px solid rgba(255,255,255,0.15); }
+/* Three chips (engine, API, route) no longer fit one card line; the route tag is the one that
+   must never be the part clipped off. */
+.card-path.card-recommend { white-space: normal; overflow: visible; text-overflow: clip; line-height: 2; }
 
 .card-body {
   padding: 12px;
