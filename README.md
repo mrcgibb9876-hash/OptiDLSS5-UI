@@ -100,13 +100,18 @@ DLSS-only game) is unverified upstream.
 
 ## Language
 
-The manager runs in English, Brazilian Portuguese, Russian or Korean. It follows Windows by default
-(any Portuguese locale gets pt-BR, any Russian locale gets ru, any Korean locale gets ko) and
-Settings has a Language selector to pin one. Every string the manager draws goes through
-`src/renderer/i18n.js`; a language is one flat file under `src/renderer/locales/` mapping the
-English text to its translation, so adding another is a matter of copying `pt-BR.js` and
-translating the right-hand side. Anything a file does not cover falls back to English. The in-game
-panel is OptiScaler's and stays English.
+The manager runs in English, Brazilian Portuguese, Russian, Korean, Simplified Chinese, Spanish or
+German. It follows Windows by default (any Portuguese locale gets pt-BR, any Chinese locale gets
+zh-CN, and so on) and Settings has a Language selector to pin one. Every string the manager draws
+goes through `src/renderer/i18n.js`; a language is one flat file under `src/renderer/locales/`
+mapping the English text to its translation. Anything a file does not cover falls back to English.
+The in-game panel is OptiScaler's and stays English.
+
+Translations welcome. The existing files were written by the maintainer's tooling, not by native
+speakers, so corrections to any of them are as useful as new languages. To add one, copy
+`src/renderer/locales/pt-BR.js`, translate the right-hand side of each line (keep the `{placeholders}`
+and HTML tags exactly as they are), register it under its own code, and add it to the selector and
+script list in `src/renderer/index.html` and to `detect()` in `i18n.js`.
 
 ## Frame Generation for games with no DLSS of their own
 
