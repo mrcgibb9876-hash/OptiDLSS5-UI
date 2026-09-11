@@ -352,4 +352,6 @@ window.I18N.register("zh-CN", {
   "Anti-cheat present ({file}) -- OptiScaler is for single-player games; using it in a game that goes online risks a ban.": "检测到反作弊（{file}）-- OptiScaler 面向单机游戏；在会联网的游戏中使用有封号风险。",
   "ReShade is already installed here as {file}. Install replaces it with OptiScaler -- pick Launch mode: Injector in Edit to keep both.": "此处已安装 ReShade（{file}）。安装会用 OptiScaler 替换它 -- 在“编辑”中选择启动模式：Injector 可同时保留两者。",
   "{file} v{version} beside the exe predates Shader Model 5.1, so OptiScaler's shaders can silently fail to compile -- rename it and Windows' own copy loads instead.": "exe 旁的 {file} v{version} 早于 Shader Model 5.1，OptiScaler 的着色器可能静默编译失败 -- 将其重命名后会改为加载 Windows 自带副本。",
+  "The DLSS5 Feeder is deployed here. Luma UE and the Feeder are both ReShade add-ons supplying the DLSS call, and only one can run -- Deploy removes the Feeder first, then puts Luma UE in.": "这里已部署 DLSS5 Feeder。Luma UE 和 Feeder 都是提供 DLSS 调用的 ReShade 插件，只能运行一个 -- “部署”会先移除 Feeder，再装入 Luma UE。",
+  "Deploy Luma UE (removes the Feeder first)": "部署 Luma UE（先移除 Feeder）",
 });

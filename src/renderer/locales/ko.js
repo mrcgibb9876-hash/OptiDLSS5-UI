@@ -352,4 +352,6 @@ window.I18N.register("ko", {
   "Anti-cheat present ({file}) -- OptiScaler is for single-player games; using it in a game that goes online risks a ban.": "안티치트가 있습니다({file}) -- OptiScaler는 싱글플레이 게임용입니다. 온라인에 접속하는 게임에서 사용하면 밴 위험이 있습니다.",
   "ReShade is already installed here as {file}. Install replaces it with OptiScaler -- pick Launch mode: Injector in Edit to keep both.": "ReShade가 이미 {file}(으)로 설치되어 있습니다. 설치하면 OptiScaler로 대체됩니다 -- 둘 다 유지하려면 편집에서 실행 모드: Injector를 선택하세요.",
   "{file} v{version} beside the exe predates Shader Model 5.1, so OptiScaler's shaders can silently fail to compile -- rename it and Windows' own copy loads instead.": "exe 옆의 {file} v{version}은(는) Shader Model 5.1 이전 버전이라 OptiScaler 셰이더가 조용히 컴파일에 실패할 수 있습니다 -- 이름을 바꾸면 Windows 자체 사본이 로드됩니다.",
+  "The DLSS5 Feeder is deployed here. Luma UE and the Feeder are both ReShade add-ons supplying the DLSS call, and only one can run -- Deploy removes the Feeder first, then puts Luma UE in.": "여기에 DLSS5 Feeder가 배포되어 있습니다. Luma UE와 Feeder는 모두 DLSS 호출을 제공하는 ReShade 애드온이며 하나만 실행할 수 있습니다 -- 배포하면 먼저 Feeder를 제거한 뒤 Luma UE를 넣습니다.",
+  "Deploy Luma UE (removes the Feeder first)": "Luma UE 배포 (Feeder를 먼저 제거)",
 });

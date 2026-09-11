@@ -539,6 +539,11 @@ ipcMain.handle('lumaue:deploy', async (_evt, { exePath, force, licenseConfirmed 
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     if (!lumaue.isFallenOrder(exePath)) throw new Error('Luma UE is only offered for STAR WARS Jedi: Fallen Order');
     const dir = gameDir(exePath);
+    // Hand-over from the Feeder: the two are both ReShade add-ons supplying the DLSS call and
+    // cannot share one ReShade. Its ReShade64.dll goes too -- Luma's deploy places its own.
+    const feederRemoved = feeder.feederDeployed(dir)
+      ? await feeder.removeFeederStack(dir, { keepReShade: false })
+      : null;
     const results = await lumaue.deployLumaUeStack(dir, {
       cacheDir: lumaUeCacheDir(),
       getRhiManifest,
@@ -553,7 +558,7 @@ ipcMain.handle('lumaue:deploy', async (_evt, { exePath, force, licenseConfirmed 
     // already-installed game left ReShade unloaded (no Luma overlay, no DLSS call, the NR panel
     // stuck on "waiting") until the next launch of this app. Run it now.
     const configured = fs.existsSync(path.join(dir, 'OptiScaler.ini')) ? await autoConfigureGame(dir, exePath) : null;
-    return { ok: true, ...results, autoConfigured: configured ? configured.applied : [], optiScalerInstalled: !!configured };
+    return { ok: true, ...results, feederRemoved, autoConfigured: configured ? configured.applied : [], optiScalerInstalled: !!configured };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }

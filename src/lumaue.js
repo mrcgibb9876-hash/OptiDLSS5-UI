@@ -112,22 +112,23 @@ function lumaUeReadiness(dir, exePath) {
     };
   }
 
-  // Both are ReShade add-ons that supply the DLSS call; two at once means two DLSS sources
-  // fighting over one ReShade. The Feeder section has Remove for exactly this hand-over.
-  if (fs.existsSync(path.join(dir, 'dlss5-feed.addon64'))) {
-    return {
-      supported: false,
-      reason: 'Remove the DLSS5 Feeder first (its section above has Remove) -- Luma UE and the Feeder are both ReShade add-ons supplying the DLSS call, and only one can run.',
-    };
-  }
-
   const reshadeInstalled = fs.existsSync(path.join(dir, RESHADE_DLL_NAME));
   const addonInstalled = fs.existsSync(path.join(dir, LUMA_ADDON_DEST_NAME));
   const shadersInstalled = fs.existsSync(path.join(dir, 'Luma', 'Global', 'Luma_Copy_PS.hlsl'));
   const dlssInstalled = fs.existsSync(path.join(dir, 'nvngx_dlss.dll'));
 
+  // Both are ReShade add-ons that supply the DLSS call; two at once means two DLSS sources
+  // fighting over one ReShade. Still supported -- the section stays open and Deploy does the
+  // hand-over itself (lumaue:deploy removes the Feeder first). Hiding the section here is what
+  // read as "still no Luma" to a real user (2026-09-11).
+  const blockedByFeeder = !addonInstalled && fs.existsSync(path.join(dir, 'dlss5-feed.addon64'));
+
   return {
     supported: true,
+    blockedByFeeder,
+    reason: blockedByFeeder
+      ? 'The DLSS5 Feeder is deployed here. Luma UE and the Feeder are both ReShade add-ons supplying the DLSS call, and only one can run -- Deploy removes the Feeder first, then puts Luma UE in.'
+      : null,
     knownIssue: LUMA_KNOWN_ISSUE,
     licenseSummary: LUMA_LICENSE_SUMMARY,
     reshadeInstalled,

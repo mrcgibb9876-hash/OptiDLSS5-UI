@@ -1288,6 +1288,7 @@ async function loadLumaUeSection(game) {
   knownIssue.textContent = readiness.knownIssue || '';
   licenseText.textContent = readiness.licenseSummary || '';
   deployBtn.disabled = !licenseCheckbox.checked;
+  deployBtn.textContent = readiness.blockedByFeeder ? t('Deploy Luma UE (removes the Feeder first)') : t('Deploy Luma UE');
   // The workaround used to be a blind question; now the GPU is known it is pre-answered, and
   // still a checkbox the user can untick.
   if (gpu.vendor === 'amd' || gpu.vendor === 'intel') $('#game-lumaue-amd-intel').checked = true;
@@ -1295,9 +1296,11 @@ async function loadLumaUeSection(game) {
   const yn = (v) => (v ? t('yes') : t('no'));
   status.textContent = readiness.complete
     ? t("Deployed -- select DLSS in Luma's own overlay (Home key) in-game.")
-    : t('Not yet deployed (ReShade64.dll: {reshade}, addon: {addon}, shaders: {shaders}, nvngx_dlss.dll: {dlss}).', {
-      reshade: yn(readiness.reshadeInstalled), addon: yn(readiness.addonInstalled), shaders: yn(readiness.shadersInstalled), dlss: yn(readiness.dlssInstalled),
-    });
+    : readiness.blockedByFeeder
+      ? t(readiness.reason)
+      : t('Not yet deployed (ReShade64.dll: {reshade}, addon: {addon}, shaders: {shaders}, nvngx_dlss.dll: {dlss}).', {
+        reshade: yn(readiness.reshadeInstalled), addon: yn(readiness.addonInstalled), shaders: yn(readiness.shadersInstalled), dlss: yn(readiness.dlssInstalled),
+      });
 
   // Unprompted, once per game: the deploy button alone turned out not to be enough -- a real
   // tester deployed nothing at all and the log showed no trace of Luma ever having run, which
@@ -1339,6 +1342,7 @@ $('#btn-lumaue-deploy').addEventListener('click', async () => {
   try {
     const result = await window.api.lumaUeDeploy(game.exePath, { licenseConfirmed });
     if (!result.ok) throw new Error(result.error || t('Deploy failed'));
+    if (result.feederRemoved) toast(t('DLSS5 Feeder removed ({list}).', { list: result.feederRemoved.removed.join(', ') }));
     toast(result.deployed ? t('Deployed Luma UE for this game.') : t('Luma UE was already deployed.'));
     if (!result.optiScalerInstalled) {
       toast(t('OptiScaler is not installed for this game yet -- click Install on its card; Luma only loads through OptiScaler.'));
@@ -1353,7 +1357,12 @@ $('#btn-lumaue-deploy').addEventListener('click', async () => {
   } catch (error) {
     toast(t('Could not deploy Luma UE: {error}', { error: error.message }));
   }
-  loadLumaUeSection(game);
+  // The Feeder section, the route tag and Lossless all keyed off "Feeder game" -- refresh them.
+  await loadRouteStatus(game);
+  await loadFeederSection(game);
+  await loadLumaUeSection(game);
+  await loadLosslessSection(game);
+  renderGrid();
 });
 
 function closeGameModal() {
