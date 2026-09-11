@@ -406,7 +406,9 @@ async function loadFrameGenSection(game) {
   }
   select.value = '';
   status.className = 'status-line';
-  status.textContent = `${state.dll}: currently ${state.currentVersion || 'unknown version'}` +
+  // For an Unreal game the DLL lives under the plugin tree, not beside the exe -- say where.
+  const where = state.relativeTo && state.relativeTo !== state.dll ? ` (${state.relativeTo})` : '';
+  status.textContent = `${state.dll}${where}: currently ${state.currentVersion || 'unknown version'}` +
     (state.swapped ? ' (swapped by this app -- original backed up, Restore puts it back)' : '');
 }
 

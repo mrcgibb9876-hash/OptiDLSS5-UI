@@ -116,7 +116,9 @@ ipcMain.handle('framegen:state', async (_evt, exePath) => {
   const dir = gameDir(exePath);
   const state = framegen.frameGenSwapState(dir);
   if (state.hasFrameGen) {
-    state.currentVersion = await framegen.readDllVersion(execFileAsync, path.join(dir, state.dll));
+    // state.dllPath, not path.join(dir, state.dll): an Unreal game keeps the DLL under its
+    // plugin tree, not beside the exe.
+    state.currentVersion = await framegen.readDllVersion(execFileAsync, state.dllPath);
   }
   return state;
 });
