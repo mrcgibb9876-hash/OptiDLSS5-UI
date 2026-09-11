@@ -50,6 +50,13 @@ contextBridge.exposeInMainWorld('api', {
 
   gameStatus: (exePath) => ipcRenderer.invoke('game:status', exePath),
   gameRoute: (exePath, detected) => ipcRenderer.invoke('game:route', { exePath, detected }),
+  gpuInfo: () => ipcRenderer.invoke('gpu:info'),
+
+  amdNrStatus: (exePath, api) => ipcRenderer.invoke('amdnr:status', { exePath, api }),
+  amdNrLatest: () => ipcRenderer.invoke('amdnr:latest'),
+  amdNrOpenReleasePage: () => ipcRenderer.invoke('amdnr:openReleasePage'),
+  amdNrDeployNrModel: (exePath, options) => ipcRenderer.invoke('amdnr:deployNrModel', { exePath, ...options }),
+  amdNrRunSetup: (exePath) => ipcRenderer.invoke('amdnr:runSetup', exePath),
   detectPath: (exePath) => ipcRenderer.invoke('game:detect-path', exePath),
   detectPathIfStale: (exePath, stored) => ipcRenderer.invoke('game:detect-path-if-stale', { exePath, stored }),
   installGame: (payload) => ipcRenderer.invoke('game:install', payload),
