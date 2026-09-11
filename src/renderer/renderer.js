@@ -99,6 +99,7 @@ async function renderGrid() {
         <div class="card-title">${escapeHtml(game.name)}</div>
         <div class="card-path" title="${escapeHtml(game.exePath)}">${escapeHtml(game.exePath)}</div>
         <div class="card-path card-recommend" title="Which install path suits this game">Checking graphics API…</div>
+        <div class="card-warning card-route-next hidden"></div>
         ${(status.warnings || []).map((w) => `<div class="card-warning" title="${escapeHtml(w.message)}">⚠ ${escapeHtml(w.message)}</div>`).join('')}
         <div class="card-actions">
           <button class="btn ${backends.optiscaler ? 'btn-danger' : 'btn-primary'} btn-install">${backends.optiscaler ? 'Remove OptiScaler' : 'Install OptiScaler'}</button>
@@ -202,9 +203,37 @@ async function applyRecommendation(game, card, backends) {
   if (engineText) chips.push(`<span class="engine-badge ${badgeClass}" title="${title}">${escapeHtml(engineText)}</span>`);
   if (detected.apiBadge) chips.push(`<span class="engine-badge api-badge ${badgeClass}" title="${title}">${escapeHtml(detected.apiBadge)}</span>`);
 
+  // The route tag: which stack this game should get (OptiScaler alone, + Feeder, + Luma UE), and
+  // whether it is all there yet -- decided in main.js (route.js) from the folder and the cached
+  // detection above, so the card answers "what do I click" before the Edit dialog ever opens.
+  const route = await window.api.gameRoute(game.exePath, detected);
+  const routeClass = route.route === 'unsupported' ? 'route-badge-unsupported'
+    : route.route === 'unknown' ? 'route-badge-unknown'
+    : route.complete ? 'route-badge-done'
+    : 'route-badge-todo';
+  const routeText = route.complete ? `\u2713 ${route.label}` : route.label;
+  const routeTitle = escapeHtml(route.nextStep && route.optiInstalled ? `${route.reason} Next: ${route.nextStep}.` : route.reason);
+  chips.push(`<span class="engine-badge route-badge ${routeClass}" title="${routeTitle}">${escapeHtml(routeText)}</span>`);
+
   line.innerHTML = chips.join(' ');
 
-  if (detected.recommend === 'unsupported') {
+  // OptiScaler is in but the rest of its route is not (a Feeder game installed before the
+  // one-click flow existed, or Luma UE still waiting on its licence confirmation): say so on
+  // the card, where the "OptiScaler" badge would otherwise read as finished.
+  const nextEl = card.querySelector('.card-route-next');
+  if (nextEl) {
+    const showNext = route.optiInstalled && !route.complete && route.nextStep;
+    nextEl.classList.toggle('hidden', !showNext);
+    if (showNext) nextEl.textContent = `\u26a0 Next: ${route.nextStep}`;
+  }
+
+  if (canRecommendInstall && route.route === 'feeder' && !route.feederDeployed) {
+    install.textContent = 'Install OptiScaler + Feeder';
+  } else if (canRecommendInstall && route.route === 'lumaue') {
+    install.textContent = 'Install OptiScaler (then Luma UE)';
+  }
+
+  if (detected.recommend === 'unsupported' || route.route === 'unsupported') {
     install.classList.remove('btn-primary');
   } else if (canRecommendInstall) {
     install.classList.add('btn-primary');
@@ -236,6 +265,36 @@ async function installGame(game) {
     openSettingsModal();
     return;
   }
+  // A Feeder game gets its whole route from this one button: the Feeder first (so nvngx_dlss.dll
+  // and dlss5-feed.addon64 are on disk when autoConfigureGame runs and picks the DLSS 5 only
+  // profile with LoadReshade forced), then OptiScaler. Only the default motion-vector provider
+  // is used here -- it is the auto-fetchable one, so no licence dialog; LumeniteFX stays a
+  // deliberate choice in Edit. If the Feeder cannot be fetched the install stops: OptiScaler on
+  // its own would report "Installed" with nothing to hook, which is the exact confusion this
+  // route exists to prevent.
+  let feederNote = '';
+  // A game added seconds ago may not have its detection cached yet (the card fills it in
+  // asynchronously); the route needs the API to know whether the Feeder can run here.
+  if (!game.detectedPath) {
+    game.detectedPath = await window.api.detectPath(game.exePath);
+    window.api.saveGames(games);
+  }
+  const route = await window.api.gameRoute(game.exePath, game.detectedPath);
+  if (route.route === 'feeder' && !route.feederDeployed) {
+    toast('Deploying the DLSS5 Feeder first (ReShade, add-on, motion-vector shader, nvngx_dlss.dll)…');
+    const providers = await window.api.feederMvProviders();
+    const provider = providers.find((p) => p.default && p.autoFetchable) || providers.find((p) => p.autoFetchable);
+    const deployed = provider
+      ? await window.api.feederDeploy(game.exePath, provider.id, { force: false, licenseConfirmed: false })
+      : { ok: false, error: 'no auto-fetchable motion-vector provider' };
+    if (!deployed.ok) {
+      toast(`Could not deploy the DLSS5 Feeder: ${deployed.error}. OptiScaler was not installed -- without the Feeder it would have no DLSS call to hook. Retry once you are online.`);
+      renderGrid();
+      return;
+    }
+    feederNote = ` Deployed the DLSS5 Feeder first (${provider.displayName}).`;
+  }
+
   toast('Installing…');
   const res = await window.api.installGame({
     exePath: game.exePath,
@@ -288,7 +347,10 @@ async function installGame(game) {
     const reframeworkConfigNote = res.reframeworkConfig && res.reframeworkConfig.length > 0
       ? ' Set REFramework’s menu key to Insert (it had drifted to Numpad0, unreachable on a laptop) and enlarged its overlay text.'
       : '';
-    toast(`Installed. Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}${proxyCreatedNote}${configNote}${streamlineNote}${reEngineNote}${profileNote}${hotfixNote}${reframeworkNote}${reframeworkConfigNote}`);
+    const lumaNote = route.route === 'lumaue' && !route.lumaDeployed
+      ? ' Next: open Edit and deploy Luma UE -- OptiScaler has no DLSS call to hook in this game until Luma supplies one.'
+      : '';
+    toast(`Installed.${feederNote} Copied nvngx_dlssnr.dll (${mb} MB) to ${res.dir}${proxyNote}${proxyCreatedNote}${configNote}${streamlineNote}${reEngineNote}${profileNote}${hotfixNote}${reframeworkNote}${reframeworkConfigNote}${lumaNote}`);
   } else {
     toast(`Install failed: ${res.error}`);
   }
@@ -339,6 +401,7 @@ async function openGameModal(game) {
   $('#steam-results').innerHTML = '';
   updateBannerPreview();
   gameModal.classList.remove('hidden');
+  await loadRouteStatus(game);
   await loadEngineProfileStatus(game);
   await loadFrameGenSection(game);
   await loadInjectorSection(game);
@@ -346,6 +409,20 @@ async function openGameModal(game) {
   await loadOptiFgSection(game);
   await loadLosslessSection(game);
   await loadLumaUeSection(game);
+}
+
+// The same route the card tags, spelled out: which stack this game gets and what is still to do.
+async function loadRouteStatus(game) {
+  const el = $('#game-route-status');
+  if (!game || !game.exePath) {
+    el.classList.add('hidden');
+    return;
+  }
+  const route = await window.api.gameRoute(game.exePath, game.detectedPath);
+  el.classList.remove('hidden');
+  el.className = `status-line ${route.route === 'unsupported' ? 'status-bad' : route.complete ? 'status-ok' : ''}`.trim();
+  const progress = route.complete ? 'All set.' : route.nextStep ? `Next: ${route.nextStep}.` : '';
+  el.textContent = `Recommended: ${route.label}. ${route.reason} ${progress}`.trim();
 }
 
 // Turns a "blind install" into an informed one: says whether OptiScaler_DLSSNR's own engine has
@@ -458,8 +535,11 @@ async function loadInjectorSection(game) {
   // game never loaded a DLL of that name" and never finds it. Confirmed on a real deploy
   // (Batman: Arkham Knight, 2026-09-09). Proxy is the only supported mode there, so this
   // whole toggle would just be a way to break it.
+  // Luma UE loads the same way (a plain ReShade64.dll that OptiScaler itself loads via
+  // LoadReshade), so the same rule holds there; route.js already folds both cases in.
   const feederStatus = await window.api.feederReadiness(game.exePath);
-  if (feederStatus.needed) {
+  const route = await window.api.gameRoute(game.exePath, game.detectedPath);
+  if (feederStatus.needed || route.route === 'feeder' || route.route === 'lumaue') {
     section.classList.add('hidden');
     return;
   }

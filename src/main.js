@@ -13,6 +13,7 @@ const injector = require('./injector');
 const feeder = require('./feeder');
 const lossless = require('./lossless');
 const lumaue = require('./lumaue');
+const { recommendRoute } = require('./route');
 const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame } = require('./detect');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const ENGINE_KNOWN_GAMES = new Set(require('./engine-known-games.json').exeNames);
@@ -223,6 +224,12 @@ ipcMain.handle('feeder:readiness', async (_evt, exePath) => {
   const dir = gameDir(exePath);
   if (!feeder.needsFeeder(dir) && !feeder.feederDeployed(dir)) {
     return { ready: false, needed: false, reason: 'This game already has native DLSS -- use the DLSS 5 only profile instead, not the Feeder.' };
+  }
+  // Fallen Order gets its DLSS call from Luma UE (lumaue.js), not the Feeder. Both deploy a plain
+  // ReShade64.dll into the same folder, so offering both here let a user deploy one over the
+  // other. Only a Feeder already on disk keeps this section open for that game.
+  if ((lumaue.isFallenOrder(exePath) || lumaue.lumaUeDeployed(dir)) && !feeder.feederDeployed(dir)) {
+    return { ready: false, needed: false, reason: 'This game uses Luma UE for its DLSS call, not the Feeder -- see the Luma UE section.' };
   }
   const api = await detectRenderApi(dir, exePath);
   return { needed: true, ...feeder.feederReadiness(dir, api) };
@@ -673,6 +680,15 @@ ipcMain.handle('game:status', (_evt, exePath) => {
   return { exeMissing: false, hasIni, hasNr, hasUninstaller, dir, backends };
 });
 
+// The one-line answer the card tags and the Install button acts on -- see route.js. `detected`
+// is the cached detection the renderer already holds for this game, so this never rescans the exe.
+ipcMain.handle('game:route', (_evt, { exePath, detected }) => {
+  if (!exePath || !fs.existsSync(exePath)) {
+    return { route: 'unknown', label: 'Exe missing', reason: 'Game .exe not found', steps: [], complete: false, nextStep: null };
+  }
+  return recommendRoute(gameDir(exePath), exePath, detected || {});
+});
+
 ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath, proxyName }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
@@ -756,9 +772,9 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
       proxyError = err.message;
     }
 
-    const { api, applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix } = await autoConfigureGame(dir, exePath);
+    const { api, applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix, profile } = await autoConfigureGame(dir, exePath);
 
-    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, proxy, proxyError, feederGame, api, autoConfigured: applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
+    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, proxy, proxyError, feederGame, api, autoConfigured: applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix, profile };
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -805,7 +821,7 @@ ipcMain.handle('game:confirm-remove', async (_evt, gameName) => {
     cancelId: 2,
     title: 'Remove game',
     message: `Remove "${gameName}" from OptiDLSS5-UI?`,
-    detail: 'Removing OptiScaler runs its uninstaller in a terminal you confirm yourself (same as Run Setup).'
+    detail: 'Removing OptiScaler deletes the files this app installed and puts back anything it renamed. No terminal.'
   });
   return ['remove-and-forget', 'forget-only', 'cancel'][res.response] || 'cancel';
 });
