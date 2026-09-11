@@ -447,3 +447,7 @@ select:focus { outline: 1px solid var(--accent); }
   z-index: 30;
   box-shadow: 0 6px 20px rgba(0,0,0,0.4);
 }
+
+/* Korean wraps between any two syllables by default, which splits short button labels mid-word
+   ("폴더 열 / 기"); keep-all breaks at spaces only, as it does for Latin text. */
+html[lang="ko"] { word-break: keep-all; }

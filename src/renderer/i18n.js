@@ -35,10 +35,13 @@ window.I18N = (() => {
   }
 
   // What the OS says, narrowed to a language this app ships. Portuguese of any region gets
-  // pt-BR: it is the only Portuguese here, and a pt-PT file can take precedence later.
+  // pt-BR: it is the only Portuguese here, and a pt-PT file can take precedence later. Russian
+  // and Korean have no regional variants worth splitting.
   function detect() {
     const lang = String(navigator.language || 'en').toLowerCase();
     if (lang.startsWith('pt')) return 'pt-BR';
+    if (lang.startsWith('ru')) return 'ru';
+    if (lang.startsWith('ko')) return 'ko';
     return 'en';
   }
 
