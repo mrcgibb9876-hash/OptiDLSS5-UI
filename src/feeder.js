@@ -183,7 +183,7 @@ function feederDeployed(dir) {
 function feederReadiness(dir, api) {
   if (api === 'vulkan') return { ready: false, supported: false, reason: 'Vulkan needs a layer, not a ReShade add-on -- not yet supported by this app.' };
   if (api !== 'dx11' && api !== 'dx12') {
-    return { ready: false, supported: false, reason: `Render API not detected (${api || 'unknown'}) -- not yet supported by this app.` };
+    return { ready: false, supported: false, reason: 'Render API not detected ({api}) -- not yet supported by this app.', reasonVars: { api: api || 'unknown' } };
   }
 
   const reshadeInstalled = fs.existsSync(path.join(dir, RESHADE_DLL_NAME));

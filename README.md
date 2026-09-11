@@ -98,6 +98,15 @@ until then you download `dlssnr_on_amd_setup.exe` yourself, put it beside the ga
 app does everything around that. Whether it runs alongside OptiScaler (as the FSR provider for a
 DLSS-only game) is unverified upstream.
 
+## Language
+
+The manager runs in English or Brazilian Portuguese. It follows Windows by default (any Portuguese
+locale gets pt-BR) and Settings has a Language selector to pin either. Every string the manager
+draws goes through `src/renderer/i18n.js`; a language is one flat file under
+`src/renderer/locales/` mapping the English text to its translation, so adding another is a matter
+of copying `pt-BR.js` and translating the right-hand side. Anything a file does not cover falls
+back to English. The in-game panel is OptiScaler's and stays English.
+
 ## Frame Generation for games with no DLSS of their own
 
 OptiScaler's own Frame Generation (FSRFG) needs the game's swapchain to be D3D12, and can't run
