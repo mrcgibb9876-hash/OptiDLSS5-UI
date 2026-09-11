@@ -19,8 +19,9 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
+const { findUnrealPluginFile } = require('./framegen');
 
-const DETECT_VERSION = 3;
+const DETECT_VERSION = 4;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
@@ -249,7 +250,7 @@ async function scanSiblingDlls(dir, exePath) {
 // path here), and a shipped Vulkan loader means a Vulkan path exists.
 function folderApiEvidence(dir) {
   const found = new Set();
-  if (fs.existsSync(path.join(dir, 'D3D12', 'D3D12Core.dll'))) found.add('dx12');
+  if (agilitySdkPath(dir)) found.add('dx12');
   if (fs.existsSync(path.join(dir, 'vulkan-1.dll'))) found.add('vulkan');
   return found;
 }
@@ -396,12 +397,124 @@ function engineFromEvidence(dir, exePath, hits) {
   if (hits.has('red') || hits.has('red2')) return { engine: 'RED Engine', id: 'red' };
   if (hits.has('unreal') || looksLikeUnrealLayout(dir, exePath)) {
     const version = unrealVersionFromWindow(hits.get('unreal'));
-    return { engine: version ? `Unreal Engine ${version}` : 'Unreal Engine', id: 'unreal' };
+    return { engine: version ? `Unreal Engine ${version}` : 'Unreal Engine', id: 'unreal', version };
   }
   if (fs.existsSync(path.join(dir, 'CrySystem.dll')) || hits.has('cryengine')) return { engine: 'CryEngine', id: 'cryengine' };
   if (hits.has('godot')) return { engine: 'Godot', id: 'godot' };
   if (hits.has('anvil')) return { engine: 'AnvilNext', id: 'anvil' };
   return { engine: null, id: null };
+}
+
+// Unreal's executable names d3d12.dll whether or not the game ever uses it: the D3D12 RHI is
+// compiled in from UE 4.2x on while the Windows default stayed DX11 through UE4 (UE5 flipped it
+// to DX12). Fallen Order (UE 4.21, DX11 only) read as "DX12 primary" from the exe alone, which
+// would have offered OptiScaler's D3D12-only Frame Generation on a D3D11 swapchain. So for an
+// Unreal game the exe is only the list of candidates: the primary is the engine generation's
+// default unless the folder proves otherwise (the Agility SDK redistributable D3D12\D3D12Core.dll
+// ships only with a DX12 renderer), and either way it stays provisional until OptiScaler.log
+// shows what the game really created (optiScalerRuntimeApi below).
+// Unreal packages the Agility SDK as Binaries\Win64\D3D12\D3D12Core.dll (Code Vein 2) or
+// D3D12\x64\D3D12Core.dll (Mortal Shell II, Halloween) -- both the game's own files, dated with
+// the install. OptiScaler's own copy lives under OptiScaler\D3D12_OptiScaler\ and is never
+// looked at here: it says what OptiScaler can do, not what the game does.
+function agilitySdkPath(dir) {
+  for (const rel of [['D3D12', 'D3D12Core.dll'], ['D3D12', 'x64', 'D3D12Core.dll']]) {
+    const p = path.join(dir, ...rel);
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
+// DLSS Frame Generation only runs on a D3D12 (or Vulkan) swapchain, and Unreal never defaults
+// to Vulkan on Windows -- so a UE game that ships nvngx_dlssg.dll / sl.dlss_g.dll (beside the exe
+// like Aliens: Fireteam Elite 2, or in its plugin tree like Stellar Blade's
+// SB\Plugins\Runtime\Nvidia\Streamline) renders with DX12 whatever generation of UE4 it is.
+// Direct children of the exe folder only: the streamline\ subfolder beside the exe is this
+// app's own Streamline deploy, and OptiScaler\streamline\ is OptiScaler's.
+const DLSS_FG_FILES = ['nvngx_dlssg.dll', 'sl.dlss_g.dll'];
+
+function dlssFrameGenPath(dir) {
+  for (const name of DLSS_FG_FILES) {
+    const p = path.join(dir, name);
+    if (fs.existsSync(p)) return p;
+  }
+  return findUnrealPluginFile(dir, DLSS_FG_FILES);
+}
+
+function unrealStaticApi(dir, found, engine) {
+  if (!found.api || found.api === 'vulkan') return found;
+  const apis = found.apis || [];
+  if (!(apis.includes('dx11') && apis.includes('dx12'))) return found;
+  const dx12First = ['dx12', ...apis.filter((a) => a !== 'dx12')];
+  const agility = agilitySdkPath(dir);
+  if (agility) {
+    return { ...found, api: 'dx12', apis: dx12First, reason: `DX12 -- ships the Agility SDK (${path.relative(dir, agility)}), which only a DX12 renderer uses` };
+  }
+  const fg = dlssFrameGenPath(dir);
+  if (fg) {
+    return { ...found, api: 'dx12', apis: dx12First, reason: `DX12 -- ships DLSS Frame Generation (${path.basename(fg)}), which needs a D3D12 swapchain` };
+  }
+  const major = engine.version ? parseInt(String(engine.version), 10) : null;
+  const api = major === 4 ? 'dx11' : 'dx12';
+  const reason = major === 4
+    ? 'DX11 -- Unreal Engine 4\'s Windows default; the exe names DX12 too, so run it once and this is re-checked from OptiScaler.log'
+    : 'DX12 -- Unreal Engine 5\'s Windows default; the exe names DX11 too, so run it once and this is re-checked from OptiScaler.log';
+  return { ...found, api, apis: [api, ...apis.filter((a) => a !== api)], reason, uncertain: true };
+}
+
+// The truth, once the game has run with OptiScaler installed: its own log names the device and
+// swapchain the game created (the same idea as Unity's Player.log above, for every engine).
+// Markers are our fork's own log lines, checked against real logs (2026-09-11): a D3D11 game
+// (Fallen Order, Batman) logs "creating Dx11 swapchain!" from the DXGI factory hook and
+// "hkD3D11CreateDevice[AndSwapChain] Device captured"; a D3D12 game (Code Vein 2, Cyberpunk)
+// logs only hkD3D12CreateDevice. Swapchain evidence outranks device evidence because a D3D11
+// game with the DLSS5 Feeder also has one D3D12 device -- the Feeder's own private NGX session.
+const RUNTIME_LOG_MAX_BYTES = 4 * 1024 * 1024;
+
+function optiScalerLogStat(dir) {
+  try { return fs.statSync(path.join(dir, 'OptiScaler.log')); } catch { return null; }
+}
+
+async function optiScalerRuntimeApi(dir) {
+  let fh;
+  try { fh = await fsp.open(path.join(dir, 'OptiScaler.log'), 'r'); } catch { return null; }
+  let text;
+  try {
+    const buf = Buffer.alloc(RUNTIME_LOG_MAX_BYTES);
+    const { bytesRead } = await fh.read(buf, 0, RUNTIME_LOG_MAX_BYTES, 0);
+    text = buf.subarray(0, bytesRead).toString('latin1');
+  } catch {
+    return null;
+  } finally {
+    await fh.close();
+  }
+  if (/Vulkan is creating swapchain/.test(text)) return { api: 'vulkan', evidence: 'a Vulkan swapchain' };
+  if (/creating Dx11 swapchain!|hkD3D11CreateDeviceAndSwapChain Device captured|Created Dx11wDx12SC/.test(text)) return { api: 'dx11', evidence: 'a D3D11 swapchain' };
+  const d3d11Device = /hkD3D11CreateDevice Device captured/.test(text);
+  if (/hkD3D12CreateDevice/.test(text) && !d3d11Device) return { api: 'dx12', evidence: 'a D3D12 device' };
+  if (d3d11Device) return { api: 'dx11', evidence: 'a D3D11 device' };
+  return null;
+}
+
+// A UE game's root holds a launcher stub named like the game (CodeVein2.exe) that only spawns
+// <Project>\Binaries\Win64\<Project>-Win64-Shipping.exe -- the process that actually renders,
+// and the only folder where a proxy DLL, the ini and every check in this app mean anything.
+// Pointed at the stub, the app would install beside a file that never loads dxgi.dll.
+function resolveUnrealShippingExe(exePath) {
+  if (!exePath || /-win(64|gdk)-shipping\.exe$/i.test(exePath)) return exePath;
+  const root = path.dirname(exePath);
+  if (!fs.existsSync(path.join(root, 'Engine'))) return exePath;
+  let entries = [];
+  try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch { return exePath; }
+  for (const e of entries) {
+    if (!e.isDirectory() || e.name.toLowerCase() === 'engine') continue;
+    const win64 = path.join(root, e.name, 'Binaries', 'Win64');
+    let files = [];
+    try { files = fs.readdirSync(win64); } catch { continue; }
+    const shipping = files.find((f) => /-win64-shipping\.exe$/i.test(f));
+    if (shipping) return path.join(win64, shipping);
+  }
+  return exePath;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -421,6 +534,20 @@ async function detectGame(dir, exePath) {
   if (engine.id === 'unity') found = await detectUnity(dir, exePath);
   else if (engine.id === 'red') found = detectRedEngine(dir, exePath);
   if (!found) found = await genericApiDetection(dir, exePath, exe || (await scanExecutable(exePath)));
+  if (engine.id === 'unreal') found = unrealStaticApi(dir, found, engine);
+
+  const runtime = await optiScalerRuntimeApi(dir);
+  if (runtime) {
+    found = {
+      ...found,
+      api: runtime.api,
+      apis: [...new Set([runtime.api, ...(found.apis || [])])],
+      reason: `${API_LABEL[runtime.api]} -- what OptiScaler saw this game create on its last run (${runtime.evidence})`,
+      uncertain: false,
+      runtimeApi: runtime.api,
+    };
+  }
+  const logStat = optiScalerLogStat(dir);
 
   const oldOnly = !found.api && found.old && found.old.length > 0;
   // The tag names every API the game really runs on, primary first -- "DX11/DX12" for a game
@@ -455,6 +582,10 @@ async function detectGame(dir, exePath) {
     recommend,
     reason,
     uncertain: !!found.uncertain,
+    runtimeApi: found.runtimeApi || null,
+    // What OptiScaler.log looked like when this was decided -- a later run of the game is new
+    // evidence, and isDetectionStale re-runs detection when the log has changed since.
+    runtimeLogMtime: logStat ? logStat.mtimeMs : null,
     detectVersion: DETECT_VERSION,
   };
 }
@@ -463,8 +594,18 @@ async function detectRenderApi(dir, exePath) {
   return (await detectGame(dir, exePath)).api;
 }
 
-function isDetectionStale(stored) {
-  return !stored || stored.detectVersion !== DETECT_VERSION || !!stored.uncertain;
+function isDetectionStale(stored, dir) {
+  if (!stored || stored.detectVersion !== DETECT_VERSION) return true;
+  // A provisional Unity answer waits on Player.log, which nothing below tracks, so it re-runs
+  // every time; a provisional Unreal answer waits on OptiScaler.log, tracked by mtime below --
+  // re-scanning a 100 MB exe on every grid render would buy nothing until the game has run.
+  if (!!stored.uncertain && stored.engineId !== 'unreal') return true;
+  if (dir) {
+    const logStat = optiScalerLogStat(dir);
+    const mtime = logStat ? logStat.mtimeMs : null;
+    if (mtime !== (stored.runtimeLogMtime === undefined ? null : stored.runtimeLogMtime)) return true;
+  }
+  return false;
 }
 
-module.exports = { DETECT_VERSION, detectGame, detectRenderApi, isDetectionStale, isReEngineGame, peImports, scanFile };
+module.exports = { DETECT_VERSION, detectGame, detectRenderApi, isDetectionStale, isReEngineGame, peImports, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe };

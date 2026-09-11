@@ -145,6 +145,20 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
   }
 
   if (lumaue.isFallenOrder(exePath) || lumaDeployed) {
+    // Luma UE is this game's preferred DLSS source, but a Feeder already deployed here is a
+    // working one (confirmed on a real install: frames fed, NR running) -- the card says what is
+    // actually in place and names the better option, rather than reporting a done setup as a
+    // missing step. Luma's own readiness refuses while the Feeder is on, so the order is fixed.
+    if (feederDeployed && !lumaDeployed) {
+      return finish('feeder', 'OptiScaler + Feeder',
+        'No DLSS of its own; the DLSS5 Feeder deployed here is doing that job. Luma UE is the alternative for ' +
+        'this game (it replaces the stock TAA with real DLAA, so no estimated motion vectors): remove the Feeder ' +
+        'in Edit first, then deploy Luma UE there. Frame Generation: Lossless Scaling.',
+        [
+          { key: 'feeder', label: 'Deploy the DLSS5 Feeder', done: true },
+          { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
+        ]);
+    }
     return finish('lumaue', 'OptiScaler + Luma UE',
       'No DLSS of its own. Luma UE replaces its stock TAA with DLAA, which gives OptiScaler a real DLSS call to ' +
       'hook. Install OptiScaler here, then deploy Luma UE from Edit (it needs your licence confirmation). ' +

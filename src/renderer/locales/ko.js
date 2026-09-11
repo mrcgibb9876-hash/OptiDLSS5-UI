@@ -347,4 +347,6 @@ window.I18N.register("ko", {
   "Removing the DLSS5 Feeder…": "DLSS5 Feeder 제거 중…",
   "DLSS5 Feeder removed ({list}).": "DLSS5 Feeder 제거됨({list}).",
   "Could not remove the DLSS5 Feeder: {error}": "DLSS5 Feeder를 제거할 수 없습니다: {error}",
+  "No DLSS of its own; the DLSS5 Feeder deployed here is doing that job. Luma UE is the alternative for this game (it replaces the stock TAA with real DLAA, so no estimated motion vectors): remove the Feeder in Edit first, then deploy Luma UE there. Frame Generation: Lossless Scaling.": "자체 DLSS가 없으며, 여기에 배포된 DLSS5 Feeder가 그 역할을 하고 있습니다. Luma UE는 이 게임의 대안입니다(기본 TAA를 실제 DLAA로 대체하므로 추정 모션 벡터가 없음): 먼저 편집에서 Feeder를 제거한 뒤 거기서 Luma UE를 배포하세요. 프레임 생성: Lossless Scaling.",
+  "Remove the DLSS5 Feeder first (its section above has Remove) -- Luma UE and the Feeder are both ReShade add-ons supplying the DLSS call, and only one can run.": "먼저 DLSS5 Feeder를 제거하세요(위 섹션에 제거 버튼이 있음) -- Luma UE와 Feeder는 모두 DLSS 호출을 제공하는 ReShade 애드온이며, 하나만 실행할 수 있습니다.",
 });

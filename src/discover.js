@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { discover } = require('./library');
+const { resolveUnrealShippingExe } = require('./detect');
 const NOT_A_GAME_EXE = /^(unins|setup|install|vcredist|dxsetup|dotnet|oalinst|crashpad|launcher_installer)/i;
 const NOT_THE_GAME = /(launcher|crashreport|crashhandler|redist|touchup|activation|eac|easyanticheat|battleye|be_service|steam_api|dxwebsetup|helper|updater|report|benchmark|editor|server|dedicated)/i;
 const GOOD_DIRS = /(?:^|[\\/])(binaries[\\/]win64|binaries[\\/]win32|bin[\\/]x64|bin[\\/]win64|bin|x64|win64|game)(?:[\\/]|$)/i;
@@ -47,6 +48,9 @@ function score(exePath, gameDir, gameName) {
     if (nameKey && baseKey && (baseKey.includes(nameKey) || nameKey.includes(baseKey))) s += 20;
 
     if (GOOD_DIRS.test(rel)) s += 10;
+    // The Unreal shipping exe is the process that renders; the root stub named like the game
+    // only spawns it. Everything this app does has to land beside the shipping exe.
+    if (/-win(64|gdk)-shipping$/i.test(base)) s += 15;
     s -= (rel.split(/[\\/]/).length - 1) * 2;
     if (/(?:^|[\\/])singleplayer(?:[\\/]|$)/.test(rel)) s += 4;
     if (/(?:^|[\\/])(?:multiplayer|online)(?:[\\/]|$)/.test(rel)) s -= 4;
@@ -66,7 +70,7 @@ function chooseExe(gameDir, gameName) {
     if (!candidates.length) return null;
 
     return {
-        exePath: candidates[0].exe,
+        exePath: resolveUnrealShippingExe(candidates[0].exe),
         alternatives: candidates.slice(1, 8).map((c) => c.exe)
     };
 }

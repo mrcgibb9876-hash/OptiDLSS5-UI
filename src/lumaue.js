@@ -80,13 +80,21 @@ const LUMA_KNOWN_ISSUE = 'Open upstream bug (Luma-Framework issue #122, unresolv
 
 // STAR WARS Jedi: Fallen Order's real render process (UE4 convention: a launcher stub at the
 // game root, the actual game -- and where the proxy DLL / mods belong -- under
-// SwGame\Binaries\Win64\SwGame-Win64-Shipping.exe). Confirmed via Steam Community / EA forum
-// reports of the install layout, not a local install (the user doesn't own this game).
-const FALLEN_ORDER_EXE_NAMES = ['swgame-win64-shipping.exe'];
+// SwGame\Binaries\Win64\SwGame-Win64-Shipping.exe). Not every copy launches through that
+// name: a real install (2026-09-11) runs a starwarsjedifallenorder.exe sitting right beside
+// SwGame-Win64-Shipping.exe, and matching the UE name alone left that game on the Feeder route.
+// So the project folder is the signature -- any exe in SwGame\Binaries\Win64 next to the
+// shipping exe is this game -- and the names are only the fast path.
+const FALLEN_ORDER_EXE_NAMES = ['swgame-win64-shipping.exe', 'starwarsjedifallenorder.exe'];
 
 function isFallenOrder(exePath) {
   if (!exePath) return false;
-  return FALLEN_ORDER_EXE_NAMES.includes(path.basename(exePath).toLowerCase());
+  if (FALLEN_ORDER_EXE_NAMES.includes(path.basename(exePath).toLowerCase())) return true;
+  const dir = path.dirname(exePath);
+  const parts = dir.split(/[\\/]/).map((p) => p.toLowerCase());
+  const inSwGame = parts.length >= 3 && parts[parts.length - 1] === 'win64' &&
+    parts[parts.length - 2] === 'binaries' && parts[parts.length - 3] === 'swgame';
+  return inSwGame && fs.existsSync(path.join(dir, 'SwGame-Win64-Shipping.exe'));
 }
 
 function lumaUeDeployed(dir) {
@@ -101,6 +109,15 @@ function lumaUeReadiness(dir, exePath) {
       reason: 'Luma UE is curated per-game by its author -- this app only offers it for STAR ' +
         'WARS Jedi: Fallen Order (SwGame-Win64-Shipping.exe), the one game the OptiScaler wiki ' +
         'documents this exact setup for.',
+    };
+  }
+
+  // Both are ReShade add-ons that supply the DLSS call; two at once means two DLSS sources
+  // fighting over one ReShade. The Feeder section has Remove for exactly this hand-over.
+  if (fs.existsSync(path.join(dir, 'dlss5-feed.addon64'))) {
+    return {
+      supported: false,
+      reason: 'Remove the DLSS5 Feeder first (its section above has Remove) -- Luma UE and the Feeder are both ReShade add-ons supplying the DLSS call, and only one can run.',
     };
   }
 

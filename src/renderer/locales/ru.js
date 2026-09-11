@@ -347,4 +347,6 @@ window.I18N.register("ru", {
   "Removing the DLSS5 Feeder…": "Удаление DLSS5 Feeder…",
   "DLSS5 Feeder removed ({list}).": "DLSS5 Feeder удалён ({list}).",
   "Could not remove the DLSS5 Feeder: {error}": "Не удалось удалить DLSS5 Feeder: {error}",
+  "No DLSS of its own; the DLSS5 Feeder deployed here is doing that job. Luma UE is the alternative for this game (it replaces the stock TAA with real DLAA, so no estimated motion vectors): remove the Feeder in Edit first, then deploy Luma UE there. Frame Generation: Lossless Scaling.": "Собственного DLSS нет; развёрнутый здесь DLSS5 Feeder уже выполняет эту роль. Luma UE -- альтернатива для этой игры (заменяет штатный TAA настоящим DLAA, без оценочных векторов движения): сначала удалите Feeder через «Изменить», затем разверните там Luma UE. Генерация кадров: Lossless Scaling.",
+  "Remove the DLSS5 Feeder first (its section above has Remove) -- Luma UE and the Feeder are both ReShade add-ons supplying the DLSS call, and only one can run.": "Сначала удалите DLSS5 Feeder (в его разделе выше есть «Удалить») -- Luma UE и Feeder оба являются дополнениями ReShade, дающими вызов DLSS, и работать может только одно.",
 });

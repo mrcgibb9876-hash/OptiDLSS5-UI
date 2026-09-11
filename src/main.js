@@ -17,7 +17,7 @@ const nativeDlss = require('./native-dlss');
 const { recommendRoute, withApiOverride, API_OVERRIDE_VALUES } = require('./route');
 const gpu = require('./gpu');
 const amdnr = require('./amdnr');
-const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame } = require('./detect');
+const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, resolveUnrealShippingExe } = require('./detect');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const ENGINE_KNOWN_GAMES = new Set(require('./engine-known-games.json').exeNames);
 const execFileAsync = promisify(execFile);
@@ -596,7 +596,8 @@ ipcMain.handle('pick:exe', async () => {
     filters: [{ name: 'Executable', extensions: ['exe'] }]
   });
   if (res.canceled || res.filePaths.length === 0) return null;
-  return res.filePaths[0];
+  // An Unreal root launcher stub is swapped for the shipping exe it spawns -- see detect.js.
+  return resolveUnrealShippingExe(res.filePaths[0]);
 });
 
 ipcMain.handle('pick:folder', async (_evt, title) => {
@@ -1029,7 +1030,8 @@ ipcMain.handle('game:detect-path', async (_evt, exePath) => {
 });
 
 ipcMain.handle('game:detect-path-if-stale', async (_evt, { exePath, stored }) => {
-  if (!isDetectionStale(stored)) return null;
+  const dir = exePath && fs.existsSync(exePath) ? gameDir(exePath) : null;
+  if (!isDetectionStale(stored, dir)) return null;
   try {
     if (!exePath || !fs.existsSync(exePath)) return { recommend: 'unknown', reason: 'executable not found' };
     return await detectGame(gameDir(exePath), exePath);
