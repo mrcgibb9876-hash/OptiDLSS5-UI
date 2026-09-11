@@ -747,7 +747,7 @@ const FOREIGN_REMOVALS = {
     backupSuffix: '.dlss5oneclick',
   },
   'DLSS5-Swapper': {
-    files: ['renodx-dlss5.addon64', 'renodx-dlss.addon64', 'host64', 'dlss5-feed-host64.exe', 'dlss5-feed.addon64', 'dlss5-feed.addon32', 'dlss5-feed.cfg', 'dlss5-feed.log'],
+    files: ['renodx-dlss5.addon64', 'renodx-dlss.addon64', 'host64', 'dlss5-feed-host64.exe', 'dlss5-feed.addon64', 'dlss5-feed.addon32', 'dlss5-feed.cfg', 'dlss5-feed.log', 'reshade-shaders-original'],
     manifest: '_DLSS5_Backup',
   },
   'DLSSNR-Cost-Scaler': { files: ['nvngx_dlssnr_proxy.dll'], patterns: [/cost[_ -]?scaler/i] },
@@ -911,23 +911,28 @@ async function planForeignRemoval(dir, { ours = false } = {}) {
     }
     if (spec.manifest) {
       // DLSS5-Swapper journals from the game root, which for an Unreal game is above the exe.
+      // A live manifest.json is reversed the way its own uninstall would (added -> delete,
+      // replaced -> restore from originals/<backupPrefix>/<rel>). After its uninstall has run,
+      // the journal is renamed manifest.json.done-<stamp> and only the folder is left to remove.
       let base = dir;
-      for (let up = 0; up <= 3 && !fs.existsSync(path.join(base, spec.manifest, 'manifest.json')); up++) base = path.dirname(base);
-      const manifestPath = path.join(base, spec.manifest, 'manifest.json');
+      for (let up = 0; up <= 3 && !fs.existsSync(path.join(base, spec.manifest)); up++) base = path.dirname(base);
+      const backupRoot = path.join(base, spec.manifest);
+      const manifestPath = path.join(backupRoot, 'manifest.json');
+      if (fs.existsSync(backupRoot)) del.add(path.relative(dir, backupRoot));
       if (fs.existsSync(manifestPath)) {
         try {
           const m = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-          for (const rel of (m.added || []).filter((x) => typeof x === 'string')) {
+          const prefix = m.backupPrefix ? path.join(backupRoot, m.backupPrefix) : backupRoot;
+          for (const rel of [...(m.added || []), ...(m.addedDirs || [])].filter((x) => typeof x === 'string')) {
             const abs = path.join(base, rel);
             if (fs.existsSync(abs)) del.add(path.relative(dir, abs));
           }
           for (const r of m.replaced || []) {
             const rel = typeof r === 'string' ? r : r && r.rel;
             if (!rel) continue;
-            const backup = path.join(base, spec.manifest, rel);
+            const backup = path.join(prefix, rel);
             if (fs.existsSync(backup)) restore.push({ backup: path.relative(dir, backup), to: path.relative(dir, path.join(base, rel)) });
           }
-          del.add(path.relative(dir, path.join(base, spec.manifest)));
         } catch { notes.push(spec.manifest + '/manifest.json could not be read -- its journal was not reversed'); }
       }
     }

@@ -1847,6 +1847,26 @@ async function autoUpdateOptiScalerRelease() {
   toast(hadRelease ? t('OptiScaler engine auto-updated to {tag}.', { tag: res.tag }) : t('Fetched the OptiScaler engine ({tag}) automatically.', { tag: res.tag }));
   autoSyncStaleGames();
 }
+$('#btn-clean-folder').addEventListener('click', async () => {
+  const statusEl = $('#clean-folder-status');
+  const folder = await window.api.pickFolder(t('Select the game\'s exe folder to clean'));
+  if (!folder) return;
+  statusEl.className = 'status-line';
+  statusEl.textContent = t('Cleaning…');
+  const res = await window.api.cleanFolder(folder);
+  if (!res.ok) { statusEl.className = 'status-line status-bad'; statusEl.textContent = t("Couldn't remove OptiScaler: {error}", { error: res.error }); return; }
+  if (res.cancelled) { statusEl.textContent = ''; return; }
+  const removed = [...(res.removed || []), ...((res.foreign && res.foreign.removed) || [])];
+  const restored = [...(res.restored || []), ...((res.foreign && res.foreign.restored) || [])];
+  const parts = [t('Cleaned {folder}.', { folder: res.folder })];
+  parts.push(removed.length ? t('Removed: {list}.', { list: removed.join(', ') }) : t('Nothing left to remove.'));
+  if (restored.length) parts.push(t('Restored: {list}.', { list: restored.join(', ') }));
+  if ((res.kept || []).length) parts.push(t('Left alone: {list}.', { list: res.kept.join('; ') }));
+  statusEl.className = 'status-line status-ok';
+  statusEl.textContent = parts.join(' ');
+  toast(parts.slice(0, 2).join(' '));
+});
+
 $('#btn-check-updates').addEventListener('click', async () => {
   const btn = $('#btn-check-updates');
   const statusEl = $('#update-status');

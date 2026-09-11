@@ -382,4 +382,10 @@ window.I18N.register("es", {
   "Could not remove Luma UE: {error}": "No se pudo quitar Luma UE: {error}",
   "Luma UE is known not to work here: {why}. The DLSS5 Feeder is the route for this game.": "Se sabe que Luma UE no funciona aquí: {why}. El DLSS5 Feeder es la ruta para este juego.",
   "Unverified on this game. Luma's Unreal Engine mod is generic for UE4 DirectX 11 games, but not every game survives it -- Spyro Reignited Trilogy does not start with it deployed. If this game fails to launch afterwards, use Remove Luma UE below; the DLSS5 Feeder route stays available either way.": "Sin verificar en este juego. El mod de Unreal Engine de Luma es genérico para juegos UE4 con DirectX 11, pero no todos los juegos lo soportan -- Spyro Reignited Trilogy no arranca con él desplegado. Si este juego deja de arrancar después, usa Quitar Luma UE abajo; la ruta del DLSS5 Feeder sigue disponible de todos modos.",
+  "Clean a game folder": "Limpiar una carpeta de juego",
+  "For a game that is no longer on the grid: pick its exe folder and everything this app ever put there is removed, with the game's own files left alone. Asks before deleting anything.": "Para un juego que ya no está en la cuadrícula: elige su carpeta del exe y se quita todo lo que esta app puso ahí, dejando los archivos propios del juego. Pregunta antes de borrar nada.",
+  "Clean a game folder…": "Limpiar una carpeta de juego…",
+  "Select the game's exe folder to clean": "Selecciona la carpeta del exe del juego a limpiar",
+  "Cleaning…": "Limpiando…",
+  "Cleaned {folder}.": "{folder} limpiada.",
 });

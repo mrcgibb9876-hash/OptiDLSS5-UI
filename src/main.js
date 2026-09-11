@@ -1067,6 +1067,12 @@ async function removeSharedNrDllIfUnneeded(dir) {
 // place -- unknown files stay, and the report says so where a decision was made.
 const RELEASE_LICENSE_FILES = ['DirectX_LICENSE.txt', 'FidelityFX_v2_LICENSE.md', 'RenoDX_ATTRIBUTION.txt', 'XeSS_LICENSE.txt'];
 const APP_MARKERS = ['.dlss5ui-lossless.json', '.dlss5ui-api.json', '.dlss5ui-optifg-enabled', '.optiscaler-manager-install.json'];
+const LEGACY_PAYLOAD = [
+  'OptiScaler_DlssNr.addon64', 'OptiScaler_DlssNr.exp', 'OptiScaler_DlssNr.lib', 'OptiScaler_DlssNr.pdb', 'OptiScaler_DlssNr.dll',
+  '.optdlss5-active-manifest.json', 'Verify-DLSS5Feeder.ps1', 'Run-DLSS5-Feeder-Install.bat', 'Remove_OptiScaler.bat',
+  'dlss5-feed.cfg', 'dlss5-feed.log', 'dlss5-feed-crash.dmp',
+];
+const LEGACY_PATTERNS = [/^OptiScaler_DLSSNR-.*\.zip$/i, /\.release-backup$/i, /^ReShade\.log\d+$/i];
 
 async function uninstallEverything(dir) {
   const removed = [];
@@ -1135,6 +1141,33 @@ async function uninstallEverything(dir) {
   rmdirIfEmpty('Licenses');
   for (const m of APP_MARKERS) await rmRel(m);
 
+  // What older versions of this app placed and never journaled: engine build artifacts from
+  // early releases, the previous marker name, a verification script, an engine zip dropped in
+  // the folder, the old proxy-backup name, ReShade's rotated logs. Seen on real folders
+  // (Zero Company, Halloween, Batman, 2026-09-12) after a Remove that left them all behind.
+  for (const rel of LEGACY_PAYLOAD) await rmRel(rel);
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch {}
+  for (const name of names) {
+    if (LEGACY_PATTERNS.some((p) => p.test(name))) await rmRel(name);
+  }
+  // A Feeder-era folder whose add-on is already gone (an older Remove took only OptiScaler):
+  // the shader folder's DLSS5_Feed.fx is the proof, and then the ReShade files were ours too --
+  // unless another toolchain is here, whose ReShade they may be.
+  const foreign = foreignToolchains(dir);
+  const feederEra = fs.existsSync(path.join(dir, 'reshade-shaders', 'Shaders', 'DLSS5_Feed.fx'));
+  if (feederEra && !foreign.length) {
+    for (const n of ['ReShade64.dll', 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log', 'reshade-shaders']) await rmRel(n);
+  }
+  // nvngx_dlss.dll beside the exe is ours when the game keeps its own DLSS in its plugin tree
+  // (the beside-the-exe copy is the duplicate a mis-deploy left) or when the Feeder era placed
+  // it. A game that ships DLSS beside its exe (Streamline games, Tomb Raider) keeps its own.
+  const shippedElsewhere = nativeDlss.shippedDlssPath(dir) && !fs.existsSync(path.join(dir, 'sl.interposer.dll')) && !fs.existsSync(path.join(dir, 'sl.interposer.dll.original'));
+  if (fs.existsSync(path.join(dir, 'nvngx_dlss.dll')) && (shippedElsewhere || feederEra)) await rmRel('nvngx_dlss.dll');
+  // A streamline\ folder beside the exe is this app's deploy: a game that ships Streamline keeps
+  // it beside the exe itself, never in a subfolder.
+  if (fs.existsSync(path.join(dir, 'streamline', 'sl.interposer.dll')) && !fs.existsSync(path.join(dir, 'sl.interposer.dll'))) await rmRel('streamline');
+
   // Another tool's files are not this app's to delete -- named so the user knows they remain.
   for (const f of foreignToolchains(dir)) kept.push(`${f.tool} files, not placed by this app: ${f.files.join(', ')}`);
 
@@ -1178,23 +1211,74 @@ ipcMain.handle('game:removeForeign', async (_evt, exePath) => {
         '\n\nIf that tool modified game files in place without leaving a backup, those cannot be restored here and the game may break -- verify the game files through its store afterwards if it does. Your own OptiScaler install here is not touched.',
     });
     if (res.response !== 0) return { ok: true, cancelled: true };
-    const removed = [];
-    const restored = [];
-    for (const r of plan.restore) {
-      const backup = path.join(dir, r.backup);
-      const to = path.join(dir, r.to);
-      if (!fs.existsSync(backup)) continue;
-      await fsp.rm(to, { recursive: true, force: true });
-      await fsp.rename(backup, to);
-      restored.push(r.to);
+    const done = await executeForeignRemoval(dir, plan);
+    return { ok: true, cancelled: false, ...done, notes: plan.notes };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+async function executeForeignRemoval(dir, plan) {
+  const removed = [];
+  const restored = [];
+  for (const r of plan.restore) {
+    const backup = path.join(dir, r.backup);
+    const to = path.join(dir, r.to);
+    if (!fs.existsSync(backup)) continue;
+    await fsp.rm(to, { recursive: true, force: true });
+    await fsp.rename(backup, to);
+    restored.push(r.to);
+  }
+  for (const rel of plan.del) {
+    const p = path.join(dir, rel);
+    if (!fs.existsSync(p)) continue;
+    await fsp.rm(p, { recursive: true, force: true });
+    removed.push(rel);
+  }
+  return { removed, restored };
+}
+
+// Settings > "Clean a game folder...": the full Remove for a game that is no longer on the grid
+// (removed from the list by an older version that only took OptiScaler out), then -- with its own
+// warning -- the other-toolchain removal if one is found. Both steps confirm natively first.
+ipcMain.handle('game:cleanFolder', async (_evt, { folder }) => {
+  try {
+    if (!folder || !fs.existsSync(folder)) throw new Error('Folder not found');
+    const dir = folder;
+    const backends = detectInstalledBackends(dir);
+    let legacy = [];
+    try { legacy = fs.readdirSync(dir).filter((n) => LEGACY_PAYLOAD.includes(n) || LEGACY_PATTERNS.some((p) => p.test(n))); } catch {}
+    const found = [...new Set([...backends.leftovers, ...legacy])];
+    const first = await dialog.showMessageBox({
+      type: 'warning',
+      buttons: ['Clean this folder', 'Cancel'],
+      defaultId: 1,
+      cancelId: 1,
+      title: 'Clean a game folder',
+      message: `Remove everything this app ever put in ${path.basename(dir)}?`,
+      detail: (found.length ? `Found here now:\n  ${found.join('\n  ')}\n\n` : 'Nothing of this app\'s was recognised here, but the full Remove will still run.\n\n') +
+        'This removes OptiScaler, the Feeder or Luma UE, Streamline, REFramework, swapped DLLs and every marker this app placed, and puts back anything it renamed or replaced. Files it did not place are left alone.',
+    });
+    if (first.response !== 0) return { ok: true, cancelled: true };
+    const result = await uninstallEverything(dir);
+    const plan = await planForeignRemoval(dir, { ours: false });
+    let foreignDone = null;
+    if (plan.found.length && (plan.del.length || plan.restore.length)) {
+      const tools = plan.found.map((f) => f.tool).join(', ');
+      const second = await dialog.showMessageBox({
+        type: 'warning',
+        buttons: ['Delete these files', 'Leave them'],
+        defaultId: 1,
+        cancelId: 1,
+        title: 'Another DLSS 5 toolchain is here',
+        message: `Also delete ${plan.del.length} item(s) placed by ${tools}?`,
+        detail: `Will delete:\n  ${plan.del.join('\n  ')}` +
+          (plan.restore.length ? `\n\nWill restore from that tool's backups:\n  ${plan.restore.map((r) => r.to).join('\n  ')}` : '') +
+          '\n\nIf that tool modified game files in place without leaving a backup, those cannot be restored here and the game may break -- verify the game files through its store afterwards if it does.',
+      });
+      if (second.response === 0) foreignDone = await executeForeignRemoval(dir, plan);
     }
-    for (const rel of plan.del) {
-      const p = path.join(dir, rel);
-      if (!fs.existsSync(p)) continue;
-      await fsp.rm(p, { recursive: true, force: true });
-      removed.push(rel);
-    }
-    return { ok: true, cancelled: false, removed, restored, notes: plan.notes };
+    return { ok: true, cancelled: false, folder: dir, ...result, foreign: foreignDone };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
