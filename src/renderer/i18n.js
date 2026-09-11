@@ -35,13 +35,18 @@ window.I18N = (() => {
   }
 
   // What the OS says, narrowed to a language this app ships. Portuguese of any region gets
-  // pt-BR: it is the only Portuguese here, and a pt-PT file can take precedence later. Russian
-  // and Korean have no regional variants worth splitting.
+  // pt-BR: it is the only Portuguese here, and a pt-PT file can take precedence later. Same for
+  // Chinese: only Simplified ships, so every zh-* gets it until a zh-TW file exists (Traditional
+  // is different terminology, not a character conversion). Spanish covers Spain and Latin
+  // America with one file; Russian, Korean and German have no regional split worth making.
   function detect() {
     const lang = String(navigator.language || 'en').toLowerCase();
     if (lang.startsWith('pt')) return 'pt-BR';
     if (lang.startsWith('ru')) return 'ru';
     if (lang.startsWith('ko')) return 'ko';
+    if (lang.startsWith('zh')) return 'zh-CN';
+    if (lang.startsWith('es')) return 'es';
+    if (lang.startsWith('de')) return 'de';
     return 'en';
   }
 
