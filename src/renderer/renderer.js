@@ -740,6 +740,11 @@ async function configureLossless(game, { frameGenMode = 'LSFG3', mode = 'FIXED',
   setField('Path', game.exePath);
   setField('FrameGeneration', frameGenMode);
   setField('ScalingType', 'Off');
+  // Explicit, not inherited from whatever profile served as the template: Lossless Scaling's
+  // windowed-output option shows the game in a small centred window, and resize-before-scaling
+  // shrinks the game's own window. Neither is wanted for frame generation only.
+  setField('WindowedMode', 'false');
+  setField('ResizeBeforeScaling', 'false');
   // FIXED multiplies every frame by LSFG3Multiplier; ADAPTIVE generates only what it takes to
   // hold LSFG3Target fps. Both fields are written either way so switching modes later is clean.
   setField('LSFG3Mode1', mode === 'ADAPTIVE' ? 'ADAPTIVE' : 'FIXED');

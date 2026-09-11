@@ -20,7 +20,7 @@ const fsp = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 
-const DETECT_VERSION = 2;
+const DETECT_VERSION = 3;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
@@ -237,16 +237,21 @@ async function scanSiblingDlls(dir, exePath) {
     sources.push(name);
   }
 
-  // The game's own Agility SDK redistributable only ever ships with a DX12 renderer.
-  if (fs.existsSync(path.join(dir, 'D3D12', 'D3D12Core.dll'))) {
-    modern.add('dx12');
-    sources.push('D3D12\\D3D12Core.dll');
-  }
-  if (entries.some((f) => /^vulkan-1\.dll$/i.test(f))) {
-    modern.add('vulkan');
-    sources.push('vulkan-1.dll');
+  for (const api of folderApiEvidence(dir)) {
+    modern.add(api);
+    sources.push(api === 'dx12' ? 'D3D12\\D3D12Core.dll' : 'vulkan-1.dll');
   }
   return { modern, old, imports, sources };
+}
+
+// What the game folder itself says, independent of any binary: its own Agility SDK redistributable
+// only ever ships with a DX12 renderer (Where Winds Meet links DX11 in its exe and keeps its DX12
+// path here), and a shipped Vulkan loader means a Vulkan path exists.
+function folderApiEvidence(dir) {
+  const found = new Set();
+  if (fs.existsSync(path.join(dir, 'D3D12', 'D3D12Core.dll'))) found.add('dx12');
+  if (fs.existsSync(path.join(dir, 'vulkan-1.dll'))) found.add('vulkan');
+  return found;
 }
 
 async function genericApiDetection(dir, exePath, exe) {
@@ -254,7 +259,7 @@ async function genericApiDetection(dir, exePath, exe) {
     const api = pickModern(exe.modern, exe.imports);
     const linked = exe.imports.includes(API_DLL[api]);
     return {
-      api, apis: [...exe.modern], old: [...exe.old],
+      api, apis: [...new Set([...exe.modern, ...folderApiEvidence(dir)])], old: [...exe.old],
       reason: `${API_LABEL[api]} -- ${linked ? 'linked by' : 'referenced in'} the executable`,
     };
   }
@@ -418,7 +423,13 @@ async function detectGame(dir, exePath) {
   if (!found) found = await genericApiDetection(dir, exePath, exe || (await scanExecutable(exePath)));
 
   const oldOnly = !found.api && found.old && found.old.length > 0;
-  const apiLabel = found.api ? API_LABEL[found.api] : oldOnly ? API_LABEL[found.old[0]] : null;
+  // The tag names every API the game really runs on, primary first -- "DX11/DX12" for a game
+  // that links DX11 but ships a DX12 path too. Vulkan is listed only when it is the primary:
+  // Unreal and Unity name vulkan-1.dll without ever defaulting to it on Windows.
+  const others = MODERN_APIS.filter((a) => a !== found.api && a !== 'vulkan' && (found.apis || []).includes(a));
+  const apiLabel = found.api
+    ? [found.api, ...others].map((a) => API_LABEL[a]).join('/')
+    : oldOnly ? API_LABEL[found.old[0]] : null;
 
   let recommend = 'unknown';
   let reason = found.reason;
