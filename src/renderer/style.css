@@ -6,11 +6,29 @@
   --border: #2e333d;
   --text: #e8eaed;
   --text-dim: #9aa1ac;
+  /* NVIDIA green by default -- the accent, its RGB triple for translucent fills, the lighter
+     tint used for text on dark chips, and the text colour on a solid accent fill. */
   --accent: #76b900;
   --accent-hover: #8ad900;
+  --accent-rgb: 118, 185, 0;
+  --accent-text: #9ed94f;
+  --on-accent: #0c0e0f;
   --danger: #e5484d;
+  --danger-rgb: 229, 72, 77;
   --warn: #d9a441;
   --radius: 10px;
+}
+
+/* On an AMD card the app wears AMD's red instead (renderer.js sets the class from gpu:info).
+   Danger moves to orange so a Remove button still reads differently from a primary one. */
+body.vendor-amd {
+  --accent: #ed1c24;
+  --accent-hover: #ff3b42;
+  --accent-rgb: 237, 28, 36;
+  --accent-text: #ff7b80;
+  --on-accent: #ffffff;
+  --danger: #ff8a3d;
+  --danger-rgb: 255, 138, 61;
 }
 
 * { box-sizing: border-box; }
@@ -38,7 +56,7 @@ body {
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand-mark {
   background: var(--accent);
-  color: #0c0e0f;
+  color: var(--on-accent);
   font-weight: 800;
   font-size: 13px;
   padding: 4px 7px;
@@ -63,13 +81,13 @@ body {
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #0c0e0f;
+  color: var(--on-accent);
   font-weight: 600;
 }
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-ghost { background: transparent; }
 .btn-small { padding: 5px 10px; font-size: 12px; }
-.btn-danger { color: var(--danger); border-color: rgba(229,72,77,0.4); }
+.btn-danger { color: var(--danger); border-color: rgba(var(--danger-rgb),0.4); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .settings-banner {
@@ -163,10 +181,10 @@ body {
   border-radius: 999px;
   backdrop-filter: blur(4px);
 }
-.badge-installed { background: rgba(118,185,0,0.85); color: #0c0e0f; }
+.badge-installed { background: rgba(var(--accent-rgb),0.85); color: var(--on-accent); }
 .badge-partial { background: rgba(217,164,65,0.9); color: #0c0e0f; }
 .badge-none { background: rgba(255,255,255,0.12); color: var(--text); }
-.badge-missing { background: rgba(229,72,77,0.85); color: #fff; }
+.badge-missing { background: rgba(var(--danger-rgb),0.85); color: #fff; }
 
 .engine-badge {
   display: inline-block;
@@ -176,14 +194,14 @@ body {
   border-radius: 999px;
   letter-spacing: 0.3px;
 }
-.engine-badge-known { background: rgba(118,185,0,0.18); color: #9ed94f; border: 1px solid rgba(118,185,0,0.4); }
-.engine-badge-unsupported { background: rgba(229,72,77,0.16); color: #e5484d; border: 1px solid rgba(229,72,77,0.4); }
+.engine-badge-known { background: rgba(var(--accent-rgb),0.18); color: var(--accent-text); border: 1px solid rgba(var(--accent-rgb),0.4); }
+.engine-badge-unsupported { background: rgba(var(--danger-rgb),0.16); color: var(--danger); border: 1px solid rgba(var(--danger-rgb),0.4); }
 .engine-badge-unknown { background: rgba(255,255,255,0.08); color: var(--text-dim); border: 1px solid rgba(255,255,255,0.15); }
 .api-badge { font-weight: 600; opacity: 0.9; }
 /* The route tag: what this game should get, and whether it is all there yet. */
 .route-badge-todo { background: rgba(88,166,255,0.16); color: #8ec5ff; border: 1px solid rgba(88,166,255,0.45); }
-.route-badge-done { background: rgba(118,185,0,0.18); color: #9ed94f; border: 1px solid rgba(118,185,0,0.4); }
-.route-badge-unsupported { background: rgba(229,72,77,0.16); color: #e5484d; border: 1px solid rgba(229,72,77,0.4); }
+.route-badge-done { background: rgba(var(--accent-rgb),0.18); color: var(--accent-text); border: 1px solid rgba(var(--accent-rgb),0.4); }
+.route-badge-unsupported { background: rgba(var(--danger-rgb),0.16); color: var(--danger); border: 1px solid rgba(var(--danger-rgb),0.4); }
 .route-badge-unknown { background: rgba(255,255,255,0.08); color: var(--text-dim); border: 1px solid rgba(255,255,255,0.15); }
 /* Three chips (engine, API, route) no longer fit one card line; the route tag is the one that
    must never be the part clipped off. */
@@ -358,7 +376,7 @@ select:focus { outline: 1px solid var(--accent); }
 }
 
 .status-line { font-size: 12px; margin-top: 6px; }
-.status-ok { color: var(--accent); }
+.status-ok { color: var(--accent-text); }
 .status-bad { color: var(--danger); }
 
 .modal-wide { width: 620px; }

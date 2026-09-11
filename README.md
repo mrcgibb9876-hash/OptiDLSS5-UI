@@ -35,8 +35,8 @@ and dark themes:
 
 ![DLSS 5 Developer Controls panel, light theme, with the Lossless Scaling row active](docs/screenshots/dlssnr-panel-light.png)
 
-**On an AMD card** the app detects the GPU and routes differently (see
-[DLSS NR on AMD](#dlss-nr-on-amd-rx-7000--9000) below). Each DX12 card gets a "DLSS NR on AMD" tag,
+**On an AMD card** the app detects the GPU, wears AMD red instead of NVIDIA green, and routes
+differently (see [DLSS NR on AMD](#dlss-nr-on-amd-rx-7000--9000) below). Each DX12 card gets a "DLSS NR on AMD" tag,
 a DX11 game says there is no Neural Rendering route on AMD yet, and Install warns that OptiScaler's
 own Neural Rendering will not run on this GPU before it does anything. These three are **mock-ups
 rendered from the real app code with stubbed data**, not captures from an AMD machine -- phase 1
