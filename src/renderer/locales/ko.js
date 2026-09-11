@@ -375,4 +375,11 @@ window.I18N.register("ko", {
   "Could not remove the other toolchain: {error}": "다른 툴체인을 제거할 수 없습니다: {error}",
   "Other DLSS 5 toolchain removed.": "다른 DLSS 5 툴체인이 제거되었습니다.",
   "If the game now fails to start, verify its files through its store.": "게임이 이제 시작되지 않으면 스토어에서 게임 파일을 검증하세요.",
+  "Remove Luma UE": "Luma UE 제거",
+  "Deploy Luma UE (experimental)": "Luma UE 배포 (실험적)",
+  "Removing Luma UE…": "Luma UE 제거 중…",
+  "Luma UE removed ({list}).": "Luma UE 제거됨({list}).",
+  "Could not remove Luma UE: {error}": "Luma UE를 제거할 수 없습니다: {error}",
+  "Luma UE is known not to work here: {why}. The DLSS5 Feeder is the route for this game.": "Luma UE는 여기서 작동하지 않는 것으로 알려져 있습니다: {why}. 이 게임의 경로는 DLSS5 Feeder입니다.",
+  "Unverified on this game. Luma's Unreal Engine mod is generic for UE4 DirectX 11 games, but not every game survives it -- Spyro Reignited Trilogy does not start with it deployed. If this game fails to launch afterwards, use Remove Luma UE below; the DLSS5 Feeder route stays available either way.": "이 게임에서는 검증되지 않았습니다. Luma의 Unreal Engine 모드는 UE4 DirectX 11 게임에 범용이지만 모든 게임이 견디는 것은 아닙니다 -- Spyro Reignited Trilogy는 배포 시 시작되지 않습니다. 이후 이 게임이 실행되지 않으면 아래의 Luma UE 제거를 사용하세요. DLSS5 Feeder 경로는 어느 쪽이든 계속 사용할 수 있습니다.",
 });

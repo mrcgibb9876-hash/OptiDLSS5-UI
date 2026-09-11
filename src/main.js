@@ -293,7 +293,7 @@ ipcMain.handle('feeder:readiness', async (_evt, exePath) => {
   // ReShade64.dll into the same folder, so offering both here let a user deploy one over the
   // other. Only a Feeder already on disk keeps this section open for that game.
   const detected = withApiOverride(await detectGame(dir, exePath), readApiOverride(dir));
-  if ((lumaue.isLumaUeGame(exePath, detected) || lumaue.lumaUeDeployed(dir)) && !feeder.feederDeployed(dir)) {
+  if ((lumaue.isLumaUeDefault(exePath) || lumaue.lumaUeDeployed(dir)) && !feeder.feederDeployed(dir)) {
     return { ready: false, needed: false, reason: 'This game uses Luma UE for its DLSS call, not the Feeder -- see the Luma UE section.' };
   }
   return { needed: true, ...feeder.feederReadiness(dir, detected.api) };
@@ -555,6 +555,7 @@ ipcMain.handle('lumaue:deploy', async (_evt, { exePath, force, licenseConfirmed 
     const dir = gameDir(exePath);
     const detected = withApiOverride(await detectGame(dir, exePath), readApiOverride(dir));
     if (!lumaue.isLumaUeGame(exePath, detected)) throw new Error('Luma UE is for Unreal Engine 4 games rendering with DirectX 11 and no DLSS of their own');
+    if (lumaue.lumaUeKnownBad(exePath)) throw new Error('Luma UE is known not to work with this game: ' + lumaue.lumaUeKnownBad(exePath));
     // Hand-over from the Feeder: the two are both ReShade add-ons supplying the DLSS call and
     // cannot share one ReShade. Its ReShade64.dll goes too -- Luma's deploy places its own.
     const feederRemoved = feeder.feederDeployed(dir)
@@ -575,6 +576,27 @@ ipcMain.handle('lumaue:deploy', async (_evt, { exePath, force, licenseConfirmed 
     // stuck on "waiting") until the next launch of this app. Run it now.
     const configured = fs.existsSync(path.join(dir, 'OptiScaler.ini')) ? await autoConfigureGame(dir, exePath) : null;
     return { ok: true, ...results, feederRemoved, autoConfigured: configured ? configured.applied : [], optiScalerInstalled: !!configured };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// Undoes lumaue:deploy for one game, the mirror of feeder:remove: the stack goes, [Plugins]
+// LoadReshade returns to auto unless the Feeder still needs ReShade loaded, and the profile is
+// re-run so the game lands where it should (the Feeder route, for a game Luma broke).
+ipcMain.handle('lumaue:remove', async (_evt, { exePath }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const result = await lumaue.removeLumaStack(dir);
+    const iniPath = path.join(dir, 'OptiScaler.ini');
+    let ini = [];
+    if (fs.existsSync(iniPath)) {
+      if (!feeder.feederDeployed(dir)) ini = patchIniValues(iniPath, [{ section: 'Plugins', key: 'LoadReshade', value: 'auto' }]);
+      const { applied } = await autoConfigureGame(dir, exePath);
+      ini = [...ini, ...(applied || [])];
+    }
+    return { ok: true, ...result, ini };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }

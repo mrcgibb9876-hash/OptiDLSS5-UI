@@ -375,4 +375,11 @@ window.I18N.register("ru", {
   "Could not remove the other toolchain: {error}": "Не удалось удалить другой набор инструментов: {error}",
   "Other DLSS 5 toolchain removed.": "Другой набор инструментов DLSS 5 удалён.",
   "If the game now fails to start, verify its files through its store.": "Если игра теперь не запускается, проверьте её файлы через магазин.",
+  "Remove Luma UE": "Удалить Luma UE",
+  "Deploy Luma UE (experimental)": "Развернуть Luma UE (экспериментально)",
+  "Removing Luma UE…": "Удаление Luma UE…",
+  "Luma UE removed ({list}).": "Luma UE удалён ({list}).",
+  "Could not remove Luma UE: {error}": "Не удалось удалить Luma UE: {error}",
+  "Luma UE is known not to work here: {why}. The DLSS5 Feeder is the route for this game.": "Известно, что Luma UE здесь не работает: {why}. Для этой игры путь -- DLSS5 Feeder.",
+  "Unverified on this game. Luma's Unreal Engine mod is generic for UE4 DirectX 11 games, but not every game survives it -- Spyro Reignited Trilogy does not start with it deployed. If this game fails to launch afterwards, use Remove Luma UE below; the DLSS5 Feeder route stays available either way.": "Не проверено на этой игре. Мод Luma для Unreal Engine универсален для игр UE4 на DirectX 11, но не каждая игра его переносит -- Spyro Reignited Trilogy с ним не запускается. Если игра после этого перестанет запускаться, используйте «Удалить Luma UE» ниже; путь DLSS5 Feeder остаётся доступным в любом случае.",
 });

@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('api', {
 
   lumaUeReadiness: (exePath) => ipcRenderer.invoke('lumaue:readiness', { exePath }),
   lumaUeDeploy: (exePath, options) => ipcRenderer.invoke('lumaue:deploy', { exePath, ...options }),
+  lumaUeRemove: (exePath) => ipcRenderer.invoke('lumaue:remove', { exePath }),
   lumaUeApplyAmdIntelWorkaround: (exePath) => ipcRenderer.invoke('lumaue:applyAmdIntelWorkaround', { exePath }),
 
   losslessDetect: () => ipcRenderer.invoke('lossless:detect'),

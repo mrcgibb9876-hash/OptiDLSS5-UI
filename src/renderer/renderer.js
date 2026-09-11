@@ -1347,10 +1347,12 @@ async function loadLumaUeSection(game) {
   }
   section.classList.remove('hidden');
 
-  knownIssue.textContent = readiness.knownIssue || '';
+  knownIssue.textContent = t(readiness.knownIssue || '');
   licenseText.textContent = readiness.licenseSummary || '';
   deployBtn.disabled = !licenseCheckbox.checked;
-  deployBtn.textContent = readiness.blockedByFeeder ? t('Deploy Luma UE (removes the Feeder first)') : t('Deploy Luma UE');
+  deployBtn.textContent = readiness.blockedByFeeder ? t('Deploy Luma UE (removes the Feeder first)')
+    : readiness.experimental ? t('Deploy Luma UE (experimental)') : t('Deploy Luma UE');
+  $('#btn-lumaue-remove').classList.toggle('hidden', !readiness.addonInstalled);
   // The workaround used to be a blind question; now the GPU is known it is pre-answered, and
   // still a checkbox the user can untick.
   if (gpu.vendor === 'amd' || gpu.vendor === 'intel') $('#game-lumaue-amd-intel').checked = true;
@@ -1392,6 +1394,19 @@ $('#btn-close-lumaue-instructions').addEventListener('click', () => {
 
 $('#game-lumaue-license-confirm').addEventListener('change', (e) => {
   $('#btn-lumaue-deploy').disabled = !e.target.checked;
+});
+
+$('#btn-lumaue-remove').addEventListener('click', async () => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  $('#game-lumaue-status').textContent = t('Removing Luma UE…');
+  const res = await window.api.lumaUeRemove(game.exePath);
+  toast(res.ok ? t('Luma UE removed ({list}).', { list: res.removed.join(', ') }) : t('Could not remove Luma UE: {error}', { error: res.error }));
+  await loadRouteStatus(game);
+  await loadFeederSection(game);
+  await loadLumaUeSection(game);
+  await loadLosslessSection(game);
+  renderGrid();
 });
 
 $('#btn-lumaue-deploy').addEventListener('click', async () => {

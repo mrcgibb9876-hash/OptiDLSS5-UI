@@ -375,4 +375,11 @@ window.I18N.register('pt-BR', {
   "Could not remove the other toolchain: {error}": "Não foi possível remover a outra toolchain: {error}",
   "Other DLSS 5 toolchain removed.": "Outra toolchain DLSS 5 removida.",
   "If the game now fails to start, verify its files through its store.": "Se o jogo não iniciar mais, verifique os arquivos dele pela loja.",
+  "Remove Luma UE": "Remover Luma UE",
+  "Deploy Luma UE (experimental)": "Implantar Luma UE (experimental)",
+  "Removing Luma UE…": "Removendo Luma UE…",
+  "Luma UE removed ({list}).": "Luma UE removido ({list}).",
+  "Could not remove Luma UE: {error}": "Não foi possível remover o Luma UE: {error}",
+  "Luma UE is known not to work here: {why}. The DLSS5 Feeder is the route for this game.": "Sabe-se que o Luma UE não funciona aqui: {why}. O DLSS5 Feeder é a rota para este jogo.",
+  "Unverified on this game. Luma's Unreal Engine mod is generic for UE4 DirectX 11 games, but not every game survives it -- Spyro Reignited Trilogy does not start with it deployed. If this game fails to launch afterwards, use Remove Luma UE below; the DLSS5 Feeder route stays available either way.": "Não verificado neste jogo. O mod de Unreal Engine do Luma é genérico para jogos UE4 em DirectX 11, mas nem todo jogo aguenta -- Spyro Reignited Trilogy não inicia com ele implantado. Se este jogo não iniciar depois, use Remover Luma UE abaixo; a rota do DLSS5 Feeder continua disponível de qualquer forma.",
 });

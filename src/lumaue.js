@@ -114,8 +114,26 @@ function isLumaUeGame(exePath, detected) {
   return !fs.existsSync(path.join(dir, 'sl.interposer.dll')) && !fs.existsSync(path.join(dir, 'sl.interposer.dll.original'));
 }
 
-const LUMA_GENERIC_NOTE = 'Luma\'s Unreal Engine mod is generic for UE4 DirectX 11 games; this app has verified it on ' +
-  'STAR WARS Jedi: Fallen Order. Elsewhere, confirm Luma\'s overlay (Home) appears and DLSS can be selected in it.';
+const LUMA_GENERIC_NOTE = 'Unverified on this game. Luma\'s Unreal Engine mod is generic for UE4 DirectX 11 games, but not ' +
+  'every game survives it -- Spyro Reignited Trilogy does not start with it deployed. If this game fails to launch ' +
+  'afterwards, use Remove Luma UE below; the DLSS5 Feeder route stays available either way.';
+
+// Games where Luma UE was tried on a real install and the game did not start. Refused rather
+// than warned about -- a route that is known to break the game is not a choice to offer.
+const LUMA_UE_KNOWN_BAD = {
+  'spyro-win64-shipping.exe': 'Spyro Reignited Trilogy does not start with Luma UE deployed (user report, 2026-09-12)',
+};
+
+function lumaUeKnownBad(exePath) {
+  return LUMA_UE_KNOWN_BAD[path.basename(exePath || '').toLowerCase()] || null;
+}
+
+// The default route only where Luma UE has been verified end to end (Fallen Order). Every other
+// eligible UE4 D3D11 game defaults to the Feeder and gets Luma as an experimental option in Edit
+// -- the wider gate shipped in 1.25.0 on the strength of one game and broke Spyro within a day.
+function isLumaUeDefault(exePath) {
+  return isFallenOrder(exePath);
+}
 
 function lumaUeDeployed(dir) {
   return fs.existsSync(path.join(dir, LUMA_ADDON_DEST_NAME));
@@ -123,6 +141,14 @@ function lumaUeDeployed(dir) {
 
 // Same "explain, don't just disable" shape as feeder.js's feederReadiness().
 function lumaUeReadiness(dir, exePath, detected = null) {
+  const knownBad = lumaUeKnownBad(exePath);
+  if (knownBad && !lumaUeDeployed(dir)) {
+    return {
+      supported: false,
+      reason: 'Luma UE is known not to work here: {why}. The DLSS5 Feeder is the route for this game.',
+      reasonVars: { why: knownBad },
+    };
+  }
   if (!isLumaUeGame(exePath, detected) && !lumaUeDeployed(dir)) {
     return {
       supported: false,
@@ -148,6 +174,8 @@ function lumaUeReadiness(dir, exePath, detected = null) {
     reason: blockedByFeeder
       ? 'The DLSS5 Feeder is deployed here. Luma UE and the Feeder are both ReShade add-ons supplying the DLSS call, and only one can run -- Deploy removes the Feeder first, then puts Luma UE in.'
       : null,
+    experimental: !isFallenOrder(exePath),
+    knownBad,
     knownIssue: isFallenOrder(exePath) ? LUMA_KNOWN_ISSUE : LUMA_GENERIC_NOTE,
     licenseSummary: LUMA_LICENSE_SUMMARY,
     reshadeInstalled,
@@ -263,6 +291,8 @@ module.exports = {
   removeLumaStack,
   isFallenOrder,
   isLumaUeGame,
+  isLumaUeDefault,
+  lumaUeKnownBad,
   lumaUeDeployed,
   lumaUeReadiness,
   deployLumaUeStack,
