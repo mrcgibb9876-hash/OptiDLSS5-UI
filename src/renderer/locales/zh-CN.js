@@ -362,4 +362,7 @@ window.I18N.register("zh-CN", {
   "Downloading Manager {version} in the background -- you will be asked to restart when it is ready.": "正在后台下载 Manager {version} -- 准备好后会提示您重启。",
   "Update Manager": "更新 Manager",
   "The update is not ready yet.": "更新尚未就绪。",
+  "Remove leftovers": "移除残留",
+  "Restored: {list}.": "已恢复：{list}。",
+  "Removes everything this app put in the game folder -- OptiScaler, the Feeder or Luma UE, Streamline, REFramework, swapped DLLs, its markers -- and puts back anything it renamed or replaced. No terminal.": "移除本应用放入游戏文件夹的一切 -- OptiScaler、Feeder 或 Luma UE、Streamline、REFramework、被替换的 DLL、标记文件 -- 并恢复它重命名或替换过的所有文件。无需终端。",
 });

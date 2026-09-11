@@ -810,7 +810,15 @@ ipcMain.handle('game:setApiOverride', async (_evt, { exePath, api }) => {
 function detectInstalledBackends(dir) {
   const has = (name) => fs.existsSync(path.join(dir, name));
   const optiscaler = has('OptiScaler.ini') && has('nvngx_dlssnr.dll');
-  return { optiscaler };
+  // Anything else of ours still in the folder once OptiScaler itself is gone -- so the card can
+  // still offer Remove and take the folder the rest of the way back.
+  const leftovers = [
+    'OptiScaler.ini', 'OptiScaler.dll', 'nvngx_dlssnr.dll', 'nvngx.dll_dlssnr.dll', 'OptiScaler',
+    'dlss5-feed.addon64', 'Luma-Unreal Engine.addon', 'Luma',
+    '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.dlss5ui-lossless.json',
+    '.dlss5ui-api.json', '.dlss5ui-optifg-enabled', '.optiscaler-manager-install.json',
+  ].filter(has);
+  return { optiscaler, leftovers };
 }
 
 ipcMain.handle('game:status', (_evt, exePath) => {
@@ -925,11 +933,26 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
       }
     }
 
+    const journal = readInstallMarker(dir) || {};
+    const added = new Set(journal.added || []);
+    const replaced = [...(journal.replaced || [])];
+    const oursAlready = OUR_INSTALL_SIGNS.some((n) => fs.existsSync(path.join(dir, n)));
     for (const entry of await fsp.readdir(releaseFolder, { withFileTypes: true })) {
       const src = path.join(releaseFolder, entry.name);
       const dest = path.join(dir, entry.name);
+      const existed = fs.existsSync(dest);
+      if (!existed) {
+        added.add(entry.name);
+      } else if (entry.isFile() && !oursAlready && !added.has(entry.name) && !replaced.some((r) => r.rel === entry.name)) {
+        // Someone else's file under a payload name (a hand-installed OptiScaler, say): keep the
+        // original so Remove can put it back exactly.
+        const backup = entry.name + ORIG_BACKUP_SUFFIX;
+        if (!fs.existsSync(path.join(dir, backup))) await fsp.copyFile(dest, path.join(dir, backup));
+        replaced.push({ rel: entry.name, backup });
+      }
       await fsp.cp(src, dest, { recursive: true, force: true });
     }
+    updateInstallJournal(dir, { added: [...added], replaced });
 
     const nrDest = path.join(dir, 'nvngx_dlssnr.dll');
     await fsp.copyFile(nrDllPath, nrDest);
@@ -1007,13 +1030,92 @@ async function removeSharedNrDllIfUnneeded(dir) {
   return true;
 }
 
+// Strips a game folder back to what it was before this app touched it: every stack it can
+// deploy (Feeder, Luma UE, the FrameGen DLL swap, Streamline, REFramework), the OptiScaler
+// payload and proxy, everything the install journal recorded as added, everything it recorded
+// as replaced (put back from its backup), and every marker. A folder installed before the
+// journal existed still gets the fixed payload list. Nothing here guesses at a file it did not
+// place -- unknown files stay, and the report says so where a decision was made.
+const RELEASE_LICENSE_FILES = ['DirectX_LICENSE.txt', 'FidelityFX_v2_LICENSE.md', 'RenoDX_ATTRIBUTION.txt', 'XeSS_LICENSE.txt'];
+const APP_MARKERS = ['.dlss5ui-lossless.json', '.dlss5ui-api.json', '.dlss5ui-optifg-enabled', '.optiscaler-manager-install.json'];
+
+async function uninstallEverything(dir) {
+  const removed = [];
+  const restored = [];
+  const kept = [];
+  const journal = readInstallMarker(dir) || {};
+  const rmRel = async (rel) => {
+    const p = path.join(dir, rel);
+    if (!fs.existsSync(p)) return false;
+    await fsp.rm(p, { recursive: true, force: true });
+    removed.push(rel);
+    return true;
+  };
+  const rmdirIfEmpty = (rel) => {
+    try { if (fs.readdirSync(path.join(dir, rel)).length === 0) { fs.rmdirSync(path.join(dir, rel)); removed.push(rel); } } catch {}
+  };
+
+  if (feeder.feederDeployed(dir)) {
+    const r = await feeder.removeFeederStack(dir, { keepReShade: false });
+    removed.push(...r.removed); kept.push(...r.kept);
+  }
+  if (lumaue.lumaUeDeployed(dir) || fs.existsSync(path.join(dir, 'Luma-Unreal Engine.addon'))) {
+    const r = await lumaue.removeLumaStack(dir);
+    removed.push(...r.removed); kept.push(...r.kept);
+  }
+  try {
+    const fg = await framegen.restoreFrameGenDll(dir);
+    if (fg.restored) restored.push(path.basename(fg.file || 'nvngx_dlssg.dll'));
+  } catch {}
+  if (journal.streamline && journal.streamline.dir) {
+    for (const f of journal.streamline.files || []) await rmRel(path.join(journal.streamline.dir, f));
+    rmdirIfEmpty(journal.streamline.dir);
+  }
+  if (journal.reframework) {
+    await rmRel(REFRAMEWORK_DLL_NAME);
+    await rmRel(REFRAMEWORK_CONFIG_NAME);
+    await rmRel('reframework');
+  }
+
+  const core = await uninstallOptiScaler(dir);
+  removed.push(...core.removed); kept.push(...core.kept);
+  if (core.nrDllRemoved && !removed.includes('nvngx_dlssnr.dll')) removed.push('nvngx_dlssnr.dll');
+
+  for (const rel of journal.added || []) await rmRel(rel);
+  for (const r of journal.replaced || []) {
+    const backup = path.join(dir, r.backup);
+    if (!fs.existsSync(backup)) continue;
+    await fsp.rm(path.join(dir, r.rel), { recursive: true, force: true });
+    await fsp.rename(backup, path.join(dir, r.rel));
+    restored.push(r.rel);
+  }
+  // Any backup the journal lost track of (an older marker, a hand-edited one): the suffix alone
+  // says what it is and where it goes back.
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.endsWith(ORIG_BACKUP_SUFFIX)) continue;
+    const rel = name.slice(0, -ORIG_BACKUP_SUFFIX.length);
+    await fsp.rm(path.join(dir, rel), { recursive: true, force: true });
+    await fsp.rename(path.join(dir, name), path.join(dir, rel));
+    if (!restored.includes(rel)) restored.push(rel);
+  }
+
+  // Payload names from before the journal existed. Licenses/ only loses the files the release
+  // ships and the folder itself only once empty -- a game's own Licenses folder is not ours.
+  for (const rel of ['OptiScaler', '!! EXTRACT ALL FILES TO GAME FOLDER !!', 'setup_linux.sh']) await rmRel(rel);
+  for (const f of RELEASE_LICENSE_FILES) await rmRel(path.join('Licenses', f));
+  rmdirIfEmpty('Licenses');
+  for (const m of APP_MARKERS) await rmRel(m);
+
+  return { removed: [...new Set(removed)], restored, kept };
+}
+
 ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
   const dir = gameDir(exePath);
   try {
     // Done here rather than by spawning the generated .bat: that script asks its own questions in
     // a console the app cannot see, and decides what to restore by guessing from filenames. This
-    // reverses what the install recorded it did.
-    const result = await uninstallOptiScaler(dir);
+    // reverses what the install recorded it did -- and every other stack this app deploys.
+    const result = await uninstallEverything(dir);
     return { ok: true, ...result };
   } catch (err) {
     return { ok: false, error: err.message };
@@ -1416,6 +1518,10 @@ async function deployStreamlineFolder(dir, exePath) {
     await fsp.copyFile(path.join(cacheDir, entry.name), destFile);
     copied.push(entry.name);
   }
+  if (copied.length > 0) {
+    const prior = (readInstallMarker(dir) || {}).streamline || {};
+    updateInstallJournal(dir, { streamline: { dir: path.relative(dir, dest), files: [...new Set([...(prior.files || []), ...copied])] } });
+  }
   return {
     deployed: copied.length > 0,
     files: copied,
@@ -1585,6 +1691,7 @@ async function ensureREFrameworkForGame(dir) {
   if (!cachedDll) return { installed: false, error: 'could not fetch REFramework' };
 
   await fsp.copyFile(cachedDll, destPath);
+  updateInstallJournal(dir, { reframework: true });
   return { installed: true, version: fs.existsSync(path.join(reframeworkCacheDir(), '.version'))
     ? fs.readFileSync(path.join(reframeworkCacheDir(), '.version'), 'utf-8').trim() : 'unknown' };
 }
@@ -1918,6 +2025,20 @@ function readInstallMarker(dir) {
   return readJson(path.join(dir, INSTALL_MARKER), null);
 }
 
+// The install journal: the same marker file, grown into a record of everything this app put in
+// the folder (`added`), every file of someone else's it overwrote and backed up (`replaced`), and
+// which optional stacks it deployed (`streamline`, `reframework`). uninstallEverything() reverses
+// it; a folder installed before the journal existed still gets the fixed payload list.
+function updateInstallJournal(dir, patch) {
+  const current = readInstallMarker(dir) || {};
+  writeJson(path.join(dir, INSTALL_MARKER), { ...current, ...patch });
+}
+
+const ORIG_BACKUP_SUFFIX = '.dlss5ui-orig';
+// Files this app's own earlier installs leave behind: a payload-named file beside any of these
+// is ours, not the game's, and is overwritten without a backup.
+const OUR_INSTALL_SIGNS = ['nvngx_dlssnr.dll', 'nvngx.dll_dlssnr.dll', INSTALL_MARKER];
+
 // Renames OptiScaler.dll to the proxy name, preserving anything already using that name.
 //
 // The backup rule is deliberately more cautious than the script's: if a backup already exists this
@@ -1963,7 +2084,7 @@ async function installProxy(dir, proxyName = DEFAULT_PROXY) {
 
   // What we did, so removal reverses exactly this rather than inferring it from what is lying
   // around. The generated uninstaller has to guess, which is why it can hijack a hand-made setup.
-  writeJson(path.join(dir, INSTALL_MARKER), {
+  updateInstallJournal(dir, {
     proxy: proxyName,
     backedUp,
     installedAt: new Date().toISOString()

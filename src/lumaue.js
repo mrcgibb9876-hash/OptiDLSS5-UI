@@ -229,14 +229,38 @@ async function deployLumaUeStack(dir, { cacheDir, getRhiManifest, compareVersion
 
   fs.writeFileSync(
     path.join(dir, LUMA_DEPLOY_MARKER),
-    JSON.stringify({ lumaVersion: asset.tag, deployedAt: new Date().toISOString() }, null, 2),
+    JSON.stringify({ lumaVersion: asset.tag, placedNvngxDlss: !!(dlss && dlss.deployed), deployedAt: new Date().toISOString() }, null, 2),
     'utf8',
   );
 
   return { deployed: true, version: asset.tag, shaderFiles: shaderEntries.length, dlss, ini };
 }
 
+// Reverses deployLumaUeStack(): Luma's shader folder, its add-on, the ReShade it brought (a plain
+// ReShade64.dll plus the ini/preset/log ReShade writes beside it), nvngx_dlss.dll when this app
+// placed it, and the marker. Same shape as feeder.removeFeederStack().
+async function removeLumaStack(dir) {
+  const removed = [];
+  const kept = [];
+  let marker = null;
+  try { marker = JSON.parse(fs.readFileSync(path.join(dir, LUMA_DEPLOY_MARKER), 'utf8')); } catch {}
+  const rm = async (rel) => {
+    const p = path.join(dir, rel);
+    if (!fs.existsSync(p)) return;
+    await fsp.rm(p, { recursive: true, force: true });
+    removed.push(rel);
+  };
+  await rm('Luma');
+  await rm(LUMA_ADDON_DEST_NAME);
+  for (const name of [RESHADE_DLL_NAME, 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log']) await rm(name);
+  if (!(marker && marker.placedNvngxDlss === false)) await rm('nvngx_dlss.dll');
+  else kept.push('nvngx_dlss.dll (was already here before Luma)');
+  await rm(LUMA_DEPLOY_MARKER);
+  return { removed, kept };
+}
+
 module.exports = {
+  removeLumaStack,
   isFallenOrder,
   isLumaUeGame,
   lumaUeDeployed,

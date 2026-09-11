@@ -362,4 +362,7 @@ window.I18N.register("ko", {
   "Downloading Manager {version} in the background -- you will be asked to restart when it is ready.": "Manager {version}을(를) 백그라운드에서 다운로드하는 중 -- 준비되면 다시 시작하라는 안내가 표시됩니다.",
   "Update Manager": "Manager 업데이트",
   "The update is not ready yet.": "업데이트가 아직 준비되지 않았습니다.",
+  "Remove leftovers": "잔여 파일 제거",
+  "Restored: {list}.": "복원됨: {list}.",
+  "Removes everything this app put in the game folder -- OptiScaler, the Feeder or Luma UE, Streamline, REFramework, swapped DLLs, its markers -- and puts back anything it renamed or replaced. No terminal.": "이 앱이 게임 폴더에 넣은 모든 것을 제거합니다 -- OptiScaler, Feeder 또는 Luma UE, Streamline, REFramework, 교체된 DLL, 마커 -- 그리고 이름을 바꾸거나 교체한 것은 모두 되돌립니다. 터미널 없음.",
 });

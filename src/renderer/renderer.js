@@ -114,7 +114,7 @@ async function renderGrid() {
         <div class="card-warning card-detect-warning hidden"></div>
         ${(status.warnings || []).map((w) => `<div class="card-warning" title="${escapeHtml(w.message)}">⚠ ${escapeHtml(w.message)}</div>`).join('')}
         <div class="card-actions">
-          <button class="btn ${backends.optiscaler ? 'btn-danger' : 'btn-primary'} btn-install">${escapeHtml(backends.optiscaler ? t('Remove OptiScaler') : t('Install OptiScaler'))}</button>
+          <button class="btn ${backends.optiscaler || (backends.leftovers || []).length ? 'btn-danger' : 'btn-primary'} btn-install">${escapeHtml(backends.optiscaler ? t('Remove OptiScaler') : (backends.leftovers || []).length ? t('Remove leftovers') : t('Install OptiScaler'))}</button>
           <button class="btn btn-ghost btn-setup" title="${escapeHtml(t('Optional -- the app already sets up the proxy DLL. Use this for OptiPatcher or spoofing options.'))}">${escapeHtml(t('Setup script'))}</button>
         </div>
         <div class="card-actions-row2">
@@ -161,12 +161,13 @@ async function renderGrid() {
     }
 
     card.querySelector('.btn-install').addEventListener('click', () => {
-      if (backends.optiscaler) {
+      if (backends.optiscaler || (backends.leftovers || []).length) {
         flipToConfirm(card, {
           title: t('Remove OptiScaler?'),
-          detail: t('Removes the files this app installed and puts back anything it renamed. No terminal.'),
+          detail: t('Removes everything this app put in the game folder -- OptiScaler, the Feeder or Luma UE, Streamline, REFramework, swapped DLLs, its markers -- and puts back anything it renamed or replaced. No terminal.'),
           onConfirm: async () => {
             const res = await window.api.runUninstall(game.exePath);
+            if (res.ok) await removeLosslessProfile(game);
             toast(res.ok ? describeUninstall(res) : t("Couldn't remove OptiScaler: {error}", { error: res.error }));
             renderGrid();
           }
@@ -410,8 +411,9 @@ async function installGame(game) {
 // terminal had opened, which is why the badge and the folder could disagree.
 function describeUninstall(res) {
   const removed = (res.removed || []).length ? ' ' + t('Removed: {list}.', { list: res.removed.join(', ') }) : ' ' + t('Nothing left to remove.');
+  const restored = (res.restored || []).length ? ' ' + t('Restored: {list}.', { list: res.restored.join(', ') }) : '';
   const kept = (res.kept || []).length ? ' ' + t('Left alone: {list}.', { list: res.kept.join('; ') }) : '';
-  return `${t('OptiScaler removed.')}${removed}${kept}`;
+  return `${t('OptiScaler removed.')}${removed}${restored}${kept}`;
 }
 
 // The escape hatch. Installing no longer needs this -- the app does the rename itself -- but the
@@ -428,6 +430,7 @@ async function removeGame(game) {
 
   if (choice === 'remove-and-forget') {
     const res = await window.api.runUninstall(game.exePath);
+    if (res.ok) await removeLosslessProfile(game);
     toast(res.ok ? describeUninstall(res) : t("Couldn't remove OptiScaler: {error}. Removed from the list anyway.", { error: res.error }));
   }
 
@@ -988,6 +991,31 @@ $('#game-optifg-toggle').addEventListener('change', async (e) => {
 // ever touches Title/Path/FrameGeneration/ScalingType; every other field -- and every other
 // profile in the file -- passes through untouched. See lossless.js for why this file, not a
 // hand-rolled default profile, is the safe source of truth for the rest of the schema.
+// The reverse of configureLossless() for Remove: drops the profile this app created for the game
+// (matched the same way, by Path then by normalised Title) and leaves every other profile and
+// every root setting alone. Quiet when Lossless Scaling is not installed or has no profile.
+async function removeLosslessProfile(game) {
+  try {
+    const xmlText = await window.api.losslessReadSettings();
+    if (!xmlText) return false;
+    const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+    if (doc.querySelector('parsererror')) return false;
+    const profilesEl = doc.querySelector('GameProfiles');
+    if (!profilesEl) return false;
+    const exePathLower = (game.exePath || '').trim().toLowerCase();
+    const normalizedTitle = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, '');
+    const profiles = Array.from(profilesEl.querySelectorAll('Profile'));
+    let profile = profiles.find((p) => { const el = p.querySelector('Path'); return el && el.textContent.trim().toLowerCase() === exePathLower; });
+    if (!profile) profile = profiles.find((p) => { const el = p.querySelector('Title'); return el && normalizedTitle(el.textContent) === normalizedTitle(game.name); });
+    if (!profile) return false;
+    profilesEl.removeChild(profile);
+    await window.api.losslessWriteSettings(new XMLSerializer().serializeToString(doc));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function configureLossless(game, { frameGenMode = 'LSFG3', mode = 'FIXED', multiplier = 2, target = 120 } = {}) {
   const xmlText = await window.api.losslessReadSettings();
   if (!xmlText) {

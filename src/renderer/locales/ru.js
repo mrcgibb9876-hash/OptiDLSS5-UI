@@ -362,4 +362,7 @@ window.I18N.register("ru", {
   "Downloading Manager {version} in the background -- you will be asked to restart when it is ready.": "Manager {version} загружается в фоне -- когда он будет готов, вам предложат перезапуск.",
   "Update Manager": "Обновить Manager",
   "The update is not ready yet.": "Обновление ещё не готово.",
+  "Remove leftovers": "Удалить остатки",
+  "Restored: {list}.": "Восстановлено: {list}.",
+  "Removes everything this app put in the game folder -- OptiScaler, the Feeder or Luma UE, Streamline, REFramework, swapped DLLs, its markers -- and puts back anything it renamed or replaced. No terminal.": "Удаляет всё, что это приложение положило в папку игры -- OptiScaler, Feeder или Luma UE, Streamline, REFramework, подменённые DLL, свои маркеры -- и возвращает всё, что переименовало или заменило. Без терминала.",
 });
