@@ -17,7 +17,7 @@ const nativeDlss = require('./native-dlss');
 const { recommendRoute, withApiOverride, API_OVERRIDE_VALUES } = require('./route');
 const gpu = require('./gpu');
 const amdnr = require('./amdnr');
-const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, resolveUnrealShippingExe } = require('./detect');
+const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, resolveUnrealShippingExe, foreignToolchains } = require('./detect');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const managerUpdate = require('./manager-update');
 let electronAutoUpdater = null;
@@ -830,7 +830,14 @@ ipcMain.handle('game:status', (_evt, exePath) => {
     fs.existsSync(path.join(dir, 'uninstall_optiscaler.bat')) ||
     fs.existsSync(path.join(dir, 'uninstaller.bat'));
   const backends = detectInstalledBackends(dir);
-  return { exeMissing: false, hasIni, hasNr, hasUninstaller, dir, backends };
+  // Cheap marker checks on every card render: another DLSS 5 toolchain in the folder is the
+  // one thing that makes an otherwise correct install crash, so it is said on the card itself.
+  const foreign = foreignToolchains(dir);
+  const warnings = foreign.map((f) => ({
+    message: 'Another DLSS 5 toolchain is installed here ({tool}: {files}) -- two stacks hooking the same DLSS call crash the game. Remove it with its own uninstaller before using this one.',
+    vars: { tool: f.tool, files: f.files.join(', ') },
+  }));
+  return { exeMissing: false, hasIni, hasNr, hasUninstaller, dir, backends, foreign, warnings };
 });
 
 // The one-line answer the card tags and the Install button acts on -- see route.js. `detected`
@@ -1105,6 +1112,9 @@ async function uninstallEverything(dir) {
   for (const f of RELEASE_LICENSE_FILES) await rmRel(path.join('Licenses', f));
   rmdirIfEmpty('Licenses');
   for (const m of APP_MARKERS) await rmRel(m);
+
+  // Another tool's files are not this app's to delete -- named so the user knows they remain.
+  for (const f of foreignToolchains(dir)) kept.push(`${f.tool} files, not placed by this app: ${f.files.join(', ')}`);
 
   return { removed: [...new Set(removed)], restored, kept };
 }

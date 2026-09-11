@@ -365,4 +365,7 @@ window.I18N.register('pt-BR', {
   "Remove leftovers": "Remover restos",
   "Restored: {list}.": "Restaurado: {list}.",
   "Removes everything this app put in the game folder -- OptiScaler, the Feeder or Luma UE, Streamline, REFramework, swapped DLLs, its markers -- and puts back anything it renamed or replaced. No terminal.": "Remove tudo que este app colocou na pasta do jogo -- OptiScaler, o Feeder ou Luma UE, Streamline, REFramework, DLLs trocadas, seus marcadores -- e devolve tudo que renomeou ou substituiu. Sem terminal.",
+  "Another DLSS 5 toolchain is installed here ({tool}: {files}) -- two stacks hooking the same DLSS call crash the game. Remove it with its own uninstaller before using this one.": "Há outra toolchain DLSS 5 instalada aqui ({tool}: {files}) -- duas pilhas capturando a mesma chamada DLSS travam o jogo. Remova-a com o próprio desinstalador dela antes de usar esta.",
+  "Another DLSS 5 toolchain is here": "Há outra toolchain DLSS 5 aqui",
+  "This folder already has {list}. Two stacks hooking the same DLSS call crash the game -- remove the other one with its own uninstaller first.": "Esta pasta já tem {list}. Duas pilhas capturando a mesma chamada DLSS travam o jogo -- remova primeiro a outra com o próprio desinstalador dela.",
 });

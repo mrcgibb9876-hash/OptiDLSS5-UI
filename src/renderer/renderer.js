@@ -112,7 +112,7 @@ async function renderGrid() {
         <div class="card-path card-recommend" title="${escapeHtml(t('Which install path suits this game'))}">${escapeHtml(t('Checking graphics API…'))}</div>
         <div class="card-warning card-route-next hidden"></div>
         <div class="card-warning card-detect-warning hidden"></div>
-        ${(status.warnings || []).map((w) => `<div class="card-warning" title="${escapeHtml(w.message)}">⚠ ${escapeHtml(w.message)}</div>`).join('')}
+        ${(status.warnings || []).map((w) => `<div class="card-warning" title="${escapeHtml(t(w.message, w.vars))}">⚠ ${escapeHtml(t(w.message, w.vars))}</div>`).join('')}
         <div class="card-actions">
           <button class="btn ${backends.optiscaler || (backends.leftovers || []).length ? 'btn-danger' : 'btn-primary'} btn-install">${escapeHtml(backends.optiscaler ? t('Remove OptiScaler') : (backends.leftovers || []).length ? t('Remove leftovers') : t('Install OptiScaler'))}</button>
           <button class="btn btn-ghost btn-setup" title="${escapeHtml(t('Optional -- the app already sets up the proxy DLL. Use this for OptiPatcher or spoofing options.'))}">${escapeHtml(t('Setup script'))}</button>
@@ -171,6 +171,17 @@ async function renderGrid() {
             toast(res.ok ? describeUninstall(res) : t("Couldn't remove OptiScaler: {error}", { error: res.error }));
             renderGrid();
           }
+        });
+      } else if ((status.foreign || []).length) {
+        // Another DLSS 5 toolchain is in the folder: installing on top of it is how a real
+        // user's Fallen Order came to crash on launch. Said before the click lands.
+        const list = status.foreign.map((f) => `${f.tool}: ${f.files.join(', ')}`).join('; ');
+        flipToConfirm(card, {
+          title: t('Another DLSS 5 toolchain is here'),
+          detail: t('This folder already has {list}. Two stacks hooking the same DLSS call crash the game -- remove the other one with its own uninstaller first.', { list }),
+          onConfirm: () => installGame(game),
+          confirmLabel: t('Install anyway'),
+          danger: true,
         });
       } else if (gpu.vendor === 'amd' || gpu.vendor === 'intel') {
         // Installs fine, renders nothing new: OptiScaler's NR pass needs NVIDIA's NGX runtime.

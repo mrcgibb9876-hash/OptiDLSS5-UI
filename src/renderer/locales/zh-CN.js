@@ -365,4 +365,7 @@ window.I18N.register("zh-CN", {
   "Remove leftovers": "移除残留",
   "Restored: {list}.": "已恢复：{list}。",
   "Removes everything this app put in the game folder -- OptiScaler, the Feeder or Luma UE, Streamline, REFramework, swapped DLLs, its markers -- and puts back anything it renamed or replaced. No terminal.": "移除本应用放入游戏文件夹的一切 -- OptiScaler、Feeder 或 Luma UE、Streamline、REFramework、被替换的 DLL、标记文件 -- 并恢复它重命名或替换过的所有文件。无需终端。",
+  "Another DLSS 5 toolchain is installed here ({tool}: {files}) -- two stacks hooking the same DLSS call crash the game. Remove it with its own uninstaller before using this one.": "这里已安装另一套 DLSS 5 工具链（{tool}：{files}）-- 两套堆栈挂接同一个 DLSS 调用会导致游戏崩溃。使用本工具前请先用其自带的卸载程序移除它。",
+  "Another DLSS 5 toolchain is here": "这里有另一套 DLSS 5 工具链",
+  "This folder already has {list}. Two stacks hooking the same DLSS call crash the game -- remove the other one with its own uninstaller first.": "此文件夹已包含 {list}。两套堆栈挂接同一个 DLSS 调用会导致游戏崩溃 -- 请先用其自带的卸载程序移除另一套。",
 });

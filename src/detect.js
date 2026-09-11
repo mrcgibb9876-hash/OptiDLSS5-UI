@@ -720,6 +720,33 @@ function resolveUnrealShippingExe(exePath) {
   return exePath;
 }
 
+// Other DLSS 5 toolchains that people layer into the same folder. Two stacks hooking the same
+// NGX call -- two Feeders, a Feeder under Luma, two neural consumers -- crash the game, and the
+// folder in a real user's report (2026-09-11) carried DLSS5oneclick's whole tree (Core\, docs\,
+// INSTALL-DLSSNR.md, *.dlss5oneclick backups, nvngx_dlssnr_proxy.dll) under this app's own
+// OptiScaler + Luma, with the other tool's Feeder crash dump sitting beside them. Marker files
+// only, never guessed from generic names; the report names the tool and the files.
+const FOREIGN_TOOLCHAINS = [
+  { tool: 'DLSS5oneclick', files: ['INSTALL-DLSSNR.md', 'nvngx_dlssnr.dll.dlss5oneclick', '!! EXTRACT ALL FILES TO GAME FOLDER !!.dlss5oneclick', 'Core/dlss5-feed.addon64', 'Core/renodx-dlss5.addon64', 'get_streamline.ps1', 'get_streamline.bat', 'get_streamline.cmd'], pattern: /\.dlss5oneclick$/i },
+  { tool: 'DLSS5-Swapper', files: ['_DLSS5_Backup/manifest.json', 'renodx-dlss5.addon64', 'host64/renodx-dlss5.addon64', 'dlss5-feed-host64.exe'] },
+  { tool: 'DLSSNR-Cost-Scaler', files: ['nvngx_dlssnr_proxy.dll'] },
+  { tool: 'a RenoDX DLSS 5 add-on', pattern: /^renodx-dlss.*\.addon(64|32)?$/i },
+];
+
+function foreignToolchains(dir) {
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch { return []; }
+  const out = [];
+  for (const t of FOREIGN_TOOLCHAINS) {
+    if (t.unless && fs.existsSync(path.join(dir, t.unless))) continue;
+    const found = new Set();
+    for (const rel of t.files || []) if (fs.existsSync(path.join(dir, ...rel.split('/')))) found.add(rel);
+    if (t.pattern) for (const n of names) if (t.pattern.test(n)) found.add(n);
+    if (found.size) out.push({ tool: t.tool, files: [...found] });
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Public
 
@@ -829,4 +856,4 @@ function isDetectionStale(stored, dir) {
   return false;
 }
 
-module.exports = { DETECT_VERSION, detectGame, detectRenderApi, isDetectionStale, isReEngineGame, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName };
+module.exports = { DETECT_VERSION, detectGame, detectRenderApi, isDetectionStale, isReEngineGame, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, foreignToolchains };

@@ -365,4 +365,7 @@ window.I18N.register("ko", {
   "Remove leftovers": "잔여 파일 제거",
   "Restored: {list}.": "복원됨: {list}.",
   "Removes everything this app put in the game folder -- OptiScaler, the Feeder or Luma UE, Streamline, REFramework, swapped DLLs, its markers -- and puts back anything it renamed or replaced. No terminal.": "이 앱이 게임 폴더에 넣은 모든 것을 제거합니다 -- OptiScaler, Feeder 또는 Luma UE, Streamline, REFramework, 교체된 DLL, 마커 -- 그리고 이름을 바꾸거나 교체한 것은 모두 되돌립니다. 터미널 없음.",
+  "Another DLSS 5 toolchain is installed here ({tool}: {files}) -- two stacks hooking the same DLSS call crash the game. Remove it with its own uninstaller before using this one.": "여기에 다른 DLSS 5 툴체인이 설치되어 있습니다({tool}: {files}) -- 같은 DLSS 호출을 두 스택이 후킹하면 게임이 충돌합니다. 이 앱을 사용하기 전에 해당 툴체인의 제거 도구로 제거하세요.",
+  "Another DLSS 5 toolchain is here": "다른 DLSS 5 툴체인이 있습니다",
+  "This folder already has {list}. Two stacks hooking the same DLSS call crash the game -- remove the other one with its own uninstaller first.": "이 폴더에는 이미 {list}이(가) 있습니다. 같은 DLSS 호출을 두 스택이 후킹하면 게임이 충돌합니다 -- 먼저 다른 툴체인을 그 제거 도구로 제거하세요.",
 });
