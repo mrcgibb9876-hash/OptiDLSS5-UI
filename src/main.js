@@ -95,9 +95,36 @@ ipcMain.handle('data:save-games', (_evt, games) => {
 });
 
 ipcMain.handle('data:save-settings', (_evt, settings) => {
+  const before = readJson(settingsFile(), {});
   writeJson(settingsFile(), settings);
+  // A changed Language reaches every installed game's in-game panel now, not on its next install.
+  if (panelLanguageValue(before) !== panelLanguageValue(settings)) {
+    for (const game of readJson(gamesFile(), [])) {
+      try {
+        if (game && game.exePath) applyPanelLanguage(gameDir(game.exePath), settings);
+      } catch {
+        // One game's unwritable ini must not block saving the settings themselves.
+      }
+    }
+  }
   return true;
 });
+
+// The in-game DLSS 5 panel speaks the same languages as this app (engine v1.0.11 and later), and
+// its [DlssNr] Language key follows this app's Language setting: auto stays auto (each then follows
+// Windows on its own), a pinned language is written in the engine's lower-case form. Written on
+// every install (autoConfigureGame) and re-written across all games when the setting changes.
+function panelLanguageValue(settings) {
+  const lang = settings && settings.language ? String(settings.language) : 'auto';
+  return lang === 'auto' ? 'auto' : lang.toLowerCase();
+}
+
+function applyPanelLanguage(dir, settings = readJson(settingsFile(), {})) {
+  const iniPath = path.join(dir, 'OptiScaler.ini');
+  if (!fs.existsSync(iniPath)) return [];
+  const value = panelLanguageValue(settings);
+  return ensureIniKey(iniPath, 'DlssNr', 'Language', value) ? [{ section: 'DlssNr', key: 'Language', value }] : [];
+}
 
 // The Streamline builds RHI currently publishes, newest first, for the Settings dropdown.
 ipcMain.handle('streamline:versions', async () => {
@@ -1707,6 +1734,7 @@ async function autoConfigureGame(dir, exePath) {
   // lumaue.js's file header) -- OptiScaler needs the same explicit LoadReshade nudge to load it.
   if (lumaue.lumaUeDeployed(dir)) forced = [...forced, ...patchIniValues(iniPath, LOAD_RESHADE_FORCED)];
   forced = [...forced, ...applyLosslessMarker(dir)];
+  forced = [...forced, ...applyPanelLanguage(dir)];
   return {
     api, applied: [...applied, ...forced], streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix,
     profile: dlss5Only ? (optiFgOn ? 'dlss5-only+optifg' : 'dlss5-only') : 'full',
