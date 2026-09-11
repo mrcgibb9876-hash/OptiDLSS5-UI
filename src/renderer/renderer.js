@@ -775,8 +775,15 @@ async function loadLosslessSection(game) {
     return;
   }
 
-  // Offered for every game, not just Feeder ones: it runs outside the game entirely, so nothing
-  // about the game's own renderer rules it out, and it is sometimes simply the better option.
+  // Offered only to games with no DLSS of their own (Feeder, Luma UE and plain no-DLSS games).
+  // A native-DLSS game has NVIDIA's own Frame Generation in its video settings, versioned by the
+  // "DLSS Frame Generation version" control above -- the gate lives in main.js
+  // (losslessEligibility) so the marker/ini side enforces the same rule, not just this view.
+  const gate = await window.api.losslessEligibility(game.exePath);
+  if (!gate.eligible) {
+    section.classList.add('hidden');
+    return;
+  }
   section.classList.remove('hidden');
   // Back to defaults before this game's profile (if any) is read, so the last game's choices
   // never leak into an unconfigured one.
