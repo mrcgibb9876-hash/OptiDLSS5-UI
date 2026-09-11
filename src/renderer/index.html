@@ -62,6 +62,15 @@
       <div id="game-route-status" class="status-line hidden"></div>
       <div id="game-engine-profile-status" class="status-line hidden"></div>
 
+      <div id="game-api-section" class="hidden">
+        <label class="field-label">Graphics API this game runs with</label>
+        <p class="field-hint">Some games ship more than one renderer -- Where Winds Meet links DX11 in its exe and carries a DX12 path beside it -- and detection can only name one. The upscaler key, the DLSS5 Feeder, OptiScaler's own Frame Generation and DLSS NR on AMD all follow this, so pick what the game's own video settings actually use. Applied to OptiScaler.ini straight away if it is installed.</p>
+        <div class="field-row">
+          <select id="game-api-select"></select>
+        </div>
+        <span id="game-api-status" class="status-line"></span>
+      </div>
+
       <div id="game-framegen-section" class="hidden">
         <label class="field-label">DLSS Frame Generation version</label>
         <p class="field-hint">The game's own frame gen, not OptiScaler's -- this only versions the DLL it already loads (nvngx_dlssg.dll).</p>

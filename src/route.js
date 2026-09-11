@@ -42,6 +42,26 @@ const feeder = require('./feeder');
 const lumaue = require('./lumaue');
 const amdnr = require('./amdnr');
 
+// A user's per-game API choice laid over the detection result: the chosen API becomes the
+// primary, joins the list of APIs the game runs on (so keepGamesOwnDlss writes its upscaler key
+// too), and an "old API only" verdict is lifted, since the user is saying a modern path exists.
+// Pure so it can be tested; main.js reads the marker and calls this.
+const API_OVERRIDE_VALUES = ['dx11', 'dx12', 'vulkan'];
+
+function withApiOverride(detected, override) {
+  const base = detected || {};
+  if (!override || !API_OVERRIDE_VALUES.includes(override)) return { ...base, apiOverride: null };
+  const apis = [override, ...(base.apis || []).filter((a) => a !== override)];
+  return {
+    ...base,
+    api: override,
+    apis,
+    recommend: base.recommend === 'unsupported' ? 'optiscaler' : base.recommend,
+    apiOverride: override,
+    detectedApi: base.api || null,
+  };
+}
+
 function optiScalerInstalled(dir) {
   return fs.existsSync(path.join(dir, 'OptiScaler.ini')) && fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'));
 }
@@ -138,4 +158,4 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
     'DX12. For a Unity game, run it once and this is re-checked from its Player.log.', []);
 }
 
-module.exports = { recommendRoute, optiScalerInstalled };
+module.exports = { recommendRoute, optiScalerInstalled, withApiOverride, API_OVERRIDE_VALUES };
