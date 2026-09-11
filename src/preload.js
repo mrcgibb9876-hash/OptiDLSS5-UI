@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('api', {
   lumaUeApplyAmdIntelWorkaround: (exePath) => ipcRenderer.invoke('lumaue:applyAmdIntelWorkaround', { exePath }),
 
   losslessDetect: () => ipcRenderer.invoke('lossless:detect'),
+  losslessEligibility: (exePath) => ipcRenderer.invoke('lossless:eligibility', exePath),
   losslessReadSettings: () => ipcRenderer.invoke('lossless:readSettings'),
   losslessWriteSettings: (xmlText) => ipcRenderer.invoke('lossless:writeSettings', xmlText),
   losslessLaunch: () => ipcRenderer.invoke('lossless:launch'),

@@ -336,10 +336,40 @@ ipcMain.handle('lossless:launch', () => {
 // exe, and autoConfigureGame re-applies it every time it runs (install, sync, deploy).
 const LOSSLESS_MARKER = '.dlss5ui-lossless.json';
 
+// Lossless Scaling is offered ONLY to games with no DLSS of their own. A native-DLSS game
+// (Cyberpunk, 007 First Light, Witcher 3...) has NVIDIA's own Frame Generation available in its
+// video settings, and the Manager versions that DLL for it (framegen.js); layering an external
+// generator on top is never the better option there, and two generators stacking frames is the
+// exact failure the in-game panel warns about. So for those games the section is hidden, the
+// profile is never written, and an old marker is never re-applied to the ini.
+//
+// "Its own DLSS" means the game SHIPPED it -- hasNativeDlss() only checks the disk, and both
+// the Feeder and Luma UE deploys place nvngx_dlss.dll into a game that had none (same trap
+// autoConfigureGame's isFeederGame guard exists for). Those games stay eligible: for them
+// Lossless is the only Frame Generation route there is.
+function losslessEligibility(dir) {
+  const synthesised = feeder.needsFeeder(dir) || feeder.feederDeployed(dir) || lumaue.lumaUeDeployed(dir);
+  if (hasNativeDlss(dir) && !synthesised) {
+    return {
+      eligible: false,
+      reason: 'This game has its own DLSS -- use its built-in DLSS Frame Generation (versioned above) instead of Lossless Scaling.',
+    };
+  }
+  return { eligible: true };
+}
+
+ipcMain.handle('lossless:eligibility', (_evt, exePath) => {
+  if (!exePath || !fs.existsSync(exePath)) return { eligible: false, reason: 'Game .exe not found' };
+  return losslessEligibility(gameDir(exePath));
+});
+
 function applyLosslessMarker(dir) {
   const iniPath = path.join(dir, 'OptiScaler.ini');
   const marker = readJson(path.join(dir, LOSSLESS_MARKER), null);
   if (!marker || !marker.exePath || !fs.existsSync(iniPath)) return [];
+  // A marker left from before the gate (or from a game that has since gained native DLSS via an
+  // update) must not resurrect the panel row: leave the ini alone, so it never gets the keys.
+  if (!losslessEligibility(dir).eligible) return [];
   const applied = [];
   const set = (key, value) => {
     if (ensureIniKey(iniPath, 'DlssNr', key, value)) applied.push({ section: 'DlssNr', key, value });
@@ -356,6 +386,10 @@ ipcMain.handle('lossless:setExePathInGameIni', (_evt, { exePath, losslessExePath
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
+    // The renderer hides the section for these games; this is the backstop so a stale UI state
+    // can't write a marker the gate would then have to keep ignoring forever.
+    const gate = losslessEligibility(dir);
+    if (!gate.eligible) throw new Error(gate.reason);
     writeJson(path.join(dir, LOSSLESS_MARKER), {
       exePath: losslessExePath,
       gameTitle: gameTitle || null,
