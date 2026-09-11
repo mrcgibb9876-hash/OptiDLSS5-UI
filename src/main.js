@@ -278,11 +278,11 @@ ipcMain.handle('feeder:readiness', async (_evt, exePath) => {
   // Fallen Order gets its DLSS call from Luma UE (lumaue.js), not the Feeder. Both deploy a plain
   // ReShade64.dll into the same folder, so offering both here let a user deploy one over the
   // other. Only a Feeder already on disk keeps this section open for that game.
-  if ((lumaue.isFallenOrder(exePath) || lumaue.lumaUeDeployed(dir)) && !feeder.feederDeployed(dir)) {
+  const detected = withApiOverride(await detectGame(dir, exePath), readApiOverride(dir));
+  if ((lumaue.isLumaUeGame(exePath, detected) || lumaue.lumaUeDeployed(dir)) && !feeder.feederDeployed(dir)) {
     return { ready: false, needed: false, reason: 'This game uses Luma UE for its DLSS call, not the Feeder -- see the Luma UE section.' };
   }
-  const api = await resolveApi(dir, exePath);
-  return { needed: true, ...feeder.feederReadiness(dir, api) };
+  return { needed: true, ...feeder.feederReadiness(dir, detected.api) };
 });
 
 ipcMain.handle('feeder:mvProviders', () => {
@@ -525,7 +525,8 @@ ipcMain.handle('lumaue:readiness', async (_evt, { exePath }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) return { ok: false, error: 'Game .exe not found' };
     const dir = gameDir(exePath);
-    return { ok: true, ...lumaue.lumaUeReadiness(dir, exePath) };
+    const detected = withApiOverride(await detectGame(dir, exePath), readApiOverride(dir));
+    return { ok: true, ...lumaue.lumaUeReadiness(dir, exePath, detected) };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -537,8 +538,9 @@ ipcMain.handle('lumaue:readiness', async (_evt, { exePath }) => {
 ipcMain.handle('lumaue:deploy', async (_evt, { exePath, force, licenseConfirmed }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
-    if (!lumaue.isFallenOrder(exePath)) throw new Error('Luma UE is only offered for STAR WARS Jedi: Fallen Order');
     const dir = gameDir(exePath);
+    const detected = withApiOverride(await detectGame(dir, exePath), readApiOverride(dir));
+    if (!lumaue.isLumaUeGame(exePath, detected)) throw new Error('Luma UE is for Unreal Engine 4 games rendering with DirectX 11 and no DLSS of their own');
     // Hand-over from the Feeder: the two are both ReShade add-ons supplying the DLSS call and
     // cannot share one ReShade. Its ReShade64.dll goes too -- Luma's deploy places its own.
     const feederRemoved = feeder.feederDeployed(dir)

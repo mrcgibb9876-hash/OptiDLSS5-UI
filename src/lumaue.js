@@ -7,12 +7,15 @@
 // a ReShade add-on that replaces UE4's TAA with DLAA/FSR3 and, in doing so, makes the real DLSS
 // call OptiScaler's Neural Rendering pass hooks.
 //
-// This is deliberately scoped to Fallen Order alone, not "any Unreal Engine game" -- Luma's
-// Unreal Engine mod is curated/tested by its author on a specific, short list of titles (the
-// generic UE4 rendering path is not universally correct), and the OptiScaler wiki names this
-// exact game with this exact setup. Do not widen isFallenOrder()'s match to a generic engine
-// signature (the way isReEngineGame() in main.js does for RE Engine's re_chunk_000.pak) without
-// separately verifying Luma actually supports whatever else gets added.
+// Scope (widened 2026-09-11, after the Fallen Order deploy was verified end to end -- Luma's
+// overlay, DLSS selected there, the NR pass evaluating through dlss_12): Luma is "a modding
+// framework that facilitates improving graphics in DirectX 11 games" (its README), its Unreal
+// Engine mod detects UE4's TAA shaders generically and "works in the majority of games out of the
+// box" (its own tooltip), and it skips any non-D3D11 device (CHECK_GRAPHICS_API_COMPATIBILITY).
+// So the gate is the mod's own: Unreal Engine 4, rendering with DirectX 11, no DLSS of the game's
+// own -- isLumaUeGame() below. Fallen Order stays special only for what is specific to it: the
+// open menu bug and the AMD/Intel ini workaround from the OptiScaler wiki. UE3 (Batman: Arkham
+// Knight, no version string) and any UE game on DX12 stay on the Feeder.
 //
 // KNOWN, OPEN, UNRESOLVED BUG (checked 2026-09-10, Luma-Framework issue #122, still open, no
 // maintainer response): character pop-in and an "unnatural amount of noise" when opening any
@@ -97,18 +100,34 @@ function isFallenOrder(exePath) {
   return inSwGame && fs.existsSync(path.join(dir, 'SwGame-Win64-Shipping.exe'));
 }
 
+// Where Luma's Unreal Engine mod applies at all: UE4 (a version string is required -- a
+// version-less "Unreal Engine" is the layout-only guess, which is how UE3 titles read), D3D11 as
+// the renderer, and no DLSS of the game's own. `detected` is the app's detection result (route.js
+// hands the cached one over; main.js runs detection where nothing is cached).
+function isLumaUeGame(exePath, detected) {
+  if (isFallenOrder(exePath)) return true;
+  if (!detected || detected.engineId !== 'unreal') return false;
+  const version = detected.engineVersion || ((/Unreal Engine (\d+)/.exec(detected.engine || '') || [])[1]) || null;
+  if (parseInt(String(version), 10) !== 4) return false;
+  if (detected.api !== 'dx11') return false;
+  const dir = path.dirname(exePath);
+  return !fs.existsSync(path.join(dir, 'sl.interposer.dll')) && !fs.existsSync(path.join(dir, 'sl.interposer.dll.original'));
+}
+
+const LUMA_GENERIC_NOTE = 'Luma\'s Unreal Engine mod is generic for UE4 DirectX 11 games; this app has verified it on ' +
+  'STAR WARS Jedi: Fallen Order. Elsewhere, confirm Luma\'s overlay (Home) appears and DLSS can be selected in it.';
+
 function lumaUeDeployed(dir) {
   return fs.existsSync(path.join(dir, LUMA_ADDON_DEST_NAME));
 }
 
 // Same "explain, don't just disable" shape as feeder.js's feederReadiness().
-function lumaUeReadiness(dir, exePath) {
-  if (!isFallenOrder(exePath)) {
+function lumaUeReadiness(dir, exePath, detected = null) {
+  if (!isLumaUeGame(exePath, detected) && !lumaUeDeployed(dir)) {
     return {
       supported: false,
-      reason: 'Luma UE is curated per-game by its author -- this app only offers it for STAR ' +
-        'WARS Jedi: Fallen Order (SwGame-Win64-Shipping.exe), the one game the OptiScaler wiki ' +
-        'documents this exact setup for.',
+      reason: 'Luma UE is for Unreal Engine 4 games rendering with DirectX 11 and no DLSS of their own -- this game reads as {engine} on {api}, so the DLSS5 Feeder is the route here.',
+      reasonVars: { engine: (detected && detected.engine) || 'an unknown engine', api: (detected && detected.api) ? detected.api.toUpperCase() : 'an unknown API' },
     };
   }
 
@@ -129,7 +148,7 @@ function lumaUeReadiness(dir, exePath) {
     reason: blockedByFeeder
       ? 'The DLSS5 Feeder is deployed here. Luma UE and the Feeder are both ReShade add-ons supplying the DLSS call, and only one can run -- Deploy removes the Feeder first, then puts Luma UE in.'
       : null,
-    knownIssue: LUMA_KNOWN_ISSUE,
+    knownIssue: isFallenOrder(exePath) ? LUMA_KNOWN_ISSUE : LUMA_GENERIC_NOTE,
     licenseSummary: LUMA_LICENSE_SUMMARY,
     reshadeInstalled,
     addonInstalled,
@@ -219,6 +238,7 @@ async function deployLumaUeStack(dir, { cacheDir, getRhiManifest, compareVersion
 
 module.exports = {
   isFallenOrder,
+  isLumaUeGame,
   lumaUeDeployed,
   lumaUeReadiness,
   deployLumaUeStack,

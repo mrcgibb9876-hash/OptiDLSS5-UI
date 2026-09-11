@@ -144,7 +144,7 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
       [{ key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled }]);
   }
 
-  if (lumaue.isFallenOrder(exePath) || lumaDeployed) {
+  if (lumaue.isLumaUeGame(exePath, detected) || lumaDeployed) {
     // Luma UE is this game's preferred DLSS source, but a Feeder already deployed here is a
     // working one (confirmed on a real install: frames fed, NR running) -- the card says what is
     // actually in place and names the better option, rather than reporting a done setup as a

@@ -354,4 +354,6 @@ window.I18N.register("zh-CN", {
   "{file} v{version} beside the exe predates Shader Model 5.1, so OptiScaler's shaders can silently fail to compile -- rename it and Windows' own copy loads instead.": "exe 旁的 {file} v{version} 早于 Shader Model 5.1，OptiScaler 的着色器可能静默编译失败 -- 将其重命名后会改为加载 Windows 自带副本。",
   "The DLSS5 Feeder is deployed here. Luma UE and the Feeder are both ReShade add-ons supplying the DLSS call, and only one can run -- Deploy removes the Feeder first, then puts Luma UE in.": "这里已部署 DLSS5 Feeder。Luma UE 和 Feeder 都是提供 DLSS 调用的 ReShade 插件，只能运行一个 -- “部署”会先移除 Feeder，再装入 Luma UE。",
   "Deploy Luma UE (removes the Feeder first)": "部署 Luma UE（先移除 Feeder）",
+  "Luma UE is for Unreal Engine 4 games rendering with DirectX 11 and no DLSS of their own -- this game reads as {engine} on {api}, so the DLSS5 Feeder is the route here.": "Luma UE 面向使用 DirectX 11 渲染且没有自带 DLSS 的 Unreal Engine 4 游戏 -- 这款游戏被识别为 {engine}（{api}），因此这里的路线是 DLSS5 Feeder。",
+  "Luma's Unreal Engine mod is generic for UE4 DirectX 11 games; this app has verified it on STAR WARS Jedi: Fallen Order. Elsewhere, confirm Luma's overlay (Home) appears and DLSS can be selected in it.": "Luma 的 Unreal Engine 模组对 UE4 DirectX 11 游戏是通用的；本应用已在 STAR WARS Jedi: Fallen Order 上验证。在其他游戏中，请确认 Luma 叠加层（Home）能出现并且可以在其中选择 DLSS。",
 });

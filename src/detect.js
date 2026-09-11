@@ -792,6 +792,7 @@ async function detectGame(dir, exePath) {
     apis: found.apis || [],
     engine: engine.engine,
     engineId: engine.id,
+    engineVersion: engine.version || null,
     apiBadge: apiLabel,
     badge: engine.engine || apiLabel || 'Unknown',
     recommend,
