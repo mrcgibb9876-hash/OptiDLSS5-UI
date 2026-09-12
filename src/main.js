@@ -845,6 +845,14 @@ function detectInstalledBackends(dir) {
     'dlss5-feed.addon64', 'Luma-Unreal Engine.addon', 'Luma',
     '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.optiscaler-manager-install.json',
   ].filter(has);
+  // What older versions placed and never journaled (Stellar Blade, 2026-09-12: OptiScaler_DlssNr.*
+  // build files and the Feeder-era scripts survived a Remove on an old build, and with OptiScaler
+  // itself gone the card offered no way back) -- same names the full Remove clears.
+  try {
+    for (const n of fs.readdirSync(dir)) {
+      if (LEGACY_PAYLOAD.includes(n) || LEGACY_PATTERNS.some((p) => p.test(n))) leftovers.push(n);
+    }
+  } catch {}
   return { optiscaler, leftovers };
 }
 
@@ -1173,7 +1181,7 @@ async function uninstallEverything(dir) {
   // Where Winds Meet keeps its own Streamline runtime in exactly such a subfolder, and a
   // heuristic here deleted it once (2026-09-12) -- never again.
   if (fs.existsSync(path.join(dir, 'streamline', 'sl.interposer.dll')) && !(journal.streamline && journal.streamline.dir)) {
-    kept.push('streamline\ (left alone: not recorded as this app\x27s deploy -- a game can keep its own Streamline runtime there)');
+    kept.push('streamline folder (left alone: not recorded as this app\x27s deploy -- a game can keep its own Streamline runtime there)');
   }
 
   // Another tool's files are not this app's to delete -- named so the user knows they remain.
