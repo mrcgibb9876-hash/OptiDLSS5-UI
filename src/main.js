@@ -17,7 +17,7 @@ const nativeDlss = require('./native-dlss');
 const { recommendRoute, withApiOverride, API_OVERRIDE_VALUES } = require('./route');
 const gpu = require('./gpu');
 const amdnr = require('./amdnr');
-const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
+const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const managerUpdate = require('./manager-update');
 const runlog = require('./runlog');
@@ -549,6 +549,9 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
       ghHeaders: GITHUB_HEADERS,
       force: !!force,
       licenseConfirmed: !!licenseConfirmed,
+      // Unity clears its depth buffer before the UI pass and renders reversed-Z; ReShade's
+      // Generic Depth needs telling both, or the Feeder gets a flat depth (feeder.js).
+      unity: isUnityGame(dir, exePath),
     });
     return { ok: true, ...results };
   } catch (error) {

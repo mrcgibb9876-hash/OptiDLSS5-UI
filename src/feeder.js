@@ -212,10 +212,30 @@ function feederReadiness(dir, api) {
 
 // --- download + cache, mirroring framegen.js's ensureFrameGenDllCache shape -----------
 
+// A fetch that rides out the hosts' bad minutes. raw.githubusercontent.com answered a user's
+// Feeder deploy with HTTP 503 on ReShade.fxh (2026-09-12), and both it and reshade.me do that
+// now and then: a 5xx, a 429 or a dropped connection is retried a few times with a growing
+// pause before it becomes the error the user sees. A 4xx is final at once.
+const RETRY_PAUSES_MS = [1000, 3000, 6000];
+async function fetchWithRetry(url, init = {}, { fetchImpl = fetch, pauses = RETRY_PAUSES_MS } = {}) {
+  let lastError = null;
+  for (let attempt = 0; attempt <= pauses.length; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, pauses[attempt - 1]));
+    try {
+      const res = await fetchImpl(url, init);
+      if (res.ok || (res.status < 500 && res.status !== 429)) return res;
+      lastError = new Error(`HTTP ${res.status} for ${url}`);
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError;
+}
+
 async function downloadToCache(url, cacheDir, fileName, ghHeaders) {
   const dest = path.join(cacheDir, fileName);
   if (fs.existsSync(dest)) return dest;
-  const res = await fetch(url, { headers: ghHeaders });
+  const res = await fetchWithRetry(url, { headers: ghHeaders });
   if (!res.ok) throw new Error(`Download failed: HTTP ${res.status} for ${url}`);
   const buf = Buffer.from(await res.arrayBuffer());
   await fsp.mkdir(cacheDir, { recursive: true });
@@ -226,7 +246,7 @@ async function downloadToCache(url, cacheDir, fileName, ghHeaders) {
 }
 
 async function resolveFeederAsset(ghHeaders) {
-  const res = await fetch(FEEDER_RELEASES_API, { headers: ghHeaders });
+  const res = await fetchWithRetry(FEEDER_RELEASES_API, { headers: ghHeaders });
   if (!res.ok) throw new Error(`Could not check the DLSS5-Feeder release: HTTP ${res.status}`);
   const release = await res.json();
   const asset = (release.assets || []).find((a) => FEEDER_ASSET_PATTERN.test(a.name));
@@ -258,16 +278,49 @@ async function deployReShade(dir, cacheDir, ghHeaders, { force = false } = {}) {
 // ReShade.fxh / ReShadeUI.fxh -- see the RESHADE_COMMON_HEADERS comment above for why these
 // are needed at all. Small text files, fetched directly rather than through the zip-cache
 // machinery the other deploy steps use.
-async function deployReShadeCommonHeaders(dir, ghHeaders, { force = false } = {}) {
+// The same two files, from a second host: jsDelivr serves any GitHub repo's files, so a bad
+// minute at raw.githubusercontent.com (a real HTTP 503 on a user's deploy, 2026-09-12) is not
+// the end of the install. Fetched once and kept in the cache folder with the other downloads,
+// so every later deploy on this machine needs no network for them at all.
+const RESHADE_SHADERS_MIRROR_RAW = 'https://cdn.jsdelivr.net/gh/crosire/reshade-shaders@slim/Shaders/';
+
+async function fetchReShadeHeader(name, ghHeaders, { fetchImpl = fetch, pauses } = {}) {
+  const init = { headers: { 'User-Agent': ghHeaders['User-Agent'] } };
+  let lastError = null;
+  for (const base of [RESHADE_SHADERS_REPO_RAW, RESHADE_SHADERS_MIRROR_RAW]) {
+    try {
+      const res = await fetchWithRetry(base + name, init, { fetchImpl, pauses });
+      if (!res.ok) { lastError = new Error(`HTTP ${res.status} for ${base + name}`); continue; }
+      const text = await res.text();
+      // A host's error page is not a shader: the real file opens with ReShade's own guard.
+      if (!/#pragma once|#ifndef|#define/.test(text.slice(0, 400))) { lastError = new Error(`${base + name} did not return a shader header`); continue; }
+      return text;
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw new Error(`Could not fetch ${name} from GitHub or its mirror (${lastError && lastError.message ? lastError.message : lastError}). Try again in a minute -- this is the host, not the game.`);
+}
+
+async function deployReShadeCommonHeaders(dir, ghHeaders, { force = false, cacheDir = null, fetchImpl = fetch, pauses } = {}) {
   const shaderDir = path.join(dir, 'reshade-shaders', 'Shaders');
   await fsp.mkdir(shaderDir, { recursive: true });
   const deployed = [];
   for (const name of RESHADE_COMMON_HEADERS) {
     const dest = path.join(shaderDir, name);
     if (fs.existsSync(dest) && !force) continue;
-    const res = await fetch(RESHADE_SHADERS_REPO_RAW + name, { headers: { 'User-Agent': ghHeaders['User-Agent'] } });
-    if (!res.ok) throw new Error(`Could not fetch ${name}: HTTP ${res.status}`);
-    await fsp.writeFile(dest, await res.text(), 'utf8');
+    const cached = cacheDir ? path.join(cacheDir, 'reshade-headers', name) : null;
+    let text = null;
+    if (cached && fs.existsSync(cached)) {
+      text = await fsp.readFile(cached, 'utf8');
+    } else {
+      text = await fetchReShadeHeader(name, ghHeaders, { fetchImpl, pauses });
+      if (cached) {
+        await fsp.mkdir(path.dirname(cached), { recursive: true });
+        await fsp.writeFile(cached, text, 'utf8');
+      }
+    }
+    await fsp.writeFile(dest, text, 'utf8');
     deployed.push(name);
   }
   return { deployed: deployed.length > 0, files: deployed };
@@ -435,13 +488,29 @@ function configurePreset(dir, providerId) {
 // ReShade.ini: make sure add-on loading and the shaders folder are actually enabled. A fresh
 // ReShade64.dll deploy has no ini yet; an existing one (the user already had ReShade for other
 // effects) is merged into, never replaced.
-function configureReShadeIni(dir, { effectSearchPaths = '.\\reshade-shaders\\Shaders\\**' } = {}) {
+function configureReShadeIni(dir, { effectSearchPaths = '.\\reshade-shaders\\Shaders\\**', unity = false } = {}) {
   const iniPath = path.join(dir, 'ReShade.ini');
   const existing = fs.existsSync(iniPath) ? fs.readFileSync(iniPath, 'utf8') : '';
   let next = existing;
   next = setIniKey(next, 'ADDON', 'AddonPath', '.\\');
   next = setIniKey(next, 'GENERAL', 'EffectSearchPaths', effectSearchPaths);
   if (!getIniKey(next, 'GENERAL', 'PresetPath')) next = setIniKey(next, 'GENERAL', 'PresetPath', '.\\ReShadePreset.ini');
+  // Unity: the Feeder is engine-agnostic (its README lists Subnautica, 64-bit D3D11 Unity, as
+  // verified) but Unity's depth needs two things said to ReShade's Generic Depth add-on, or
+  // the Feeder's depth probe reads flat and DLSS reconstructs from nothing. Unity clears the
+  // depth buffer after the scene and before its UI pass, so the copy has to be taken before
+  // clears (DepthCopyBeforeClears=1 is exactly "Copy depth buffer before clear operations" in
+  // the add-on's own UI, generic_depth_addon.cpp); and Unity renders reversed-Z on D3D11/D3D12,
+  // which the shaders learn from RESHADE_DEPTH_INPUT_IS_REVERSED=1. Both only fill a gap: a
+  // value someone already chose on the Generic Depth page is left alone, and the definitions
+  // list keeps everything else in it.
+  if (unity) {
+    if (!getIniKey(next, 'DEPTH', 'DepthCopyBeforeClears')) next = setIniKey(next, 'DEPTH', 'DepthCopyBeforeClears', '1');
+    const cur = getIniKey(next, 'GENERAL', 'PreprocessorDefinitions');
+    const defs = cur ? cur.split(',').map((s) => s.trim()).filter(Boolean) : [];
+    if (!defs.some((d) => /^RESHADE_DEPTH_INPUT_IS_REVERSED\s*=/i.test(d))) defs.push('RESHADE_DEPTH_INPUT_IS_REVERSED=1');
+    next = setIniKey(next, 'GENERAL', 'PreprocessorDefinitions', defs.join(','));
+  }
   // Marks ReShade's own first-run tutorial as already complete, so its "ReShade is now
   // installed successfully! Press Home to start the tutorial" banner never shows. This app's
   // users are here for the Feeder running silently, not for ReShade's own onboarding/UI.
@@ -508,10 +577,10 @@ async function feederUpdateCheck(dir, ghHeaders) {
 // force: true re-fetches and overwrites everything (used by an update). licenseConfirmed: only
 // consulted when providerId names a non-auto-fetchable provider (currently just LumeniteFX) --
 // deployLumeniteFx() itself refuses without it, this just threads it through.
-async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifest, compareVersions, ghHeaders, force = false, licenseConfirmed = false }) {
+async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifest, compareVersions, ghHeaders, force = false, licenseConfirmed = false, unity = false }) {
   const results = {};
   results.reshade = await deployReShade(dir, cacheDir, ghHeaders, { force });
-  results.commonHeaders = await deployReShadeCommonHeaders(dir, ghHeaders, { force });
+  results.commonHeaders = await deployReShadeCommonHeaders(dir, ghHeaders, { force, cacheDir });
   results.addon = await deployFeederAddon(dir, cacheDir, ghHeaders, { force });
 
   const provider = MV_PROVIDERS[providerId];
@@ -520,7 +589,7 @@ async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifes
     : await deployLumeniteFx(dir, ghHeaders, { licenseConfirmed });
 
   results.dlss = await deployNvngxDlss(dir, getRhiManifest, compareVersions, cacheDir, ghHeaders);
-  results.ini = configureReShadeIni(dir);
+  results.ini = configureReShadeIni(dir, { unity });
   results.preset = configurePreset(dir, providerId);
 
   // The addon step only resolves the release tag when it actually deploys (fresh install, or
@@ -603,4 +672,6 @@ module.exports = {
   configurePreset,
   configureReShadeIni,
   deployFeederStack,
+  fetchWithRetry,
+  fetchReShadeHeader,
 };

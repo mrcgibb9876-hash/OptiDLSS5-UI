@@ -954,4 +954,4 @@ async function planForeignRemoval(dir, { ours = false } = {}) {
   return { found, del: [...del].sort(), restore, notes };
 }
 
-module.exports = { DETECT_VERSION, detectGame, detectRenderApi, isDetectionStale, isReEngineGame, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, foreignToolchains, planForeignRemoval };
+module.exports = { DETECT_VERSION, detectGame, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, foreignToolchains, planForeignRemoval };
