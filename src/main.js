@@ -25,12 +25,12 @@ const runlog = require('./runlog');
 const library = require('./library');
 const gamehelp = require('./gamehelp');
 const aihelp = require('./aihelp');
+const engines = require('./engines');
 let electronAutoUpdater = null;
 try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
 const ENGINE_KNOWN_GAMES = new Set(require('./engine-known-games.json').exeNames);
 const execFileAsync = promisify(execFile);
 
-const RELEASES_API = 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest';
 const GITHUB_HEADERS = { 'User-Agent': 'OptiDLSS5-UI', Accept: 'application/vnd.github+json' };
 
 // Detected once per run, on first use (the GPU process is up by the time any IPC arrives).
@@ -973,6 +973,58 @@ function applyFrameGenMarker(dir) {
   return applied;
 }
 
+// The engine choice per game (engines.js): the Pre-SR build's RunBeforeSR / Passes keys follow
+// the marker; a game on the standard build gets them put back to auto. Only ever touches a game
+// whose marker names an engine, so a folder installed before this existed is left exactly as is.
+function applyEngineMarker(dir) {
+  const iniPath = path.join(dir, 'OptiScaler.ini');
+  const marker = engines.readEngineMarker(dir);
+  if (!marker || !marker.engine || !fs.existsSync(iniPath)) return [];
+  const applied = [];
+  for (const { section, key, value } of engines.iniEditsFor(marker)) {
+    if (ensureIniKey(iniPath, section, key, value)) applied.push({ section, key, value });
+  }
+  return applied;
+}
+
+ipcMain.handle('engine:forGame', (_evt, exePath) => {
+  if (!exePath || !fs.existsSync(exePath)) return { marker: null, ini: null };
+  const dir = gameDir(exePath);
+  const iniPath = path.join(dir, 'OptiScaler.ini');
+  return {
+    marker: engines.readEngineMarker(dir),
+    iniPresent: fs.existsSync(iniPath),
+    ini: fs.existsSync(iniPath) ? {
+      runBeforeSR: readIniKey(iniPath, 'DlssNr', 'RunBeforeSR'),
+      passes: readIniKey(iniPath, 'DlssNr', 'Passes'),
+    } : null,
+  };
+});
+
+// engine: which build this game should run on (the renderer resolves "follow Settings" to an id
+// before calling). runBeforeSR / passes only mean anything on the Pre-SR build. Writes the
+// marker and, when OptiScaler is already in the folder, the ini; swapping the DLL itself is the
+// renderer's job (a re-Install with the other engine's release folder).
+ipcMain.handle('engine:setForGame', (_evt, { exePath, engine, runBeforeSR, passes } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const prev = engines.readEngineMarker(dir) || {};
+    const marker = {
+      ...prev,
+      engine: engines.normalizeEngine(engine),
+      runBeforeSR: runBeforeSR === undefined || runBeforeSR === null ? (prev.runBeforeSR === undefined ? true : !!prev.runBeforeSR) : !!runBeforeSR,
+      passes: engines.clampPasses(passes === undefined || passes === null ? prev.passes : passes),
+      updatedAt: new Date().toISOString(),
+    };
+    engines.writeEngineMarker(dir, marker);
+    const iniPresent = fs.existsSync(path.join(dir, 'OptiScaler.ini'));
+    return { ok: true, marker, deferred: !iniPresent, applied: iniPresent ? applyEngineMarker(dir) : [] };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
 ipcMain.handle('framegen:multiplier', async (_evt, exePath) => {
   if (!exePath || !fs.existsSync(exePath)) return { hasFrameGen: false };
   const dir = gameDir(exePath);
@@ -1110,7 +1162,8 @@ ipcMain.handle('game:status', (_evt, exePath) => {
     message: 'Another DLSS 5 toolchain is installed here ({tool}: {files}) -- two stacks hooking the same DLSS call crash the game. Remove it with its own uninstaller before using this one.',
     vars: { tool: f.tool, files: f.files.join(', ') },
   }));
-  return { exeMissing: false, hasIni, hasNr, hasUninstaller, dir, backends, foreign, warnings };
+  const engine = (engines.readEngineMarker(dir) || {}).engine || null;
+  return { exeMissing: false, hasIni, hasNr, hasUninstaller, dir, backends, foreign, warnings, engine };
 });
 
 // The one-line answer the card tags and the Install button acts on -- see route.js. `detected`
@@ -1184,7 +1237,7 @@ ipcMain.handle('amdnr:runSetup', (_evt, exePath) => {
   }
 });
 
-ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath, proxyName }) => {
+ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath, proxyName, engine }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     if (!releaseFolder || !fs.existsSync(releaseFolder)) throw new Error('OptiScaler release folder not set');
@@ -1233,6 +1286,12 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
       await fsp.cp(src, dest, { recursive: true, force: true });
     }
     updateInstallJournal(dir, { added: [...added], replaced });
+    // Which build went in, so autoConfigureGame can set (or clear) the Pre-SR keys and the card
+    // can say which engine this game runs. Pre-SR preferences already in the marker survive.
+    if (engine) {
+      const prev = engines.readEngineMarker(dir) || {};
+      engines.writeEngineMarker(dir, { ...prev, engine: engines.normalizeEngine(engine), updatedAt: new Date().toISOString() });
+    }
 
     const nrDest = path.join(dir, 'nvngx_dlssnr.dll');
     await fsp.copyFile(nrDllPath, nrDest);
@@ -1317,7 +1376,7 @@ async function removeSharedNrDllIfUnneeded(dir) {
 // journal existed still gets the fixed payload list. Nothing here guesses at a file it did not
 // place -- unknown files stay, and the report says so where a decision was made.
 const RELEASE_LICENSE_FILES = ['DirectX_LICENSE.txt', 'FidelityFX_v2_LICENSE.md', 'RenoDX_ATTRIBUTION.txt', 'XeSS_LICENSE.txt'];
-const APP_MARKERS = ['.dlss5ui-lossless.json', '.dlss5ui-framegen.json', '.dlss5ui-api.json', '.dlss5ui-optifg-enabled', '.optiscaler-manager-install.json', reengine.REFRAMEWORK_BUILD_MARKER];
+const APP_MARKERS = ['.dlss5ui-lossless.json', '.dlss5ui-framegen.json', '.dlss5ui-api.json', '.dlss5ui-optifg-enabled', '.optiscaler-manager-install.json', reengine.REFRAMEWORK_BUILD_MARKER, engines.ENGINE_MARKER];
 const LEGACY_PAYLOAD = [
   'OptiScaler_DlssNr.addon64', 'OptiScaler_DlssNr.exp', 'OptiScaler_DlssNr.lib', 'OptiScaler_DlssNr.pdb', 'OptiScaler_DlssNr.dll',
   '.optdlss5-active-manifest.json', 'Verify-DLSS5Feeder.ps1', 'Run-DLSS5-Feeder-Install.bat', 'Remove_OptiScaler.bat',
@@ -2726,6 +2785,7 @@ async function autoConfigureGame(dir, exePath) {
   if (lumaue.lumaUeDeployed(dir)) forced = [...forced, ...patchIniValues(iniPath, LOAD_RESHADE_FORCED)];
   forced = [...forced, ...applyLosslessMarker(dir)];
   forced = [...forced, ...applyFrameGenMarker(dir)];
+  forced = [...forced, ...applyEngineMarker(dir)];
   forced = [...forced, ...applyPanelLanguage(dir)];
   return {
     api, applied: [...applied, ...forced], streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix,
@@ -3017,24 +3077,33 @@ ipcMain.handle('banner:import-local', async (_evt, sourcePath) => {
   return dest;
 });
 
-ipcMain.handle('update:check', async () => {
+// engine: which build's releases to look at (engines.js); omitted = this project's own fork, as
+// every caller before there was a choice.
+ipcMain.handle('update:check', async (_evt, { engine } = {}) => {
+  const id = engines.normalizeEngine(engine);
   try {
-    const res = await fetch(RELEASES_API, { headers: GITHUB_HEADERS });
+    const res = await fetch(engines.releasesApi(id), { headers: GITHUB_HEADERS });
     if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
     const data = await res.json();
-    const zipAsset = (data.assets || []).find((a) => a.name.toLowerCase().endsWith('.zip'));
+    const { zip: zipAsset, sha256: shaAsset } = engines.pickAssets(data);
     return {
       ok: true,
+      engine: id,
       tag: data.tag_name,
       name: data.name || data.tag_name,
       publishedAt: data.published_at,
       downloadUrl: zipAsset ? zipAsset.browser_download_url : data.zipball_url,
-      assetName: zipAsset ? zipAsset.name : `${data.tag_name}.zip`
+      assetName: zipAsset ? zipAsset.name : `${data.tag_name}.zip`,
+      sha256Url: shaAsset ? shaAsset.browser_download_url : null,
     };
   } catch (err) {
-    return { ok: false, error: err.message };
+    return { ok: false, engine: id, error: err.message };
   }
 });
+
+ipcMain.handle('engine:list', () => Object.values(engines.ENGINES).map((e) => ({
+  ...e, managedFolder: managedReleaseFolder(e.id), releasePage: engines.releasePageUrl(e.id),
+})));
 
 const MANAGER_REPO = 'mrcgibb9876-hash/OptiDLSS5-UI';
 
@@ -3129,8 +3198,10 @@ function bundledEngine() {
 
 // The one folder this app owns and may overwrite. A release folder the user pointed Settings at
 // (their own build) is theirs: read from, never extracted into or deleted.
-function managedReleaseFolder() {
-  return path.join(userDataDir(), 'OptiScalerRelease');
+// One per engine build (engines.js folderName), so switching a game between builds never
+// re-downloads the other one. The default engine keeps the folder name it always had.
+function managedReleaseFolder(engine) {
+  return path.join(userDataDir(), engines.engine(engine).folderName);
 }
 
 ipcMain.handle('update:bundledEngine', () => ({ ...(bundledEngine() || {}), managedFolder: managedReleaseFolder() }));
@@ -3138,10 +3209,11 @@ ipcMain.handle('update:bundledEngine', () => ({ ...(bundledEngine() || {}), mana
 // localZip: extract an already-downloaded zip (the bundled engine) instead of fetching downloadUrl.
 // Always lands in the managed folder, and the live copy is only replaced once the new one has
 // extracted and validated -- a truncated zip or a blocked Expand-Archive leaves a working engine
-// exactly as it was.
-ipcMain.handle('update:install', async (_evt, { downloadUrl, localZip, tag }) => {
+// exactly as it was. engine picks which managed folder; sha256Url (a release's own checksum
+// asset, which the Pre-SR fork publishes) is checked before anything is extracted.
+ipcMain.handle('update:install', async (_evt, { downloadUrl, localZip, tag, engine, sha256Url }) => {
   let tmpZip;
-  const dest = managedReleaseFolder();
+  const dest = managedReleaseFolder(engine);
   const staging = `${dest}.new`;
   try {
     let zipPath = localZip;
@@ -3149,6 +3221,15 @@ ipcMain.handle('update:install', async (_evt, { downloadUrl, localZip, tag }) =>
       const res = await fetch(downloadUrl, { headers: GITHUB_HEADERS });
       if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
       const buf = Buffer.from(await res.arrayBuffer());
+
+      if (sha256Url) {
+        const shaRes = await fetch(sha256Url, { headers: GITHUB_HEADERS });
+        const expected = shaRes.ok ? engines.parseSha256Text(await shaRes.text()) : null;
+        if (expected) {
+          const actual = crypto.createHash('sha256').update(buf).digest('hex');
+          if (actual !== expected) throw new Error(`Downloaded zip failed its sha256 check (expected ${expected.slice(0, 12)}…, got ${actual.slice(0, 12)}…)`);
+        }
+      }
 
       tmpZip = path.join(os.tmpdir(), `optiscaler-update-${Date.now()}.zip`);
       await fsp.writeFile(tmpZip, buf);
@@ -3168,7 +3249,7 @@ ipcMain.handle('update:install', async (_evt, { downloadUrl, localZip, tag }) =>
     await fsp.rm(dest, { recursive: true, force: true });
     await fsp.rename(staging, dest);
 
-    return { ok: true, folder: findReleaseRoot(dest), tag };
+    return { ok: true, folder: findReleaseRoot(dest), tag, engine: engines.normalizeEngine(engine) };
   } catch (err) {
     return { ok: false, error: err.message };
   } finally {

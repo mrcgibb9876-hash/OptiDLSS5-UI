@@ -67,6 +67,33 @@
       <div id="game-route-status" class="status-line hidden"></div>
       <div id="game-engine-profile-status" class="status-line hidden"></div>
 
+      <div id="game-engine-section" class="hidden">
+        <label class="field-label" data-i18n>OptiScaler build for this game</label>
+        <p class="field-hint" data-i18n>Two builds of the DLSS Neural Rendering engine are available. OptiScaler_DLSSNR is this project's own, with the Alt+Home DLSS 5 panel. The PreSR-Multipass fork (wilsjo2) can run Neural Rendering before DLSS upscaling, on the smaller pre-upscale image -- much faster at the same output resolution -- and can stack up to three passes; it has no Alt+Home panel (use OptiScaler's Insert menu). Changing this on an installed game re-installs it with the other build.</p>
+        <div class="field-row">
+          <select id="game-engine-select"></select>
+        </div>
+        <span id="game-engine-status" class="status-line"></span>
+
+        <div id="game-presr-block" class="field-subblock hidden">
+          <label class="field-label" data-i18n>Pre-SR Neural Rendering</label>
+          <p class="field-hint" data-i18n>Run NR before DLSS upscaling: the model works on the DLSS input (1920x1080 in 4K Performance) instead of the full output frame, which is where the speed-up comes from. Passes run the model more than once with separate settings each; every extra pass costs more.</p>
+          <label class="field-label">
+            <input id="game-presr-before" type="checkbox" checked />
+            <span data-i18n>Run NR before DLSS upscaling (faster)</span>
+          </label>
+          <div class="field-row">
+            <select id="game-presr-passes">
+              <option value="1" data-i18n>1 pass</option>
+              <option value="2" data-i18n>2 passes</option>
+              <option value="3" data-i18n>3 passes</option>
+            </select>
+            <button id="btn-presr-apply" class="btn btn-ghost" data-i18n>Apply</button>
+          </div>
+          <span id="game-presr-status" class="status-line"></span>
+        </div>
+      </div>
+
       <div id="game-api-section" class="hidden">
         <label class="field-label" data-i18n>Graphics API this game runs with</label>
         <p class="field-hint" data-i18n>Some games ship more than one renderer -- Where Winds Meet links DX11 in its exe and carries a DX12 path beside it -- and detection can only name one. The upscaler key, the DLSS5 Feeder, OptiScaler's own Frame Generation and DLSS NR on AMD all follow this, so pick what the game's own video settings actually use. Applied to OptiScaler.ini straight away if it is installed.</p>
@@ -307,7 +334,17 @@
         </select>
       </div>
 
-      <label class="field-label" data-i18n>OptiScaler (DLSSNR) release folder</label>
+      <label class="field-label" data-i18n>OptiScaler build (default for new installs)</label>
+      <p class="field-hint" data-i18n>OptiScaler_DLSSNR is this project's own fork, with the Alt+Home DLSS 5 panel. OptiScaler-DLSSNR-PreSR-Multipass (wilsjo2) runs Neural Rendering before DLSS upscaling -- far cheaper at the same output resolution -- and supports up to three passes, but has no Alt+Home panel. Fetched from its GitHub releases when first chosen and kept current the same way. Any game can override this in Edit.</p>
+      <div class="field-row">
+        <select id="settings-engine">
+          <option value="dlssnr">OptiScaler_DLSSNR (Alt+Home panel)</option>
+          <option value="presr">OptiScaler-DLSSNR-PreSR-Multipass (Pre-SR, faster)</option>
+        </select>
+      </div>
+      <div id="settings-engine-status" class="status-line"></div>
+
+      <label class="field-label" data-i18n>OptiScaler_DLSSNR release folder</label>
       <p class="field-hint" data-i18n>Set up automatically: the engine ships inside this app's installer and is extracted on first launch, then kept current from GitHub. Only change this to use your own build (the folder containing setup_windows.bat).</p>
       <div class="field-row">
         <input id="settings-release-folder" type="text" data-i18n-placeholder placeholder="Not set — browse or paste a path" />

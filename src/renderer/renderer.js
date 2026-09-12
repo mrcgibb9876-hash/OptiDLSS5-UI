@@ -2,10 +2,11 @@ let games = [];
 // The store-search version this build carries, asked of the main process once (see steam:searchVersion).
 let bannerSearchVersion = 1;
 let bannerSearchVersionLoaded = false;
-let settings = { releaseFolder: '', nrDllPath: '', installedVersion: '', streamlineVersion: 'latest' };
+let settings = { releaseFolder: '', nrDllPath: '', installedVersion: '', streamlineVersion: 'latest', engine: 'dlssnr', engines: {} };
 let editingGameId = null;
 let pendingBanner = { appid: null, localPath: null };
-let pendingUpdate = null;
+// One entry per engine build with a newer release than what is installed (see checkUpdate).
+let pendingUpdates = [];
 let pendingManagerUpdate = null;
 // Filled in at init from gpu:info (see gpu.js). 'unknown' behaves like NVIDIA -- the app's
 // behaviour before detection existed.
@@ -138,7 +139,7 @@ async function renderGrid() {
       badgeText = t('Exe missing');
     } else if (backends.optiscaler) {
       badgeClass = 'badge-installed';
-      badgeText = 'OptiScaler';
+      badgeText = status.engine === 'presr' ? 'OptiScaler Pre-SR' : 'OptiScaler';
     } else if (status.hasIni || (status.hasNr && gpu.vendor !== 'amd')) {
       // On an AMD card a lone nvngx_dlssnr.dll is the DLSS-NR-on-AMD layout, not a half-done
       // OptiScaler install -- the route chip carries that state; this badge stays "Not installed".
@@ -759,7 +760,16 @@ $('#help-ai').addEventListener('click', async () => {
 });
 
 async function installGame(game) {
-  const valid = await window.api.validateRelease(settings.releaseFolder);
+  // The build this game runs on (its own choice, else the Settings default). The Pre-SR fork is
+  // fetched on first use rather than at launch, so choosing it costs nothing until a game needs it.
+  const engineId = engineOf(game);
+  const ready = await ensureEngine(engineId);
+  if (!ready.ok) {
+    toast(t('Could not set up the {engine} build: {error}', { engine: engineLabel(engineId), error: ready.error }));
+    return;
+  }
+  const releaseFolder = engineFolder(engineId);
+  const valid = await window.api.validateRelease(releaseFolder);
   if (!valid.valid) {
     toast(t('Set up the OptiScaler release folder in Settings first ({reason}).', { reason: valid.reason }));
     openSettingsModal();
@@ -811,8 +821,9 @@ async function installGame(game) {
   toast(t('Installing…'));
   const res = await window.api.installGame({
     exePath: game.exePath,
-    releaseFolder: settings.releaseFolder,
-    nrDllPath: settings.nrDllPath
+    releaseFolder,
+    nrDllPath: settings.nrDllPath,
+    engine: engineId,
   });
   if (res.ok) {
     const mb = (res.nrDllBytes / 1024 / 1024).toFixed(0);
@@ -936,6 +947,7 @@ async function openGameModal(game) {
   await loadRouteStatus(game);
   await loadApiSection(game);
   await loadEngineProfileStatus(game);
+  await loadEngineSection(game);
   await loadFrameGenSection(game);
   await loadInjectorSection(game);
   await loadFeederSection(game);
@@ -1090,6 +1102,96 @@ $('#game-api-select').addEventListener('change', async (e) => {
   await loadLosslessSection(game);
   await loadAmdNrSection(game);
   renderGrid();
+});
+
+// Which OptiScaler build this game runs on, and the Pre-SR fork's two knobs when it is that one.
+async function loadEngineSection(game) {
+  const section = $('#game-engine-section');
+  const select = $('#game-engine-select');
+  const status = $('#game-engine-status');
+  const presrBlock = $('#game-presr-block');
+  if (!game || !game.exePath) {
+    section.classList.add('hidden');
+    return;
+  }
+  section.classList.remove('hidden');
+
+  select.innerHTML = '';
+  const follow = document.createElement('option');
+  follow.value = '';
+  follow.textContent = t('Settings default ({engine})', { engine: engineLabel(settings.engine) });
+  select.appendChild(follow);
+  for (const id of Object.keys(ENGINE_LABELS)) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = id === 'presr' ? t('{engine} (Pre-SR, faster)', { engine: engineLabel(id) }) : t('{engine} (Alt+Home panel)', { engine: engineLabel(id) });
+    select.appendChild(opt);
+  }
+  select.value = game.engine && ENGINE_LABELS[game.engine] ? game.engine : '';
+
+  const effective = engineOf(game);
+  const state = await window.api.engineForGame(game.exePath);
+  const installedAs = state.marker && state.marker.engine ? engineIdOrDefault(state.marker.engine) : null;
+  const installed = (await window.api.gameStatus(game.exePath)).backends || {};
+  status.className = 'status-line';
+  status.textContent = installed.optiscaler && installedAs && installedAs !== effective
+    ? t('Installed with {installed}; press Install on the card to switch it to {engine}.', { installed: engineLabel(installedAs), engine: engineLabel(effective) })
+    : installed.optiscaler && installedAs
+      ? t('Installed with {engine}.', { engine: engineLabel(installedAs) })
+      : '';
+
+  presrBlock.classList.toggle('hidden', effective !== 'presr');
+  if (effective === 'presr') {
+    const marker = state.marker || {};
+    const iniBefore = state.ini && state.ini.runBeforeSR;
+    const iniPasses = state.ini && Number(state.ini.passes);
+    $('#game-presr-before').checked = marker.runBeforeSR === undefined ? !(iniBefore === 'false') : !!marker.runBeforeSR;
+    $('#game-presr-passes').value = String([1, 2, 3].includes(Number(marker.passes)) ? Number(marker.passes) : [1, 2, 3].includes(iniPasses) ? iniPasses : 1);
+    $('#game-presr-status').textContent = state.iniPresent ? '' : t('Applied on Install.');
+  }
+}
+
+$('#game-engine-select').addEventListener('change', async (e) => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  const chosen = e.target.value || null;
+  game.engine = chosen;
+  window.api.saveGames(games);
+  const effective = engineOf(game);
+  // The marker names the build this game should be on from now; the ini keys follow at once when
+  // OptiScaler is already there. The DLL itself only changes with a re-Install, which is offered
+  // rather than run silently -- it copies the release over the folder, ini included.
+  const res = await window.api.setGameEngine({ exePath: game.exePath, engine: effective });
+  if (!res.ok) toast(t('Could not set the build: {error}', { error: res.error }));
+  const status = (await window.api.gameStatus(game.exePath)).backends || {};
+  if (status.optiscaler) {
+    toast(t('This game will use {engine}. Press Install on its card to switch the files over.', { engine: engineLabel(effective) }));
+  } else {
+    toast(t('This game will use {engine} when installed.', { engine: engineLabel(effective) }));
+  }
+  await loadEngineSection(game);
+  await loadInjectorSection(game);
+  renderGrid();
+});
+
+$('#btn-presr-apply').addEventListener('click', async () => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  const status = $('#game-presr-status');
+  status.textContent = t('Applying…');
+  const res = await window.api.setGameEngine({
+    exePath: game.exePath,
+    engine: engineOf(game),
+    runBeforeSR: $('#game-presr-before').checked,
+    passes: Number($('#game-presr-passes').value),
+  });
+  if (!res.ok) {
+    status.className = 'status-line status-bad';
+    status.textContent = t('Could not apply: {error}', { error: res.error });
+    return;
+  }
+  status.className = 'status-line status-ok';
+  status.textContent = res.deferred ? t('Saved -- applied on Install.') : t('Applied to OptiScaler.ini ({keys}). Takes effect on the next launch.', { keys: (res.applied || []).map((x) => `${x.key}=${x.value}`).join(', ') || t('already set') });
 });
 
 // The same route the card tags, spelled out: which stack this game gets and what is still to do.
@@ -1277,7 +1379,7 @@ async function loadInjectorSection(game) {
     return;
   }
 
-  const readiness = await window.api.injectorReadiness(settings.releaseFolder);
+  const readiness = await window.api.injectorReadiness(engineFolder(engineOf(game)));
   const status = $('#game-injector-status');
   if (!readiness.ready) {
     section.classList.add('hidden');
@@ -1299,7 +1401,7 @@ async function loadInjectorSection(game) {
     status.className = 'status-line';
     status.textContent = '';
     if (isInjector && isSteamGame) {
-      const res = await window.api.injectorSteamOption(settings.releaseFolder);
+      const res = await window.api.injectorSteamOption(engineFolder(engineOf(game)));
       if (res.ok) {
         $('#game-injector-launch-option').value = res.launchOption;
       } else {
@@ -1323,7 +1425,7 @@ $('#btn-injector-launch-now').addEventListener('click', async () => {
   const game = games.find((x) => x.id === editingGameId);
   const status = $('#game-injector-status');
   status.textContent = t('Launching…');
-  const res = await window.api.injectorLaunch(game.exePath, settings.releaseFolder);
+  const res = await window.api.injectorLaunch(game.exePath, engineFolder(engineOf(game)));
   status.textContent = res.ok ? t('Launched through the injector.') : t('Launch failed: {error}', { error: res.error });
 });
 
@@ -2090,12 +2192,14 @@ function openSettingsModal() {
   $('#settings-language').value = settings.language || 'auto';
   $('#settings-ai-key').value = settings.anthropicApiKey || '';
   $('#settings-ai-model').value = settings.aiModel || 'claude-sonnet-5';
+  $('#settings-engine').value = engineIdOrDefault(settings.engine);
   $('#settings-release-folder').value = settings.releaseFolder || '';
   $('#settings-nr-dll').value = settings.nrDllPath || '';
-  $('#update-status').textContent = settings.installedVersion ? t('Installed: {version}', { version: settings.installedVersion }) : '';
+  $('#update-status').textContent = installedEnginesText();
   $('#update-status').className = 'status-line';
   $('#btn-install-update').classList.add('hidden');
-  pendingUpdate = null;
+  pendingUpdates = [];
+  refreshEngineSettingStatus();
   checkReleaseStatus();
   checkNrDllStatus();
   loadStreamlineVersions();
@@ -2157,6 +2261,24 @@ $('#settings-ai-key').addEventListener('change', async (e) => {
 $('#settings-ai-model').addEventListener('change', async (e) => {
   settings.aiModel = e.target.value || 'claude-sonnet-5';
   await window.api.saveSettings(settings);
+});
+
+$('#settings-engine').addEventListener('change', async (e) => {
+  const id = engineIdOrDefault(e.target.value);
+  settings.engine = id;
+  await window.api.saveSettings(settings);
+  const statusEl = $('#settings-engine-status');
+  statusEl.className = 'status-line';
+  statusEl.textContent = engineFolder(id) ? '' : t('Fetching the {engine} build…', { engine: engineLabel(id) });
+  const ready = await ensureEngine(id);
+  if (!ready.ok) {
+    statusEl.className = 'status-line status-bad';
+    statusEl.textContent = t('Could not set up the {engine} build: {error}', { engine: engineLabel(id), error: ready.error });
+    return;
+  }
+  refreshEngineSettingStatus();
+  $('#update-status').textContent = installedEnginesText();
+  toast(t('New installs use {engine}. Games already installed keep their build until you change it in Edit.', { engine: engineLabel(id) }));
 });
 
 $('#settings-language').addEventListener('change', async (e) => {
@@ -2249,10 +2371,17 @@ async function autoSyncStaleGames() {
   const nrRefreshed = [];
   const failed = [];
 
-  const releaseValid = settings.releaseFolder && (await window.api.validateRelease(settings.releaseFolder)).valid;
+  // Each game syncs against the build it runs on; a build with no valid folder yet (the Pre-SR
+  // fork before its first fetch) is skipped rather than fetched here -- Install does that.
+  const validByEngine = {};
   for (const game of games) {
-    if (!releaseValid) break;
-    const res = await window.api.syncGameIfStale({ exePath: game.exePath, releaseFolder: settings.releaseFolder, nrDllPath: settings.nrDllPath });
+    const engineId = engineOf(game);
+    if (validByEngine[engineId] === undefined) {
+      const folder = engineFolder(engineId);
+      validByEngine[engineId] = !!folder && (await window.api.validateRelease(folder)).valid;
+    }
+    if (!validByEngine[engineId]) continue;
+    const res = await window.api.syncGameIfStale({ exePath: game.exePath, releaseFolder: engineFolder(engineId), nrDllPath: settings.nrDllPath });
     if (!res.ok) {
       failed.push(`${game.name} (${res.error})`);
       continue;
@@ -2307,6 +2436,96 @@ async function usingCustomReleaseFolder(managedFolder) {
   const norm = (p) => String(p || '').replace(/[\\/]+$/, '').toLowerCase();
   if (norm(settings.releaseFolder) === norm(managedFolder)) return false;
   return (await window.api.validateRelease(settings.releaseFolder)).valid;
+}
+
+// ── Which OptiScaler build a game runs on ─────────────────────────────────────
+//
+// engines.js (main) is the list. The default build keeps its state where it always was
+// (settings.releaseFolder / installedVersion -- also what a user's own custom folder points at);
+// every other build lives in settings.engines[id] = { folder, version }. A game may name its own
+// build (game.engine); otherwise it follows settings.engine.
+const ENGINE_LABELS = {
+  dlssnr: 'OptiScaler_DLSSNR',
+  presr: 'OptiScaler-DLSSNR-PreSR-Multipass',
+};
+const DEFAULT_ENGINE_ID = 'dlssnr';
+
+function engineIdOrDefault(id) {
+  return Object.prototype.hasOwnProperty.call(ENGINE_LABELS, id) ? id : DEFAULT_ENGINE_ID;
+}
+
+function engineLabel(id) {
+  return ENGINE_LABELS[engineIdOrDefault(id)];
+}
+
+function engineOf(game) {
+  return engineIdOrDefault(game && game.engine ? game.engine : settings.engine);
+}
+
+function engineFolder(id) {
+  id = engineIdOrDefault(id);
+  if (id === DEFAULT_ENGINE_ID) return settings.releaseFolder || '';
+  return ((settings.engines || {})[id] || {}).folder || '';
+}
+
+function engineVersion(id) {
+  id = engineIdOrDefault(id);
+  if (id === DEFAULT_ENGINE_ID) return settings.installedVersion || '';
+  return ((settings.engines || {})[id] || {}).version || '';
+}
+
+function setEngineState(id, folder, version) {
+  id = engineIdOrDefault(id);
+  if (id === DEFAULT_ENGINE_ID) {
+    settings.releaseFolder = folder;
+    settings.installedVersion = version;
+  } else {
+    settings.engines = { ...(settings.engines || {}), [id]: { folder, version } };
+  }
+}
+
+// Every build that has a folder on disk -- the ones worth checking for updates.
+function enginesInUse() {
+  return Object.keys(ENGINE_LABELS).filter((id) => id === DEFAULT_ENGINE_ID || !!engineFolder(id));
+}
+
+function installedEnginesText() {
+  const parts = enginesInUse().filter((id) => engineVersion(id)).map((id) => `${engineLabel(id)} ${engineVersion(id)}`);
+  return parts.length ? t('Installed: {version}', { version: parts.join(', ') }) : '';
+}
+
+function refreshEngineSettingStatus() {
+  const el = $('#settings-engine-status');
+  const id = engineIdOrDefault(settings.engine);
+  const folder = engineFolder(id);
+  if (!folder) { el.className = 'status-line'; el.textContent = ''; return; }
+  el.className = 'status-line status-ok';
+  el.textContent = engineVersion(id) ? t('{engine} {version} is ready.', { engine: engineLabel(id), version: engineVersion(id) }) : t('{engine} is ready.', { engine: engineLabel(id) });
+}
+
+// Makes sure a build is on disk: a valid folder is enough; otherwise its latest GitHub release
+// is fetched into that build's managed folder. Returns { ok } or { ok: false, error }.
+const engineFetches = {};
+async function ensureEngine(id) {
+  id = engineIdOrDefault(id);
+  const folder = engineFolder(id);
+  if (folder && (await window.api.validateRelease(folder)).valid) return { ok: true };
+  if (!engineFetches[id]) {
+    engineFetches[id] = (async () => {
+      const res = await window.api.checkUpdate(id);
+      if (!res.ok) return { ok: false, error: res.error };
+      toast(t('Fetching {engine} {tag}…', { engine: engineLabel(id), tag: res.tag }));
+      const installRes = await window.api.installUpdate({ downloadUrl: res.downloadUrl, assetName: res.assetName, tag: res.tag, engine: id, sha256Url: res.sha256Url });
+      if (!installRes.ok) return { ok: false, error: installRes.error };
+      setEngineState(id, installRes.folder, res.tag);
+      await window.api.saveSettings(settings);
+      refreshBannerVisibility();
+      checkReleaseStatus();
+      toast(t('Fetched {engine} {tag}.', { engine: engineLabel(id), tag: res.tag }));
+      return { ok: true };
+    })().finally(() => { delete engineFetches[id]; });
+  }
+  return engineFetches[id];
 }
 
 async function ensureBundledEngine() {
@@ -2385,31 +2604,42 @@ $('#btn-manager-restart').addEventListener('click', async () => {
   if (!ok) { $('#btn-manager-restart').disabled = false; toast(t('The update is not ready yet.')); }
 });
 
+// Every build in use gets the same treatment: the default one always, the Pre-SR fork once it
+// has been fetched for some game.
 async function autoUpdateOptiScalerRelease() {
   const bundled = await window.api.bundledEngine();
-  if (await usingCustomReleaseFolder(bundled.managedFolder)) return;
-  const res = await window.api.checkUpdate();
-  if (!res.ok || settings.installedVersion === res.tag) return;
-  // Never step backwards from the bundled engine because GitHub's "latest" lags behind it.
-  if (settings.installedVersion && compareTags(settings.installedVersion, res.tag) > 0) return;
+  let anyUpdated = false;
+  for (const id of enginesInUse()) {
+    if (id === DEFAULT_ENGINE_ID && (await usingCustomReleaseFolder(bundled.managedFolder))) continue;
+    const res = await window.api.checkUpdate(id);
+    const installed = engineVersion(id);
+    if (!res.ok || installed === res.tag) continue;
+    // Never step backwards from the bundled engine because GitHub's "latest" lags behind it.
+    if (installed && compareTags(installed, res.tag) > 0) continue;
 
-  const installRes = await window.api.installUpdate({
-    downloadUrl: res.downloadUrl,
-    assetName: res.assetName,
-    tag: res.tag
-  });
-  if (!installRes.ok) {
-    toast(t('Auto-update to {tag} failed: {error}', { tag: res.tag, error: installRes.error }));
-    return;
+    const installRes = await window.api.installUpdate({
+      downloadUrl: res.downloadUrl,
+      assetName: res.assetName,
+      tag: res.tag,
+      engine: id,
+      sha256Url: res.sha256Url,
+    });
+    if (!installRes.ok) {
+      toast(t('Auto-update to {tag} failed: {error}', { tag: res.tag, error: installRes.error }));
+      continue;
+    }
+
+    const hadRelease = !!engineFolder(id);
+    setEngineState(id, installRes.folder, res.tag);
+    await window.api.saveSettings(settings);
+    toast(hadRelease
+      ? t('{engine} auto-updated to {tag}.', { engine: engineLabel(id), tag: res.tag })
+      : t('Fetched {engine} {tag} automatically.', { engine: engineLabel(id), tag: res.tag }));
+    anyUpdated = true;
   }
-
-  const hadRelease = !!settings.releaseFolder;
-  settings.releaseFolder = installRes.folder;
-  settings.installedVersion = res.tag;
-  await window.api.saveSettings(settings);
+  if (!anyUpdated) return;
   refreshBannerVisibility();
   checkReleaseStatus();
-  toast(hadRelease ? t('OptiScaler engine auto-updated to {tag}.', { tag: res.tag }) : t('Fetched the OptiScaler engine ({tag}) automatically.', { tag: res.tag }));
   autoSyncStaleGames();
 }
 $('#btn-clean-folder').addEventListener('click', async () => {
@@ -2444,29 +2674,39 @@ $('#btn-check-updates').addEventListener('click', async () => {
   mismatchEl.classList.add('hidden');
   $('#btn-install-update').classList.add('hidden');
 
-  const [res, managerRes] = await Promise.all([window.api.checkUpdate(), window.api.checkManagerUpdate()]);
+  // Every build in use is checked (the default always; the Pre-SR fork once fetched), so one
+  // status line and one button cover them all.
+  const ids = enginesInUse();
+  const [managerRes, ...engineResults] = await Promise.all([window.api.checkManagerUpdate(), ...ids.map((id) => window.api.checkUpdate(id))]);
   btn.disabled = false;
 
   let engineNeedsUpdate = false;
-  if (!res.ok) {
-    statusEl.className = 'status-line status-bad';
-    statusEl.textContent = t('Check failed: {error}', { error: res.error });
-    pendingUpdate = null;
-  } else {
-    pendingUpdate = res;
+  pendingUpdates = [];
+  const lines = [];
+  let anyFailed = false;
+  ids.forEach((id, i) => {
+    const res = engineResults[i];
+    const installed = engineVersion(id);
+    if (!res.ok) {
+      anyFailed = true;
+      lines.push(t('{engine}: check failed: {error}', { engine: engineLabel(id), error: res.error }));
+      return;
+    }
     // Older than GitHub's latest, not merely different: a Manager whose bundle is ahead of the
     // latest release must not offer a downgrade.
-    engineNeedsUpdate = !settings.installedVersion || compareTags(settings.installedVersion, res.tag) < 0;
-    if (!engineNeedsUpdate) {
-      statusEl.className = 'status-line status-ok';
-      statusEl.textContent = t('Engine up to date ({tag}).', { tag: res.tag });
-    } else {
-      statusEl.className = 'status-line';
-      statusEl.textContent = settings.installedVersion
-        ? t('Engine update available: {tag} (installed: {installed})', { tag: res.tag, installed: settings.installedVersion })
-        : t('Latest engine release: {tag} — not installed yet.', { tag: res.tag });
+    const needs = !installed || compareTags(installed, res.tag) < 0;
+    if (!needs) {
+      lines.push(t('{engine} up to date ({tag}).', { engine: engineLabel(id), tag: res.tag }));
+      return;
     }
-  }
+    engineNeedsUpdate = true;
+    pendingUpdates.push(res);
+    lines.push(installed
+      ? t('{engine} update available: {tag} (installed: {installed})', { engine: engineLabel(id), tag: res.tag, installed })
+      : t('{engine}: latest release {tag} — not installed yet.', { engine: engineLabel(id), tag: res.tag }));
+  });
+  statusEl.className = anyFailed ? 'status-line status-bad' : engineNeedsUpdate ? 'status-line' : 'status-line status-ok';
+  statusEl.textContent = lines.join(' ');
 
   let managerNeedsUpdate = false;
   if (!managerRes.ok) {
@@ -2514,34 +2754,43 @@ $('#btn-install-update').addEventListener('click', async () => {
   const statusEl = $('#update-status');
   const managerStatusEl = $('#manager-update-status');
 
-  if (pendingUpdate && settings.installedVersion !== pendingUpdate.tag) {
+  const toInstall = pendingUpdates.filter((u) => engineVersion(u.engine) !== u.tag);
+  if (toInstall.length) {
     btn.disabled = true;
-    statusEl.className = 'status-line';
-    statusEl.textContent = t('Downloading {tag}…', { tag: pendingUpdate.tag });
+    const done = [];
+    for (const pending of toInstall) {
+      const id = engineIdOrDefault(pending.engine);
+      statusEl.className = 'status-line';
+      statusEl.textContent = t('Downloading {engine} {tag}…', { engine: engineLabel(id), tag: pending.tag });
 
-    const res = await window.api.installUpdate({
-      downloadUrl: pendingUpdate.downloadUrl,
-      assetName: pendingUpdate.assetName,
-      tag: pendingUpdate.tag
-    });
+      const res = await window.api.installUpdate({
+        downloadUrl: pending.downloadUrl,
+        assetName: pending.assetName,
+        tag: pending.tag,
+        engine: id,
+        sha256Url: pending.sha256Url,
+      });
 
-    btn.disabled = false;
+      if (!res.ok) {
+        btn.disabled = false;
+        statusEl.className = 'status-line status-bad';
+        statusEl.textContent = t('Update failed: {error}', { error: res.error });
+        return;
+      }
 
-    if (!res.ok) {
-      statusEl.className = 'status-line status-bad';
-      statusEl.textContent = t('Update failed: {error}', { error: res.error });
-      return;
+      setEngineState(id, res.folder, res.tag);
+      await window.api.saveSettings(settings);
+      if (id === DEFAULT_ENGINE_ID) $('#settings-release-folder').value = res.folder;
+      done.push(`${engineLabel(id)} ${res.tag}`);
     }
-
-    settings.releaseFolder = res.folder;
-    settings.installedVersion = res.tag;
-    await window.api.saveSettings(settings);
-    $('#settings-release-folder').value = res.folder;
+    btn.disabled = false;
+    pendingUpdates = [];
     statusEl.className = 'status-line status-ok';
-    statusEl.textContent = t('Installed {tag}.', { tag: res.tag });
+    statusEl.textContent = t('Installed {tag}.', { tag: done.join(', ') });
     checkReleaseStatus();
+    refreshEngineSettingStatus();
     refreshBannerVisibility();
-    toast(t('OptiScaler engine updated to {tag}', { tag: res.tag }));
+    toast(t('OptiScaler engine updated to {tag}', { tag: done.join(', ') }));
     autoSyncStaleGames();
   }
 

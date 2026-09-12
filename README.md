@@ -179,6 +179,19 @@ for anyone setting the release folder by hand. **The DLSS NR model file** (`nvng
 the one piece NVIDIA only ships inside driver packages) is fetched automatically too, from the
 same RHI manifest the Feeder already uses -- a fresh install needs no manual downloads at all.
 
+**A second engine build: OptiScaler-DLSSNR-PreSR-Multipass.** Settings > "OptiScaler build" (and
+per game, Edit > "OptiScaler build for this game") can switch from this project's own
+OptiScaler_DLSSNR to [wilsjo2's PreSR-Multipass fork](https://github.com/wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass).
+That build can run Neural Rendering *before* DLSS upscaling, so the model works on the DLSS input
+(1920x1080 in 4K Performance) rather than the full output frame -- a large speed-up at the same
+output resolution -- and can stack one to three passes. It is fetched from its own GitHub
+releases the first time a game needs it (sha256 checked against the release's own checksum
+file), kept in its own managed folder beside the default build, and updated on the same schedule.
+The Pre-SR block in Edit sets `[DlssNr] RunBeforeSR` (on by default, since the fork itself
+defaults it off) and `Passes`. That build has no Alt+Home DLSS 5 panel; its Neural Rendering
+controls live in OptiScaler's own Insert menu. Switching an installed game between builds is a
+re-Install from the card; Remove clears either.
+
 ## What OptiScaler covers, and what it doesn't
 
 OptiScaler intercepts the game's own upscaler — NVNGX, FSR or XeSS — and hands the neural model a
@@ -316,6 +329,7 @@ releases and never mirrored here:
 | [ReshadeMotionEstimation](https://github.com/JakobPCoder/ReshadeMotionEstimation) (JakobPCoder) | Default motion-vector provider for the Feeder | CC BY-NC 4.0 |
 | [LumeniteFX](https://github.com/umar-afzaal/LumeniteFX) (umar-afzaal) | Optional motion-vector provider; fetched live from the official repo only after per-action consent | AGNYA (all rights reserved) |
 | [Luma-Framework](https://github.com/Filoppi/Luma-Framework) (Filoppi) | DLAA in place of TAA for STAR WARS Jedi: Fallen Order; fetched live after per-action consent | Custom MIT variant |
+| [OptiScaler-DLSSNR-PreSR-Multipass](https://github.com/wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass) (wilsjo2) | Optional engine build: Neural Rendering before DLSS upscaling, 1-3 passes; fetched live from its releases | GPL-3.0 |
 | [REFramework](https://github.com/praydog/REFramework) (praydog) | Required on RE Engine games | MIT |
 | [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) (THS) | Frame Generation for games with no DLSS of their own; configured, never installed | Paid, Steam |
 | [DLSS5-Swapper](https://github.com/rakanki911/DLSS5-Swapper) (Rakan Alkhaldi) | `src/library.js`, as above | MIT |

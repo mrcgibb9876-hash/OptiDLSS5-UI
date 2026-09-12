@@ -94,7 +94,10 @@ contextBridge.exposeInMainWorld('api', {
   cacheSteamBanner: (appid, fallbackImageUrl) => ipcRenderer.invoke('banner:cache-steam', { appid, fallbackImageUrl }),
   importLocalBanner: (sourcePath) => ipcRenderer.invoke('banner:import-local', sourcePath),
 
-  checkUpdate: () => ipcRenderer.invoke('update:check'),
+  checkUpdate: (engine) => ipcRenderer.invoke('update:check', { engine }),
+  engineList: () => ipcRenderer.invoke('engine:list'),
+  engineForGame: (exePath) => ipcRenderer.invoke('engine:forGame', exePath),
+  setGameEngine: (payload) => ipcRenderer.invoke('engine:setForGame', payload),
   installUpdate: (payload) => ipcRenderer.invoke('update:install', payload),
   checkManagerUpdate: () => ipcRenderer.invoke('update:checkManager'),
   openManagerReleasePage: () => ipcRenderer.invoke('update:openManagerReleasePage'),
