@@ -310,6 +310,7 @@ body {
   line-height: 1.4;
 }
 .field-row { display: flex; gap: 8px; }
+.field-subblock { margin-top: 12px; }
 .lumaue-steps {
   font-size: 12.5px;
   color: var(--text);

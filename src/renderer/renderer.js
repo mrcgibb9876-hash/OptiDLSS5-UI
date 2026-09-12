@@ -1128,7 +1128,59 @@ async function loadFrameGenSection(game) {
   const where = state.relativeTo && state.relativeTo !== state.dll ? ` (${state.relativeTo})` : '';
   status.textContent = t('{dll}{where}: currently {version}', { dll: state.dll, where, version: state.currentVersion || t('unknown version') }) +
     (state.swapped ? ' ' + t('(swapped by this app -- original backed up, Restore puts it back)') : '');
+
+  await loadFrameGenMultiplier(game);
 }
+
+// The multiplier of the game's OWN NVIDIA Frame Generation (2x/3x/4x or Dynamic) -- an override
+// OptiScaler applies to every slDLSSGSetOptions the game makes, so the game's menu still turns FG
+// on and off and this only changes how many frames it asks the driver for. Stored as a per-game
+// marker that autoConfigureGame re-applies to the ini (see framegen:setMultiplier in main.js).
+// Hidden on AMD/Intel: the game's DLSS-G never runs there in the first place.
+async function loadFrameGenMultiplier(game) {
+  const block = $('#game-framegen-multiplier-block');
+  const res = await window.api.frameGenMultiplier(game.exePath);
+  if (!res || !res.hasFrameGen || (res.gpuVendor && res.gpuVendor !== 'nvidia' && res.gpuVendor !== 'unknown')) {
+    block.classList.add('hidden');
+    return;
+  }
+  block.classList.remove('hidden');
+  const select = $('#game-framegen-multiplier');
+  const status = $('#game-framegen-multiplier-status');
+  const m = res.marker;
+  select.value = m ? (m.dynamic ? 'dynamic' : (m.frames ? String(m.frames) : 'auto')) : 'auto';
+  status.className = 'status-line';
+  const iniFrames = res.ini && res.ini.frames && res.ini.frames !== 'auto' ? Number(res.ini.frames) : null;
+  const iniDynamic = !!(res.ini && String(res.ini.dynamic).toLowerCase() === 'true');
+  if (m) {
+    status.textContent = m.dynamic
+      ? t('Set by this app: Dynamic (driver picks the multiplier).')
+      : t('Set by this app: {mult}x.', { mult: (m.frames || 1) + 1 });
+    if (!res.iniPresent) status.textContent += ' ' + t('Applied once OptiScaler is installed.');
+  } else if (iniDynamic) {
+    status.textContent = t('Currently Dynamic, set from the in-game panel. Pick a value here to manage it from the app.');
+  } else if (iniFrames) {
+    status.textContent = t('Currently {mult}x, set from the in-game panel. Pick a value here to manage it from the app.', { mult: iniFrames + 1 });
+  } else {
+    status.textContent = t("Game setting -- the game's own Frame Generation menu decides.");
+  }
+}
+
+$('#btn-framegen-multiplier-apply').addEventListener('click', async () => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  const v = $('#game-framegen-multiplier').value;
+  const res = await window.api.frameGenSetMultiplier({
+    exePath: game.exePath,
+    frames: v === 'dynamic' || v === 'auto' ? null : Number(v),
+    dynamic: v === 'dynamic',
+  });
+  if (!res || !res.ok) return toast(t('Could not set the multiplier: {error}', { error: res ? res.error : '?' }));
+  if (res.cleared) toast(t("Frame Generation multiplier back to the game's own setting."));
+  else if (res.deferred) toast(t('Saved -- applied once OptiScaler is installed for this game.'));
+  else toast(t('Frame Generation multiplier applied. It takes effect on the next launch (or right away from the Alt+Home panel).'));
+  loadFrameGenMultiplier(game);
+});
 
 $('#btn-framegen-swap').addEventListener('click', async () => {
   if (!editingGameId) return;

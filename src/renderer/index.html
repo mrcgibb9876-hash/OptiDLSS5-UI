@@ -87,6 +87,22 @@
           <button id="btn-framegen-restore" class="btn btn-ghost" data-i18n>Restore original</button>
         </div>
         <span id="game-framegen-status" class="status-line"></span>
+
+        <div id="game-framegen-multiplier-block" class="field-subblock">
+          <label class="field-label" data-i18n>NVIDIA Frame Generation multiplier</label>
+          <p class="field-hint" data-i18n>The game's own DLSS Frame Generation -- how many frames it makes per rendered frame. Turn Frame Generation on in the game's video settings as usual; this only changes the multiplier it asks for. 3x and 4x need an RTX 50 series -- other cards stay at 2x. Also adjustable live from the Alt+Home panel.</p>
+          <div class="field-row">
+            <select id="game-framegen-multiplier">
+              <option value="auto" data-i18n>Game setting</option>
+              <option value="1">2x</option>
+              <option value="2">3x</option>
+              <option value="3">4x</option>
+              <option value="dynamic" data-i18n>Dynamic (driver picks, RTX 50)</option>
+            </select>
+            <button id="btn-framegen-multiplier-apply" class="btn btn-ghost" data-i18n>Apply</button>
+          </div>
+          <span id="game-framegen-multiplier-status" class="status-line"></span>
+        </div>
       </div>
 
       <div id="game-injector-section" class="hidden">

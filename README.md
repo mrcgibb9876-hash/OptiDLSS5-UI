@@ -22,7 +22,11 @@ the missing-NR-file one below):
 
 **Editing a game** covers per-game Neural Rendering source, Frame Generation, and — for a game with
 no native DLSS of its own (checked beside the exe and, for an Unreal game, under the plugin tree where UE keeps it — a game that ships DLSS there is never offered the Feeder) — the DLSS5 Feeder deploy and its two Frame Generation options
-side by side (OptiScaler's own FSRFG where it can run, Lossless Scaling where it can't):
+side by side (OptiScaler's own FSRFG where it can run, Lossless Scaling where it can't).
+For a game that ships NVIDIA's own DLSS Frame Generation (Cyberpunk, Stellar Blade, Witcher 3…)
+the same modal sets its **multiplier** — game setting, 2x, 3x, 4x, or Dynamic — without replacing
+the game's frame gen: OptiScaler rewrites what the game asks the driver for, the game's own menu
+still turns it on and off, and the Alt+Home panel shows the same control live:
 
 ![Edit Game modal, Feeder and Frame Generation section for a game with no native DLSS](docs/screenshots/edit-game-lossless.png)
 

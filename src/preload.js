@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('api', {
   frameGenState: (exePath) => ipcRenderer.invoke('framegen:state', exePath),
   frameGenSwap: (exePath, version) => ipcRenderer.invoke('framegen:swap', { exePath, version }),
   frameGenRestore: (exePath) => ipcRenderer.invoke('framegen:restore', exePath),
+  frameGenMultiplier: (exePath) => ipcRenderer.invoke('framegen:multiplier', exePath),
+  frameGenSetMultiplier: (payload) => ipcRenderer.invoke('framegen:setMultiplier', payload),
 
   injectorReadiness: (releaseFolder) => ipcRenderer.invoke('injector:readiness', { releaseFolder }),
   injectorSteamOption: (releaseFolder) => ipcRenderer.invoke('injector:steamOption', { releaseFolder }),

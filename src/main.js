@@ -869,6 +869,118 @@ function gameDir(exePath) {
 // OptiScaler's own Frame Generation apply, whether DLSS NR on AMD is offered. So a game that
 // ships more than one gets a choice. Stored beside the exe like the other per-game markers, so
 // every entry point (install, sync, deploy, the card) sees the same answer.
+// ---- The game's own NVIDIA Frame Generation: multiplier override ----------------------------
+//
+// A native-DLSS game (anything with an nvngx_dlssg.dll, beside the exe or in its Unreal plugin
+// tree) runs NVIDIA's own DLSS Frame Generation through Streamline. OptiScaler never replaces
+// that here (its own FG bridge stays off -- see autoConfigureGame), but it does hook every
+// slDLSSGSetOptions the game makes, and [DLSSG] OverrideInterpolationCount / OverrideForceDMFG /
+// FramerateTargetDMFG in OptiScaler.ini rewrite what the game asks the driver for: 1 = 2x,
+// 2 = 3x, 3 = 4x generated frames, or Dynamic (the driver picks, RTX 50 only). Turning FG on and
+// off stays the game's own video setting. The engine clamps a count above what the driver
+// reports (an RTX 40 card is 2x whatever is written), so offering 3x/4x everywhere is safe.
+//
+// Same shape as the Lossless marker: game:install copies the release ini over the folder
+// wholesale, and a multiplier can be picked before OptiScaler is installed, so the source of
+// truth is a per-game marker beside the exe that autoConfigureGame re-applies. No marker means
+// "don't touch" -- a value set live from the Alt+Home panel is then left alone.
+const FRAMEGEN_MARKER = '.dlss5ui-framegen.json';
+
+// The value of one key in one section of an ini, as written (trimmed), or null when absent.
+function readIniKey(iniPath, section, key) {
+  let text;
+  try { text = fs.readFileSync(iniPath, 'utf-8'); } catch { return null; }
+  let inSection = false;
+  for (const line of text.split(/\r\n|\n/)) {
+    const sectionMatch = line.match(/^\s*\[([^\]]+)\]\s*$/);
+    if (sectionMatch) { inSection = sectionMatch[1].toLowerCase() === section.toLowerCase(); continue; }
+    if (!inSection) continue;
+    const kvMatch = line.match(/^(\s*)([^;#=\s][^=]*?)(\s*=\s*)(.*)$/);
+    if (kvMatch && kvMatch[2].trim().toLowerCase() === key.toLowerCase()) return kvMatch[4].trim();
+  }
+  return null;
+}
+
+function frameGenMarkerFrames(marker) {
+  return marker && Number.isInteger(marker.frames) && marker.frames >= 1 && marker.frames <= 5 ? marker.frames : null;
+}
+
+function applyFrameGenMarker(dir) {
+  const iniPath = path.join(dir, 'OptiScaler.ini');
+  const marker = readJson(path.join(dir, FRAMEGEN_MARKER), null);
+  if (!marker || !fs.existsSync(iniPath)) return [];
+  const applied = [];
+  const set = (key, value) => {
+    if (ensureIniKey(iniPath, 'DLSSG', key, value)) applied.push({ section: 'DLSSG', key, value });
+  };
+  const frames = frameGenMarkerFrames(marker);
+  set('OverrideInterpolationCount', frames ? String(frames) : 'auto');
+  set('OverrideForceDMFG', marker.dynamic ? 'true' : 'auto');
+  if (marker.dynamic) {
+    const target = Number(marker.target);
+    set('FramerateTargetDMFG', Number.isFinite(target) && target > 0 ? String(Math.round(target)) : 'auto');
+  }
+  return applied;
+}
+
+ipcMain.handle('framegen:multiplier', async (_evt, exePath) => {
+  if (!exePath || !fs.existsSync(exePath)) return { hasFrameGen: false };
+  const dir = gameDir(exePath);
+  if (!framegen.frameGenSwapState(dir).hasFrameGen) return { hasFrameGen: false };
+  let gpuVendor = 'unknown';
+  try { gpuVendor = ((await getGpuInfo()) || {}).vendor || 'unknown'; } catch {}
+  const iniPath = path.join(dir, 'OptiScaler.ini');
+  const iniPresent = fs.existsSync(iniPath);
+  return {
+    hasFrameGen: true,
+    gpuVendor,
+    marker: readJson(path.join(dir, FRAMEGEN_MARKER), null),
+    iniPresent,
+    ini: iniPresent ? {
+      frames: readIniKey(iniPath, 'DLSSG', 'OverrideInterpolationCount'),
+      dynamic: readIniKey(iniPath, 'DLSSG', 'OverrideForceDMFG'),
+      target: readIniKey(iniPath, 'DLSSG', 'FramerateTargetDMFG'),
+    } : null,
+  };
+});
+
+// frames: 1..5 generated frames per real one (1 = 2x), or null; dynamic: let the driver pick.
+// Neither = back to the game's own setting: the marker goes and any override it wrote is cleared.
+ipcMain.handle('framegen:setMultiplier', async (_evt, { exePath, frames, dynamic, target } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    if (!framegen.frameGenSwapState(dir).hasFrameGen) {
+      throw new Error('This game has no DLSS Frame Generation of its own (no nvngx_dlssg.dll) -- nothing to set a multiplier on');
+    }
+    const iniPath = path.join(dir, 'OptiScaler.ini');
+    const markerPath = path.join(dir, FRAMEGEN_MARKER);
+    const wantFrames = frameGenMarkerFrames({ frames: Number(frames) });
+    const wantDynamic = !!dynamic;
+    if (!wantFrames && !wantDynamic) {
+      try { fs.rmSync(markerPath, { force: true }); } catch {}
+      const cleared = [];
+      if (fs.existsSync(iniPath)) {
+        for (const key of ['OverrideInterpolationCount', 'OverrideForceDMFG']) {
+          if (ensureIniKey(iniPath, 'DLSSG', key, 'auto')) cleared.push({ section: 'DLSSG', key, value: 'auto' });
+        }
+      }
+      return { ok: true, cleared: true, deferred: !fs.existsSync(iniPath), applied: cleared };
+    }
+    const t = Number(target);
+    writeJson(markerPath, {
+      frames: wantDynamic ? null : wantFrames,
+      dynamic: wantDynamic,
+      target: Number.isFinite(t) && t > 0 ? Math.round(t) : null,
+      updatedAt: new Date().toISOString(),
+    });
+    if (!fs.existsSync(iniPath)) return { ok: true, cleared: false, deferred: true, applied: [] };
+    return { ok: true, cleared: false, deferred: false, applied: applyFrameGenMarker(dir) };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
 const API_OVERRIDE_MARKER = '.dlss5ui-api.json';
 
 function readApiOverride(dir) {
@@ -910,8 +1022,8 @@ function detectInstalledBackends(dir) {
   const optiscaler = has('OptiScaler.ini') && has('nvngx_dlssnr.dll');
   // Anything else of ours still in the folder once OptiScaler itself is gone -- so the card can
   // still offer Remove and take the folder the rest of the way back.
-  // Only what an INSTALL leaves behind. The three preference markers (.dlss5ui-api.json,
-  // .dlss5ui-lossless.json, .dlss5ui-optifg-enabled) are deliberately not here: each can be set
+  // Only what an INSTALL leaves behind. The preference markers (.dlss5ui-api.json,
+  // .dlss5ui-lossless.json, .dlss5ui-framegen.json, .dlss5ui-optifg-enabled) are deliberately not here: each can be set
   // on a game before anything is installed -- choosing DX12 for Where Winds Meet in Edit wrote
   // .dlss5ui-api.json, this list then called it a leftover, and the card's Install button turned
   // into a red "Remove leftovers" that deleted the choice. Remove (the full uninstall) still
@@ -1155,7 +1267,7 @@ async function removeSharedNrDllIfUnneeded(dir) {
 // journal existed still gets the fixed payload list. Nothing here guesses at a file it did not
 // place -- unknown files stay, and the report says so where a decision was made.
 const RELEASE_LICENSE_FILES = ['DirectX_LICENSE.txt', 'FidelityFX_v2_LICENSE.md', 'RenoDX_ATTRIBUTION.txt', 'XeSS_LICENSE.txt'];
-const APP_MARKERS = ['.dlss5ui-lossless.json', '.dlss5ui-api.json', '.dlss5ui-optifg-enabled', '.optiscaler-manager-install.json'];
+const APP_MARKERS = ['.dlss5ui-lossless.json', '.dlss5ui-framegen.json', '.dlss5ui-api.json', '.dlss5ui-optifg-enabled', '.optiscaler-manager-install.json'];
 const LEGACY_PAYLOAD = [
   'OptiScaler_DlssNr.addon64', 'OptiScaler_DlssNr.exp', 'OptiScaler_DlssNr.lib', 'OptiScaler_DlssNr.pdb', 'OptiScaler_DlssNr.dll',
   '.optdlss5-active-manifest.json', 'Verify-DLSS5Feeder.ps1', 'Run-DLSS5-Feeder-Install.bat', 'Remove_OptiScaler.bat',
@@ -2493,6 +2605,7 @@ async function autoConfigureGame(dir, exePath) {
   // lumaue.js's file header) -- OptiScaler needs the same explicit LoadReshade nudge to load it.
   if (lumaue.lumaUeDeployed(dir)) forced = [...forced, ...patchIniValues(iniPath, LOAD_RESHADE_FORCED)];
   forced = [...forced, ...applyLosslessMarker(dir)];
+  forced = [...forced, ...applyFrameGenMarker(dir)];
   forced = [...forced, ...applyPanelLanguage(dir)];
   return {
     api, applied: [...applied, ...forced], streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix,
