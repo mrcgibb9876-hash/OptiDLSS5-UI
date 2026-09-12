@@ -238,6 +238,25 @@
     </div>
   </div>
 
+  <div id="help-modal" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <h2 id="help-title">Game Help</h2>
+      <div id="help-status" class="help-status"></div>
+      <p id="help-body" class="help-body"></p>
+      <div id="help-lastrun" class="status-line"></div>
+      <div id="help-waiting" class="status-line status-ok hidden"></div>
+      <pre id="help-ai-out" class="help-ai-out hidden"></pre>
+      <div class="modal-actions" style="flex-wrap: wrap;">
+        <button id="help-apply" class="btn btn-primary hidden"></button>
+        <button id="help-launch" class="btn btn-launch" data-i18n>Launch and check</button>
+        <button id="help-ai" class="btn btn-ghost hidden"></button>
+        <button id="help-bundle" class="btn btn-ghost has-tip" data-i18n data-tip="Packs this game's logs, settings and what this app knows about it into one zip on your Desktop, to attach when asking for help. Nothing is sent anywhere.">Save bundle to share</button>
+        <button id="help-report" class="btn btn-ghost has-tip" data-i18n data-tip="Opens a new GitHub issue in your browser with this finding filled in. Attach the saved bundle zip to it.">Report on GitHub</button>
+        <button id="help-close" class="btn btn-ghost" data-i18n>Close</button>
+      </div>
+    </div>
+  </div>
+
   <div id="settings-modal" class="modal-overlay hidden">
     <div class="modal">
       <h2 data-i18n>Settings</h2>
@@ -257,6 +276,17 @@
       </div>
 
       <div id="settings-gpu-status" class="status-line" style="margin-bottom: 8px;"></div>
+
+      <label class="field-label" data-i18n>AI help (optional, paid by you)</label>
+      <p class="field-hint" data-i18n>When Game Help has no rule for a problem, "Ask AI" sends that game's logs and the app's own view to Claude on your Anthropic API key, and Claude may apply the same fixes the app has, each one confirmed with you first. You pay Anthropic directly for what you use; nothing is sent until you press Ask AI. Keys start with sk-ant-.</p>
+      <div class="field-row">
+        <input id="settings-ai-key" type="password" data-i18n-placeholder placeholder="Anthropic API key (sk-ant-…)" autocomplete="off" />
+        <select id="settings-ai-model">
+          <option value="claude-sonnet-5">Claude Sonnet 5</option>
+          <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (cheapest)</option>
+          <option value="claude-opus-5">Claude Opus 5</option>
+        </select>
+      </div>
 
       <label class="field-label" data-i18n>OptiScaler (DLSSNR) release folder</label>
       <p class="field-hint" data-i18n>Set up automatically: the engine ships inside this app's installer and is extracted on first launch, then kept current from GitHub. Only change this to use your own build (the folder containing setup_windows.bat).</p>

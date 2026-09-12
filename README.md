@@ -231,6 +231,31 @@ its own folder, and for an Unreal game that means the
 `<Project>-Win64-Shipping.exe` under `<Project>BinariesWin64` -- the process that actually renders and the one
 OptiScaler is installed beside -- even when the card was added from the launcher stub in the install root.
 
+## Game Help
+
+Every card has a **Game Help** button. It checks what the app already knows about the game -- the
+detection, the recommended route and what is deployed, the last run's verdict from the logs, other
+DLSS 5 toolchains in the folder, the verified-games registry -- against a rule table
+(`src/gamehelp.js`) and says one of six things:
+
+- **Working** -- Neural Rendering ran on the last run, with the pass count and fps.
+- **Fix available** -- the app can do it: remove another toolchain, remove a Feeder that is on a game
+  with its own DLSS, remove Luma UE from a game known to break with it, reconfigure the ini
+  (`dlss_12` for D3D11, NR on, REFramework for RE Engine, the Feeder's ReShade settings), or Install.
+  One button applies it.
+- **Your move** -- something only you can do in-game, such as selecting DLSS in Luma's overlay.
+- **Needs a run** -- no log yet. **Launch and check** starts the game and reads the new log by itself
+  once you have reached gameplay and quit.
+- **Not available** -- DLSS 5 cannot work here with what this app deploys: a 32-bit game, anti-cheat,
+  a Vulkan-only game with no DLSS, or a fix that was applied and changed nothing. It says why.
+- **No rule fits** -- the escalation: **Save bundle to share** zips the logs, settings and the app's
+  own view to your Desktop (nothing is sent anywhere), or **Ask AI**.
+
+**Ask AI** is optional and paid by you: in Settings, paste an Anthropic API key (you pay Anthropic
+directly for what you use). It sends that game's log tails and the app's view to Claude, which may
+apply only the same fixes the app has, and only after you confirm each one in a dialog. It ends with
+a plain verdict: fixed, or "DLSS 5 is not currently available for this game" and why. Nothing is sent
+until you press Ask AI, and the key never leaves your machine except to api.anthropic.com.
 ## In-game keys
 
 | | |

@@ -22,6 +22,8 @@ const { openZip, findEntry, extractEntryTo } = require('./zip');
 const managerUpdate = require('./manager-update');
 const runlog = require('./runlog');
 const library = require('./library');
+const gamehelp = require('./gamehelp');
+const aihelp = require('./aihelp');
 let electronAutoUpdater = null;
 try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
 const ENGINE_KNOWN_GAMES = new Set(require('./engine-known-games.json').exeNames);
@@ -1300,7 +1302,10 @@ ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
 // The explicit, double-confirmed removal of another DLSS 5 toolchain. The card already asked once
 // (warning 1 of 2, renderer); this shows the second, native confirmation with the exact file list
 // and then deletes only what the plan names. Never runs without both.
-ipcMain.handle('game:removeForeign', async (_evt, exePath) => {
+ipcMain.handle('game:removeForeign', (_evt, exePath) => removeForeignFlow(exePath));
+
+// The whole foreign-removal flow, its second warning included, so Game Help can run it too.
+async function removeForeignFlow(exePath) {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
@@ -1326,7 +1331,7 @@ ipcMain.handle('game:removeForeign', async (_evt, exePath) => {
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
-});
+}
 
 async function executeForeignRemoval(dir, plan) {
   const removed = [];
@@ -1446,6 +1451,157 @@ ipcMain.handle('game:supportBundle', async (_evt, { exePath, detected }) => {
   }
 });
 
+// ── Game Help ─────────────────────────────────────────────────────────────────
+// Everything gamehelp.diagnose() looks at, gathered from what the app already computes for the
+// card: the cached detection (with the API override), the route, the last run, other
+// toolchains, the registry's known-bad note, REFramework, and whether NR is on in the ini.
+async function helpContext(exePath, detected, fixesTried = []) {
+  const dir = gameDir(exePath);
+  const effective = withApiOverride(detected || {}, readApiOverride(dir));
+  const { vendor } = await getGpuInfo();
+  const route = recommendRoute(dir, exePath, effective, vendor || 'unknown');
+  const run = await runlog.analyzeRun(dir);
+  let nrEnabledInIni = null;
+  try {
+    const ini = fs.readFileSync(path.join(dir, 'OptiScaler.ini'), 'utf8');
+    const m = /^\[DlssNr\][\s\S]*?^Enabled\s*=\s*(\S+)/im.exec(ini);
+    if (m) nrEnabledInIni = !/^(false|0)$/i.test(m[1]);
+  } catch {}
+  const reEngine = isReEngineGame(dir);
+  return {
+    dir, exePath, detected: effective, route, run, fixesTried,
+    foreign: foreignToolchains(dir),
+    backends: detectInstalledBackends(dir),
+    lumaKnownBad: route.lumaDeployed ? lumaue.lumaUeKnownBad(exePath) : null,
+    reEngine,
+    reframeworkPresent: reEngine ? fs.existsSync(path.join(dir, REFRAMEWORK_DLL_NAME)) : null,
+    nrEnabledInIni,
+    gpuVendor: vendor || 'unknown',
+  };
+}
+
+ipcMain.handle('game:help', async (_evt, { exePath, detected, fixesTried = [] } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const ctx = await helpContext(exePath, detected, fixesTried);
+    const diag = gamehelp.diagnose(ctx);
+    return { ok: true, ...diag, run: ctx.run, route: { route: ctx.route.route, label: ctx.route.label, reason: ctx.route.reason }, foreign: ctx.foreign };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// The fixes the app runs itself. 'install' is the card's Install button: the renderer runs it.
+async function applyHelpFix(exePath, fixId) {
+  const dir = gameDir(exePath);
+  switch (fixId) {
+    case 'remove-foreign': {
+      const r = await removeForeignFlow(exePath);
+      if (!r.ok) throw new Error(r.error);
+      if (r.cancelled) return { done: false, text: 'cancelled by the user' };
+      return { done: true, text: `removed ${(r.removed || []).length} item(s)${(r.restored || []).length ? ', restored ' + r.restored.length : ''}` };
+    }
+    case 'remove-feeder': {
+      if (!feeder.feederDeployed(dir)) return { done: false, text: 'no Feeder deployed here' };
+      const r = await feeder.removeFeederStack(dir, { keepReShade: lumaue.lumaUeDeployed(dir) });
+      if (fs.existsSync(path.join(dir, 'OptiScaler.ini'))) await autoConfigureGame(dir, exePath);
+      return { done: true, text: `removed the Feeder (${r.removed.length} files)` };
+    }
+    case 'remove-luma': {
+      if (!lumaue.lumaUeDeployed(dir)) return { done: false, text: 'no Luma UE deployed here' };
+      const r = await lumaue.removeLumaStack(dir);
+      if (fs.existsSync(path.join(dir, 'OptiScaler.ini'))) await autoConfigureGame(dir, exePath);
+      return { done: true, text: `removed Luma UE (${r.removed.length} files)` };
+    }
+    case 'reconfigure': {
+      if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { done: false, text: 'OptiScaler is not installed here' };
+      const r = await autoConfigureGame(dir, exePath);
+      const changed = (r.applied || []).map((e) => `${e.section}.${e.key}=${e.value}`);
+      const refw = r.reframework && r.reframework.installed ? ', REFramework placed' : '';
+      return { done: true, text: changed.length ? `set ${changed.join(', ')}${refw}` : `nothing needed changing${refw}` };
+    }
+    case 'install':
+      return { done: false, text: 'Install runs from the card: press Install OptiScaler on this game' };
+    default:
+      throw new Error(`unknown fix ${fixId}`);
+  }
+}
+
+ipcMain.handle('game:help-apply', async (_evt, { exePath, fixId } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    return { ok: true, ...(await applyHelpFix(exePath, fixId)) };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// The AI tier's evidence: the same view the bundle carries, as text, plus the log tails.
+async function helpEvidence(ctx) {
+  const tail = (file, max = 12000) => {
+    try {
+      const size = fs.statSync(file).size;
+      const fd = fs.openSync(file, 'r');
+      try {
+        const len = Math.min(size, max);
+        const buf = Buffer.alloc(len);
+        fs.readSync(fd, buf, 0, len, size - len);
+        return buf.toString('latin1');
+      } finally { fs.closeSync(fd); }
+    } catch { return null; }
+  };
+  const { dir } = ctx;
+  const view = {
+    appVersion: app.getVersion(), gpuVendor: ctx.gpuVendor, detection: ctx.detected, route: ctx.route, run: ctx.run,
+    backends: ctx.backends, foreign: ctx.foreign, reEngine: ctx.reEngine, reframeworkPresent: ctx.reframeworkPresent,
+    nrEnabledInIni: ctx.nrEnabledInIni, lumaKnownBad: ctx.lumaKnownBad, fixesTried: ctx.fixesTried,
+    ruleVerdict: gamehelp.diagnose(ctx),
+  };
+  let listing = [];
+  try { listing = fs.readdirSync(dir).slice(0, 200); } catch {}
+  const parts = [`## App view\n${JSON.stringify(view, null, 1)}`, `## Folder listing (${path.basename(dir)})\n${listing.join('\n')}`];
+  for (const name of ['OptiScaler.log', 'dlss5-feed.log', 'ReShade.log']) {
+    const t = tail(path.join(dir, name));
+    if (t) parts.push(`## ${name} (tail)\n${t}`);
+  }
+  const ini = tail(path.join(dir, 'OptiScaler.ini'), 6000);
+  if (ini) parts.push(`## OptiScaler.ini (tail)\n${ini}`);
+  return parts.join('\n\n');
+}
+
+ipcMain.handle('game:help-ai', async (evt, { exePath, detected, fixesTried = [] } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const settings = readJson(settingsFile(), {});
+    const apiKey = (settings.anthropicApiKey || '').trim();
+    if (!apiKey) throw new Error('No API key set (Settings > AI help)');
+    const model = aihelp.MODELS.includes(settings.aiModel) ? settings.aiModel : aihelp.DEFAULT_MODEL;
+    const ctx = await helpContext(exePath, detected, fixesTried);
+    const evidence = await helpEvidence(ctx);
+    const sender = evt && evt.sender;
+    const result = await aihelp.helpSession({
+      apiKey, model, evidence,
+      onText: (text) => { try { sender.send('game:help-ai-text', { exePath, text }); } catch {} },
+      applyFix: async (fix, why) => {
+        if (!gamehelp.FIX_IDS.includes(fix)) return 'refused: not a known fix';
+        if (fix === 'install') return 'not possible from here: the user must press Install OptiScaler on the card; tell them so';
+        const res = await dialog.showMessageBox({
+          type: 'question', buttons: ['Allow', 'Skip'], defaultId: 0, cancelId: 1,
+          title: 'Game Help (AI) wants to make a change',
+          message: `Apply "${fix}" to ${path.basename(exePath)}?`,
+          detail: why || '',
+        });
+        if (res.response !== 0) return 'the user declined this fix';
+        const r = await applyHelpFix(exePath, fix);
+        return (r.done ? 'done: ' : 'not done: ') + r.text;
+      },
+    });
+    return { ok: true, model, ...result };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
 // The exe a Launch should run. An Unreal game's card may point at the launcher stub in the
 // install root (the exe the store lists); the process that actually renders is the
 // <Project>-Win64-Shipping.exe under <Project>\Binaries\Win64, and that is what OptiScaler is
@@ -1481,6 +1637,11 @@ ipcMain.handle('game:launch', async (_evt, { exePath, dryRun = false } = {}) => 
 
 ipcMain.handle('game:open-folder', (_evt, exePath) => {
   shell.openPath(gameDir(exePath));
+});
+
+ipcMain.handle('shell:openExternal', (_evt, url) => {
+  // Only the project's own GitHub: this is the report button, not a general browser opener.
+  if (typeof url === 'string' && url.startsWith('https://github.com/mrcgibb9876-hash/')) shell.openExternal(url);
 });
 
 ipcMain.handle('shell:openPath', (_evt, p) => {

@@ -73,7 +73,12 @@ contextBridge.exposeInMainWorld('api', {
   launchGame: (exePath) => ipcRenderer.invoke('game:launch', { exePath }),
   lastRun: (exePath) => ipcRenderer.invoke('game:lastRun', exePath),
   supportBundle: (exePath, detected) => ipcRenderer.invoke('game:supportBundle', { exePath, detected }),
+  gameHelp: (exePath, detected, fixesTried) => ipcRenderer.invoke('game:help', { exePath, detected, fixesTried }),
+  gameHelpApply: (exePath, fixId) => ipcRenderer.invoke('game:help-apply', { exePath, fixId }),
+  gameHelpAi: (exePath, detected, fixesTried) => ipcRenderer.invoke('game:help-ai', { exePath, detected, fixesTried }),
+  onGameHelpAiText: (cb) => ipcRenderer.on('game:help-ai-text', (_evt, payload) => cb(payload)),
   openPath: (p) => ipcRenderer.invoke('shell:openPath', p),
+  openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
 
   confirmRemove: (gameName) => ipcRenderer.invoke('game:confirm-remove', gameName),
   removeForeign: (exePath) => ipcRenderer.invoke('game:removeForeign', exePath),

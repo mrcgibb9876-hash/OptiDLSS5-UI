@@ -169,7 +169,7 @@ async function renderGrid() {
         <div class="card-actions-row2">
           <button class="btn btn-ghost btn-open">${escapeHtml(t('Open Folder'))}</button>
           <button class="btn btn-ghost btn-edit">${escapeHtml(t('Edit'))}</button>
-          <button class="btn btn-ghost btn-support has-tip" data-tip="${escapeHtml(t('Packs this game\'s logs, settings and what this app knows about it into one zip on your Desktop, to attach when asking for help. Nothing is sent anywhere.'))}">${escapeHtml(t('Support bundle'))}</button>
+          <button class="btn btn-ghost btn-help has-tip" data-tip="${escapeHtml(t('Checks this game\'s setup and its last run, applies the fix when the app has one, tells you plainly when DLSS 5 is not available here, and can save a bundle to share or ask an AI.'))}">${escapeHtml(t('Game Help'))}</button>
           <button class="btn btn-ghost btn-danger btn-remove">${escapeHtml(t('Remove'))}</button>
         </div>
       </div>
@@ -281,13 +281,7 @@ async function renderGrid() {
         });
       });
     }
-    card.querySelector('.btn-support').addEventListener('click', async () => {
-      const res = await window.api.supportBundle(game.exePath, game.detectedPath || null);
-      if (!res.ok) { toast(t('Could not save the support bundle: {error}', { error: res.error })); return; }
-      if (res.cancelled) return;
-      toast(t('Support bundle saved: {path} ({count} files). Last run: {verdict}', { path: res.zipPath, count: res.files.length, verdict: describeRun(res.run) }));
-      window.api.openPath(res.zipPath);
-    });
+    card.querySelector('.btn-help').addEventListener('click', () => openHelp(game));
     card.querySelector('.btn-launch').addEventListener('click', async () => {
       const res = await window.api.launchGame(game.exePath);
       if (!res.ok) { toast(t('Could not launch {name}: {error}', { name: game.name, error: res.error })); return; }
@@ -429,6 +423,213 @@ function escapeHtml(str) {
   div.textContent = str ?? '';
   return div.innerHTML;
 }
+
+// ── Game Help ─────────────────────────────────────────────────────────────────
+// Tier one: the rule table in src/gamehelp.js, through game:help. Tier two: Ask AI, through
+// game:help-ai, on the user's own key. Both end in words on this modal.
+const helpModal = $('#help-modal');
+let helpGame = null;
+let helpFixesTried = [];
+let helpDiag = null;
+let helpPoll = null;
+let helpLastRunAt = null;
+
+function helpWords(diag) {
+  const v = diag.vars || {};
+  switch (diag.code) {
+    case 'bit32': return t('DLSS 5 is not currently available for this game: it is a 32-bit game, and OptiScaler and the NR model are 64-bit only.');
+    case 'anticheat': return t('DLSS 5 is not currently available for this game: it runs under {antiCheat}, which blocks the DLL this app relies on. Using it there can also get an account banned.', v);
+    case 'unsupported': return t('DLSS 5 is not currently available for this game: {reason}', v);
+    case 'foreign': return t('Another DLSS 5 toolchain is in this folder ({tool}). Two stacks hooking the same DLSS call crash the game. Remove it first.', v);
+    case 'feeder-misdeployed': return t('The DLSS5 Feeder is deployed on a game that ships its own DLSS. Two DLSS DLLs load and the game crashes. Remove the Feeder; OptiScaler alone is the route here.');
+    case 'luma-known-bad': return t('Luma UE is deployed here, and this game is known not to work with it ({reason}). Remove Luma UE.', v);
+    case 'not-installed': return t('OptiScaler is not installed on this game yet. Install it and the route\'s other steps follow.');
+    case 'feeder-missing': return t('This game has no DLSS of its own, so OptiScaler alone has nothing to hook. Install deploys the DLSS5 Feeder first.');
+    case 'luma-missing': return t('This game\'s route is Luma UE, which is not deployed yet. Install, then deploy Luma UE from Edit.');
+    case 'reframework-missing': return t('This is an RE Engine game and REFramework is missing. OptiScaler does nothing there without it. Reconfigure fetches and places it.');
+    case 'needs-run': return t('No run to judge yet. Launch the game, reach actual gameplay (not a menu), play a minute, then quit. Come back here and it is checked.');
+    case 'ok': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}{api}.', { count: v.count, fps: v.fps ? t(' at {fps} fps', { fps: v.fps }) : '', api: v.api ? ' (' + v.api + ')' : '' });
+    case 'ok-exit-crash': return t('Neural Rendering ran ({count} passes). The game crashed only on the way out, inside NVIDIA\'s shutdown, which does not affect play.', v);
+    case 'd3d11-native': return t('DLSS was created on the native D3D11 path, so the Neural Rendering pass never ran. Dx11Upscaler must be dlss_12. Reconfigure writes it.');
+    case 'nr-disabled': return t('DLSS ran but Neural Rendering is switched off in OptiScaler.ini. Reconfigure turns it on.');
+    case 'dlss-no-nr': return t('DLSS was created and Neural Rendering is on, yet the pass never ran. This is not a known case. Save the bundle to share, or ask the AI.');
+    case 'feeder-technique': return t('DLSS initialised but the Feeder\'s shader technique was missing. Install again to redeploy the Feeder.');
+    case 'luma-select-dlss': return t('Luma UE is deployed but no DLSS call happened. In-game, press Home for Luma\'s overlay and select DLSS as the upscaler, in gameplay. Then check again.');
+    case 'init-no-feature': return t('DLSS initialised but no feature was ever created. This is not a known case. Save the bundle to share, or ask the AI.');
+    case 'no-hook': return t('Nothing called DLSS on the last run, so nothing was hooked. Check the game\'s own graphics settings have DLSS or DLAA selected. If they do, this is not a known case: save the bundle or ask the AI.');
+    case 'ue-crash-luma': return t('The game crashed (Unreal crash report: {message}) with Luma UE deployed, and Luma is not verified on this game. Remove Luma UE and try the Feeder route.', { message: (v.message || '').slice(0, 120) });
+    case 'ue-crash-feeder': return t('The game crashed (Unreal crash report: {message}) with the Feeder deployed. Remove the Feeder and check whether it runs clean.', { message: (v.message || '').slice(0, 120) });
+    case 'ue-crash': return t('The game crashed (Unreal crash report: {message}). No rule covers this. Save the bundle to share, or ask the AI.', { message: (v.message || '').slice(0, 120) });
+    case 'feed-stopped': return t('The Feeder gave up on the last run. Reconfigure rewrites its ReShade settings; if it stops again, dlss5-feed.log has its own diagnosis.');
+    case 'fix-failed': return t('The fix "{fix}" was applied and the result did not change. DLSS 5 is not currently available for this game with what this app can do on its own. Save the bundle to share, or ask the AI.', v);
+    default: return t('No rule covers this run ({verdict}). Save the bundle to share, or ask the AI.', { verdict: v.verdict || diag.code });
+  }
+}
+
+function helpFixLabel(id) {
+  switch (id) {
+    case 'remove-foreign': return t('Remove the other toolchain');
+    case 'remove-feeder': return t('Remove the Feeder');
+    case 'remove-luma': return t('Remove Luma UE');
+    case 'reconfigure': return t('Reconfigure');
+    case 'install': return t('Install OptiScaler');
+    default: return id;
+  }
+}
+
+function renderHelp(diag) {
+  helpDiag = diag;
+  const body = $('#help-body');
+  const status = $('#help-status');
+  const cls = { ok: 'status-ok', fix: '', step: '', 'needs-run': '', unavailable: 'status-bad', unknown: 'status-bad' }[diag.status] || '';
+  status.className = 'help-status ' + cls;
+  status.textContent = {
+    ok: t('Working'), fix: t('Fix available'), step: t('Your move'), 'needs-run': t('Needs a run'),
+    unavailable: t('Not available'), unknown: t('No rule fits'),
+  }[diag.status] || '';
+  body.textContent = helpWords(diag);
+  const run = diag.run;
+  $('#help-lastrun').textContent = run && run.ran ? t('Last run: {when} -- {verdict}', { when: new Date(run.at).toLocaleString(), verdict: describeRun(run) }) : t('Last run: none recorded');
+  const apply = $('#help-apply');
+  apply.classList.toggle('hidden', diag.status !== 'fix');
+  if (diag.fix) apply.textContent = helpFixLabel(diag.fix.id);
+  $('#help-ai').classList.toggle('hidden', !(diag.status === 'unknown' || diag.status === 'step' || diag.status === 'fix'));
+  $('#help-ai').textContent = settings.anthropicApiKey ? t('Ask AI') : t('Set up AI help…');
+  $('#help-ai-out').classList.add('hidden');
+}
+
+async function refreshHelp() {
+  const diag = await window.api.gameHelp(helpGame.exePath, helpGame.detectedPath || null, helpFixesTried);
+  if (!diag.ok) { toast(t('Game Help could not check this game: {error}', { error: diag.error })); return null; }
+  renderHelp(diag);
+  return diag;
+}
+
+function stopHelpPoll() { if (helpPoll) { clearInterval(helpPoll); helpPoll = null; } $('#help-waiting').classList.add('hidden'); }
+
+async function openHelp(game) {
+  helpGame = game;
+  helpFixesTried = [];
+  $('#help-title').textContent = t('Game Help -- {name}', { name: game.name });
+  $('#help-body').textContent = t('Checking…');
+  $('#help-status').textContent = '';
+  $('#help-ai-out').classList.add('hidden');
+  $('#help-ai-out').textContent = '';
+  helpModal.classList.remove('hidden');
+  const diag = await refreshHelp();
+  helpLastRunAt = diag && diag.run && diag.run.at ? diag.run.at : null;
+}
+
+function closeHelp() { stopHelpPoll(); helpModal.classList.add('hidden'); helpGame = null; }
+
+$('#help-close').addEventListener('click', closeHelp);
+helpModal.addEventListener('click', (e) => { if (e.target === helpModal) closeHelp(); });
+
+$('#help-apply').addEventListener('click', async () => {
+  if (!helpDiag || !helpDiag.fix || !helpGame) return;
+  const id = helpDiag.fix.id;
+  const game = helpGame;
+  if (id === 'install') {
+    closeHelp();
+    await installGame(game);
+    await renderGrid();
+    openHelp(game);
+    return;
+  }
+  $('#help-apply').disabled = true;
+  const res = await window.api.gameHelpApply(game.exePath, id);
+  $('#help-apply').disabled = false;
+  if (!res.ok) { toast(t('The fix failed: {error}', { error: res.error })); return; }
+  toast(res.done ? t('Done: {text}', { text: res.text }) : t('Not done: {text}', { text: res.text }));
+  if (res.done) helpFixesTried.push(id);
+  renderGrid();
+  // A fix that changes files changes the finding at once; one that changes settings only shows
+  // on the next run, and the old log still says what it said -- so the fix is marked tried and
+  // the user is pointed at Launch.
+  const diag = await refreshHelp();
+  if (diag && diag.status !== 'ok' && res.done) $('#help-body').textContent += ' ' + t('Now launch the game, reach gameplay, quit, and this is checked again.');
+});
+
+$('#help-launch').addEventListener('click', async () => {
+  if (!helpGame) return;
+  const res = await window.api.launchGame(helpGame.exePath);
+  if (!res.ok) { toast(t('Could not launch {name}: {error}', { name: helpGame.name, error: res.error })); return; }
+  $('#help-waiting').classList.remove('hidden');
+  $('#help-waiting').textContent = t('Launched. Reach gameplay, play a minute, quit -- this checks the new log by itself.');
+  stopHelpPoll();
+  const started = Date.now();
+  helpPoll = setInterval(async () => {
+    if (!helpGame) return stopHelpPoll();
+    const diag = await window.api.gameHelp(helpGame.exePath, helpGame.detectedPath || null, helpFixesTried);
+    const at = diag && diag.ok && diag.run && diag.run.at ? diag.run.at : null;
+    if (at && at !== helpLastRunAt) {
+      helpLastRunAt = at;
+      stopHelpPoll();
+      renderHelp(diag);
+      renderGrid();
+      toast(t('New run checked: {verdict}', { verdict: describeRun(diag.run) }));
+    } else if (Date.now() - started > 20 * 60 * 1000) {
+      stopHelpPoll();
+    }
+  }, 8000);
+});
+
+$('#help-bundle').addEventListener('click', async () => {
+  if (!helpGame) return;
+  const game = helpGame;
+  const res = await window.api.supportBundle(game.exePath, game.detectedPath || null);
+  if (!res.ok) { toast(t('Could not save the support bundle: {error}', { error: res.error })); return; }
+  if (res.cancelled) return;
+  toast(t('Support bundle saved: {path} ({count} files). Last run: {verdict}', { path: res.zipPath, count: res.files.length, verdict: describeRun(res.run) }));
+  window.api.openPath(res.zipPath);
+});
+
+$('#help-report').addEventListener('click', () => {
+  if (!helpGame || !helpDiag) return;
+  const run = helpDiag.run;
+  const title = `[Game Help] ${helpGame.name}: ${helpDiag.code}`;
+  const body = [
+    `**Game:** ${helpGame.name}`,
+    `**Exe:** ${helpGame.exePath.split(/[\\/]/).pop()}`,
+    `**Engine / API:** ${(helpGame.detectedPath && helpGame.detectedPath.badge) || '?'} / ${(helpGame.detectedPath && helpGame.detectedPath.api) || '?'}`,
+    `**Route:** ${helpDiag.route ? helpDiag.route.label : '?'}`,
+    `**Game Help said:** ${helpWords(helpDiag)}`,
+    `**Last run:** ${run && run.ran ? describeRun(run) : 'none'}`,
+    `**App:** ${settings.installedVersion || ''}`,
+    '',
+    '_Attach the support bundle zip (Game Help > Save bundle to share) to this issue._',
+  ].join('\n');
+  window.api.openExternal(`https://github.com/mrcgibb9876-hash/OptiDLSS5-UI/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`);
+});
+
+window.api.onGameHelpAiText(({ exePath, text }) => {
+  if (!helpGame || helpGame.exePath !== exePath) return;
+  const out = $('#help-ai-out');
+  out.classList.remove('hidden');
+  out.textContent += (out.textContent ? '\n\n' : '') + text;
+});
+
+$('#help-ai').addEventListener('click', async () => {
+  if (!helpGame) return;
+  if (!settings.anthropicApiKey) { openSettingsModal(); $('#settings-ai-key').focus(); return; }
+  const game = helpGame;
+  const btn = $('#help-ai');
+  btn.disabled = true;
+  btn.textContent = t('Asking…');
+  const out = $('#help-ai-out');
+  out.classList.remove('hidden');
+  out.textContent = t('Sending this game\'s logs and the app\'s view to Claude ({model}). Each change it wants is confirmed with you first.', { model: settings.aiModel || 'claude-sonnet-5' });
+  const res = await window.api.gameHelpAi(game.exePath, game.detectedPath || null, helpFixesTried);
+  btn.disabled = false;
+  btn.textContent = t('Ask AI');
+  if (!res.ok) { out.textContent += '\n\n' + t('AI help failed: {error}', { error: res.error }); return; }
+  const verdict = res.available === true ? t('AI verdict: DLSS 5 should work here now. Launch and reach gameplay to confirm.')
+    : res.available === false ? t('AI verdict: DLSS 5 is not currently available for this game.')
+    : t('AI ended without a clear verdict.');
+  out.textContent += '\n\n' + verdict + (res.summary && !out.textContent.includes(res.summary) ? '\n\n' + res.summary : '');
+  renderGrid();
+  refreshHelp();
+});
 
 async function installGame(game) {
   const valid = await window.api.validateRelease(settings.releaseFolder);
@@ -1659,6 +1860,8 @@ function openSettingsModal() {
       : gpu.vendor === 'intel' ? ' ' + t('-- no Neural Rendering route on Intel; OptiScaler still installs for its upscaler swap.')
       : gpu.vendor === 'unknown' ? ' ' + t('-- could not identify the GPU; assuming NVIDIA.') : '');
   $('#settings-language').value = settings.language || 'auto';
+  $('#settings-ai-key').value = settings.anthropicApiKey || '';
+  $('#settings-ai-model').value = settings.aiModel || 'claude-sonnet-5';
   $('#settings-release-folder').value = settings.releaseFolder || '';
   $('#settings-nr-dll').value = settings.nrDllPath || '';
   $('#update-status').textContent = settings.installedVersion ? t('Installed: {version}', { version: settings.installedVersion }) : '';
@@ -1718,6 +1921,15 @@ function applyLanguage() {
   const wanted = settings.language && settings.language !== 'auto' ? settings.language : I18N.detect();
   I18N.setLocale(wanted);
 }
+
+$('#settings-ai-key').addEventListener('change', async (e) => {
+  settings.anthropicApiKey = (e.target.value || '').trim();
+  await window.api.saveSettings(settings);
+});
+$('#settings-ai-model').addEventListener('change', async (e) => {
+  settings.aiModel = e.target.value || 'claude-sonnet-5';
+  await window.api.saveSettings(settings);
+});
 
 $('#settings-language').addEventListener('change', async (e) => {
   settings.language = e.target.value || 'auto';
