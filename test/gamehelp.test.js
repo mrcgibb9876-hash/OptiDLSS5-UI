@@ -42,6 +42,12 @@ const rows = [
   ['Feeder gave up: reconfigure', base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'feed-stopped' } }), { status: 'fix', fix: 'reconfigure' }],
   ['a fix already tried and the verdict unchanged: unknown, not the same fix again', base({ run: { ran: true, verdict: 'dlss-no-nr', detail: 'd3d11-native' }, fixesTried: ['reconfigure'] }), { status: 'unknown', code: 'fix-failed' }],
   ['exit-only crash with NR having run: ok', base({ run: { ran: true, verdict: 'shutdown-fault', nrDispatch: 200 } }), { status: 'ok', code: 'ok-exit-crash' }],
+  ['exit-only crash with NR having run on a Feeder game: still ok, the Feeder stays', base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'shutdown-fault', nrDispatch: 200 } }), { status: 'ok', code: 'ok-exit-crash' }],
+  ['shutdown fault with nothing run and a Feeder deployed: remove the Feeder', base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'shutdown-fault', nrDispatch: 0 } }), { status: 'fix', fix: 'remove-feeder' }],
+  ['a fix applied against this same run: needs a run, not failed', base({ run: { ran: true, at: 'T1', verdict: 'dlss-no-nr', detail: 'd3d11-native' }, fixesTried: [{ id: 'reconfigure', runAt: 'T1' }] }), { status: 'needs-run', code: 'needs-run-after-fix' }],
+  ['the same fix after a newer run says the same thing: failed', base({ run: { ran: true, at: 'T2', verdict: 'dlss-no-nr', detail: 'd3d11-native' }, fixesTried: [{ id: 'reconfigure', runAt: 'T1' }] }), { status: 'unknown', code: 'fix-failed' }],
+  ['a fix applied before any log, still no log: needs a run', base({ run: { ran: false, verdict: 'no-log' }, route: { optiInstalled: false }, fixesTried: [{ id: 'install', runAt: null }] }), { status: 'needs-run', code: 'needs-run-after-fix' }],
+  ['Luma route with no Luma yet: deploy it in Edit, not a reinstall', base({ route: { route: 'lumaue', lumaDeployed: false }, run: { ran: false, verdict: 'no-log' } }), { status: 'step', code: 'luma-missing' }],
 ];
 
 for (const [name, ctx, want] of rows) {

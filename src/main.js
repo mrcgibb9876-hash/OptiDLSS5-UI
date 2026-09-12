@@ -1464,7 +1464,9 @@ async function helpContext(exePath, detected, fixesTried = []) {
   let nrEnabledInIni = null;
   try {
     const ini = fs.readFileSync(path.join(dir, 'OptiScaler.ini'), 'utf8');
-    const m = /^\[DlssNr\][\s\S]*?^Enabled\s*=\s*(\S+)/im.exec(ini);
+    // Only the [DlssNr] section's own Enabled: the match stops at the next section header.
+    const section = /^\[DlssNr\][^[]*/im.exec(ini);
+    const m = section && /^Enabled\s*=\s*(\S+)/im.exec(section[0]);
     if (m) nrEnabledInIni = !/^(false|0)$/i.test(m[1]);
   } catch {}
   const reEngine = isReEngineGame(dir);
@@ -1626,12 +1628,31 @@ ipcMain.handle('game:launch', async (_evt, { exePath, dryRun = false } = {}) => 
     if (!dryRun) {
       // Detached, own folder as cwd (Unreal and Unity both resolve their data relative to it),
       // nothing inherited from this app: the game outlives the manager if it is closed.
+      // spawn() reports a refusal (an exe that demands elevation, a blocked file) as an
+      // asynchronous 'error' event; unhandled, that event would take the whole app down.
       const child = spawn(target, [], { cwd: path.dirname(target), detached: true, stdio: 'ignore', windowsHide: false });
+      await new Promise((resolve, reject) => {
+        child.once('spawn', resolve);
+        child.once('error', (e) => reject(new Error(`could not start ${path.basename(target)}: ${e && e.message ? e.message : e}`)));
+      });
       child.unref();
     }
     return { ok: true, target, via: 'exe' };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// Whether the game's process is up, by image name -- the one signal that works for a direct
+// launch and a Steam one alike, so the help modal judges the log after the game stops, not
+// while it is still writing. null when tasklist cannot say.
+ipcMain.handle('game:running', async (_evt, { exePath } = {}) => {
+  try {
+    const name = path.basename(launchTarget(exePath));
+    const { stdout } = await execFileAsync('tasklist.exe', ['/FI', `IMAGENAME eq ${name}`, '/NH', '/FO', 'CSV'], { windowsHide: true });
+    return { ok: true, running: stdout.toLowerCase().includes(`"${name.toLowerCase()}"`) };
+  } catch (error) {
+    return { ok: false, running: null, error: String(error && error.message ? error.message : error) };
   }
 });
 

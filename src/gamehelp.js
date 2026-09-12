@@ -10,18 +10,31 @@
 //
 // Fix ids are what main.js's game:help-apply knows how to run: remove-foreign, remove-feeder,
 // remove-luma, reconfigure. 'install' is the card's own Install button, run by the renderer.
+//
+// fixesTried: what the renderer already applied this session, as { id, runAt } (runAt: the
+// last run's timestamp when the fix ran; a bare id string means "judge it now"). A fix that
+// changes settings only shows on the next run, and the old log still says what it said -- so
+// while run.at is unchanged the same rule answers "needs a run", not "the fix failed".
 
 function diagnose(ctx) {
   const d = ctx.detected || {};
   const route = ctx.route || {};
   const run = ctx.run || { ran: false, verdict: 'no-log' };
-  const tried = new Set(ctx.fixesTried || []);
+  const runAt = run.at || null;
+  const tried = new Set();
+  const pending = new Set();
+  for (const e of ctx.fixesTried || []) {
+    if (typeof e === 'string') tried.add(e);
+    else if (e && e.id) ((e.runAt || null) === runAt ? pending : tried).add(e.id);
+  }
   const foreign = ctx.foreign || [];
 
-  const fix = (code, id, vars = {}) => (tried.has(id)
-    ? { status: 'unknown', code: 'fix-failed', vars: { ...vars, fix: id, code }, fix: null }
-    : { status: 'fix', code, vars, fix: { id } });
   const out = (status, code, vars = {}) => ({ status, code, vars, fix: null });
+  const fix = (code, id, vars = {}) => {
+    if (pending.has(id)) return out('needs-run', 'needs-run-after-fix', { ...vars, fix: id, code });
+    if (tried.has(id)) return out('unknown', 'fix-failed', { ...vars, fix: id, code });
+    return { status: 'fix', code, vars, fix: { id } };
+  };
 
   // Hard stops first: nothing the app deploys can run in these.
   if (d.bitness === 32) return out('unavailable', 'bit32');
@@ -36,6 +49,8 @@ function diagnose(ctx) {
   // Not installed, or the route's first step is missing: Install is the fix.
   if (!route.optiInstalled) return fix('not-installed', 'install');
   if (route.route === 'feeder' && !route.feederDeployed) return fix('feeder-missing', 'install');
+  // Install does not deploy Luma UE (its licence is confirmed in Edit), so this is the user's step.
+  if (route.route === 'lumaue' && !route.lumaDeployed) return out('step', 'luma-missing');
   if (ctx.reEngine && ctx.reframeworkPresent === false) return fix('reframework-missing', 'reconfigure');
 
   // What the last run said.
@@ -44,7 +59,11 @@ function diagnose(ctx) {
     case 'nr-ran':
       return out('ok', 'ok', { count: run.nrDispatch, fps: run.fps || 0, api: (run.runtimeApi || '').toUpperCase() });
     case 'shutdown-fault':
-      return route.feederDeployed ? fix('feeder-misdeployed', 'remove-feeder') : out('ok', 'ok-exit-crash', { count: run.nrDispatch });
+      // NR ran and only the exit faulted: that is a working game, whatever is deployed. A
+      // Feeder reaching here is one the route accepts (feederMisdeployed was handled above), so
+      // it is only removed when nothing ran at all.
+      if (run.nrDispatch > 0) return out('ok', 'ok-exit-crash', { count: run.nrDispatch });
+      return route.feederDeployed ? fix('feeder-misdeployed', 'remove-feeder') : out('unknown', 'unknown', { verdict: run.verdict });
     case 'duplicate-dlss':
       return fix('feeder-misdeployed', 'remove-feeder');
     case 'dlss-no-nr':
@@ -58,7 +77,7 @@ function diagnose(ctx) {
     case 'no-dlss':
       if (route.lumaDeployed) return out('step', 'luma-select-dlss');
       if (route.route === 'feeder' && route.feederDeployed) return out('unknown', 'no-hook');
-      if (route.route === 'lumaue') return fix('luma-missing', 'install');
+      if (route.route === 'lumaue') return out('step', 'luma-missing');
       return out('unknown', 'no-hook');
     case 'ue-crash':
       if (route.lumaDeployed && !(route.verified && route.verified.route === 'lumaue')) return fix('ue-crash-luma', 'remove-luma', { message: run.detail || '' });

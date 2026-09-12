@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld('api', {
   uninstallPlan: (exePath) => ipcRenderer.invoke('game:uninstallPlan', exePath),
   openFolder: (exePath) => ipcRenderer.invoke('game:open-folder', exePath),
   launchGame: (exePath) => ipcRenderer.invoke('game:launch', { exePath }),
+  gameRunning: (exePath) => ipcRenderer.invoke('game:running', { exePath }),
   lastRun: (exePath) => ipcRenderer.invoke('game:lastRun', exePath),
   supportBundle: (exePath, detected) => ipcRenderer.invoke('game:supportBundle', { exePath, detected }),
   gameHelp: (exePath, detected, fixesTried) => ipcRenderer.invoke('game:help', { exePath, detected, fixesTried }),

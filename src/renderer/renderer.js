@@ -391,7 +391,7 @@ async function applyRecommendation(game, card, backends) {
   // Nobody reads a README; the card has to do the telling.
   const helpEl = card.querySelector('.card-help');
   if (helpEl) {
-    const diag = await window.api.gameHelp(game.exePath, game.detectedPath || null, []);
+    const diag = await window.api.gameHelp(game.exePath, game.detectedPath || null, helpTriedFor(game));
     const show = diag && diag.ok && ['fix', 'step', 'unavailable', 'unknown'].includes(diag.status);
     helpEl.classList.toggle('hidden', !show);
     if (show) {
@@ -458,6 +458,11 @@ let helpFixesTried = [];
 let helpDiag = null;
 let helpPoll = null;
 let helpLastRunAt = null;
+// The fixes applied this session, per game, as { id, runAt } (see gamehelp.js): the modal and
+// the card read the same list, so a card does not offer "Fix it" again for a fix that is only
+// waiting on the next run.
+const helpTriedByGame = new Map();
+const helpTriedFor = (game) => helpTriedByGame.get(game.exePath) || [];
 
 function helpWords(diag) {
   const v = diag.vars || {};
@@ -470,9 +475,10 @@ function helpWords(diag) {
     case 'luma-known-bad': return t('Luma UE is deployed here, and this game is known not to work with it ({reason}). Remove Luma UE.', v);
     case 'not-installed': return t('OptiScaler is not installed on this game yet. Install it and the route\'s other steps follow.');
     case 'feeder-missing': return t('This game has no DLSS of its own, so OptiScaler alone has nothing to hook. Install deploys the DLSS5 Feeder first.');
-    case 'luma-missing': return t('This game\'s route is Luma UE, which is not deployed yet. Install, then deploy Luma UE from Edit.');
+    case 'luma-missing': return t('This game\'s route is Luma UE, which is not deployed yet. Open Edit and deploy Luma UE (its licence is confirmed there), then launch.');
     case 'reframework-missing': return t('This is an RE Engine game and REFramework is missing. OptiScaler does nothing there without it. Reconfigure fetches and places it.');
     case 'needs-run': return t('No run to judge yet. Launch the game, reach actual gameplay (not a menu), play a minute, then quit. Come back here and it is checked.');
+    case 'needs-run-after-fix': return t('"{fix}" was applied. The old log still says what it said, so launch the game, reach gameplay, play a minute, quit, and this is checked again.', { fix: helpFixLabel(v.fix) });
     case 'ok': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}{api}.', { count: v.count, fps: v.fps ? t(' at {fps} fps', { fps: v.fps }) : '', api: v.api ? ' (' + v.api + ')' : '' });
     case 'ok-exit-crash': return t('Neural Rendering ran ({count} passes). The game crashed only on the way out, inside NVIDIA\'s shutdown, which does not affect play.', v);
     case 'd3d11-native': return t('DLSS was created on the native D3D11 path, so the Neural Rendering pass never ran. Dx11Upscaler must be dlss_12. Reconfigure writes it.');
@@ -569,7 +575,8 @@ function stopHelpPoll() { if (helpPoll) { clearInterval(helpPoll); helpPoll = nu
 
 async function openHelp(game, { autoFix = false } = {}) {
   helpGame = game;
-  helpFixesTried = [];
+  helpFixesTried = helpTriedFor(game);
+  helpTriedByGame.set(game.exePath, helpFixesTried);
   helpAutoFix = autoFix;
   $('#help-title').textContent = t('Game Help -- {name}', { name: game.name });
   $('#help-body').textContent = t('Checking…');
@@ -597,9 +604,14 @@ $('#help-apply').addEventListener('click', async () => {
   if (!helpDiag || !helpDiag.fix || !helpGame) return;
   const id = helpDiag.fix.id;
   const game = helpGame;
+  // Recorded with the run it was judged against: until a newer run exists, the same rule reads
+  // "needs a run", not "the fix failed" (gamehelp.js).
+  const tried = helpTriedFor(game);
+  const markTried = () => { tried.push({ id, runAt: helpLastRunAt }); helpTriedByGame.set(game.exePath, tried); };
   if (id === 'install') {
     closeHelp();
     await installGame(game);
+    markTried();
     await renderGrid();
     openHelp(game);
     return;
@@ -609,13 +621,11 @@ $('#help-apply').addEventListener('click', async () => {
   $('#help-apply').disabled = false;
   if (!res.ok) { toast(t('The fix failed: {error}', { error: res.error })); return; }
   toast(res.done ? t('Done: {text}', { text: res.text }) : t('Not done: {text}', { text: res.text }));
-  if (res.done) helpFixesTried.push(id);
+  if (res.done) markTried();
   renderGrid();
   // A fix that changes files changes the finding at once; one that changes settings only shows
-  // on the next run, and the old log still says what it said -- so the fix is marked tried and
-  // the user is pointed at Launch.
-  const diag = await refreshHelp();
-  if (diag && diag.status !== 'ok' && res.done) $('#help-body').textContent += ' ' + t('Now launch the game, reach gameplay, quit, and this is checked again.');
+  // on the next run, and the finding then says so and offers Launch.
+  await refreshHelp();
 });
 
 $('#help-launch').addEventListener('click', async () => {
@@ -626,19 +636,35 @@ $('#help-launch').addEventListener('click', async () => {
   $('#help-waiting').textContent = t('Launched. Reach gameplay, play a minute, quit -- this checks the new log by itself.');
   stopHelpPoll();
   const started = Date.now();
+  // run.at is OptiScaler.log's mtime, which moves from the moment the game starts writing it.
+  // A changed stamp alone would judge a half-written log seconds after launch ("nothing called
+  // DLSS"), so the run counts once it is over: the log records a clean exit or a recognised
+  // crash, or its stamp has stood still for a few polls after changing.
+  const CRASHED = ['ue-crash', 'shutdown-fault', 'duplicate-dlss'];
+  let seenAt = null;
+  let stableTicks = 0;
   helpPoll = setInterval(async () => {
     if (!helpGame) return stopHelpPoll();
     const diag = await window.api.gameHelp(helpGame.exePath, helpGame.detectedPath || null, helpFixesTried);
-    const at = diag && diag.ok && diag.run && diag.run.at ? diag.run.at : null;
+    const run = diag && diag.ok && diag.run && diag.run.ran ? diag.run : null;
+    const at = run && run.at ? run.at : null;
     if (at && at !== helpLastRunAt) {
-      helpLastRunAt = at;
-      stopHelpPoll();
-      renderHelp(diag);
-      renderGrid();
-      toast(t('New run checked: {verdict}', { verdict: describeRun(diag.run) }));
-    } else if (Date.now() - started > 20 * 60 * 1000) {
-      stopHelpPoll();
+      stableTicks = at === seenAt ? stableTicks + 1 : 0;
+      seenAt = at;
+      const proc = await window.api.gameRunning(helpGame.exePath);
+      const stopped = proc && proc.running === false;
+      const finished = run.cleanExit || CRASHED.includes(run.verdict) || (stopped && stableTicks >= 1) || stableTicks >= 6;
+      if (finished) {
+        helpLastRunAt = at;
+        stopHelpPoll();
+        renderHelp(diag);
+        renderGrid();
+        toast(t('New run checked: {verdict}', { verdict: describeRun(diag.run) }));
+        return;
+      }
+      $('#help-waiting').textContent = t('The game is running. Reach gameplay, play a minute, quit -- the log is checked when it stops.');
     }
+    if (Date.now() - started > 20 * 60 * 1000) stopHelpPoll();
   }, 8000);
 });
 
