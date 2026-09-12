@@ -189,7 +189,9 @@ function feederDeployed(dir) {
 // DLSS evaluate still happens on a private D3D12 device, and only how ReShade gets into the
 // game differs (reshadeModeForApi). Async because the Vulkan layer is a registry read.
 async function feederReadiness(dir, api, { execFileAsync = null } = {}) {
-  if (!['dx11', 'dx12', 'vulkan', 'opengl'].includes(api)) {
+  // dx9: a 64-bit DirectX 9 game behind dgVoodoo2 (legacy.js) renders D3D11, so ReShade goes in the
+  // same local way as for D3D11. Experimental.
+  if (!['dx11', 'dx12', 'vulkan', 'opengl', 'dx9'].includes(api)) {
     return { ready: false, supported: false, reason: 'Render API not detected ({api}) -- not yet supported by this app.', reasonVars: { api: api || 'unknown' } };
   }
 
@@ -823,4 +825,5 @@ module.exports = {
   deployFeederStack,
   fetchWithRetry,
   fetchReShadeHeader,
+  resolveFeederAsset,
 };

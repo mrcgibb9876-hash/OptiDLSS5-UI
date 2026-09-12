@@ -20,21 +20,26 @@ const fsp = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const { findUnrealPluginFile } = require('./framegen');
+const emulators = require('./emulators');
 
-const DETECT_VERSION = 6;
+// 7: DX8 told apart from DX9, emulators recognised, 32-bit and DX8/DX9 games offered the
+// experimental Feeder routes (legacy.js) instead of "unsupported".
+const DETECT_VERSION = 7;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
 const OLD_API_DLLS = [
-  ['dx9', ['d3d9.dll', 'd3d8.dll']],
+  ['dx9', ['d3d9.dll']],
+  ['dx8', ['d3d8.dll']],
   ['dx10', ['d3d10.dll', 'd3d10core.dll']],
   ['opengl', ['opengl32.dll']],
 ];
-const API_LABEL = { dx12: 'DX12', dx11: 'DX11', vulkan: 'Vulkan', dx9: 'DX9', dx10: 'DX10', opengl: 'OpenGL' };
+const API_LABEL = { dx12: 'DX12', dx11: 'DX11', vulkan: 'Vulkan', dx9: 'DX9', dx8: 'DX8', dx10: 'DX10', opengl: 'OpenGL' };
 
 // Files this app, OptiScaler, ReShade, REFramework or the DLSS swaps place beside the exe. Every
 // one of them mentions whichever APIs *it* supports, which says nothing about the game.
-const MOD_PAYLOAD_DLL = /^(optiscaler.*|amd_fidelityfx_.*|amd_ags_x64|libxe(ss|ll).*|_?nvngx.*|sl\..*|dlssg_to_fsr3.*|fakenvapi.*|reshade.*|d3d12core|dstorage.*|nvapi64|dxgi|d3d11|d3d12|winmm|version|dbghelp|wininet|winhttp|dinput8|xinput1_[34]|ffx_.*)\.dll$/i;
+// dgVoodoo2's wrappers (d3d8/d3d9/ddraw/d3dimm) are in the list too: the legacy route places them.
+const MOD_PAYLOAD_DLL = /^(optiscaler.*|amd_fidelityfx_.*|amd_ags_x64|libxe(ss|ll).*|_?nvngx.*|sl\..*|dlssg_to_fsr3.*|fakenvapi.*|reshade.*|d3d12core|dstorage.*|nvapi64|dxgi|d3d11|d3d12|winmm|version|dbghelp|wininet|winhttp|dinput8|xinput1_[34]|ffx_.*|d3d8|d3d9|ddraw|d3dimm)\.dll$/i;
 
 const SIBLING_SCAN_MAX_BYTES = 300 * 1024 * 1024;
 
@@ -282,7 +287,7 @@ function readFileVersion(filePath) {
 // Agility SDK exports -- a game that exports them renders with DX12, no ambiguity.
 const ENTRY_POINTS = [
   ['dx12', 'D3D12CreateDevice'], ['dx11', 'D3D11CreateDevice'], ['vulkan', 'vkCreateInstance'],
-  ['dx10', 'D3D10CreateDevice'], ['dx9', 'Direct3DCreate9'], ['opengl', 'wglCreateContext'],
+  ['dx10', 'D3D10CreateDevice'], ['dx9', 'Direct3DCreate9'], ['dx8', 'Direct3DCreate8'], ['opengl', 'wglCreateContext'],
 ];
 const AGILITY_EXPORTS = ['D3D12SDKPath', 'D3D12SDKVersion'];
 
@@ -783,6 +788,11 @@ function foreignToolchains(dir) {
 // Public
 
 async function detectGame(dir, exePath) {
+  // An emulator (emulators.js): its renderer is a setting inside it, not something the exe can
+  // say, so the profile names what it offers and which one is assumed until chosen in Edit.
+  const emulator = emulators.profileFor(exePath);
+  if (emulator) return detectEmulator(dir, exePath, emulator);
+
   let engine;
   let exe = null;
   if (isReEngineGame(dir)) engine = { engine: 'RE Engine', id: 're' };
@@ -820,12 +830,19 @@ async function detectGame(dir, exePath) {
   }
   const logStat = optiScalerLogStat(dir);
 
-  // A 64-bit game whose only API is OpenGL is a DLSS5 Feeder game: ReShade goes in as its
-  // opengl32.dll and the Feeder evaluates on a private D3D12 device (its README: MX Bikes,
-  // KOTOR, Worms). DX9/DX10 stay unsupported -- the Feeder has beta paths for those, through
-  // wrappers this app does not deploy.
-  if (!found.api && found.old && found.old[0] === 'opengl' && bitness !== 32) {
+  // A game whose only API is OpenGL is a DLSS5 Feeder game: ReShade goes in as its opengl32.dll
+  // and the Feeder evaluates on a private D3D12 device (its README: MX Bikes, KOTOR, Worms).
+  if (!found.api && found.old && found.old[0] === 'opengl') {
     found = { ...found, api: 'opengl', apis: ['opengl'], reason: `OpenGL -- ${found.reason}; the DLSS5 Feeder route puts ReShade in as opengl32.dll` };
+  }
+  // DX9, DX8 and DX10 (EXPERIMENTAL, legacy.js). The Feeder's README has a path for each:
+  // D3D9 and D3D8 through dgVoodoo2, which turns them into D3D11 (a 32-bit game, or a 64-bit
+  // D3D9 one with dgVoodoo's x64 build -- there is no 64-bit D3D8), and D3D10 natively but only
+  // in its 32-bit add-on. The primary API is set to it so the route can say which path applies.
+  if (!found.api && found.old && found.old.length > 0) {
+    const legacyApi = found.old[0];
+    const reachable = legacyApi === 'dx9' || (bitness === 32 && (legacyApi === 'dx8' || legacyApi === 'dx10'));
+    if (reachable) found = { ...found, api: legacyApi, apis: [legacyApi], legacy: true };
   }
   const oldOnly = !found.api && found.old && found.old.length > 0;
   // The tag names every API the game really runs on, primary first -- "DX11/DX12" for a game
@@ -838,12 +855,22 @@ async function detectGame(dir, exePath) {
 
   let recommend = 'unknown';
   let reason = found.reason;
-  if (bitness === 32) {
+  // Experimental routes (legacy.js): a 32-bit game runs the DLSS work in the Feeder's 64-bit
+  // helper process, since NVIDIA ships no 32-bit NGX; DX8/DX9 go through dgVoodoo2 first.
+  const experimental = bitness === 32 || !!found.legacy;
+  if (bitness === 32 && found.api === 'vulkan') {
     recommend = 'unsupported';
-    reason = `32-bit executable -- OptiScaler and the DLSS5 Feeder add-on this app deploys are 64-bit only (${reason})`;
+    reason = `32-bit Vulkan -- the Feeder supports it through DXVK and its own 32-bit Vulkan layer, which this app does not deploy yet (${reason})`;
+  } else if (bitness === 32 && found.api) {
+    recommend = 'optiscaler';
+    reason = `32-bit executable -- experimental: the DLSS work runs in the Feeder's 64-bit helper beside the game${['dx8', 'dx9'].includes(found.api) ? ', with dgVoodoo2 turning ' + API_LABEL[found.api] + ' into D3D11' : ''} (${reason})`;
+  } else if (bitness === 32) {
+    recommend = 'unknown';
+    reason = `32-bit executable, graphics API not detected -- choose it in Edit (${reason})`;
   } else if (found.api) {
     recommend = 'optiscaler';
-    if (found.api !== 'opengl') reason = `${reason} -- OptiScaler hooks this directly`;
+    if (found.legacy) reason = `${reason} -- experimental: dgVoodoo2 turns it into D3D11, then the DLSS5 Feeder route`;
+    else if (found.api !== 'opengl') reason = `${reason} -- OptiScaler hooks this directly`;
   } else if (oldOnly) {
     recommend = 'unsupported';
     reason = `${reason} -- OptiScaler has no hook here`;
@@ -865,6 +892,8 @@ async function detectGame(dir, exePath) {
     reason,
     uncertain: !!found.uncertain,
     bitness,
+    experimental,
+    emulator: null,
     vulkanWrapper: hooks.vulkanWrapper,
     reshadeProxy: hooks.reshadeProxy,
     antiCheat: antiCheatPresent(dir, exePath),
@@ -872,6 +901,45 @@ async function detectGame(dir, exePath) {
     runtimeApi: found.runtimeApi || null,
     // What OptiScaler.log looked like when this was decided -- a later run of the game is new
     // evidence, and isDetectionStale re-runs detection when the log has changed since.
+    runtimeLogMtime: logStat ? logStat.mtimeMs : null,
+    detectVersion: DETECT_VERSION,
+  };
+}
+
+// EXPERIMENTAL. No exe scan: an emulator links every API it can render with, and which one runs
+// is a setting inside it. The profile's first API is assumed; once OptiScaler has run in it, its
+// log says what was really created, and an API chosen in Edit overrides both (route.js).
+async function detectEmulator(dir, exePath, emu) {
+  const [bitness, hooks] = await Promise.all([peBitness(exePath), inspectHookDlls(dir)]);
+  let api = emu.apis[0];
+  let reason = `${emu.name} (${emu.system}) is an emulator, so its renderer is one of its own settings ` +
+    `(${emu.hint}); ${API_LABEL[api]} is assumed until you choose in Edit`;
+  const runtime = await optiScalerRuntimeApi(dir);
+  if (runtime && emu.apis.includes(runtime.api)) {
+    api = runtime.api;
+    reason = `${emu.name} (${emu.system}) is an emulator; ${API_LABEL[api]} is what OptiScaler saw it create on its last run (${runtime.evidence})`;
+  }
+  const logStat = optiScalerLogStat(dir);
+  const vulkan32 = bitness === 32 && api === 'vulkan';
+  return {
+    api,
+    apis: [api, ...emu.apis.filter((a) => a !== api)],
+    engine: `${emu.name} emulator`,
+    engineId: 'emulator',
+    engineVersion: null,
+    apiBadge: API_LABEL[api],
+    badge: `${emu.name} emulator`,
+    recommend: vulkan32 ? 'unsupported' : 'optiscaler',
+    reason: `Experimental: ${reason}${vulkan32 ? ' -- but 32-bit Vulkan is not supported by this app yet' : ''}`,
+    uncertain: !runtime,
+    bitness,
+    experimental: true,
+    emulator: { key: emu.key, name: emu.name, system: emu.system, hint: emu.hint, apis: emu.apis },
+    vulkanWrapper: hooks.vulkanWrapper,
+    reshadeProxy: hooks.reshadeProxy,
+    antiCheat: null,
+    oldShaderCompiler: oldShaderCompiler(dir),
+    runtimeApi: runtime ? runtime.api : null,
     runtimeLogMtime: logStat ? logStat.mtimeMs : null,
     detectVersion: DETECT_VERSION,
   };

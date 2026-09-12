@@ -69,14 +69,17 @@ function unrealCrashNear(dir, whenMs) {
   return { path: best.path, at: new Date(best.mtimeMs).toISOString(), message };
 }
 
-async function analyzeRun(dir) {
-  const optiPath = path.join(dir, 'OptiScaler.log');
+// optiDir: where OptiScaler (and its log) lives when that is not the game folder -- a 32-bit game's
+// DLSS work runs in the Feeder's 64-bit helper, in host64\ beside it (legacy.js). The Feeder's own
+// log stays beside the game.
+async function analyzeRun(dir, { optiDir = dir } = {}) {
+  const optiPath = path.join(optiDir, 'OptiScaler.log');
   let stat;
   try { stat = fs.statSync(optiPath); } catch { return { ran: false, verdict: 'no-log' }; }
   const opti = (await readHead(optiPath)) || '';
   const feed = (await readHead(path.join(dir, 'dlss5-feed.log'))) || '';
 
-  const runtime = await optiScalerRuntimeApi(dir);
+  const runtime = await optiScalerRuntimeApi(optiDir);
   const nrDispatch = count(opti, /DlssNr_(?:Dx12|Vk)::Dispatch DLSS-NR (?:running|composition)/g);
   const nrComposition = count(opti, /DLSS-NR composition:/g);
   const dlssCreated = count(opti, /NVSDK_NGX_D3D1[12]_CreateFeature Creating new DLSS feature|NVSDK_NGX_VULKAN_CreateFeature Creating new DLSS feature|TryCreateOptiFeature Creating OptiScaler feature/g);

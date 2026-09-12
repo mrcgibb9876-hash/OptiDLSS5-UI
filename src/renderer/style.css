@@ -499,3 +499,6 @@ html[lang="ko"] { word-break: keep-all; }
 .pdplugin-found { margin-top: 12px; }
 .pdplugin-candidate { align-items: center; margin-top: 6px; }
 .pdplugin-candidate-name { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Emulators, 32-bit games, DirectX 8/9: routes not yet confirmed on a live game (route.experimental). */
+.engine-badge-experimental { background: rgba(245,166,35,0.16); color: #f5b041; border: 1px solid rgba(245,166,35,0.45); }

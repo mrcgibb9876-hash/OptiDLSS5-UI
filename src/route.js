@@ -44,12 +44,69 @@ const amdnr = require('./amdnr');
 const nativeDlss = require('./native-dlss');
 const verified = require('./verified');
 const reengine = require('./reengine');
+const legacy = require('./legacy');
 
 // A user's per-game API choice laid over the detection result: the chosen API becomes the
 // primary, joins the list of APIs the game runs on (so keepGamesOwnDlss writes its upscaler key
 // too), and an "old API only" verdict is lifted, since the user is saying a modern path exists.
 // Pure so it can be tested; main.js reads the marker and calls this.
 const API_OVERRIDE_VALUES = ['dx11', 'dx12', 'vulkan', 'opengl'];
+const API_NAMES = { dx12: 'DX12', dx11: 'DX11', vulkan: 'Vulkan', opengl: 'OpenGL', dx9: 'DX9', dx8: 'DX8', dx10: 'DX10' };
+
+// The experimental routes' words, as fixed templates so the renderer can translate them; the parts
+// that vary are placeholders filled from reasonVars.
+const ROUTE_TEXT = {
+  labelHost32: 'OptiScaler + Feeder (32-bit)',
+  labelDx9: 'OptiScaler + Feeder (DX9)',
+  stepDgVoodoo: 'Put dgVoodoo2 in front of the game (Install asks first)',
+  stepFeeder32: 'Deploy the 32-bit Feeder and its 64-bit helper with OptiScaler',
+  host32:
+    'Experimental. A 32-bit game cannot run DLSS in its own process -- NVIDIA ships no 32-bit version -- so the DLSS5 ' +
+    'Feeder\'s 32-bit add-on sends each frame to its 64-bit helper beside the game, and OptiScaler runs Neural Rendering ' +
+    'there. The DLSS 5 panel (Alt+Home) lives in that helper, not in the game: open ReShade in the game (Home), go to ' +
+    'Add-ons -> DLSS 5 Feed, press "Show the DLSS 5 panel in-game", then Alt+Home -- the helper\'s window is shown over ' +
+    'the game with your clicks and keys passed to it. That needs windowed or borderless; "Show as texture" is the ' +
+    'Feeder\'s option for exclusive fullscreen.',
+  host32DgVoodoo:
+    'Experimental. A 32-bit game cannot run DLSS in its own process -- NVIDIA ships no 32-bit version -- so the DLSS5 ' +
+    'Feeder\'s 32-bit add-on sends each frame to its 64-bit helper beside the game, and OptiScaler runs Neural Rendering ' +
+    'there. {dx} has no Feeder path of its own, so dgVoodoo2 turns it into DirectX 11 first (Install asks before ' +
+    'downloading it). The DLSS 5 panel (Alt+Home) lives in that helper, not in the game: open ReShade in the game ' +
+    '(Home), go to Add-ons -> DLSS 5 Feed, press "Show the DLSS 5 panel in-game", then Alt+Home -- the helper\'s window ' +
+    'is shown over the game with your clicks and keys passed to it. That needs windowed or borderless; "Show as ' +
+    'texture" is the Feeder\'s option for exclusive fullscreen.',
+  host32OpenGl:
+    'Experimental. A 32-bit game cannot run DLSS in its own process -- NVIDIA ships no 32-bit version -- so the DLSS5 ' +
+    'Feeder\'s 32-bit add-on sends each frame to its 64-bit helper beside the game, and OptiScaler runs Neural Rendering ' +
+    'there. On OpenGL, ReShade goes in as the game\'s opengl32.dll. The DLSS 5 panel (Alt+Home) lives in that helper, ' +
+    'not in the game: open ReShade in the game (Home), go to Add-ons -> DLSS 5 Feed, press "Show the DLSS 5 panel ' +
+    'in-game", then Alt+Home -- the helper\'s window is shown over the game with your clicks and keys passed to it. ' +
+    'That needs windowed or borderless; "Show as texture" is the Feeder\'s option for exclusive fullscreen.',
+  emulator:
+    'Experimental. {name} emulates {system} and makes no DLSS call, so the DLSS5 Feeder synthesises one inside it, for ' +
+    'every game it runs. Set its renderer first ({hint}) and pick the same API in Edit if it is not {api}. Depth is the ' +
+    'weak point: ReShade often cannot see the console game\'s depth buffer inside an emulator, and Neural Rendering has ' +
+    'less to work with then. The DLSS 5 panel (Alt+Home) opens over the emulator\'s window as in any game.',
+  emulatorVulkan:
+    'Experimental. {name} emulates {system} and makes no DLSS call, so the DLSS5 Feeder synthesises one inside it, for ' +
+    'every game it runs. Set its renderer first ({hint}) and pick the same API in Edit if it is not {api}. Depth is the ' +
+    'weak point: ReShade often cannot see the console game\'s depth buffer inside an emulator, and Neural Rendering has ' +
+    'less to work with then. On Vulkan, ReShade runs as its machine-wide Vulkan layer (ReShade\'s own installer, with ' +
+    'add-on support), and NVIDIA Smooth Motion must be off. The DLSS 5 panel (Alt+Home) opens over the emulator\'s ' +
+    'window as in any game.',
+  emulatorOpenGl:
+    'Experimental. {name} emulates {system} and makes no DLSS call, so the DLSS5 Feeder synthesises one inside it, for ' +
+    'every game it runs. Set its renderer first ({hint}) and pick the same API in Edit if it is not {api}. Depth is the ' +
+    'weak point: ReShade often cannot see the console game\'s depth buffer inside an emulator, and Neural Rendering has ' +
+    'less to work with then. On OpenGL, ReShade goes in as the emulator\'s opengl32.dll -- but OptiScaler cannot draw ' +
+    'over OpenGL, so the DLSS 5 panel (Alt+Home) will not appear; use the emulator\'s Direct3D or Vulkan renderer ' +
+    'if it has one.',
+  dx9:
+    'Experimental. DirectX 9 has no Feeder path of its own, so dgVoodoo2 turns it into DirectX 11 (Install asks before ' +
+    'downloading it -- antivirus flags that download), then the DLSS5 Feeder synthesises the DLSS call and OptiScaler ' +
+    'runs Neural Rendering. The DLSS 5 panel (Alt+Home) opens over the game as usual. If dgVoodoo2 crashes the game, ' +
+    'this route is not for it yet.',
+};
 
 function withApiOverride(detected, override) {
   const base = detected || {};
@@ -73,7 +130,10 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
   const api = detected.api || null;
   const feederDeployed = feeder.feederDeployed(dir);
   const lumaDeployed = lumaue.lumaUeDeployed(dir);
-  const optiInstalled = optiScalerInstalled(dir);
+  // The experimental legacy routes (legacy.js): a 32-bit game's OptiScaler lives in host64\, and
+  // DX8/DX9 need dgVoodoo2 in front of the game.
+  const legacyStatus = legacy.status(dir);
+  const optiInstalled = optiScalerInstalled(dir) || (detected.bitness === 32 && legacyStatus.hostOptiScaler);
   // shipsNativeDlss: the game's own Streamline/DLSS files (beside the exe or in an Unreal
   // plugin tree) -- evidence no deploy of ours can fake, so it wins over the markers. Otherwise
   // needsFeeder() is the inverse of hasNativeDlss() and flips the moment a Feeder or Luma
@@ -84,9 +144,11 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
   // under an Unreal plugin folder and deployed it anyway. The two crash together.
   const feederMisdeployed = shipsDlss && feederDeployed;
 
-  const finish = (route, label, reason, steps, reasonVars = null) => {
+  const finish = (route, label, reason, steps, reasonVars = null, extra = {}) => {
     const next = steps.find((s) => !s.done) || null;
     return {
+      experimental: false, emulator: null, legacy: null, dgVoodooDeployed: legacyStatus.dgVoodoo,
+      ...extra,
       route, label, reason, reasonVars, steps, gpuVendor,
       optiInstalled, feederDeployed, lumaDeployed, feederMisdeployed,
       verified: verified.verification(exePath),
@@ -138,6 +200,49 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
         { key: 'feeder-remove', label: 'Remove the DLSS5 Feeder (Edit)', done: false },
         { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
       ]);
+  }
+
+  // EXPERIMENTAL -- 32-bit games (legacy.js). NVIDIA ships no 32-bit NGX, so the Feeder's 32-bit
+  // add-on hands each frame to its 64-bit helper in host64\, where OptiScaler runs Neural
+  // Rendering. D3D8/D3D9 go through dgVoodoo2 first. Install does all of it; dgVoodoo2 is asked
+  // about first, because antivirus flags its download.
+  if (detected.bitness === 32) {
+    const plan = legacy.planFor({ bitness: 32, api });
+    if (!plan.supported) {
+      return finish('unsupported', 'Not supported', `32-bit executable: ${plan.reason}.`, []);
+    }
+    const steps = [];
+    if (plan.dgVoodoo) steps.push({ key: 'dgvoodoo', label: ROUTE_TEXT.stepDgVoodoo, done: legacyStatus.dgVoodoo });
+    steps.push({ key: 'feeder32', label: ROUTE_TEXT.stepFeeder32, done: legacyStatus.host32 && legacyStatus.feeder32 && legacyStatus.hostOptiScaler });
+    const text = plan.dgVoodoo ? ROUTE_TEXT.host32DgVoodoo : plan.api === 'opengl' ? ROUTE_TEXT.host32OpenGl : ROUTE_TEXT.host32;
+    return finish('feeder32', ROUTE_TEXT.labelHost32, text, steps,
+      { dx: plan.api === 'dx8' ? 'DirectX 8' : 'DirectX 9' }, { experimental: true, legacy: plan });
+  }
+
+  // EXPERIMENTAL -- emulators (emulators.js): the ordinary Feeder route, run inside the emulator, with
+  // the one thing detection cannot know said up front: which renderer it is set to.
+  if (detected.emulator) {
+    const emu = detected.emulator;
+    const text = api === 'vulkan' ? ROUTE_TEXT.emulatorVulkan : api === 'opengl' ? ROUTE_TEXT.emulatorOpenGl : ROUTE_TEXT.emulator;
+    return finish('feeder', 'OptiScaler + Feeder', text,
+      [
+        { key: 'feeder', label: 'Deploy the DLSS5 Feeder', done: feederDeployed },
+        { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
+      ],
+      { name: emu.name, system: emu.system, hint: emu.hint, api: API_NAMES[api] || String(api || '').toUpperCase() },
+      { experimental: true, emulator: emu });
+  }
+
+  // EXPERIMENTAL -- a 64-bit DirectX 9 game: dgVoodoo2's x64 D3D9.dll turns it into DirectX 11, and
+  // from there it is the ordinary 64-bit Feeder route.
+  if (api === 'dx9') {
+    const plan = legacy.planFor({ bitness: 64, api });
+    return finish('feeder', ROUTE_TEXT.labelDx9, ROUTE_TEXT.dx9,
+      [
+        { key: 'dgvoodoo', label: ROUTE_TEXT.stepDgVoodoo, done: legacyStatus.dgVoodoo },
+        { key: 'feeder', label: 'Deploy the DLSS5 Feeder', done: feederDeployed },
+        { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
+      ], null, { experimental: true, legacy: plan });
   }
 
   // Resident Evil 2/3/4/7/Village: RE Engine, no DLSS of their own. Not the Feeder -- praydog's
@@ -224,4 +329,4 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
     'Player.log; otherwise choose the API in Edit.', []);
 }
 
-module.exports = { recommendRoute, optiScalerInstalled, withApiOverride, API_OVERRIDE_VALUES };
+module.exports = { recommendRoute, optiScalerInstalled, withApiOverride, API_OVERRIDE_VALUES, ROUTE_TEXT };

@@ -125,8 +125,13 @@ test('readiness on Vulkan wants the add-on layer and warns about Smooth Motion; 
   const after = await feeder.feederReadiness(gl, 'opengl', {});
   assert.equal(after.reshadeInstalled, true);
 
+  // DX10 has no 64-bit Feeder path. DX9 does now (experimental): behind dgVoodoo2 it renders D3D11,
+  // so ReShade goes in the local way (legacy.js).
+  const dx10 = await feeder.feederReadiness(gl, 'dx10', {});
+  assert.equal(dx10.supported, false);
   const dx9 = await feeder.feederReadiness(gl, 'dx9', {});
-  assert.equal(dx9.supported, false);
+  assert.equal(dx9.supported, true);
+  assert.equal(dx9.reshadeMode, 'local');
 });
 
 test('Remove takes a ReShade opengl32.dll out and puts the game\'s own back; never a non-ReShade one', async () => {

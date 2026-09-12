@@ -311,6 +311,34 @@ one you browse to. It is imported once and placed in every one of these games, i
 install later; Remove takes it back only where it is still the copy the app placed. In-game:
 Insert opens REFramework -> TemporalUpscaler -> Enabled, Upscale Type DLSS.
 
+### Experimental: emulators, 32-bit games, DirectX 8/9
+
+These routes follow the DLSS5 Feeder's own documented paths and carry an **Experimental** tag on the
+card: they are covered by tests against the real components' layouts, but have not yet been run on a
+live game. None of these games make a DLSS call, so all of them go through the Feeder.
+
+- **Emulators** (PCSX2, RPCS3, Dolphin, DuckStation, Ryujinx, yuzu/Eden/Citron, shadPS4, Xenia, Cemu,
+  PPSSPP, RetroArch and more): recognised by exe name. Install puts the Feeder and OptiScaler in the
+  emulator, which covers every game it runs. Its renderer is a setting inside it, so the card names
+  where that setting is; choose the same API in Edit. Depth is the weak point -- ReShade often cannot
+  see a console game's depth buffer inside an emulator. On Direct3D and Vulkan the DLSS 5 panel
+  (Alt+Home) opens over the emulator as usual; OptiScaler cannot draw over OpenGL, so pick a Direct3D
+  or Vulkan renderer where there is one.
+- **32-bit games** (DirectX 10/11, OpenGL, and DirectX 8/9 below): NVIDIA ships no 32-bit DLSS, so the
+  Feeder's 32-bit add-on hands each frame to its 64-bit helper in a `host64` folder beside the game,
+  and OptiScaler runs there. The DLSS 5 panel lives in that helper: in the game, Home opens ReShade ->
+  Add-ons -> DLSS 5 Feed -> **Show the DLSS 5 panel in-game**, then Alt+Home (windowed or borderless;
+  "Show as texture" for exclusive fullscreen). Engine and NR-model updates reach the helper like any
+  other install. 32-bit Vulkan (DXVK) is not supported yet.
+- **DirectX 8/9**: dgVoodoo2 turns them into DirectX 11 first -- its 32-bit D3D8/D3D9 for a 32-bit
+  game, its x64 D3D9 for a 64-bit one -- configured to engage, output D3D11, have enough VRAM and show
+  no watermark. **Install asks before downloading dgVoodoo2**: Windows Defender currently reports the
+  official zip as `Trojan:Win32/Kepavll!rfn`, a reputation-based detection, and may delete it. The app
+  never adds antivirus exclusions; you can instead point it at a dgVoodoo2 zip you already have.
+
+Remove takes all of it back -- dgVoodoo2, the helper folder, the 32-bit ReShade -- and restores any
+file it had to set aside.
+
 ## Building
 
 ```
@@ -356,7 +384,9 @@ releases and never mirrored here:
 | [REFramework](https://github.com/praydog/REFramework) (praydog) | Required on RE Engine games | MIT |
 | [Upscaler Base Plugin](https://www.nexusmods.com/site/mods/502) (PureDark) | The DLSS call on Resident Evil 2/3/4/7/Village; downloaded by the user from Nexus, then imported and placed by the app -- never downloaded or shipped by it | PureDark's; not redistributed |
 | [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) (THS) | Frame Generation for games with no DLSS of their own; configured, never installed | Paid, Steam |
-| [DLSS5-Swapper](https://github.com/rakanki911/DLSS5-Swapper) (Rakan Alkhaldi) | `src/library.js`, as above | MIT |
+| [DLSS5-Swapper](https://github.com/rakanki911/DLSS5-Swapper) (Rakan Alkhaldi) | `src/library.js`, as above; the emulator table, the 32-bit helper layout and the dgVoodoo2 pin and settings are ported from it | MIT |
+| [DLSS5-Autopilot](https://github.com/Kizzuwatnaa/DLSS5-Autopilot) (Kizzuwatnaa) | The emulator detection table DLSS5-Swapper's is based on | MIT |
+| [dgVoodoo2](https://github.com/dege-diosg/dgVoodoo2) (Dege) | DirectX 8/9 to DirectX 11 on the experimental legacy route; fetched from its official release only after asking | Freeware |
 
 NVIDIA's DLSS is NVIDIA's; this project is not affiliated with or endorsed by NVIDIA, AMD, or any of
 the projects above.

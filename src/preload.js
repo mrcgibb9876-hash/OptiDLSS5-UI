@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('api', {
 
   feederReadiness: (exePath) => ipcRenderer.invoke('feeder:readiness', exePath),
   feederMvProviders: () => ipcRenderer.invoke('feeder:mvProviders'),
+  legacyDgVoodoo: (exePath, detected) => ipcRenderer.invoke('legacy:dgvoodoo', { exePath, detected }),
+  legacyInstallHost32: (payload) => ipcRenderer.invoke('legacy:installHost32', payload),
   feederCheckUpdate: (exePath) => ipcRenderer.invoke('feeder:checkUpdate', exePath),
   feederConfirmProviderLicense: (providerId) => ipcRenderer.invoke('feeder:confirmProviderLicense', providerId),
   feederDeploy: (exePath, mvProviderId, options) => ipcRenderer.invoke('feeder:deploy', { exePath, mvProviderId, ...options }),

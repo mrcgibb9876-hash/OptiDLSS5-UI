@@ -36,8 +36,9 @@ function diagnose(ctx) {
     return { status: 'fix', code, vars, fix: { id } };
   };
 
-  // Hard stops first: nothing the app deploys can run in these.
-  if (d.bitness === 32) return out('unavailable', 'bit32');
+  // Hard stops first: nothing the app deploys can run in these. A 32-bit game has an experimental
+  // route now (legacy.js); only one that route cannot serve (32-bit Vulkan) is a stop.
+  if (d.bitness === 32 && route.route !== 'feeder32') return out('unavailable', 'bit32');
   if (d.antiCheat) return out('unavailable', 'anticheat', { antiCheat: d.antiCheat });
   if (route.route === 'unsupported') return out('unavailable', 'unsupported', { reason: route.reason || '' });
 
@@ -49,6 +50,9 @@ function diagnose(ctx) {
   // Not installed, or the route's first step is missing: Install is the fix.
   if (!route.optiInstalled) return fix('not-installed', 'install');
   if (route.route === 'feeder' && !route.feederDeployed) return fix('feeder-missing', 'install');
+  // The experimental legacy routes: dgVoodoo2 or the 32-bit helper still to place. Install does both.
+  if (route.route === 'feeder32' && !route.complete) return fix('not-installed', 'install');
+  if (route.legacy && route.legacy.dgVoodoo && !route.dgVoodooDeployed) return fix('dgvoodoo-missing', 'install');
   // Install does not deploy Luma UE (its licence is confirmed in Edit), so this is the user's step.
   if (route.route === 'lumaue' && !route.lumaDeployed) return out('step', 'luma-missing');
   if (ctx.reEngine && ctx.reframeworkPresent === false) return fix('reframework-missing', 'reconfigure');

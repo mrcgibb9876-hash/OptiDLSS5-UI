@@ -18,7 +18,7 @@ const nativeDlss = require('./native-dlss');
 const { recommendRoute, withApiOverride, API_OVERRIDE_VALUES } = require('./route');
 const gpu = require('./gpu');
 const amdnr = require('./amdnr');
-const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, peImports, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
+const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, peImports, peBitness, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const managerUpdate = require('./manager-update');
 const runlog = require('./runlog');
@@ -27,6 +27,7 @@ const gamehelp = require('./gamehelp');
 const aihelp = require('./aihelp');
 const engines = require('./engines');
 const pdplugin = require('./pdplugin');
+const legacy = require('./legacy');
 let electronAutoUpdater = null;
 try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
 const ENGINE_KNOWN_GAMES = new Set(require('./engine-known-games.json').exeNames);
@@ -638,6 +639,117 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
   }
 });
 
+// ── Experimental legacy routes: 32-bit games, DirectX 8/9 (legacy.js) ────────────────────────
+
+// Where OptiScaler (and its log) lives for this game: host64\ for a 32-bit game on the helper route.
+function optiScalerDirFor(dir) {
+  const marker = legacy.readMarker(dir);
+  return marker && marker.host32 ? path.join(dir, legacy.HOST_DIR) : dir;
+}
+
+function legacyPlanFor(dir, exePath, detected) {
+  return legacy.planFor(withApiOverride(detected || {}, readApiOverride(dir)));
+}
+
+// dgVoodoo2 in front of a DirectX 8/9 game. Asks first, every time it would download: Windows Defender
+// flags the official zip, and that is the user's call, not this app's.
+ipcMain.handle('legacy:dgvoodoo', async (_evt, { exePath, detected } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const plan = legacyPlanFor(dir, exePath, detected);
+    if (!plan.supported || !plan.dgVoodoo) return { ok: true, skipped: true };
+    if (legacy.status(dir).dgVoodoo && fs.existsSync(path.join(dir, plan.dgVoodoo.dll))) return { ok: true, already: true };
+    let zip = legacy.cachedDgVoodooZip(feederCacheDir());
+    if (!zip) {
+      const answer = await dialog.showMessageBox({
+        type: 'warning',
+        buttons: ['Download dgVoodoo2', 'Use a dgVoodoo2 zip I have…', 'Cancel'],
+        defaultId: 0,
+        cancelId: 2,
+        noLink: true,
+        title: 'dgVoodoo2 (experimental DirectX 8/9 route)',
+        message: 'This game needs dgVoodoo2, which turns DirectX 8/9 into DirectX 11 so the DLSS5 Feeder can work.',
+        detail:
+          `dgVoodoo2 is Dege's freeware graphics wrapper. This app downloads version ${legacy.DGVOODOO.version} from its official ` +
+          `GitHub release (${legacy.DGVOODOO.page}) and checks it against a known checksum.\n\n` +
+          'Heads-up: Windows Defender currently reports that official zip as "Trojan:Win32/Kepavll!rfn" -- a ' +
+          'reputation-based detection -- and may delete it. This app never adds antivirus exclusions or works around ' +
+          'your antivirus. If it is removed, the choice of what to trust is yours: Windows Security\'s protection ' +
+          'history, or a dgVoodoo2 zip you already have.',
+      });
+      if (answer.response === 2) return { ok: true, cancelled: true };
+      if (answer.response === 1) {
+        const pick = await dialog.showOpenDialog({ title: 'Select a dgVoodoo2 release zip', properties: ['openFile'], filters: [{ name: 'dgVoodoo2 zip', extensions: ['zip'] }] });
+        if (pick.canceled || pick.filePaths.length === 0) return { ok: true, cancelled: true };
+        zip = await legacy.importDgVoodooZip(pick.filePaths[0], feederCacheDir());
+      } else {
+        zip = await legacy.ensureDgVoodooZip(feederCacheDir(), { headers: GITHUB_HEADERS });
+      }
+    }
+    const res = await legacy.deployDgVoodoo(dir, plan, zip);
+    return { ok: true, ...res };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error), code: error && error.code ? error.code : null };
+  }
+});
+
+// The shaders beside a 32-bit game, reusing the 64-bit Feeder's own steps. Returns what it created.
+async function deployLegacyShaders(dir, mvProviderId) {
+  const shaderRoot = path.join(dir, 'reshade-shaders');
+  const list = () => {
+    const out = [];
+    const walk = (d, rel) => {
+      let entries = [];
+      try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+      for (const e of entries) {
+        const r = rel ? `${rel}/${e.name}` : e.name;
+        if (e.isDirectory()) walk(path.join(d, e.name), r);
+        else out.push(`reshade-shaders/${r}`);
+      }
+    };
+    walk(shaderRoot, '');
+    return out;
+  };
+  const before = new Set(list());
+  const provider = feeder.MV_PROVIDERS[mvProviderId];
+  if (!provider || !provider.autoFetchable) throw new Error('the 32-bit route uses the default motion-vector provider only for now');
+  await feeder.deployReShadeCommonHeaders(dir, GITHUB_HEADERS, { cacheDir: feederCacheDir() });
+  await feeder.deployMvProvider(dir, mvProviderId, feederCacheDir(), GITHUB_HEADERS);
+  feeder.configureReShadeIni(dir, {});
+  feeder.configurePreset(dir, mvProviderId);
+  return list().filter((f) => !before.has(f));
+}
+
+// The whole 32-bit helper route for one game (dgVoodoo2, when needed, is legacy:dgvoodoo first).
+ipcMain.handle('legacy:installHost32', async (_evt, { exePath, detected, releaseFolder, nrDllPath, mvProviderId } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const plan = legacyPlanFor(dir, exePath, detected);
+    if (!plan.supported || !plan.host32) throw new Error(`this game does not take the 32-bit route (${plan.reason || 'not 32-bit'})`);
+    if (plan.dgVoodoo && !legacy.status(dir).dgVoodoo) throw new Error('dgVoodoo2 has to be in place first');
+    const root = releaseFolder && findReleaseRoot(releaseFolder);
+    if (!root || !hasDlssNrSection(root)) throw new Error('OptiScaler release folder not set, or not the DLSS-NR build');
+    if (!nrDllPath || !fs.existsSync(nrDllPath)) throw new Error('DLSS NR model file not found -- check Settings');
+    const asset = await feeder.resolveFeederAsset(GITHUB_HEADERS);
+    const feederZip = await feeder.downloadToCache(asset.url, feederCacheDir(), asset.name, GITHUB_HEADERS);
+    const reshadeSetup = await feeder.downloadToCache(feeder.RESHADE_SETUP_URL, feederCacheDir(), path.basename(feeder.RESHADE_SETUP_URL), GITHUB_HEADERS);
+    const res = await legacy.deployHost32(dir, plan, {
+      feederZip,
+      reshadeSetup,
+      releaseFolder: root,
+      nrDllPath,
+      deployShaders: (d) => deployLegacyShaders(d, mvProviderId),
+      deployNvngxDlss: (hostDir) => feeder.deployNvngxDlss(hostDir, getRhiManifest, compareStreamlineVersions, feederCacheDir(), GITHUB_HEADERS),
+    });
+    try { applyPanelLanguage(path.join(dir, legacy.HOST_DIR)); } catch {}
+    return { ok: true, ...res, feederVersion: asset.tag, api: plan.api };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
 // Undoes feeder:deploy for one game. Two callers: a mis-deployed Feeder on a game that ships
 // its own DLSS (feeder:readiness's misdeployed), and a user simply done with it. Resets
 // [Plugins] LoadReshade (unless Luma UE still needs ReShade loaded) and re-runs the profile,
@@ -1186,7 +1298,10 @@ ipcMain.handle('game:setApiOverride', async (_evt, { exePath, api }) => {
 
 function detectInstalledBackends(dir) {
   const has = (name) => fs.existsSync(path.join(dir, name));
-  const optiscaler = has('OptiScaler.ini') && has('nvngx_dlssnr.dll');
+  // A 32-bit game's OptiScaler is in host64\ (legacy.js).
+  const legacyMarker = legacy.readMarker(dir);
+  const optiscaler = (has('OptiScaler.ini') && has('nvngx_dlssnr.dll')) ||
+    !!(legacyMarker && legacyMarker.host32 && legacy.status(dir).hostOptiScaler);
   // Anything else of ours still in the folder once OptiScaler itself is gone -- so the card can
   // still offer Remove and take the folder the rest of the way back.
   // Only what an INSTALL leaves behind. The preference markers (.dlss5ui-api.json,
@@ -1199,6 +1314,7 @@ function detectInstalledBackends(dir) {
     'OptiScaler.ini', 'OptiScaler.dll', 'nvngx_dlssnr.dll', 'nvngx.dll_dlssnr.dll', 'OptiScaler',
     'dlss5-feed.addon64', 'Luma-Unreal Engine.addon', 'Luma',
     '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.optiscaler-manager-install.json',
+    legacy.MARKER, 'dlss5-feed.addon32',
   ].filter(has);
   // What older versions placed and never journaled (Stellar Blade, 2026-09-12: OptiScaler_DlssNr.*
   // build files and the Feeder-era scripts survived a Remove on an old build, and with OptiScaler
@@ -1305,6 +1421,8 @@ ipcMain.handle('amdnr:runSetup', (_evt, exePath) => {
 ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath, proxyName, engine }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    // The 64-bit OptiScaler cannot load into a 32-bit game; those take legacy:installHost32.
+    if ((await peBitness(exePath)) === 32) throw new Error('This is a 32-bit game: OptiScaler goes into the Feeder\'s 64-bit helper (the experimental 32-bit route), not beside the game');
     if (!releaseFolder || !fs.existsSync(releaseFolder)) throw new Error('OptiScaler release folder not set');
     if (!findSetupBat(releaseFolder)) throw new Error('setup_windows.bat not found in release folder');
     if (!hasDlssNrSection(releaseFolder)) {
@@ -1468,6 +1586,11 @@ async function uninstallEverything(dir) {
     const r = await feeder.removeFeederStack(dir, { keepReShade: false });
     removed.push(...r.removed); kept.push(...r.kept);
   }
+  // The experimental legacy routes: dgVoodoo2, the 32-bit Feeder and its host64\ helper.
+  if (legacy.readMarker(dir)) {
+    const r = await legacy.removeLegacy(dir);
+    removed.push(...r.removed); restored.push(...r.restored);
+  }
   if (lumaue.lumaUeDeployed(dir) || fs.existsSync(path.join(dir, 'Luma-Unreal Engine.addon'))) {
     const r = await lumaue.removeLumaStack(dir);
     removed.push(...r.removed); kept.push(...r.kept);
@@ -1568,6 +1691,12 @@ async function planUninstall(dir) {
   const journal = readInstallMarker(dir) || {};
   const feederMarker = readJson(path.join(dir, '.dlss5ui-feeder-deploy.json'), null);
   const lumaMarker = readJson(path.join(dir, '.dlss5ui-lumaue-deploy.json'), null);
+  if (legacy.readMarker(dir)) {
+    const lp = legacy.removalPlan(dir);
+    for (const rel of lp.remove) remove.add(rel);
+    restore.push(...lp.restore);
+    add(legacy.MARKER);
+  }
   if (feeder.feederDeployed(dir)) {
     for (const n of ['dlss5-feed.addon64', 'dlss5-feed.cfg', 'dlss5-feed.log', 'ReShade64.dll', 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log', '.dlss5ui-feeder-deploy.json']) add(n);
     const shaders = ['DLSS5_Feed.fx', 'ReShade.fxh', 'ReShadeUI.fxh'];
@@ -1749,7 +1878,8 @@ ipcMain.handle('game:confirm-remove', async (_evt, gameName) => {
 ipcMain.handle('game:lastRun', async (_evt, exePath) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) return { ran: false, verdict: 'no-log' };
-    return await runlog.analyzeRun(gameDir(exePath));
+    const dir = gameDir(exePath);
+    return await runlog.analyzeRun(dir, { optiDir: optiScalerDirFor(dir) });
   } catch (error) {
     return { ran: false, verdict: 'no-log', error: String(error && error.message ? error.message : error) };
   }
@@ -1793,7 +1923,7 @@ async function helpContext(exePath, detected, fixesTried = []) {
   const effective = withApiOverride(detected || {}, readApiOverride(dir));
   const { vendor } = await getGpuInfo();
   const route = recommendRoute(dir, exePath, effective, vendor || 'unknown');
-  const run = await runlog.analyzeRun(dir);
+  const run = await runlog.analyzeRun(dir, { optiDir: optiScalerDirFor(dir) });
   let nrEnabledInIni = null;
   try {
     const ini = fs.readFileSync(path.join(dir, 'OptiScaler.ini'), 'utf8');
@@ -2903,7 +3033,15 @@ async function findActiveOptiScalerFile(dir) {
     if (match) return { file: path.join(dir, match.Name), renamed: true };
   } catch {
   }
-  if (present.length === 1) return { file: path.join(dir, present[0]), renamed: true };
+  // One proxy-named DLL and no version resource to say what it is: only OptiScaler if its bytes say
+  // so. Without this check a game's own dxgi.dll (or one just restored from a backup) was taken for
+  // OptiScaler -- Remove deleted it, and a sync could have copied OptiScaler over it.
+  if (present.length === 1) {
+    const file = path.join(dir, present[0]);
+    try {
+      if (fs.readFileSync(file).includes(Buffer.from('OptiScaler', 'latin1'))) return { file, renamed: true };
+    } catch {}
+  }
   return null;
 }
 
@@ -2911,6 +3049,27 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDl
   try {
     if (!exePath || !fs.existsSync(exePath)) return { ok: true, updated: false, reason: 'exe missing' };
     const dir = gameDir(exePath);
+    // A 32-bit game on the helper route: its OptiScaler (winmm.dll) and NR model are in host64\ and
+    // follow the engine and model in Settings the same way.
+    const legacyMarker = legacy.readMarker(dir);
+    if (legacyMarker && legacyMarker.host32) {
+      const hostDir = path.join(dir, legacy.HOST_DIR);
+      let updated = false;
+      let nrUpdated = false;
+      const releaseDll = releaseFolder ? path.join(releaseFolder, 'OptiScaler.dll') : null;
+      const hostDll = path.join(hostDir, 'winmm.dll');
+      if (releaseDll && fs.existsSync(releaseDll) && hasDlssNrSection(releaseFolder) && fs.existsSync(hostDll) && sha256File(releaseDll) !== sha256File(hostDll)) {
+        await fsp.copyFile(releaseDll, hostDll);
+        updated = true;
+      }
+      const hostNr = path.join(hostDir, 'nvngx_dlssnr.dll');
+      if (nrDllPath && fs.existsSync(nrDllPath) && fs.existsSync(hostNr) && fs.statSync(hostNr).size !== fs.statSync(nrDllPath).size) {
+        await fsp.copyFile(nrDllPath, hostNr);
+        nrUpdated = true;
+      }
+      try { applyPanelLanguage(hostDir); } catch {}
+      return { ok: true, updated: updated || nrUpdated, nrUpdated, reason: 'legacy 32-bit route', autoConfigured: [] };
+    }
     if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: true, updated: false, reason: 'not installed' };
 
     const { api, applied: autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix } = await autoConfigureGame(dir, exePath);
@@ -2987,7 +3146,8 @@ const EARLY_PROXY_CANDIDATES = ['winmm.dll', 'version.dll', 'dbghelp.dll', 'wini
 async function proxyNameForGame(dir, exePath, feederGame) {
   if (!feederGame) return DEFAULT_PROXY;
   const api = await resolveApi(dir, exePath);
-  if (api !== 'vulkan' && api !== 'opengl') return DEFAULT_PROXY;
+  // dx9: a 64-bit DirectX 9 game behind dgVoodoo2 imports no DXGI at start either (legacy.js).
+  if (api !== 'vulkan' && api !== 'opengl' && api !== 'dx9') return DEFAULT_PROXY;
   const imports = await peImports(exePath);
   return EARLY_PROXY_CANDIDATES.find((name) => imports.includes(name)) || 'winmm.dll';
 }

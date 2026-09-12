@@ -9,9 +9,13 @@ grant.
 ### DLSS5-Swapper -- MIT
 
 `src/library.js` is taken verbatim from [DLSS5-Swapper](https://github.com/rakanki911/DLSS5-Swapper),
-and the app's original install core was ported from it.
+and the app's original install core was ported from it; so were the emulator profile table
+(`src/emulators.js`), the 32-bit helper layout and the dgVoodoo2 pin and settings (`src/legacy.js`).
 Copyright (c) 2026 Rakan Alkhaldi. Full licence text:
 [third_party/DLSS5-Swapper-LICENSE.txt](third_party/DLSS5-Swapper-LICENSE.txt).
+
+DLSS5-Swapper's emulator table is in turn based on the MIT-licensed detection table in
+[DLSS5-Autopilot](https://github.com/Kizzuwatnaa/DLSS5-Autopilot) (core/emulators.py) by Kizzuwatnaa.
 
 ### Electron and its dependencies
 
@@ -34,6 +38,7 @@ https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR, built on
 Each is downloaded from its own official source when a game needs it, under its own terms, as
 listed in the README's credits table: RHI's manifest and packages (Streamline, DLSS, the DLSS NR
 model), REFramework (MIT), the DLSS5 Feeder (MIT), ReShade (BSD 3-Clause), motion-vector shaders,
-Luma-Framework, and wilsjo2's OptiScaler-DLSSNR-PreSR-Multipass engine (GPL-3.0). PureDark's
+Luma-Framework, wilsjo2's OptiScaler-DLSSNR-PreSR-Multipass engine (GPL-3.0), and dgVoodoo2 (Dege's
+freeware, from its official GitHub release, only after the user agrees). PureDark's
 Upscaler Base Plugin is never downloaded or shipped by the app: the user downloads it from
 Nexus Mods, and the app only places the user's own copy into their games.

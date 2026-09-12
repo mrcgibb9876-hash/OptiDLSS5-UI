@@ -363,6 +363,11 @@ async function applyRecommendation(game, card, backends) {
   const routeText = route.complete ? `\u2713 ${t(route.label)}` : t(route.label);
   const routeTitle = escapeHtml(route.nextStep && route.optiInstalled ? `${t(route.reason, route.reasonVars)} ${t('Next: {step}.', { step: t(route.nextStep) })}` : t(route.reason, route.reasonVars));
   chips.push(`<span class="engine-badge route-badge ${routeClass}" title="${routeTitle}">${escapeHtml(routeText)}</span>`);
+  // Emulators, 32-bit games and DirectX 8/9: routes built from the Feeder's documented paths but not
+  // yet run on a live game here (emulators.js, legacy.js).
+  if (route.experimental) {
+    chips.push(`<span class="engine-badge engine-badge-experimental" title="${escapeHtml(t('Experimental: built from the DLSS5 Feeder\'s documented route for this kind of game, but not yet confirmed on a real one. It may not work, and depth or motion can be rough.'))}">${escapeHtml(t('Experimental'))}</span>`);
+  }
   // Only a dated, human confirmation from the registry (src/verified-games.json) earns this.
   if (route.verified && route.verified.route === route.route) {
     chips.push(`<span class="engine-badge engine-badge-known" title="${escapeHtml(route.verified.notes || '')}">✓ ${escapeHtml(t('Verified {date}', { date: route.verified.verified }))}</span>`);
@@ -374,7 +379,8 @@ async function applyRecommendation(game, card, backends) {
   // of these block anything, all of them have bitten real installs.
   const detectWarnings = [];
   if (detected.antiCheat) detectWarnings.push(t('Anti-cheat present ({file}) -- OptiScaler is for single-player games; using it in a game that goes online risks a ban.', { file: detected.antiCheat }));
-  if (detected.reshadeProxy) detectWarnings.push(t('ReShade is already installed here as {file}. Install replaces it with OptiScaler -- pick Launch mode: Injector in Edit to keep both.', { file: detected.reshadeProxy }));
+  // On the 32-bit route the ReShade beside the game is this app's own (legacy.js), not a conflict.
+  if (detected.reshadeProxy && route.route !== 'feeder32') detectWarnings.push(t('ReShade is already installed here as {file}. Install replaces it with OptiScaler -- pick Launch mode: Injector in Edit to keep both.', { file: detected.reshadeProxy }));
   if (detected.oldShaderCompiler) detectWarnings.push(t('{file} v{version} beside the exe predates Shader Model 5.1, so OptiScaler\'s shaders can silently fail to compile -- rename it and Windows\' own copy loads instead.', { file: detected.oldShaderCompiler.file, version: detected.oldShaderCompiler.version }));
   const warnEl = card.querySelector('.card-detect-warning');
   if (warnEl) {
@@ -488,6 +494,7 @@ function helpWords(diag) {
   const v = diag.vars || {};
   switch (diag.code) {
     case 'bit32': return t('DLSS 5 is not currently available for this game: it is a 32-bit game, and OptiScaler and the NR model are 64-bit only.');
+    case 'dgvoodoo-missing': return t('This DirectX 9 game needs dgVoodoo2 in front of it before the DLSS5 Feeder can work. Install puts it there, asking first -- antivirus flags its download, so the choice is yours.');
     case 'anticheat': return t('DLSS 5 is not currently available for this game: it runs under {antiCheat}, which blocks the DLL this app relies on. Using it there can also get an account banned.', v);
     case 'unsupported': return t('DLSS 5 is not currently available for this game: {reason}', v);
     case 'foreign': return t('Another DLSS 5 toolchain is in this folder ({tool}). Two stacks hooking the same DLSS call crash the game. Remove it first.', v);
@@ -532,6 +539,7 @@ function helpShort(diag) {
     case 'luma-known-bad': return t('Luma UE breaks this game');
     case 'not-installed': return t('Not installed yet');
     case 'feeder-missing': return t('Feeder not deployed yet');
+    case 'dgvoodoo-missing': return t('dgVoodoo2 not in place yet');
     case 'luma-missing': return t('Luma UE not deployed yet');
     case 'reframework-missing': return t('REFramework missing');
     case 'pd-build-missing': return t('Needs the pd-upscaler REFramework');
@@ -811,6 +819,43 @@ async function installGame(game) {
     window.api.saveGames(games);
   }
   const route = await window.api.gameRoute(game.exePath, game.detectedPath);
+
+  // Experimental DirectX 8/9 routes: dgVoodoo2 goes in first. The main process asks before any
+  // download (antivirus flags it), so a cancel stops the install here with nothing placed.
+  if (route.legacy && route.legacy.dgVoodoo && !route.dgVoodooDeployed) {
+    toast(t('Setting up dgVoodoo2 first (it asks before downloading)…'));
+    const dg = await window.api.legacyDgVoodoo(game.exePath, game.detectedPath);
+    if (!dg.ok) {
+      toast(t('dgVoodoo2 could not be set up: {error}', { error: dg.error }));
+      renderGrid();
+      return;
+    }
+    if (dg.cancelled) {
+      toast(t('Install stopped: this game\'s DirectX 8/9 route needs dgVoodoo2.'));
+      return;
+    }
+  }
+
+  // Experimental 32-bit route: everything goes through the Feeder's 64-bit helper (legacy.js), and
+  // OptiScaler is installed there, not beside the game -- so the rest of this function does not apply.
+  if (route.route === 'feeder32') {
+    toast(t('Installing the experimental 32-bit route (Feeder, its 64-bit helper, OptiScaler)…'));
+    const providers = await window.api.feederMvProviders();
+    const provider = providers.find((p) => p.default && p.autoFetchable) || providers.find((p) => p.autoFetchable);
+    const res32 = await window.api.legacyInstallHost32({
+      exePath: game.exePath,
+      detected: game.detectedPath,
+      releaseFolder,
+      nrDllPath: settings.nrDllPath,
+      mvProviderId: provider ? provider.id : null,
+    });
+    toast(res32.ok
+      ? t('Installed the experimental 32-bit route. In the game: Home opens ReShade -> Add-ons -> DLSS 5 Feed -> "Show the DLSS 5 panel in-game", then Alt+Home.')
+      : t('Install failed: {error}', { error: res32.error }));
+    renderGrid();
+    return;
+  }
+
   if (route.route === 'feeder' && !route.feederDeployed) {
     toast(t('Deploying the DLSS5 Feeder first (ReShade, add-on, motion-vector shader, nvngx_dlss.dll)…'));
     const providers = await window.api.feederMvProviders();
