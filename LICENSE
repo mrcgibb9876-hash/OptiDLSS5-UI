@@ -1,0 +1,41 @@
+OptiDLSS5-UI
+Copyright (c) 2026 mrcgibb9876-hash. All rights reserved.
+
+This software, including its source code, user interface, text, translations and artwork (the
+"Software"), is the property of the copyright holder. It is published so that it can be used,
+read and improved through this repository. It is not open source.
+
+What you may do
+  1. Download the official releases of the Software from this repository and install and run
+     them on your own computers, for personal use.
+  2. View the source code, and fork this repository on GitHub, as far as GitHub's Terms of
+     Service require for public repositories -- for the purpose of proposing changes back to it.
+  3. Submit issues and pull requests to this repository. By submitting a contribution you agree
+     that it may be included in, and distributed under the terms of, the Software.
+
+What you may not do without prior written permission from the copyright holder
+  - copy, reproduce, modify, adapt, translate or create derivative works of the Software or any
+    part of it;
+  - publish, distribute, sublicense, rent, lease, sell or otherwise make the Software or any
+    part of it available to others, including in modified form, as part of another product, or
+    as your own work;
+  - remove or alter this notice or any copyright or attribution notice in the Software.
+
+Third-party components
+Parts of the Software, and programs it downloads or bundles, are the work of others and remain
+under their own licences, listed in THIRD-PARTY-NOTICES.md. This licence does not restrict any
+right those licences grant. In particular: src/library.js is under the MIT licence; the
+OptiScaler_DLSSNR engine, which the Software downloads and ships beside itself as a separate
+program, is under the GNU General Public License v3.0, with its source at
+https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR.
+
+No warranty
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE, INCLUDING ANY EFFECT ON
+GAMES, GAME FILES OR SAVE DATA.
+
+Versions of the Software published before this licence was added (v1.54.1 and earlier) were
+distributed without a licence of their own; this licence applies from v1.55.0 onward.

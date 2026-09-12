@@ -1,10 +1,11 @@
 {
   "name": "optidlss5-ui",
   "productName": "OptiDLSS5-UI",
-  "version": "1.54.1",
+  "version": "1.55.0",
   "description": "Per-game OptiScaler / DLSS Ray Reconstruction install manager",
   "main": "src/main.js",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "author": "OptiDLSS5-UI",
   "scripts": {
     "start": "electron .",
@@ -29,6 +30,18 @@
       {
         "from": "README-END-USER.txt",
         "to": "README.txt"
+      },
+      {
+        "from": "LICENSE",
+        "to": "LICENSE.txt"
+      },
+      {
+        "from": "THIRD-PARTY-NOTICES.md",
+        "to": "THIRD-PARTY-NOTICES.md"
+      },
+      {
+        "from": "third_party",
+        "to": "third_party"
       },
       {
         "from": "tools/DLSS5Injector/DLSS5Injector.exe",

@@ -323,10 +323,16 @@ Electron 33, Windows x64. No native modules.
 
 ## Credits and licensing
 
+**OptiDLSS5-UI is proprietary: all rights reserved.** You may download and run the official
+releases and propose changes here, but not copy, modify, redistribute or reuse the app or its code
+elsewhere without written permission -- see [LICENSE](LICENSE). This applies from v1.55.0. The
+OptiScaler_DLSSNR engine it installs is a separate program and stays GPL-3.0. Third-party parts keep
+their own licences: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
 `src/library.js` is taken verbatim from [DLSS5-Swapper](https://github.com/rakanki911/DLSS5-Swapper)
-— MIT, Copyright (c) 2026 Rakan Alkhaldi. The licence text is kept alongside it in
-[LICENSE-DLSS5-Swapper.txt](LICENSE-DLSS5-Swapper.txt); keeping that notice is the whole of what MIT
-asks. It is held byte-identical to its upstream so it can be refreshed without a merge — the
+— MIT, Copyright (c) 2026 Rakan Alkhaldi. The licence text is kept in
+[third_party/DLSS5-Swapper-LICENSE.txt](third_party/DLSS5-Swapper-LICENSE.txt) and ships inside the
+installer; keeping that notice is the whole of what MIT asks. It is held byte-identical to its upstream so it can be refreshed without a merge — the
 adaptation for this app lives in `src/discover.js` instead.
 
 [OptiScaler](https://github.com/optiscaler/OptiScaler) is the upstream this all rests on, through
