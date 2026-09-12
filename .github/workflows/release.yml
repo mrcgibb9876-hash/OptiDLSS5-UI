@@ -47,6 +47,11 @@ jobs:
     - name: Install
       run: npm ci
 
+    # The suite drives main.js's own handlers (install/remove round trips, detection, routes,
+    # last-run verdicts). A release never ships with a red suite.
+    - name: Test
+      run: npm test
+
     - name: Set up MSVC
       uses: ilammy/msvc-dev-cmd@v1
       with:

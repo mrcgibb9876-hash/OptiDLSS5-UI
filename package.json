@@ -8,7 +8,8 @@
   "author": "OptiDLSS5-UI",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win nsis portable --publish=never"
+    "dist": "electron-builder --win nsis portable --publish=never",
+    "test": "node --test"
   },
   "devDependencies": {
     "electron": "^33.0.0",

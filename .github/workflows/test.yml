@@ -1,0 +1,23 @@
+name: Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: npm
+    - name: Install
+      run: npm ci
+    # The suite loads src/main.js with electron stubbed and drives its IPC handlers directly:
+    # install/remove round trips, detection rules, routes, the last-run verdicts. PowerShell is
+    # used the way the app uses it, so this runs on Windows.
+    - name: Test
+      run: npm test
