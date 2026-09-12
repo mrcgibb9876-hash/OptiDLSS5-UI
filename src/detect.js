@@ -21,7 +21,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { findUnrealPluginFile } = require('./framegen');
 
-const DETECT_VERSION = 5;
+const DETECT_VERSION = 6;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
@@ -344,12 +344,17 @@ async function inspectHookDlls(dir) {
 // too), but OptiScaler's own banner says "do not use in multiplayer games", and a card that
 // shows the risk is the honest thing. Direct children of the exe folder and up to three
 // ancestors only -- the game root is at most that far up in every layout this app knows.
-const ANTI_CHEAT = /easyanticheat|battleye|eaanticheat|(?:^|[-_])(?:eac|be)launcher|start_protected_game|beservice|beclient|vanguard|xigncode|gameguard|nprotect|ace-base|anticheat/i;
+const ANTI_CHEAT = /easyanticheat|battleye|eaanticheat|(?:^|[-_])(?:eac|be)launcher|start_protected_game|beservice|beclient|vanguard|xigncode|gameguard|nprotect|ace-base|anticheat|ricochet/i;
 // Where the climb stops: a folder that holds games rather than being one. A loose installer
 // parked in D:\Games is not evidence about any game under it.
 const LIBRARY_ROOT = /^(games?|my ?games|steamlibrary|steamapps|common|gog ?games|epic ?games|xbox ?games|origin ?games|ea ?games|repacks?|emulation|downloads|program files(?: \(x86\))?|[a-z]:\\?)$/i;
+// Activision's Ricochet leaves no named file beside the exe: its kernel driver comes with the
+// game's own launcher. The modern Call of Duty titles (Modern Warfare II and III, Black Ops 6,
+// Warzone) all run through the one Call of Duty HQ exe, so that exe name is the evidence.
+const RICOCHET_EXES = /^cod\.exe$/i;
 
-function antiCheatPresent(dir) {
+function antiCheatPresent(dir, exePath = null) {
+  if (exePath && RICOCHET_EXES.test(path.basename(exePath))) return 'Ricochet (Call of Duty HQ)';
   let current = dir;
   for (let up = 0; up <= 3; up++) {
     if (LIBRARY_ROOT.test(path.basename(current) || current)) break;
@@ -855,7 +860,7 @@ async function detectGame(dir, exePath) {
     bitness,
     vulkanWrapper: hooks.vulkanWrapper,
     reshadeProxy: hooks.reshadeProxy,
-    antiCheat: antiCheatPresent(dir),
+    antiCheat: antiCheatPresent(dir, exePath),
     oldShaderCompiler: oldShaderCompiler(dir),
     runtimeApi: found.runtimeApi || null,
     // What OptiScaler.log looked like when this was decided -- a later run of the game is new

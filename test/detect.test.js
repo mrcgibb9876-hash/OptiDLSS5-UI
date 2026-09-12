@@ -90,3 +90,20 @@ test('peBitness tells 32-bit from 64-bit on Windows', { skip: process.platform !
   const wow = path.join(sys, 'SysWOW64', 'notepad.exe');
   if (fs.existsSync(wow)) assert.equal(await detect.peBitness(wow), 32);
 });
+
+test('anti-cheat is read from the files beside the exe, and Call of Duty HQ counts as Ricochet by its exe alone', () => {
+  // Each game sits under a Games folder so the climb stops there, not in the shared temp dir.
+  const root = path.join(scratchDir('ac'), 'Games');
+  const game = (name) => { const d = path.join(root, name); fs.mkdirSync(d, { recursive: true }); return d; };
+
+  const eac = game('WithEac');
+  write(eac, 'EasyAntiCheat/settings.json');
+  assert.equal(detect.antiCheatPresent(eac, path.join(eac, 'Game.exe')), 'EasyAntiCheat');
+
+  const cod = game('Call of Duty');
+  assert.match(detect.antiCheatPresent(cod, path.join(cod, 'cod.exe')), /Ricochet/);
+
+  const clean = game('Clean');
+  write(clean, 'data.pak');
+  assert.equal(detect.antiCheatPresent(clean, path.join(clean, 'Game.exe')), null);
+});
