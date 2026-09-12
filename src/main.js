@@ -388,12 +388,54 @@ ipcMain.handle('lossless:writeSettings', (_evt, xmlText) => {
   }
 });
 
-ipcMain.handle('lossless:launch', () => {
+// Whether a Lossless Scaling process is up, by image name. It is single-instance: a second
+// launch only tells the first to show its window and exits, which is exactly the pop-over the
+// tray settings exist to prevent -- so every launch here checks first.
+async function losslessRunning() {
+  const { stdout } = await execFileAsync('tasklist.exe', ['/FI', 'IMAGENAME eq LosslessScaling.exe', '/NH', '/FO', 'CSV'], { windowsHide: true });
+  return stdout.toLowerCase().includes('"losslessscaling.exe"');
+}
+
+// Starts it and waits for the spawn to be accepted (a refusal arrives as an asynchronous error
+// event, which unhandled would take this process down). minimized: its own -StartMinimized
+// argument sends it straight to the tray.
+async function losslessSpawn(exePath, { minimized = false } = {}) {
+  const child = spawn(exePath, minimized ? ['-StartMinimized'] : [], { cwd: path.dirname(exePath), detached: true, stdio: 'ignore' });
+  await new Promise((resolve, reject) => {
+    child.once('spawn', resolve);
+    child.once('error', (e) => reject(new Error(`could not start Lossless Scaling: ${e && e.message ? e.message : e}`)));
+  });
+  child.unref();
+}
+
+ipcMain.handle('lossless:launch', async () => {
   try {
     const info = lossless.detect();
     if (!info.installed) throw new Error('Lossless Scaling is not installed');
-    spawn(info.exePath, [], { cwd: path.dirname(info.exePath), detached: true, stdio: 'ignore' }).unref();
-    return { ok: true };
+    if (await losslessRunning()) return { ok: true, alreadyRunning: true };
+    await losslessSpawn(info.exePath);
+    return { ok: true, alreadyRunning: false };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// Lossless Scaling reads its profiles from Settings.xml once, at startup, and writes its own
+// in-memory copy back over the file from its UI and from a real close (its decompiled
+// MainWindow, 2026-09-12). So a profile written while it runs is neither picked up nor safe
+// until it restarts -- and the restart has to be a kill, since a graceful close would first save
+// the stale copy over what was just written. Called after every successful configure; a no-op
+// when it is not running (the next launch reads the file).
+ipcMain.handle('lossless:restart', async () => {
+  try {
+    const info = lossless.detect();
+    if (!info.installed) throw new Error('Lossless Scaling is not installed');
+    if (!(await losslessRunning())) return { ok: true, restarted: false };
+    await execFileAsync('taskkill.exe', ['/F', '/IM', 'LosslessScaling.exe'], { windowsHide: true }).catch(() => {});
+    for (let i = 0; i < 40 && (await losslessRunning()); i++) await new Promise((r) => setTimeout(r, 100));
+    if (await losslessRunning()) throw new Error('Lossless Scaling would not close -- if it runs as administrator, close it yourself and launch it again');
+    await losslessSpawn(info.exePath, { minimized: true });
+    return { ok: true, restarted: true };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }

@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('api', {
   losslessReadSettings: () => ipcRenderer.invoke('lossless:readSettings'),
   losslessWriteSettings: (xmlText) => ipcRenderer.invoke('lossless:writeSettings', xmlText),
   losslessLaunch: () => ipcRenderer.invoke('lossless:launch'),
+  losslessRestart: () => ipcRenderer.invoke('lossless:restart'),
   losslessOpenStorePage: () => ipcRenderer.invoke('lossless:openStorePage'),
   losslessSetExePathInGameIni: (exePath, losslessExePath, gameTitle, profile = {}) => ipcRenderer.invoke('lossless:setExePathInGameIni', { exePath, losslessExePath, gameTitle, ...profile }),
 

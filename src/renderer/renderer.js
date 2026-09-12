@@ -1704,6 +1704,12 @@ $('#btn-lossless-configure').addEventListener('click', async () => {
       ? t('Added a Lossless Scaling profile for this game ({what}).', { what })
       : t("Updated this game's Lossless Scaling profile ({what}).", { what }));
 
+    // Lossless Scaling only reads profiles at startup, and a running one would later write its
+    // stale copy back over the file -- so a running instance is restarted (to the tray) now.
+    const restart = await window.api.losslessRestart();
+    if (!restart.ok) toast(t('Lossless Scaling is running and could not be restarted, so it has not read the new profile yet: {error}', { error: restart.error }));
+    else if (restart.restarted) toast(t('Restarted Lossless Scaling in the tray so it reads the new profile.'));
+
     // Only one frame generator at a time: two of them stack their generated frames. OptiScaler's
     // own FG is ours to switch off; the game's native DLSS Frame Generation is a game setting the
     // hint above (and the in-game panel) tells the user to turn off themselves.
@@ -1724,7 +1730,7 @@ $('#btn-lossless-configure').addEventListener('click', async () => {
 $('#btn-lossless-launch').addEventListener('click', async () => {
   const res = await window.api.losslessLaunch();
   if (res.ok) {
-    toast(t('Launched Lossless Scaling.'));
+    toast(res.alreadyRunning ? t('Lossless Scaling is already running (check the tray).') : t('Launched Lossless Scaling.'));
   } else {
     toast(t('Could not launch Lossless Scaling: {error}', { error: res.error }));
   }
