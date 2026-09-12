@@ -69,13 +69,30 @@ jobs:
     # it on first launch and still checks GitHub for anything newer.
     - name: Fetch the OptiScaler_DLSSNR engine build to bundle
       shell: pwsh
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        $headers = @{ 'User-Agent' = 'OptiDLSS5-UI-release'; Accept = 'application/vnd.github+json' }
-        $release = Invoke-RestMethod -Headers $headers -Uri 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest'
-        $asset = $release.assets | Where-Object { $_.name -like '*.zip' } | Select-Object -First 1
+        # Authenticated with the job token: an anonymous call from a shared runner IP is rate
+        # limited, and the limited answer is a JSON error with no assets in it -- which read as
+        # "no zip on the release" and failed two releases in a row (2026-09-12). Retried with a
+        # pause for the ordinary hiccups on top of that.
+        $headers = @{ 'User-Agent' = 'OptiDLSS5-UI-release'; Accept = 'application/vnd.github+json'; Authorization = "Bearer $env:GITHUB_TOKEN" }
+        $asset = $null
+        $release = $null
+        for ($attempt = 1; $attempt -le 5; $attempt++) {
+          try {
+            $release = Invoke-RestMethod -Headers $headers -Uri 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest'
+            $asset = $release.assets | Where-Object { $_.name -like '*.zip' } | Select-Object -First 1
+          } catch {
+            Write-Output "attempt $attempt failed: $($_.Exception.Message)"
+          }
+          if ($asset) { break }
+          Write-Output "attempt $attempt: no .zip asset on the latest release yet ($($release.tag_name)); waiting"
+          Start-Sleep -Seconds (10 * $attempt)
+        }
 
         if (-not $asset) {
-          Write-Error "No .zip asset found on OptiScaler_DLSSNR's latest release ($($release.tag_name))."
+          Write-Error "No .zip asset found on OptiScaler_DLSSNR's latest release ($($release.tag_name)) after 5 attempts."
           exit 1
         }
 
