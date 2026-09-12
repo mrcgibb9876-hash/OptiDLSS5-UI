@@ -121,7 +121,7 @@ async function renderGrid() {
         <div class="card-actions-row2">
           <button class="btn btn-ghost btn-open">${escapeHtml(t('Open Folder'))}</button>
           <button class="btn btn-ghost btn-edit">${escapeHtml(t('Edit'))}</button>
-          <button class="btn btn-ghost btn-support" title="${escapeHtml(t('Save every log and the app\'s own view of this game into one zip to share.'))}">${escapeHtml(t('Support bundle'))}</button>
+          <button class="btn btn-ghost btn-support has-tip" data-tip="${escapeHtml(t('Packs this game\'s logs, settings and what this app knows about it into one zip on your Desktop, to attach when asking for help. Nothing is sent anywhere.'))}">${escapeHtml(t('Support bundle'))}</button>
           <button class="btn btn-ghost btn-danger btn-remove">${escapeHtml(t('Remove'))}</button>
         </div>
       </div>

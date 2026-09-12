@@ -391,7 +391,6 @@ window.I18N.register("ko", {
   "A newer DLSS NR model ({version}) is published -- fetching it…": "더 새로운 DLSS NR 모델({version})이 게시되었습니다 -- 가져오는 중…",
   "DLSS NR model refreshed in: {list}.": "DLSS NR 모델 갱신됨: {list}.",
   "Support bundle": "지원 번들",
-  "Save every log and the app's own view of this game into one zip to share.": "모든 로그와 이 게임에 대한 앱 자체 정보를 하나의 zip으로 저장해 공유합니다.",
   "Could not save the support bundle: {error}": "지원 번들을 저장할 수 없습니다: {error}",
   "Support bundle saved: {path} ({count} files). Last run: {verdict}": "지원 번들 저장됨: {path} ({count}개 파일). 마지막 실행: {verdict}",
   "Last run {when}: {verdict}": "마지막 실행 {when}: {verdict}",
@@ -416,4 +415,5 @@ window.I18N.register("ko", {
   "Could not launch {name}: {error}": "{name}을(를) 실행할 수 없습니다: {error}",
   "Launched {name} ({exe}).": "{name} 실행됨 ({exe}).",
   "Launching {name} through Steam.": "Steam을 통해 {name}을(를) 실행합니다.",
+  "Packs this game's logs, settings and what this app knows about it into one zip on your Desktop, to attach when asking for help. Nothing is sent anywhere.": "이 게임의 로그와 설정, 그리고 이 앱이 파악한 정보를 바탕화면에 zip 하나로 묶습니다. 도움을 요청할 때 첨부하세요. 어디로도 전송되지 않습니다.",
 });

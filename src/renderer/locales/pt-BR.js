@@ -391,7 +391,6 @@ window.I18N.register('pt-BR', {
   "A newer DLSS NR model ({version}) is published -- fetching it…": "Um modelo DLSS NR mais novo ({version}) foi publicado -- baixando…",
   "DLSS NR model refreshed in: {list}.": "Modelo DLSS NR atualizado em: {list}.",
   "Support bundle": "Pacote de suporte",
-  "Save every log and the app's own view of this game into one zip to share.": "Salva todos os logs e a visão do próprio app sobre este jogo em um zip para compartilhar.",
   "Could not save the support bundle: {error}": "Não foi possível salvar o pacote de suporte: {error}",
   "Support bundle saved: {path} ({count} files). Last run: {verdict}": "Pacote de suporte salvo: {path} ({count} arquivos). Última execução: {verdict}",
   "Last run {when}: {verdict}": "Última execução {when}: {verdict}",
@@ -416,4 +415,5 @@ window.I18N.register('pt-BR', {
   "Could not launch {name}: {error}": "Não foi possível iniciar {name}: {error}",
   "Launched {name} ({exe}).": "{name} iniciado ({exe}).",
   "Launching {name} through Steam.": "Iniciando {name} pelo Steam.",
+  "Packs this game's logs, settings and what this app knows about it into one zip on your Desktop, to attach when asking for help. Nothing is sent anywhere.": "Junta os logs e as configurações deste jogo e o que este app sabe sobre ele em um zip na sua Área de trabalho, para anexar ao pedir ajuda. Nada é enviado a lugar nenhum.",
 });

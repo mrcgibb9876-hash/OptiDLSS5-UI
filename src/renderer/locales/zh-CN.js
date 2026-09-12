@@ -391,7 +391,6 @@ window.I18N.register("zh-CN", {
   "A newer DLSS NR model ({version}) is published -- fetching it…": "已发布更新的 DLSS NR 模型（{version}）-- 正在获取…",
   "DLSS NR model refreshed in: {list}.": "已在以下游戏中刷新 DLSS NR 模型：{list}。",
   "Support bundle": "支持包",
-  "Save every log and the app's own view of this game into one zip to share.": "将所有日志和应用对这款游戏的自身视图保存到一个 zip 中以便分享。",
   "Could not save the support bundle: {error}": "无法保存支持包：{error}",
   "Support bundle saved: {path} ({count} files). Last run: {verdict}": "支持包已保存：{path}（{count} 个文件）。上次运行：{verdict}",
   "Last run {when}: {verdict}": "上次运行 {when}：{verdict}",
@@ -416,4 +415,5 @@ window.I18N.register("zh-CN", {
   "Could not launch {name}: {error}": "无法启动 {name}：{error}",
   "Launched {name} ({exe}).": "已启动 {name}（{exe}）。",
   "Launching {name} through Steam.": "正在通过 Steam 启动 {name}。",
+  "Packs this game's logs, settings and what this app knows about it into one zip on your Desktop, to attach when asking for help. Nothing is sent anywhere.": "把这个游戏的日志、设置以及本应用掌握的信息打包成桌面上的一个 zip，求助时附上即可。不会向任何地方发送。",
 });

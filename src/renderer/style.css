@@ -244,6 +244,37 @@ body {
 }
 .card-actions .btn { flex: 1; min-width: 70px; }
 .card-actions-row2 { display: flex; gap: 6px; }
+
+/* A floating explanation on hover, for buttons whose name alone does not say what they do.
+   Faster and larger than the native title tooltip, and it wraps. Anchored above the button
+   so it stays inside the card (the card clips overflow) for the buttons in its bottom rows. */
+.has-tip { position: relative; }
+.has-tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%) translateY(4px);
+  width: 240px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 400;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+  z-index: 20;
+}
+.has-tip:hover::after, .has-tip:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
+.card-actions-row2 .has-tip::after { left: auto; right: 0; transform: translateY(4px); }
+.card-actions-row2 .has-tip:hover::after, .card-actions-row2 .has-tip:focus-visible::after { transform: translateY(0); }
 .card-actions-row2 .btn { flex: 1; }
 
 .modal-overlay {

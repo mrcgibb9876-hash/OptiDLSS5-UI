@@ -391,7 +391,6 @@ window.I18N.register("ru", {
   "A newer DLSS NR model ({version}) is published -- fetching it…": "Опубликована более новая модель DLSS NR ({version}) -- загружаю…",
   "DLSS NR model refreshed in: {list}.": "Модель DLSS NR обновлена в: {list}.",
   "Support bundle": "Пакет поддержки",
-  "Save every log and the app's own view of this game into one zip to share.": "Сохраняет все журналы и собственное представление приложения об этой игре в один zip для отправки.",
   "Could not save the support bundle: {error}": "Не удалось сохранить пакет поддержки: {error}",
   "Support bundle saved: {path} ({count} files). Last run: {verdict}": "Пакет поддержки сохранён: {path} ({count} файлов). Последний запуск: {verdict}",
   "Last run {when}: {verdict}": "Последний запуск {when}: {verdict}",
@@ -416,4 +415,5 @@ window.I18N.register("ru", {
   "Could not launch {name}: {error}": "Не удалось запустить {name}: {error}",
   "Launched {name} ({exe}).": "{name} запущена ({exe}).",
   "Launching {name} through Steam.": "{name} запускается через Steam.",
+  "Packs this game's logs, settings and what this app knows about it into one zip on your Desktop, to attach when asking for help. Nothing is sent anywhere.": "Собирает логи и настройки этой игры и то, что приложение о ней знает, в один zip на рабочем столе -- приложите его, когда просите о помощи. Никуда ничего не отправляется.",
 });
