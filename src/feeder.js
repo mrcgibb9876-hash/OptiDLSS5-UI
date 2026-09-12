@@ -184,28 +184,51 @@ function feederDeployed(dir) {
 
 // What's deployed, what's missing, and the real reason anything blocking is blocking -- same
 // "explain, don't just disable" posture as injectorReadiness() in injector.js.
-function feederReadiness(dir, api) {
-  if (api === 'vulkan') return { ready: false, supported: false, reason: 'Vulkan needs a layer, not a ReShade add-on -- not yet supported by this app.' };
-  if (api !== 'dx11' && api !== 'dx12') {
+// The Feeder runs on D3D11, D3D12, Vulkan and OpenGL (its README: DOOM 2016 on Vulkan, MX
+// Bikes on OpenGL, "any ... game with a working ReShade depth buffer"); on the last two the
+// DLSS evaluate still happens on a private D3D12 device, and only how ReShade gets into the
+// game differs (reshadeModeForApi). Async because the Vulkan layer is a registry read.
+async function feederReadiness(dir, api, { execFileAsync = null } = {}) {
+  if (!['dx11', 'dx12', 'vulkan', 'opengl'].includes(api)) {
     return { ready: false, supported: false, reason: 'Render API not detected ({api}) -- not yet supported by this app.', reasonVars: { api: api || 'unknown' } };
   }
 
-  const reshadeInstalled = fs.existsSync(path.join(dir, RESHADE_DLL_NAME));
+  const mode = reshadeModeForApi(api);
+  let reshadeInstalled = false;
+  let vulkanLayer = null;
+  if (mode === 'vulkan-layer') {
+    vulkanLayer = await vulkanLayerStatus({ execFileAsync });
+    reshadeInstalled = vulkanLayer.registered && vulkanLayer.addon;
+  } else if (mode === 'opengl32') {
+    reshadeInstalled = isReShadeDll(path.join(dir, OPENGL_PROXY_NAME));
+  } else {
+    reshadeInstalled = fs.existsSync(path.join(dir, RESHADE_DLL_NAME));
+  }
   const addonInstalled = fs.existsSync(path.join(dir, 'dlss5-feed.addon64'));
   const fxInstalled = fs.existsSync(path.join(dir, 'reshade-shaders', 'Shaders', 'DLSS5_Feed.fx'));
   const headersInstalled = RESHADE_COMMON_HEADERS.every((f) => fs.existsSync(path.join(dir, 'reshade-shaders', 'Shaders', f)));
   const dlssInstalled = fs.existsSync(path.join(dir, 'nvngx_dlss.dll'));
   const dlssnrInstalled = fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'));
 
+  const notes = [];
+  if (api === 'vulkan') {
+    notes.push('NVIDIA Smooth Motion must be off for this game: on Vulkan the driver invents its extra frames after the Feeder has run, so half the frames carry no neural pass (the Feeder\'s README, "Smooth Motion off on Vulkan"). NVIDIA app or Profile Inspector, per game.');
+    if (vulkanLayer && vulkanLayer.registered && !vulkanLayer.addon) notes.push(`The ReShade Vulkan layer on this PC (${vulkanLayer.dllPath || vulkanLayer.manifestPath}) has no add-on support. ${VULKAN_LAYER_INSTRUCTION}`);
+    else if (vulkanLayer && !vulkanLayer.registered) notes.push(`ReShade is not installed as a Vulkan layer on this PC. ${VULKAN_LAYER_INSTRUCTION}`);
+  }
+
   return {
     ready: true,
     supported: true,
+    reshadeMode: mode,
     reshadeInstalled,
+    vulkanLayer,
     addonInstalled,
     fxInstalled,
     headersInstalled,
     dlssInstalled,
     dlssnrInstalled,
+    notes,
     complete: reshadeInstalled && addonInstalled && fxInstalled && headersInstalled && dlssInstalled && dlssnrInstalled,
   };
 }
@@ -263,16 +286,115 @@ async function resolveFeederAsset(ghHeaders) {
 // rest of this app uses for ordinary zips -- see deployStreamlineFolder/ensureREFrameworkForGame
 // in main.js) fails on it because the End Of Central Directory record isn't the very last thing
 // in the file. zip.js's EOCD scan handles both a plain zip and this case with the same code path.
-async function deployReShade(dir, cacheDir, ghHeaders, { force = false } = {}) {
-  const dest = path.join(dir, RESHADE_DLL_NAME);
-  if (fs.existsSync(dest) && !force) return { deployed: false, reason: 'already present', file: RESHADE_DLL_NAME };
+// How ReShade reaches the game, by graphics API (the Feeder's README, "Install for a Vulkan
+// game" / "Install for an OpenGL game"):
+//   local         D3D11/D3D12: a plain ReShade64.dll beside the exe that OptiScaler loads itself
+//                 ([Plugins] LoadReshade=true). Not a proxy.
+//   opengl32      OpenGL: ReShade *is* the game's opengl32.dll -- the only way its GL hooks run.
+//                 Add-ons load from its own folder, so the game folder still holds the add-on.
+//   vulkan-layer  Vulkan: ReShade only runs as a Vulkan implicit layer, machine-wide, registered
+//                 in the registry (Khronos\Vulkan\ImplicitLayers) and shared by every Vulkan game.
+//                 The add-on is still found per game through AddonPath=.\ in the game's
+//                 ReShade.ini. This app never writes that registration itself: it is a
+//                 machine-wide change under HKLM, and ReShade's own installer (cached here) is
+//                 the right tool -- the user runs it once, choosing Vulkan and "Enable loading
+//                 of add-ons".
+// OptiScaler in the last two takes a name the game imports at start (winmm.dll / version.dll,
+// main.js picks from the exe's import table) and must not try to load a ReShade64.dll that is
+// not there.
+const RESHADE_MODE_FOR_API = { dx11: 'local', dx12: 'local', opengl: 'opengl32', vulkan: 'vulkan-layer' };
+function reshadeModeForApi(api) { return RESHADE_MODE_FOR_API[api] || 'local'; }
+
+const OPENGL_PROXY_NAME = 'opengl32.dll';
+const OPENGL_BACKUP_NAME = 'opengl32.dll.dlss5ui-orig';
+
+// The add-on build of ReShade exports the registration entry points add-ons look up by name;
+// the plain build does not. Same version number, same product name (the README's issue #53),
+// so the export table is the only honest tell.
+function isAddonReShadeDll(file) {
+  try {
+    return fs.readFileSync(file).includes(Buffer.from('ReShadeRegisterAddon', 'latin1'));
+  } catch {
+    return false;
+  }
+}
+
+// Whether a file is a ReShade build at all (for an opengl32.dll that might be the game's own).
+function isReShadeDll(file) {
+  try {
+    return fs.statSync(file).size > 1024 * 1024 && fs.readFileSync(file).includes(Buffer.from('ReShade', 'latin1'));
+  } catch {
+    return false;
+  }
+}
+
+// The machine's ReShade Vulkan layer, if any: where ReShade's own installer puts it (HKLM,
+// C:\ProgramData\ReShade\ReShade64.json -> .\ReShade64.dll) or a per-user registration (HKCU).
+// Read-only. The Vulkan loader takes the first layer of a given name it finds, HKLM before
+// HKCU, so the registration that counts is the first one -- which is why a plain build
+// registered by an old ReShade install for some other game silently wins over anything
+// registered later.
+async function vulkanLayerStatus({ execFileAsync, regQuery = null } = {}) {
+  const out = { registered: false, manifestPath: null, dllPath: null, addon: false, hive: null };
+  const query = regQuery || (execFileAsync
+    ? async (hive) => (await execFileAsync('reg.exe', ['query', `${hive}\\SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers`], { windowsHide: true })).stdout
+    : null);
+  if (!query) return out;
+  for (const hive of ['HKLM', 'HKCU']) {
+    let stdout = '';
+    try { stdout = await query(hive); } catch { continue; }
+    const line = (stdout || '').split(/\r?\n/).map((l) => l.trim()).find((l) => /reshade64\.json\s+REG_DWORD/i.test(l));
+    if (!line) continue;
+    const manifestPath = line.replace(/\s+REG_DWORD.*$/i, '').trim();
+    out.registered = true;
+    out.hive = hive;
+    out.manifestPath = manifestPath;
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      const lib = manifest && manifest.layer && manifest.layer.library_path ? String(manifest.layer.library_path) : '.\\ReShade64.dll';
+      out.dllPath = path.isAbsolute(lib) ? lib : path.resolve(path.dirname(manifestPath), lib);
+      out.addon = isAddonReShadeDll(out.dllPath);
+    } catch {}
+    return out;
+  }
+  return out;
+}
+
+const VULKAN_LAYER_INSTRUCTION = 'Run ReShade\'s installer, pick this game\'s exe, choose Vulkan and tick "Enable loading of add-ons" -- then deploy again.';
+
+async function deployReShade(dir, cacheDir, ghHeaders, { force = false, api = 'dx11', execFileAsync = null } = {}) {
+  const mode = reshadeModeForApi(api);
+
+  if (mode === 'vulkan-layer') {
+    // Machine-wide and shared: an add-on build already registered is used as it is (its
+    // version does not matter to the Feeder). Anything else is the user's installer run --
+    // the setup exe is cached so the button in the Edit dialog can open it for them.
+    const status = await vulkanLayerStatus({ execFileAsync });
+    if (status.registered && status.addon) return { deployed: false, reason: 'add-on Vulkan layer already registered', file: status.dllPath, mode, manifestPath: status.manifestPath };
+    const setupPath = await downloadToCache(RESHADE_SETUP_URL, cacheDir, path.basename(RESHADE_SETUP_URL), ghHeaders);
+    const err = new Error(status.registered
+      ? `The ReShade Vulkan layer on this PC (${status.dllPath || status.manifestPath}) is a build without add-on support, so the Feeder would never load. ${VULKAN_LAYER_INSTRUCTION}`
+      : `ReShade is not installed as a Vulkan layer on this PC. ${VULKAN_LAYER_INSTRUCTION}`);
+    err.needsReShadeInstaller = true;
+    err.setupPath = setupPath;
+    throw err;
+  }
+
+  const fileName = mode === 'opengl32' ? OPENGL_PROXY_NAME : RESHADE_DLL_NAME;
+  const dest = path.join(dir, fileName);
+  if (fs.existsSync(dest) && !force) {
+    if (mode !== 'opengl32' || isReShadeDll(dest)) return { deployed: false, reason: 'already present', file: fileName, mode };
+    // The game's own opengl32.dll (rare, but a wrapper such as dgVoodoo ships one): kept
+    // under a backup name so Remove can put it back.
+    await fsp.copyFile(dest, path.join(dir, OPENGL_BACKUP_NAME));
+  }
 
   const setupPath = await downloadToCache(RESHADE_SETUP_URL, cacheDir, path.basename(RESHADE_SETUP_URL), ghHeaders);
   const zip = openZip(setupPath);
   const entry = findEntry(zip, /^ReShade64\.dll$/i);
   if (!entry) throw new Error('ReShade64.dll not found in the downloaded ReShade setup');
   extractEntryTo(zip, entry, dest);
-  return { deployed: true, file: RESHADE_DLL_NAME };
+  return { deployed: true, file: fileName, mode };
 }
 
 // ReShade.fxh / ReShadeUI.fxh -- see the RESHADE_COMMON_HEADERS comment above for why these
@@ -577,9 +699,10 @@ async function feederUpdateCheck(dir, ghHeaders) {
 // force: true re-fetches and overwrites everything (used by an update). licenseConfirmed: only
 // consulted when providerId names a non-auto-fetchable provider (currently just LumeniteFX) --
 // deployLumeniteFx() itself refuses without it, this just threads it through.
-async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifest, compareVersions, ghHeaders, force = false, licenseConfirmed = false, unity = false }) {
+async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifest, compareVersions, ghHeaders, force = false, licenseConfirmed = false, unity = false, execFileAsync = null }) {
   const results = {};
-  results.reshade = await deployReShade(dir, cacheDir, ghHeaders, { force });
+  results.reshade = await deployReShade(dir, cacheDir, ghHeaders, { force, api, execFileAsync });
+  results.reshadeMode = results.reshade.mode || reshadeModeForApi(api);
   results.commonHeaders = await deployReShadeCommonHeaders(dir, ghHeaders, { force, cacheDir });
   results.addon = await deployFeederAddon(dir, cacheDir, ghHeaders, { force });
 
@@ -601,7 +724,7 @@ async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifes
     // placedNvngxDlss: whether THIS app put nvngx_dlss.dll here (as opposed to skipping one
     // already present) -- removeFeederStack() only takes back what was placed.
     const placedNvngxDlss = results.dlss.deployed || !!(previousMarker && previousMarker.placedNvngxDlss);
-    writeFeederDeployMarker(dir, { feederVersion, mvProviderId: providerId, placedNvngxDlss, deployedAt: new Date().toISOString() });
+    writeFeederDeployMarker(dir, { feederVersion, mvProviderId: providerId, placedNvngxDlss, reshadeMode: results.reshadeMode, deployedAt: new Date().toISOString() });
   }
 
   return results;
@@ -642,6 +765,19 @@ async function removeFeederStack(dir, { keepReShade = false } = {}) {
   } else {
     for (const name of [RESHADE_DLL_NAME, 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log']) await rm(name);
   }
+  // OpenGL: ReShade was the game's opengl32.dll. Only a ReShade build is taken (never a
+  // game's own), and a backed-up original goes back in its place.
+  const gl = path.join(dir, OPENGL_PROXY_NAME);
+  if (fs.existsSync(gl) && isReShadeDll(gl)) {
+    await rm(OPENGL_PROXY_NAME);
+    const backup = path.join(dir, OPENGL_BACKUP_NAME);
+    if (fs.existsSync(backup)) {
+      await fsp.rename(backup, gl);
+      kept.push(OPENGL_PROXY_NAME + ' (the game\'s own, put back)');
+    }
+  }
+  // Vulkan: the ReShade layer is machine-wide and shared by every Vulkan game; it stays.
+  if (marker && marker.reshadeMode === 'vulkan-layer') kept.push('the ReShade Vulkan layer (machine-wide, shared by other games)');
 
   const shipped = nativeDlss.shippedDlssPath(dir);
   if (shipped || !(marker && marker.placedNvngxDlss === false)) {
@@ -654,9 +790,22 @@ async function removeFeederStack(dir, { keepReShade = false } = {}) {
   return { removed, kept, shippedDlss: shipped };
 }
 
+// How ReShade reached this game's Feeder deploy, from the marker; 'local' for a deploy from
+// before the marker carried it (every such deploy was D3D11/D3D12).
+function feederReShadeMode(dir) {
+  const marker = readFeederDeployMarker(dir);
+  return (marker && marker.reshadeMode) || 'local';
+}
+
 module.exports = {
   MV_PROVIDERS,
   downloadToCache,
+  reshadeModeForApi,
+  feederReShadeMode,
+  vulkanLayerStatus,
+  isAddonReShadeDll,
+  isReShadeDll,
+  RESHADE_SETUP_URL,
   mvProviderList,
   needsFeeder,
   feederDeployed,

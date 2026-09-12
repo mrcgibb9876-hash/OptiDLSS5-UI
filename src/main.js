@@ -17,7 +17,7 @@ const nativeDlss = require('./native-dlss');
 const { recommendRoute, withApiOverride, API_OVERRIDE_VALUES } = require('./route');
 const gpu = require('./gpu');
 const amdnr = require('./amdnr');
-const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
+const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, peImports, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const managerUpdate = require('./manager-update');
 const runlog = require('./runlog');
@@ -300,7 +300,21 @@ ipcMain.handle('feeder:readiness', async (_evt, exePath) => {
   if ((lumaue.isLumaUeDefault(exePath) || lumaue.lumaUeDeployed(dir)) && !feeder.feederDeployed(dir)) {
     return { ready: false, needed: false, reason: 'This game uses Luma UE for its DLSS call, not the Feeder -- see the Luma UE section.' };
   }
-  return { needed: true, ...feeder.feederReadiness(dir, detected.api) };
+  return { needed: true, ...(await feeder.feederReadiness(dir, detected.api, { execFileAsync })) };
+});
+
+// ReShade's own installer, for the one step this app leaves to it: registering ReShade as the
+// machine-wide Vulkan layer with add-on support (an HKLM registration -- the installer asks for
+// elevation itself). The setup exe is the same one the Feeder deploy downloads and caches.
+ipcMain.handle('feeder:openReShadeSetup', async () => {
+  try {
+    const setupPath = await feeder.downloadToCache(feeder.RESHADE_SETUP_URL, feederCacheDir(), path.basename(feeder.RESHADE_SETUP_URL), GITHUB_HEADERS);
+    const opened = await shell.openPath(setupPath);
+    if (opened) throw new Error(opened);
+    return { ok: true, setupPath };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
 });
 
 ipcMain.handle('feeder:mvProviders', () => {
@@ -552,10 +566,16 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
       // Unity clears its depth buffer before the UI pass and renders reversed-Z; ReShade's
       // Generic Depth needs telling both, or the Feeder gets a flat depth (feeder.js).
       unity: isUnityGame(dir, exePath),
+      execFileAsync,
     });
     return { ok: true, ...results };
   } catch (error) {
-    return { ok: false, error: String(error && error.message ? error.message : error) };
+    return {
+      ok: false,
+      error: String(error && error.message ? error.message : error),
+      // The Vulkan case this app hands to ReShade's own installer (feeder.js, deployReShade).
+      needsReShadeInstaller: !!(error && error.needsReShadeInstaller),
+    };
   }
 });
 
@@ -1255,7 +1275,7 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
     let proxy = null;
     let proxyError = null;
     try {
-      proxy = await installProxy(dir, proxyName || DEFAULT_PROXY);
+      proxy = await installProxy(dir, proxyName || (await proxyNameForGame(dir, exePath, feederGame)));
     } catch (err) {
       // Not fatal: everything else is in place, and Run Setup is still there to do it by hand.
       proxyError = err.message;
@@ -2626,10 +2646,20 @@ async function autoConfigureGame(dir, exePath) {
   const applied = patchIniDefaults(iniPath, edits);
   // A DLSS-5-only game keeps its own DLSS whether or not OptiFG is layered on -- see
   // keepGamesOwnDlss for why the upscaler key cannot be left at auto.
+  // A Feeder game's DLSS call always arrives on a private D3D12 device -- on D3D11, Vulkan
+  // and OpenGL games too (the Feeder's README: "Dx12Upscaler=dlss" for the DLSS-NR consumer)
+  // -- so the D3D12 key is set whatever API the game itself renders with.
+  const upscalerApis = feederGame ? [...new Set([...apis, 'dx12'])] : apis;
   let forced = dlss5Only
-    ? patchIniValues(iniPath, [...(optiFgOn ? OPTIFG_FORCED : DLSS5_ONLY_FORCED), ...keepGamesOwnDlss(apis)])
+    ? patchIniValues(iniPath, [...(optiFgOn ? OPTIFG_FORCED : DLSS5_ONLY_FORCED), ...keepGamesOwnDlss(upscalerApis)])
     : [];
-  if (feederGame && feeder.feederDeployed(dir)) forced = [...forced, ...patchIniValues(iniPath, LOAD_RESHADE_FORCED)];
+  if (feederGame && feeder.feederDeployed(dir)) {
+    // Only where ReShade is the plain ReShade64.dll beside the exe. As the game's opengl32.dll
+    // or as the Vulkan layer it is already in the process, and a second copy loaded by
+    // OptiScaler would be two ReShades.
+    const local = feeder.feederReShadeMode(dir) === 'local';
+    forced = [...forced, ...patchIniValues(iniPath, local ? LOAD_RESHADE_FORCED : [{ section: 'Plugins', key: 'LoadReshade', value: 'false' }])];
+  }
   // Luma UE deploys its own ReShade64.dll the same non-proxying way the Feeder does (see
   // lumaue.js's file header) -- OptiScaler needs the same explicit LoadReshade nudge to load it.
   if (lumaue.lumaUeDeployed(dir)) forced = [...forced, ...patchIniValues(iniPath, LOAD_RESHADE_FORCED)];
@@ -2747,6 +2777,20 @@ const INSTALL_MARKER = '.optiscaler-manager-install.json';
 // dxgi.dll is what the script offers as option 1 and what nearly every DX11/DX12/Vulkan game on
 // Windows already loads.
 const DEFAULT_PROXY = 'dxgi.dll';
+
+// The proxy name for a game. dxgi.dll for anything Direct3D. A Vulkan or OpenGL Feeder game
+// never imports dxgi.dll itself: OptiScaler would only load once the Feeder's private D3D12
+// device pulled it in, too late for its loader hook to catch the Feeder's NGX module. The
+// Feeder's README says winmm.dll or version.dll ("a name the process imports at start"); the
+// exe's own import table says which of the candidates it actually imports.
+const EARLY_PROXY_CANDIDATES = ['winmm.dll', 'version.dll', 'dbghelp.dll', 'wininet.dll', 'winhttp.dll'];
+async function proxyNameForGame(dir, exePath, feederGame) {
+  if (!feederGame) return DEFAULT_PROXY;
+  const api = await resolveApi(dir, exePath);
+  if (api !== 'vulkan' && api !== 'opengl') return DEFAULT_PROXY;
+  const imports = await peImports(exePath);
+  return EARLY_PROXY_CANDIDATES.find((name) => imports.includes(name)) || 'winmm.dll';
+}
 
 function readInstallMarker(dir) {
   return readJson(path.join(dir, INSTALL_MARKER), null);

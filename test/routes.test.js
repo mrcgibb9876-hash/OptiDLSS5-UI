@@ -68,3 +68,20 @@ test('runlog turns the logs into the verdict the card shows', async () => {
   assert.equal((await runlog.analyzeRun(dup)).verdict, 'duplicate-dlss');
   assert.equal((await runlog.analyzeRun(scratchDir('run-none'))).ran, false);
 });
+
+test('Vulkan and OpenGL games with no DLSS of their own take the Feeder route, with the API-specific note', () => {
+  const vk = scratchDir('route-vk');
+  const vkExe = fakeExe(vk, 'Doom.exe');
+  const r = route.recommendRoute(vk, vkExe, { api: 'vulkan', apis: ['vulkan'] }, 'nvidia');
+  assert.equal(r.route, 'feeder');
+  assert.match(r.reason, /Vulkan layer/);
+  assert.match(r.reason, /Smooth Motion/);
+
+  const gl = scratchDir('route-gl');
+  const glExe = fakeExe(gl, 'MXBikes.exe');
+  const g = route.recommendRoute(gl, glExe, { api: 'opengl', apis: ['opengl'] }, 'nvidia');
+  assert.equal(g.route, 'feeder');
+  assert.match(g.reason, /opengl32\.dll/);
+
+  assert.ok(route.API_OVERRIDE_VALUES.includes('opengl'));
+});

@@ -107,3 +107,13 @@ test('anti-cheat is read from the files beside the exe, and Call of Duty HQ coun
   write(clean, 'data.pak');
   assert.equal(detect.antiCheatPresent(clean, path.join(clean, 'Game.exe')), null);
 });
+
+test('a 64-bit game that links only OpenGL is an OpenGL Feeder game, not unsupported', async () => {
+  const dir = scratchDir('gl-detect');
+  const exe = path.join(dir, 'MXBikes.exe');
+  fs.writeFileSync(exe, Buffer.concat([Buffer.from('MZ'), Buffer.alloc(200), Buffer.from('opengl32.dll\0kernel32.dll\0', 'latin1')]));
+  const d = await detect.detectGame(dir, exe);
+  assert.equal(d.api, 'opengl');
+  assert.equal(d.recommend, 'optiscaler');
+  assert.match(d.reason, /opengl32\.dll/);
+});

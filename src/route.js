@@ -48,7 +48,7 @@ const verified = require('./verified');
 // primary, joins the list of APIs the game runs on (so keepGamesOwnDlss writes its upscaler key
 // too), and an "old API only" verdict is lifted, since the user is saying a modern path exists.
 // Pure so it can be tested; main.js reads the marker and calls this.
-const API_OVERRIDE_VALUES = ['dx11', 'dx12', 'vulkan'];
+const API_OVERRIDE_VALUES = ['dx11', 'dx12', 'vulkan', 'opengl'];
 
 function withApiOverride(detected, override) {
   const base = detected || {};
@@ -171,26 +171,30 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
       ]);
   }
 
-  if (feederDeployed || api === 'dx11' || api === 'dx12') {
+  // The Feeder runs on all four APIs. On Vulkan and OpenGL the DLSS evaluate still happens on
+  // a private D3D12 device; what differs is how ReShade gets into the game (feeder.js,
+  // reshadeModeForApi) -- and on Vulkan, NVIDIA Smooth Motion has to be off for the game.
+  if (feederDeployed || api === 'dx11' || api === 'dx12' || api === 'vulkan' || api === 'opengl') {
+    const how = api === 'vulkan'
+      ? ' On Vulkan, ReShade runs as its machine-wide Vulkan layer (ReShade\'s own installer, with add-on support), ' +
+        'and NVIDIA Smooth Motion must be off for this game.'
+      : api === 'opengl'
+        ? ' On OpenGL, ReShade goes in as the game\'s opengl32.dll.'
+        : '';
     return finish('feeder', 'OptiScaler + Feeder',
       'No DLSS of its own, so OptiScaler alone would have nothing to hook. The DLSS5 Feeder synthesises the DLSS ' +
-      'call from ReShade\'s depth and motion vectors; Install deploys it first, then OptiScaler. ' +
-      'Frame Generation: Lossless Scaling.',
+      'call from ReShade\'s depth and motion vectors; Install deploys it first, then OptiScaler.' + how +
+      ' Frame Generation: Lossless Scaling.',
       [
         { key: 'feeder', label: 'Deploy the DLSS5 Feeder', done: feederDeployed },
         { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
       ]);
   }
 
-  if (api === 'vulkan') {
-    return finish('unsupported', 'Not supported yet',
-      'No DLSS of its own, and it runs on Vulkan. The DLSS5 Feeder is a ReShade add-on, which only works on ' +
-      'DX11/DX12 -- Vulkan needs a layer this app does not deploy yet.', []);
-  }
-
   return finish('unknown', 'Undetermined',
-    'No DLSS of its own, and its graphics API could not be detected yet -- the DLSS5 Feeder route needs DX11 or ' +
-    'DX12. For a Unity game, run it once and this is re-checked from its Player.log.', []);
+    'No DLSS of its own, and its graphics API could not be detected yet -- the DLSS5 Feeder route needs to know ' +
+    'whether this is DX11, DX12, Vulkan or OpenGL. For a Unity game, run it once and this is re-checked from its ' +
+    'Player.log; otherwise choose the API in Edit.', []);
 }
 
 module.exports = { recommendRoute, optiScalerInstalled, withApiOverride, API_OVERRIDE_VALUES };

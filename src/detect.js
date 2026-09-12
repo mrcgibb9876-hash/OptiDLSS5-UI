@@ -820,6 +820,13 @@ async function detectGame(dir, exePath) {
   }
   const logStat = optiScalerLogStat(dir);
 
+  // A 64-bit game whose only API is OpenGL is a DLSS5 Feeder game: ReShade goes in as its
+  // opengl32.dll and the Feeder evaluates on a private D3D12 device (its README: MX Bikes,
+  // KOTOR, Worms). DX9/DX10 stay unsupported -- the Feeder has beta paths for those, through
+  // wrappers this app does not deploy.
+  if (!found.api && found.old && found.old[0] === 'opengl' && bitness !== 32) {
+    found = { ...found, api: 'opengl', apis: ['opengl'], reason: `OpenGL -- ${found.reason}; the DLSS5 Feeder route puts ReShade in as opengl32.dll` };
+  }
   const oldOnly = !found.api && found.old && found.old.length > 0;
   // The tag names every API the game really runs on, primary first -- "DX11/DX12" for a game
   // that links DX11 but ships a DX12 path too. Vulkan is listed only when it is the primary:
@@ -836,7 +843,7 @@ async function detectGame(dir, exePath) {
     reason = `32-bit executable -- OptiScaler and the DLSS5 Feeder add-on this app deploys are 64-bit only (${reason})`;
   } else if (found.api) {
     recommend = 'optiscaler';
-    reason = `${reason} -- OptiScaler hooks this directly`;
+    if (found.api !== 'opengl') reason = `${reason} -- OptiScaler hooks this directly`;
   } else if (oldOnly) {
     recommend = 'unsupported';
     reason = `${reason} -- OptiScaler has no hook here`;

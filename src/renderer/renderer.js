@@ -445,7 +445,7 @@ async function applyRecommendation(game, card, backends) {
     install.classList.add('btn-primary');
   }
 }
-const API_LABEL = { dx12: 'DX12', dx11: 'DX11', vulkan: 'Vulkan' };
+const API_LABEL = { dx12: 'DX12', dx11: 'DX11', vulkan: 'Vulkan', opengl: 'OpenGL' };
 
 function flipToConfirm(card, { title, detail, onConfirm, confirmLabel = t('Remove'), danger = true }) {
   card.querySelector('.card-remove-title').textContent = title;
@@ -776,7 +776,14 @@ async function installGame(game) {
       ? await window.api.feederDeploy(game.exePath, provider.id, { force: false, licenseConfirmed: false })
       : { ok: false, error: t('no auto-fetchable motion-vector provider') };
     if (!deployed.ok) {
-      toast(t('Could not deploy the DLSS5 Feeder: {error}. OptiScaler was not installed -- without the Feeder it would have no DLSS call to hook. Retry once you are online.', { error: deployed.error }));
+      if (deployed.needsReShadeInstaller) {
+        // Vulkan: ReShade's own installer registers the machine-wide layer; this app opens it.
+        toast(t('Could not deploy the DLSS5 Feeder: {error}', { error: deployed.error }));
+        const r = await window.api.feederOpenReShadeSetup();
+        if (r.ok) toast(t('ReShade\'s installer is open: pick this game\'s exe, choose Vulkan, tick "Enable loading of add-ons". Then press Install again.'));
+      } else {
+        toast(t('Could not deploy the DLSS5 Feeder: {error}. OptiScaler was not installed -- without the Feeder it would have no DLSS call to hook. Retry once you are online.', { error: deployed.error }));
+      }
       renderGrid();
       return;
     }
@@ -1026,7 +1033,7 @@ async function loadApiSection(game) {
   auto.value = '';
   auto.textContent = t('Auto (detected: {api})', { api: detectedLabel });
   select.appendChild(auto);
-  for (const api of ['dx12', 'dx11', 'vulkan']) {
+  for (const api of ['dx12', 'dx11', 'vulkan', 'opengl']) {
     const opt = document.createElement('option');
     opt.value = api;
     opt.textContent = API_LABEL[api];
@@ -1339,6 +1346,33 @@ async function loadFeederSection(game) {
   }
   $('#btn-feeder-deploy').disabled = false;
 
+  // What the API adds on top (Vulkan: Smooth Motion off, and the ReShade layer state), with
+  // ReShade's own installer one click away where the layer is the missing piece.
+  let notesEl = $('#game-feeder-notes');
+  if (!notesEl) {
+    notesEl = document.createElement('div');
+    notesEl.id = 'game-feeder-notes';
+    notesEl.className = 'field-hint';
+    status.insertAdjacentElement('afterend', notesEl);
+  }
+  notesEl.innerHTML = '';
+  for (const note of readiness.notes || []) {
+    const p = document.createElement('div');
+    p.textContent = note;
+    notesEl.appendChild(p);
+  }
+  if (readiness.reshadeMode === 'vulkan-layer' && !readiness.reshadeInstalled) {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-small';
+    btn.textContent = t("Open ReShade's installer");
+    btn.addEventListener('click', async () => {
+      const r = await window.api.feederOpenReShadeSetup();
+      toast(r.ok ? t('ReShade\'s installer is open: pick this game\'s exe, choose Vulkan, tick "Enable loading of add-ons". Then Deploy here.') : t('Could not open ReShade\'s installer: {error}', { error: r.error }));
+    });
+    notesEl.appendChild(btn);
+  }
+  notesEl.classList.toggle('hidden', notesEl.childElementCount === 0);
+
   const select = $('#game-feeder-mv-provider');
   if (!feederProvidersLoaded) {
     const providers = await window.api.feederMvProviders();
@@ -1407,6 +1441,12 @@ async function deployFeederStack(game, providerId, force) {
       : t('Feeder stack deployed. Install OptiScaler normally (Install button) to finish -- not the injector.'));
   } else {
     toast(force ? t('Update failed: {error}', { error: res.error }) : t('Deploy failed: {error}', { error: res.error }));
+    // Vulkan: the one step this app leaves to ReShade's own installer -- open it now, since
+    // Deploy is what the user pressed.
+    if (res.needsReShadeInstaller) {
+      const r = await window.api.feederOpenReShadeSetup();
+      if (r.ok) toast(t('ReShade\'s installer is open: pick this game\'s exe, choose Vulkan, tick "Enable loading of add-ons". Then Deploy here.'));
+    }
   }
   loadFeederSection(game);
 }

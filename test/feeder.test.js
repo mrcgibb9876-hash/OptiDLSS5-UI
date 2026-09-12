@@ -80,3 +80,69 @@ test('a Unity game gets copy-before-clears and reversed depth, without losing wh
   const none = fs.readFileSync(path.join(plain, 'ReShade.ini'), 'utf8');
   assert.doesNotMatch(none, /DepthCopyBeforeClears|RESHADE_DEPTH_INPUT_IS_REVERSED/);
 });
+
+test('ReShade reaches the game differently per API, and the Vulkan layer is judged by its add-on exports', async () => {
+  assert.equal(feeder.reshadeModeForApi('dx11'), 'local');
+  assert.equal(feeder.reshadeModeForApi('dx12'), 'local');
+  assert.equal(feeder.reshadeModeForApi('vulkan'), 'vulkan-layer');
+  assert.equal(feeder.reshadeModeForApi('opengl'), 'opengl32');
+
+  const layerDir = scratchDir('vk-layer');
+  const manifest = path.join(layerDir, 'ReShade64.json');
+  // The manifest's library_path is what ReShade's own ships: ".\ReShade64.dll" (one backslash).
+  write(layerDir, 'ReShade64.json', JSON.stringify({ layer: { name: 'VK_LAYER_reshade', library_path: '.' + path.sep + 'ReShade64.dll' } }));
+  write(layerDir, 'ReShade64.dll', 'MZ plain build without the add-on entry points');
+  const regQuery = async (hive) => (hive === 'HKLM'
+    ? ['', 'HKEY_LOCAL_MACHINE' + path.sep + 'SOFTWARE' + path.sep + 'Khronos' + path.sep + 'Vulkan' + path.sep + 'ImplicitLayers', `    ${manifest}    REG_DWORD    0x0`, '    C:' + path.sep + 'Steam' + path.sep + 'SteamOverlayVulkanLayer64.json    REG_DWORD    0x0', ''].join('\r\n')
+    : '');
+  const plain = await feeder.vulkanLayerStatus({ regQuery });
+  assert.equal(plain.registered, true);
+  assert.equal(plain.hive, 'HKLM');
+  assert.equal(plain.addon, false);
+  assert.equal(path.resolve(plain.dllPath), path.resolve(layerDir, 'ReShade64.dll'));
+
+  write(layerDir, 'ReShade64.dll', 'MZ build with ReShadeRegisterAddon and ReShadeRegisterEvent exported');
+  const addon = await feeder.vulkanLayerStatus({ regQuery });
+  assert.equal(addon.addon, true);
+
+  const none = await feeder.vulkanLayerStatus({ regQuery: async () => '' });
+  assert.equal(none.registered, false);
+});
+
+test('readiness on Vulkan wants the add-on layer and warns about Smooth Motion; on OpenGL it wants ReShade as opengl32.dll', async () => {
+  const vk = scratchDir('ready-vk');
+  const r = await feeder.feederReadiness(vk, 'vulkan', {});
+  assert.equal(r.supported, true);
+  assert.equal(r.reshadeMode, 'vulkan-layer');
+  assert.equal(r.reshadeInstalled, false);
+  assert.ok(r.notes.some((n) => /Smooth Motion/.test(n)));
+
+  const gl = scratchDir('ready-gl');
+  const before = await feeder.feederReadiness(gl, 'opengl', {});
+  assert.equal(before.reshadeMode, 'opengl32');
+  assert.equal(before.reshadeInstalled, false);
+  fs.writeFileSync(path.join(gl, 'opengl32.dll'), Buffer.concat([Buffer.from('MZ ReShade '), Buffer.alloc(1024 * 1024 + 1)]));
+  const after = await feeder.feederReadiness(gl, 'opengl', {});
+  assert.equal(after.reshadeInstalled, true);
+
+  const dx9 = await feeder.feederReadiness(gl, 'dx9', {});
+  assert.equal(dx9.supported, false);
+});
+
+test('Remove takes a ReShade opengl32.dll out and puts the game\'s own back; never a non-ReShade one', async () => {
+  const dir = scratchDir('remove-gl');
+  fs.writeFileSync(path.join(dir, 'opengl32.dll'), Buffer.concat([Buffer.from('MZ ReShade '), Buffer.alloc(1024 * 1024 + 1)]));
+  write(dir, 'opengl32.dll.dlss5ui-orig', 'the game\'s own wrapper');
+  write(dir, 'dlss5-feed.addon64', 'x');
+  write(dir, '.dlss5ui-feeder-deploy.json', JSON.stringify({ feederVersion: '1', reshadeMode: 'opengl32', placedNvngxDlss: true }));
+  const res = await feeder.removeFeederStack(dir);
+  assert.equal(fs.readFileSync(path.join(dir, 'opengl32.dll'), 'utf8'), 'the game\'s own wrapper');
+  assert.equal(fs.existsSync(path.join(dir, 'opengl32.dll.dlss5ui-orig')), false);
+  assert.ok(res.removed.includes('opengl32.dll'));
+
+  const own = scratchDir('remove-gl-own');
+  write(own, 'opengl32.dll', 'a small game-owned file');
+  write(own, 'dlss5-feed.addon64', 'x');
+  await feeder.removeFeederStack(own);
+  assert.equal(fs.existsSync(path.join(own, 'opengl32.dll')), true);
+});
