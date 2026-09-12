@@ -233,11 +233,11 @@ a player should know.
 Both are rebindable, and both panels can be open at once. The panel moved off bare `Home` in
 v1.0.1 because `Home` collided with too many games; v1.0.0 still uses it.
 
-**Moving the DLSS 5 panel** (engine v1.0.13): hold the left mouse button on its background, away
+**Moving the DLSS 5 panel** (engine v1.0.14): hold the left mouse button on its background, away
 from any slider or checkbox, and drag it anywhere on screen. Where you leave it is remembered for
 that game, as a fraction of the screen, so it comes back in the same place at any resolution. A
-**Reset position** button in its title row puts it back on the left edge, and the **X** at the
-right end of the title row closes it (its key opens it again).
+**Reset position** button in its title row puts it back on the left edge, and the bright red **X** at the
+far right of the title row closes it (its key opens it again).
 
 **RE Engine games** (Dragon's Dogma 2, the Resident Evil titles, Monster Hunter Rise/Wilds, and
 the rest of Capcom's RE Engine catalogue) also need REFramework, which uses Insert for its own
