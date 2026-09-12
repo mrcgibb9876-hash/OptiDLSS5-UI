@@ -87,7 +87,7 @@ jobs:
             Write-Output "attempt $attempt failed: $($_.Exception.Message)"
           }
           if ($asset) { break }
-          Write-Output "attempt $attempt: no .zip asset on the latest release yet ($($release.tag_name)); waiting"
+          Write-Output "attempt $($attempt): no .zip asset on the latest release yet ($($release.tag_name)); waiting"
           Start-Sleep -Seconds (10 * $attempt)
         }
 
