@@ -112,6 +112,7 @@ async function renderGrid() {
         <div class="card-path card-recommend" title="${escapeHtml(t('Which install path suits this game'))}">${escapeHtml(t('Checking graphics API…'))}</div>
         <div class="card-warning card-route-next hidden"></div>
         <div class="card-warning card-detect-warning hidden"></div>
+        <div class="card-path card-lastrun hidden"></div>
         ${(status.warnings || []).map((w) => `<div class="card-warning" title="${escapeHtml(t(w.message, w.vars))}">⚠ ${escapeHtml(t(w.message, w.vars))}</div>`).join('')}
         ${(status.foreign || []).length ? `<button class="btn btn-danger btn-small btn-remove-foreign" style="margin: 2px 0 6px;">${escapeHtml(t('Remove the other DLSS 5 toolchain…'))}</button>` : ''}
         <div class="card-actions">
@@ -121,6 +122,7 @@ async function renderGrid() {
         <div class="card-actions-row2">
           <button class="btn btn-ghost btn-open">${escapeHtml(t('Open Folder'))}</button>
           <button class="btn btn-ghost btn-edit">${escapeHtml(t('Edit'))}</button>
+          <button class="btn btn-ghost btn-support" title="${escapeHtml(t('Save every log and the app\'s own view of this game into one zip to share.'))}">${escapeHtml(t('Support bundle'))}</button>
           <button class="btn btn-ghost btn-danger btn-remove">${escapeHtml(t('Remove'))}</button>
         </div>
       </div>
@@ -221,6 +223,13 @@ async function renderGrid() {
         });
       });
     }
+    card.querySelector('.btn-support').addEventListener('click', async () => {
+      const res = await window.api.supportBundle(game.exePath, game.detectedPath || null);
+      if (!res.ok) { toast(t('Could not save the support bundle: {error}', { error: res.error })); return; }
+      if (res.cancelled) return;
+      toast(t('Support bundle saved: {path} ({count} files). Last run: {verdict}', { path: res.zipPath, count: res.files.length, verdict: describeRun(res.run) }));
+      window.api.openPath(res.zipPath);
+    });
     card.querySelector('.btn-setup').addEventListener('click', () => runSetup(game));
     card.querySelector('.btn-open').addEventListener('click', () => window.api.openFolder(game.exePath));
     card.querySelector('.btn-edit').addEventListener('click', () => openGameModal(game));
@@ -298,6 +307,23 @@ async function applyRecommendation(game, card, backends) {
   // OptiScaler is in but the rest of its route is not (a Feeder game installed before the
   // one-click flow existed, or Luma UE still waiting on its licence confirmation): say so on
   // the card, where the "OptiScaler" badge would otherwise read as finished.
+  // What the last run's logs say, in one line -- the card answers "did it work" itself.
+  const lastRunEl = card.querySelector('.card-lastrun');
+  if (lastRunEl) {
+    const run = await window.api.lastRun(game.exePath);
+    if (run && run.ran) {
+      lastRunEl.classList.remove('hidden');
+      lastRunEl.classList.toggle('status-ok', run.verdict === 'nr-ran');
+      lastRunEl.classList.toggle('status-bad', ['duplicate-dlss', 'shutdown-fault', 'ue-crash', 'feed-stopped'].includes(run.verdict));
+      const when = new Date(run.at);
+      const stamp = isNaN(when) ? '' : when.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      lastRunEl.textContent = t('Last run {when}: {verdict}', { when: stamp, verdict: describeRun(run) });
+      lastRunEl.title = lastRunEl.textContent;
+    } else {
+      lastRunEl.classList.add('hidden');
+    }
+  }
+
   const nextEl = card.querySelector('.card-route-next');
   if (nextEl) {
     const showNext = route.optiInstalled && !route.complete && route.nextStep;
@@ -443,6 +469,27 @@ async function installGame(game) {
 
 // Says what was actually done rather than what was started. The old flow could only report that a
 // terminal had opened, which is why the badge and the folder could disagree.
+// One sentence per runlog.js verdict, with the numbers that matter.
+function describeRun(run) {
+  if (!run || !run.ran) return t('not run yet');
+  const api = run.runtimeApi ? run.runtimeApi.toUpperCase() : null;
+  switch (run.verdict) {
+    case 'nr-ran': return t('Neural Rendering ran ({count} passes{fps}{api})', { count: run.nrDispatch, fps: run.fps ? ', ' + run.fps + ' fps' : '', api: api ? ', ' + api : '' });
+    case 'dlss-no-nr': return run.detail === 'd3d11-native'
+      ? t('DLSS was created on the native D3D11 path, so Neural Rendering never ran -- Dx11Upscaler must be dlss_12; Install again to fix the ini')
+      : t('DLSS was created but Neural Rendering never ran');
+    case 'init-no-feature': return run.detail === 'feeder-technique-missing'
+      ? t('DLSS initialised but the Feeder\'s shader technique was missing -- deploy the Feeder again')
+      : t('DLSS initialised but no feature was ever created -- with Luma UE, select DLSS in its overlay (Home) in gameplay');
+    case 'no-dlss': return t('nothing called DLSS -- nothing was hooked{api}', { api: api ? ' (' + api + ')' : '' });
+    case 'duplicate-dlss': return t('crashed: two DLSS DLLs loaded (a Feeder on a game that ships DLSS) -- remove the Feeder');
+    case 'shutdown-fault': return t('crashed on the way out inside NVIDIA\'s NGX shutdown (a Feeder on a game that ships DLSS) -- remove the Feeder');
+    case 'ue-crash': return t('crashed (Unreal crash report: {message})', { message: (run.detail || '').slice(0, 120) || t('see the report') });
+    case 'feed-stopped': return t('the Feeder gave up this run -- see dlss5-feed.log for its own diagnosis');
+    default: return t('not run yet');
+  }
+}
+
 function describeUninstall(res) {
   const removed = (res.removed || []).length ? ' ' + t('Removed: {list}.', { list: res.removed.join(', ') }) : ' ' + t('Nothing left to remove.');
   const restored = (res.restored || []).length ? ' ' + t('Restored: {list}.', { list: res.restored.join(', ') }) : '';

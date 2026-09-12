@@ -20,6 +20,7 @@ const amdnr = require('./amdnr');
 const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const managerUpdate = require('./manager-update');
+const runlog = require('./runlog');
 let electronAutoUpdater = null;
 try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
 const ENGINE_KNOWN_GAMES = new Set(require('./engine-known-games.json').exeNames);
@@ -1328,8 +1329,51 @@ ipcMain.handle('game:confirm-remove', async (_evt, gameName) => {
   return ['remove-and-forget', 'forget-only', 'cancel'][res.response] || 'cancel';
 });
 
+// What the last run's logs say -- see runlog.js for the verdicts and where each was met.
+ipcMain.handle('game:lastRun', async (_evt, exePath) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) return { ran: false, verdict: 'no-log' };
+    return await runlog.analyzeRun(gameDir(exePath));
+  } catch (error) {
+    return { ran: false, verdict: 'no-log', error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// One zip with everything a helper asks for, saved where the user picks. The app's own view
+// (detection, route, status, last-run verdict, version) goes in as app-view.json.
+ipcMain.handle('game:supportBundle', async (_evt, { exePath, detected }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 16);
+    const base = path.basename(exePath, path.extname(exePath)).replace(/[^A-Za-z0-9._-]+/g, '_');
+    const res = await dialog.showSaveDialog({
+      title: 'Save support bundle',
+      defaultPath: path.join(app.getPath('desktop'), `${base}-support-${stamp}.zip`),
+      filters: [{ name: 'Zip', extensions: ['zip'] }],
+    });
+    if (res.canceled || !res.filePath) return { ok: true, cancelled: true };
+    const effective = withApiOverride(detected || {}, readApiOverride(dir));
+    const extra = {
+      appVersion: app.getVersion(),
+      detection: effective,
+      route: recommendRoute(dir, exePath, effective, ((await getGpuInfo()) || {}).vendor || 'unknown'),
+      backends: detectInstalledBackends(dir),
+      foreign: foreignToolchains(dir),
+    };
+    const out = await runlog.collectSupportBundle(dir, { zipPath: res.filePath, extra, execFileAsync });
+    return { ok: true, cancelled: false, ...out };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
 ipcMain.handle('game:open-folder', (_evt, exePath) => {
   shell.openPath(gameDir(exePath));
+});
+
+ipcMain.handle('shell:openPath', (_evt, p) => {
+  if (p && fs.existsSync(p)) shell.showItemInFolder(p);
 });
 
 // Engine + graphics API detection lives in detect.js. Results are cached per game in games.json;
