@@ -20,6 +20,47 @@ const grid = $('#game-grid');
 const emptyState = $('#empty-state');
 const settingsBanner = $('#settings-banner');
 
+// One floating tip for every [data-tip] element. Positioned above the element, centred on it,
+// flipped below when there is no room above, and kept inside the viewport either way.
+let tipEl = null;
+function showTip(target) {
+  const text = target.getAttribute('data-tip');
+  if (!text) return;
+  if (!tipEl) {
+    tipEl = document.createElement('div');
+    tipEl.className = 'floating-tip';
+    tipEl.setAttribute('role', 'tooltip');
+    document.body.appendChild(tipEl);
+  }
+  tipEl.textContent = text;
+  tipEl.classList.remove('show');
+  const r = target.getBoundingClientRect();
+  const w = tipEl.offsetWidth;
+  const h = tipEl.offsetHeight;
+  const margin = 8;
+  let left = r.left + r.width / 2 - w / 2;
+  left = Math.max(margin, Math.min(left, window.innerWidth - w - margin));
+  let top = r.top - h - margin;
+  if (top < margin) top = r.bottom + margin;
+  tipEl.style.left = `${Math.round(left)}px`;
+  tipEl.style.top = `${Math.round(top)}px`;
+  tipEl.classList.add('show');
+}
+function hideTip() {
+  if (tipEl) tipEl.classList.remove('show');
+}
+document.addEventListener('mouseover', (e) => {
+  const t = e.target.closest && e.target.closest('[data-tip]');
+  if (t) showTip(t);
+});
+document.addEventListener('mouseout', (e) => {
+  const t = e.target.closest && e.target.closest('[data-tip]');
+  if (t && !(e.relatedTarget && t.contains(e.relatedTarget))) hideTip();
+});
+document.addEventListener('focusin', (e) => { const t = e.target.closest && e.target.closest('[data-tip]'); if (t) showTip(t); });
+document.addEventListener('focusout', hideTip);
+document.addEventListener('click', hideTip, true);
+window.addEventListener('scroll', hideTip, true);
 function toast(msg) {
   const el = $('#toast');
   el.textContent = msg;

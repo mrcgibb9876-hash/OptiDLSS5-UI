@@ -246,16 +246,12 @@ body {
 .card-actions-row2 { display: flex; gap: 6px; }
 
 /* A floating explanation on hover, for buttons whose name alone does not say what they do.
-   Faster and larger than the native title tooltip, and it wraps. Anchored above the button
-   so it stays inside the card (the card clips overflow) for the buttons in its bottom rows. */
-.has-tip { position: relative; }
-.has-tip::after {
-  content: attr(data-tip);
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 8px);
-  transform: translateX(-50%) translateY(4px);
-  width: 240px;
+   One element on the body, moved next to whichever [data-tip] element is hovered or focused
+   (see showTip in renderer.js) -- drawn inside the card it would be clipped by the card's
+   overflow, which is exactly what happened to the first version. */
+.floating-tip {
+  position: fixed;
+  max-width: 260px;
   padding: 8px 10px;
   border-radius: 8px;
   background: var(--bg-elev);
@@ -269,12 +265,10 @@ body {
   white-space: normal;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 120ms ease, transform 120ms ease;
-  z-index: 20;
+  transition: opacity 120ms ease;
+  z-index: 1000;
 }
-.has-tip:hover::after, .has-tip:focus-visible::after { opacity: 1; transform: translateX(-50%) translateY(0); }
-.card-actions-row2 .has-tip::after { left: auto; right: 0; transform: translateY(4px); }
-.card-actions-row2 .has-tip:hover::after, .card-actions-row2 .has-tip:focus-visible::after { transform: translateY(0); }
+.floating-tip.show { opacity: 1; }
 .card-actions-row2 .btn { flex: 1; }
 
 .modal-overlay {
