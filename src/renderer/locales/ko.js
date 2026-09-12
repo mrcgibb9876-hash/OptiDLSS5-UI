@@ -415,4 +415,5 @@ window.I18N.register("ko", {
   "Runs the game from its own folder -- for an Unreal game, the -Win64-Shipping.exe that OptiScaler is installed beside.": "게임을 자체 폴더에서 실행합니다. 언리얼 게임이면 OptiScaler가 설치된 -Win64-Shipping.exe를 실행합니다.",
   "Could not launch {name}: {error}": "{name}을(를) 실행할 수 없습니다: {error}",
   "Launched {name} ({exe}).": "{name} 실행됨 ({exe}).",
+  "Launching {name} through Steam.": "Steam을 통해 {name}을(를) 실행합니다.",
 });

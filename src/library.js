@@ -290,4 +290,28 @@ function discover(extraFolders = [], scanDrives = false, excludedRoots = [], fin
   return { games: dedupe(filterExcluded(found, excludedRoots)), roots };
 }
 
-module.exports = { discover, folder, dedupe, autoRoots, drives, isInside, filterExcluded, steam, linuxSteamRoots };
+// The Steam appid of the game a path belongs to, from the library it sits in: walks up to the
+// steamapps\common\<installdir> folder, then finds the appmanifest in that steamapps whose
+// installdir is that folder. Null for anything not under a Steam library. The install root is
+// what is matched, so an Unreal shipping exe three folders down still resolves.
+function steamAppIdFor(exePath) {
+  if (!exePath) return null;
+  const parts = path.resolve(exePath).split(path.sep);
+  for (let i = parts.length - 2; i >= 2; i--) {
+    if (parts[i].toLowerCase() !== 'common' || parts[i - 1].toLowerCase() !== 'steamapps') continue;
+    const appsDir = parts.slice(0, i).join(path.sep);
+    const installdir = parts[i + 1];
+    let files = [];
+    try { files = fs.readdirSync(appsDir).filter((f) => /^appmanifest_\d+\.acf$/.test(f)); } catch { return null; }
+    for (const f of files) {
+      let text = '';
+      try { text = fs.readFileSync(path.join(appsDir, f), 'utf8'); } catch { continue; }
+      const dir = kv(text, 'installdir');
+      if (dir && dir.toLowerCase() === installdir.toLowerCase()) return kv(text, 'appid') || null;
+    }
+    return null;
+  }
+  return null;
+}
+
+module.exports = { discover, folder, dedupe, autoRoots, drives, isInside, filterExcluded, steam, linuxSteamRoots, steamAppIdFor };

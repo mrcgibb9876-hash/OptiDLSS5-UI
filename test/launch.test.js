@@ -28,3 +28,20 @@ test('Launch runs a non-Unreal exe as recorded, and refuses a missing one', asyn
   const missing = await invoke('game:launch', { exePath: path.join(dir, 'nope.exe'), dryRun: true });
   assert.equal(missing.ok, false);
 });
+
+test('a game under a Steam library launches through Steam, by the appid of its install folder', async () => {
+  const lib = scratchDir('launch-steam');
+  write(path.join(lib, 'steamapps'), 'appmanifest_1172380.acf', '"AppState"\n{\n\t"appid"\t\t"1172380"\n\t"name"\t\t"STAR WARS Jedi: Fallen Order"\n\t"installdir"\t\t"Jedi Fallen Order"\n}\n');
+  write(path.join(lib, 'steamapps'), 'appmanifest_208650.acf', '"AppState"\n{\n\t"appid"\t\t"208650"\n\t"installdir"\t\t"Batman Arkham Knight"\n}\n');
+  const root = path.join(lib, 'steamapps', 'common', 'Jedi Fallen Order');
+  const stub = fakeExe(root, 'StarWarsJediFallenOrder.exe');
+  write(root, 'Engine/Binaries/Win64/CrashReportClient.exe', 'x');
+  fakeExe(path.join(root, 'SwGame', 'Binaries', 'Win64'), 'SwGame-Win64-Shipping.exe');
+  const { invoke } = loadMain();
+  const res = await invoke('game:launch', { exePath: stub, dryRun: true });
+  assert.equal(res.ok, true, res.error);
+  assert.equal(res.via, 'steam');
+  assert.equal(res.steamAppId, '1172380');
+  const loose = await invoke('game:launch', { exePath: fakeExe(path.join(lib, 'elsewhere'), 'Other.exe'), dryRun: true });
+  assert.equal(loose.via, 'exe');
+});

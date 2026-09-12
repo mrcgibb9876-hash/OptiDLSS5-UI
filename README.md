@@ -225,7 +225,9 @@ a player should know.
 
 ## Launching a game
 
-Every card has a **Launch** button. It runs the game from its own folder, and for an Unreal game it runs the
+Every card has a **Launch** button. A game installed under a Steam library is launched through Steam (by the
+appid of its install folder), so its DRM, overlay and launch options behave as usual. Any other game runs from
+its own folder, and for an Unreal game that means the
 `<Project>-Win64-Shipping.exe` under `<Project>BinariesWin64` -- the process that actually renders and the one
 OptiScaler is installed beside -- even when the card was added from the launcher stub in the install root.
 

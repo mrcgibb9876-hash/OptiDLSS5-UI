@@ -415,4 +415,5 @@ window.I18N.register("zh-CN", {
   "Runs the game from its own folder -- for an Unreal game, the -Win64-Shipping.exe that OptiScaler is installed beside.": "从游戏自己的文件夹运行游戏 -- 对于虚幻引擎游戏，即 OptiScaler 所在的 -Win64-Shipping.exe。",
   "Could not launch {name}: {error}": "无法启动 {name}：{error}",
   "Launched {name} ({exe}).": "已启动 {name}（{exe}）。",
+  "Launching {name} through Steam.": "正在通过 Steam 启动 {name}。",
 });

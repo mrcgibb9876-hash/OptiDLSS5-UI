@@ -108,7 +108,6 @@ async function renderGrid() {
       </div>
       <div class="card-body">
         <div class="card-title">${escapeHtml(game.name)}</div>
-        <div class="card-path" title="${escapeHtml(game.exePath)}">${escapeHtml(game.exePath)}</div>
         <div class="card-path card-recommend" title="${escapeHtml(t('Which install path suits this game'))}">${escapeHtml(t('Checking graphics API…'))}</div>
         <div class="card-warning card-route-next hidden"></div>
         <div class="card-warning card-detect-warning hidden"></div>
@@ -241,7 +240,9 @@ async function renderGrid() {
     card.querySelector('.btn-launch').addEventListener('click', async () => {
       const res = await window.api.launchGame(game.exePath);
       if (!res.ok) { toast(t('Could not launch {name}: {error}', { name: game.name, error: res.error })); return; }
-      toast(t('Launched {name} ({exe}).', { name: game.name, exe: res.target.split(/[\\/]/).pop() }));
+      toast(res.via === 'steam'
+        ? t('Launching {name} through Steam.', { name: game.name })
+        : t('Launched {name} ({exe}).', { name: game.name, exe: res.target.split(/[\\/]/).pop() }));
     });
     card.querySelector('.btn-open').addEventListener('click', () => window.api.openFolder(game.exePath));
     card.querySelector('.btn-edit').addEventListener('click', () => openGameModal(game));

@@ -21,6 +21,7 @@ const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, resolveUn
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const managerUpdate = require('./manager-update');
 const runlog = require('./runlog');
+const library = require('./library');
 let electronAutoUpdater = null;
 try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
 const ENGINE_KNOWN_GAMES = new Set(require('./engine-known-games.json').exeNames);
@@ -1443,13 +1444,21 @@ function launchTarget(exePath) {
 ipcMain.handle('game:launch', async (_evt, { exePath, dryRun = false } = {}) => {
   try {
     const target = launchTarget(exePath);
+    // A Steam-installed game goes through Steam: its DRM, overlay, cloud saves and launch
+    // options all expect that, and some games refuse to start any other way. Steam then runs the
+    // same exe (through the game's own stub where it has one). Everything else runs directly.
+    const steamAppId = library.steamAppIdFor(target);
+    if (steamAppId) {
+      if (!dryRun) await shell.openExternal(`steam://rungameid/${steamAppId}`);
+      return { ok: true, target, via: 'steam', steamAppId };
+    }
     if (!dryRun) {
       // Detached, own folder as cwd (Unreal and Unity both resolve their data relative to it),
       // nothing inherited from this app: the game outlives the manager if it is closed.
       const child = spawn(target, [], { cwd: path.dirname(target), detached: true, stdio: 'ignore', windowsHide: false });
       child.unref();
     }
-    return { ok: true, target };
+    return { ok: true, target, via: 'exe' };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }

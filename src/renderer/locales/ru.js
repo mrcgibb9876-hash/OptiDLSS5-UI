@@ -415,4 +415,5 @@ window.I18N.register("ru", {
   "Runs the game from its own folder -- for an Unreal game, the -Win64-Shipping.exe that OptiScaler is installed beside.": "Запускает игру из её папки -- для игры на Unreal это -Win64-Shipping.exe, рядом с которым установлен OptiScaler.",
   "Could not launch {name}: {error}": "Не удалось запустить {name}: {error}",
   "Launched {name} ({exe}).": "{name} запущена ({exe}).",
+  "Launching {name} through Steam.": "{name} запускается через Steam.",
 });
