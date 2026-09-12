@@ -246,13 +246,16 @@
       <div id="help-lastrun" class="status-line"></div>
       <div id="help-waiting" class="status-line status-ok hidden"></div>
       <pre id="help-ai-out" class="help-ai-out hidden"></pre>
-      <div class="modal-actions" style="flex-wrap: wrap;">
-        <button id="help-apply" class="btn btn-primary hidden"></button>
-        <button id="help-launch" class="btn btn-launch" data-i18n>Launch and check</button>
-        <button id="help-ai" class="btn btn-ghost hidden"></button>
-        <button id="help-bundle" class="btn btn-ghost has-tip" data-i18n data-tip="Packs this game's logs, settings and what this app knows about it into one zip on your Desktop, to attach when asking for help. Nothing is sent anywhere.">Save bundle to share</button>
-        <button id="help-report" class="btn btn-ghost has-tip" data-i18n data-tip="Opens a new GitHub issue in your browser with this finding filled in. Attach the saved bundle zip to it.">Report on GitHub</button>
+      <div class="modal-actions help-primary">
+        <button id="help-apply" class="btn btn-primary btn-big hidden"></button>
+        <button id="help-launch" class="btn btn-launch btn-big hidden" data-i18n>Launch and check</button>
+        <button id="help-ai" class="btn btn-ghost btn-big hidden"></button>
+        <button id="help-more" class="btn btn-ghost" data-i18n>More…</button>
         <button id="help-close" class="btn btn-ghost" data-i18n>Close</button>
+      </div>
+      <div id="help-more-row" class="modal-actions help-more-row hidden">
+        <button id="help-bundle" class="btn btn-ghost btn-small has-tip" data-i18n data-tip="Packs this game's logs, settings and what this app knows about it into one zip on your Desktop, to attach when asking for help. Nothing is sent anywhere.">Save bundle to share</button>
+        <button id="help-report" class="btn btn-ghost btn-small has-tip" data-i18n data-tip="Opens a new GitHub issue in your browser with this finding filled in. Attach the saved bundle zip to it.">Report on GitHub</button>
       </div>
     </div>
   </div>

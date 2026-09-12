@@ -160,6 +160,7 @@ async function renderGrid() {
         <div class="card-warning card-route-next hidden"></div>
         <div class="card-warning card-detect-warning hidden"></div>
         <div class="card-path card-lastrun hidden"></div>
+        <div class="card-help hidden"><span class="card-help-text"></span><button class="btn btn-small btn-primary btn-card-fix hidden"></button></div>
         ${(status.warnings || []).map((w) => `<div class="card-warning" title="${escapeHtml(t(w.message, w.vars))}">⚠ ${escapeHtml(t(w.message, w.vars))}</div>`).join('')}
         ${(status.foreign || []).length ? `<button class="btn btn-danger btn-small btn-remove-foreign" style="margin: 2px 0 6px;">${escapeHtml(t('Remove the other DLSS 5 toolchain…'))}</button>` : ''}
         <div class="card-actions">
@@ -386,6 +387,30 @@ async function applyRecommendation(game, card, backends) {
     }
   }
 
+  // Game Help on the card itself: one line saying what is wrong, and one button that fixes it.
+  // Nobody reads a README; the card has to do the telling.
+  const helpEl = card.querySelector('.card-help');
+  if (helpEl) {
+    const diag = await window.api.gameHelp(game.exePath, game.detectedPath || null, []);
+    const show = diag && diag.ok && ['fix', 'step', 'unavailable', 'unknown'].includes(diag.status);
+    helpEl.classList.toggle('hidden', !show);
+    if (show) {
+      helpEl.classList.toggle('status-bad', diag.status === 'unavailable' || diag.status === 'unknown');
+      const text = helpEl.querySelector('.card-help-text');
+      text.textContent = helpShort(diag);
+      text.title = helpWords(diag);
+      const btn = helpEl.querySelector('.btn-card-fix');
+      btn.classList.remove('hidden');
+      if (diag.status === 'fix') {
+        btn.textContent = t('Fix it');
+        btn.onclick = () => openHelp(game, { autoFix: true });
+      } else {
+        btn.textContent = diag.status === 'step' ? t('Show me') : t('Help');
+        btn.onclick = () => openHelp(game);
+      }
+    }
+  }
+
   const nextEl = card.querySelector('.card-route-next');
   if (nextEl) {
     const showNext = route.optiInstalled && !route.complete && route.nextStep;
@@ -466,6 +491,33 @@ function helpWords(diag) {
   }
 }
 
+// The card's one line: what is wrong, in a few words. The modal has the full sentence.
+function helpShort(diag) {
+  const v = diag.vars || {};
+  switch (diag.code) {
+    case 'bit32': return t('Not available: 32-bit game');
+    case 'anticheat': return t('Not available: anti-cheat ({antiCheat})', v);
+    case 'unsupported': return t('Not available here');
+    case 'foreign': return t('Another DLSS 5 tool is in the folder');
+    case 'feeder-misdeployed': return t('Feeder on a game with its own DLSS');
+    case 'luma-known-bad': return t('Luma UE breaks this game');
+    case 'not-installed': return t('Not installed yet');
+    case 'feeder-missing': return t('Feeder not deployed yet');
+    case 'luma-missing': return t('Luma UE not deployed yet');
+    case 'reframework-missing': return t('REFramework missing');
+    case 'd3d11-native': return t('Wrong D3D11 upscaler setting');
+    case 'nr-disabled': return t('Neural Rendering is switched off');
+    case 'feeder-technique': return t('Feeder shader missing');
+    case 'luma-select-dlss': return t('Select DLSS in Luma\'s overlay (Home)');
+    case 'ue-crash-luma': return t('Crashed with Luma UE');
+    case 'ue-crash-feeder': return t('Crashed with the Feeder');
+    case 'ue-crash': return t('Crashed -- no known fix');
+    case 'feed-stopped': return t('The Feeder gave up');
+    case 'fix-failed': return t('Fix did not help -- no known fix');
+    case 'dlss-no-nr': case 'init-no-feature': case 'no-hook': default: return t('Not working -- no known fix');
+  }
+}
+
 function helpFixLabel(id) {
   switch (id) {
     case 'remove-foreign': return t('Remove the other toolchain');
@@ -490,11 +542,19 @@ function renderHelp(diag) {
   body.textContent = helpWords(diag);
   const run = diag.run;
   $('#help-lastrun').textContent = run && run.ran ? t('Last run: {when} -- {verdict}', { when: new Date(run.at).toLocaleString(), verdict: describeRun(run) }) : t('Last run: none recorded');
+  // One big button that does the next right thing; the rest sits behind More.
   const apply = $('#help-apply');
+  const launch = $('#help-launch');
+  const ai = $('#help-ai');
   apply.classList.toggle('hidden', diag.status !== 'fix');
-  if (diag.fix) apply.textContent = helpFixLabel(diag.fix.id);
-  $('#help-ai').classList.toggle('hidden', !(diag.status === 'unknown' || diag.status === 'step' || diag.status === 'fix'));
-  $('#help-ai').textContent = settings.anthropicApiKey ? t('Ask AI') : t('Set up AI help…');
+  if (diag.fix) apply.textContent = t('Fix it') + ' -- ' + helpFixLabel(diag.fix.id);
+  launch.classList.toggle('hidden', !(diag.status === 'needs-run' || diag.status === 'step' || diag.status === 'ok'));
+  launch.classList.toggle('btn-launch', diag.status !== 'fix');
+  ai.classList.toggle('hidden', diag.status !== 'unknown');
+  ai.textContent = settings.anthropicApiKey ? t('Ask AI') : t('Set up AI help…');
+  ai.classList.toggle('btn-primary', diag.status === 'unknown');
+  $('#help-more').classList.remove('hidden');
+  $('#help-more-row').classList.add('hidden');
   $('#help-ai-out').classList.add('hidden');
 }
 
@@ -507,9 +567,10 @@ async function refreshHelp() {
 
 function stopHelpPoll() { if (helpPoll) { clearInterval(helpPoll); helpPoll = null; } $('#help-waiting').classList.add('hidden'); }
 
-async function openHelp(game) {
+async function openHelp(game, { autoFix = false } = {}) {
   helpGame = game;
   helpFixesTried = [];
+  helpAutoFix = autoFix;
   $('#help-title').textContent = t('Game Help -- {name}', { name: game.name });
   $('#help-body').textContent = t('Checking…');
   $('#help-status').textContent = '';
@@ -518,7 +579,14 @@ async function openHelp(game) {
   helpModal.classList.remove('hidden');
   const diag = await refreshHelp();
   helpLastRunAt = diag && diag.run && diag.run.at ? diag.run.at : null;
+  // "Fix it" on the card: the fix runs at once; the modal only reports.
+  if (helpAutoFix && diag && diag.status === 'fix') { helpAutoFix = false; $('#help-apply').click(); }
 }
+let helpAutoFix = false;
+
+$('#help-more').addEventListener('click', () => {
+  $('#help-more-row').classList.toggle('hidden');
+});
 
 function closeHelp() { stopHelpPoll(); helpModal.classList.add('hidden'); helpGame = null; }
 

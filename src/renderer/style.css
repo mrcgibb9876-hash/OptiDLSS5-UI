@@ -410,6 +410,13 @@ select:focus { outline: 1px solid var(--accent); }
 
 .modal-wide { width: 620px; }
 
+.card-help { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 2px 0 6px; }
+.card-help-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-help .btn-card-fix { flex: none; }
+.btn-big { padding: 10px 18px; font-size: 14px; }
+.help-primary { justify-content: flex-start; margin-top: 16px; }
+.help-primary .btn-big { flex: 1; }
+.help-more-row { justify-content: flex-start; margin-top: 8px; }
 .help-status { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); margin-bottom: 6px; }
 .help-body { font-size: 14px; line-height: 1.5; margin: 0 0 10px 0; white-space: pre-wrap; }
 .help-ai-out { margin: 12px 0 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font: 12px/1.5 inherit; font-family: inherit; white-space: pre-wrap; max-height: 260px; overflow-y: auto; }
