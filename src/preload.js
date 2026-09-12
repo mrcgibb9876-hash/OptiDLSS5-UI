@@ -86,6 +86,9 @@ contextBridge.exposeInMainWorld('api', {
   onGameHelpAiText: (cb) => ipcRenderer.on('game:help-ai-text', (_evt, payload) => cb(payload)),
   openPath: (p) => ipcRenderer.invoke('shell:openPath', p),
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
+  pdPluginStatus: () => ipcRenderer.invoke('pdplugin:status'),
+  pdPluginPick: () => ipcRenderer.invoke('pdplugin:pick'),
+  pdPluginImport: (sourcePath) => ipcRenderer.invoke('pdplugin:import', { sourcePath }),
 
   confirmRemove: (gameName) => ipcRenderer.invoke('game:confirm-remove', gameName),
   removeForeign: (exePath) => ipcRenderer.invoke('game:removeForeign', exePath),

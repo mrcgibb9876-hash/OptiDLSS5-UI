@@ -420,6 +420,10 @@ async function applyRecommendation(game, card, backends) {
       if (diag.status === 'fix') {
         btn.textContent = t('Fix it');
         btn.onclick = () => openHelp(game, { autoFix: true });
+      } else if (diag.code === 'pd-plugin-missing') {
+        // The one file the app cannot fetch: its own popup, which finds the download afterwards.
+        btn.textContent = t('Get plugin');
+        btn.onclick = () => openPdPluginModal();
       } else {
         btn.textContent = diag.status === 'step' ? t('Show me') : t('Help');
         btn.onclick = () => openHelp(game);
@@ -494,7 +498,7 @@ function helpWords(diag) {
     case 'luma-missing': return t('This game\'s route is Luma UE, which is not deployed yet. Open Edit and deploy Luma UE (its licence is confirmed there), then launch.');
     case 'reframework-missing': return t('This is an RE Engine game and REFramework is missing. OptiScaler does nothing there without it. Reconfigure fetches and places it.');
     case 'pd-build-missing': return t('This Resident Evil has no DLSS of its own, so it needs REFramework\'s pd-upscaler build and nvngx_dlss.dll beside the exe. Reconfigure fetches and places both.');
-    case 'pd-plugin-missing': return t('One file this app cannot fetch: PureDark\'s Upscaler Base Plugin (PDPerfPlugin.dll), free on Nexus Mods. Download it, put PDPerfPlugin.dll beside the game exe, then launch. REFramework\'s upscaler loads it and makes the DLSS call OptiScaler hooks.');
+    case 'pd-plugin-missing': return t('One file this app cannot fetch: PureDark\'s Upscaler Base Plugin (PDPerfPlugin.dll), free on Nexus Mods. Download it once, then press "I downloaded it" -- the app finds it in Downloads and puts it in every Resident Evil that needs it. REFramework\'s upscaler loads it and makes the DLSS call OptiScaler hooks.');
     case 'pd-enable-ingame': return t('Everything is in place but the last run made no DLSS call. In-game, press Insert for REFramework\'s menu, open TemporalUpscaler, tick Enabled and set Upscale Type to DLSS. Then play a minute and quit.');
     case 'needs-run': return t('No run to judge yet. Launch the game, reach actual gameplay (not a menu), play a minute, then quit. Come back here and it is checked.');
     case 'needs-run-after-fix': return t('"{fix}" was applied. The old log still says what it said, so launch the game, reach gameplay, play a minute, quit, and this is checked again.', { fix: helpFixLabel(v.fix) });
@@ -580,6 +584,17 @@ function renderHelp(diag) {
   const url = diag.vars && diag.vars.url;
   linkBtn.classList.toggle('hidden', !url);
   if (url) linkBtn.textContent = t('Open the download page');
+  // PureDark's plugin: the popup that finds the download and places it everywhere.
+  let pdBtn = $('#help-pdplugin');
+  if (!pdBtn) {
+    pdBtn = document.createElement('button');
+    pdBtn.id = 'help-pdplugin';
+    pdBtn.className = 'btn btn-small btn-primary';
+    pdBtn.addEventListener('click', () => { closeHelp(); openPdPluginModal(); });
+    linkBtn.insertAdjacentElement('afterend', pdBtn);
+  }
+  pdBtn.classList.toggle('hidden', diag.code !== 'pd-plugin-missing');
+  pdBtn.textContent = t('I downloaded it -- set it up');
   const run = diag.run;
   $('#help-lastrun').textContent = run && run.ran ? t('Last run: {when} -- {verdict}', { when: new Date(run.at).toLocaleString(), verdict: describeRun(run) }) : t('Last run: none recorded');
   // One big button that does the next right thing; the rest sits behind More.
@@ -875,11 +890,114 @@ async function installGame(game) {
       ? ' ' + t('Next: open Edit and deploy Luma UE -- OptiScaler has no DLSS call to hook in this game until Luma supplies one.')
       : '';
     toast(`${t('Installed.')}${feederNote} ${t('Copied nvngx_dlssnr.dll ({mb} MB) to {dir}', { mb, dir: res.dir })}${proxyNote}${proxyCreatedNote}${configNote}${streamlineNote}${reEngineNote}${profileNote}${hotfixNote}${reframeworkNote}${reframeworkConfigNote}${lumaNote}`);
+    // A Resident Evil on the pd route still missing PureDark's plugin: say so now, not on a card
+    // line someone may not read. Once imported it is placed automatically, so this pops only once.
+    const after = await window.api.gameRoute(game.exePath, game.detectedPath);
+    const pluginStep = after.route === 'reframework-pd' ? (after.steps || []).find((s) => s.key === 'pd-plugin') : null;
+    if (pluginStep && !pluginStep.done) openPdPluginModal();
   } else {
     toast(t('Install failed: {error}', { error: res.error }));
   }
   renderGrid();
 }
+
+// ── PureDark's Upscaler Base Plugin (Resident Evil pd route) ─────────────────
+// See src/pdplugin.js. The popup points at Nexus, then finds the download in Downloads (re-checked
+// whenever the window regains focus, i.e. when the user comes back from the browser) or takes a
+// picked file, imports it once, and the main process places it in every game that needs it.
+const pdPluginModal = $('#pdplugin-modal');
+let pdPluginBusy = false;
+
+function pdPluginSize(bytes) {
+  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+async function refreshPdPluginModal() {
+  const st = await window.api.pdPluginStatus();
+  const found = $('#pdplugin-found');
+  found.innerHTML = '';
+  if (st.cached) {
+    const ok = document.createElement('div');
+    ok.className = 'status-line status-ok';
+    ok.textContent = t('Imported {file} -- it is placed in every Resident Evil that needs it.', { file: st.cached.from });
+    found.appendChild(ok);
+  }
+  const fresh = (st.candidates || []).filter((c) => !st.cached || c.name !== st.cached.from);
+  if (fresh.length === 0) {
+    if (!st.cached) {
+      const none = document.createElement('div');
+      none.className = 'status-line';
+      none.textContent = t('Nothing found in Downloads yet. After downloading, come back to this window -- it looks again.');
+      found.appendChild(none);
+    }
+    return;
+  }
+  const label = document.createElement('div');
+  label.className = 'field-label';
+  label.textContent = t('Found in Downloads');
+  found.appendChild(label);
+  for (const c of fresh.slice(0, 3)) {
+    const row = document.createElement('div');
+    row.className = 'field-row pdplugin-candidate';
+    const name = document.createElement('span');
+    name.className = 'pdplugin-candidate-name';
+    name.textContent = `${c.name} (${pdPluginSize(c.size)}, ${new Date(c.mtimeMs).toLocaleString()})`;
+    name.title = c.path;
+    const use = document.createElement('button');
+    use.className = 'btn btn-primary btn-small';
+    use.textContent = t('Use this file');
+    use.addEventListener('click', () => importPdPlugin(c.path));
+    row.appendChild(name);
+    row.appendChild(use);
+    found.appendChild(row);
+  }
+}
+
+async function importPdPlugin(sourcePath) {
+  if (!sourcePath || pdPluginBusy) return;
+  pdPluginBusy = true;
+  const status = $('#pdplugin-status');
+  status.className = 'status-line';
+  status.textContent = t('Importing…');
+  try {
+    const res = await window.api.pdPluginImport(sourcePath);
+    if (!res.ok) {
+      status.className = 'status-line status-bad';
+      status.textContent = t('Could not use that file: {error}', { error: res.error });
+      return;
+    }
+    const parts = [];
+    if (res.placed.length) parts.push(t('Placed in: {list}.', { list: res.placed.join(', ') }));
+    if (res.waiting.length) parts.push(t('Goes in when installed: {list}.', { list: res.waiting.join(', ') }));
+    for (const s of res.skipped) parts.push(t('{name}: left alone -- {reason}.', { name: s.name, reason: t(s.reason) }));
+    status.className = 'status-line status-ok';
+    status.textContent = [t('PDPerfPlugin.dll is ready.'), ...parts].join(' ');
+    toast(t('PDPerfPlugin.dll is ready. In-game: Insert opens REFramework -> TemporalUpscaler -> Enabled, Upscale Type DLSS.'));
+    await refreshPdPluginModal();
+    renderGrid();
+  } finally {
+    pdPluginBusy = false;
+  }
+}
+
+async function openPdPluginModal() {
+  $('#pdplugin-status').textContent = '';
+  pdPluginModal.classList.remove('hidden');
+  await refreshPdPluginModal();
+}
+
+function closePdPluginModal() { pdPluginModal.classList.add('hidden'); }
+
+$('#pdplugin-close').addEventListener('click', closePdPluginModal);
+pdPluginModal.addEventListener('click', (e) => { if (e.target === pdPluginModal) closePdPluginModal(); });
+$('#pdplugin-open-page').addEventListener('click', async () => {
+  const st = await window.api.pdPluginStatus();
+  window.api.openExternal(st.pageUrl);
+});
+$('#pdplugin-browse').addEventListener('click', async () => {
+  const picked = await window.api.pdPluginPick();
+  if (picked) importPdPlugin(picked);
+});
 
 // Says what was actually done rather than what was started. The old flow could only report that a
 // terminal had opened, which is why the badge and the folder could disagree.
@@ -2955,6 +3073,8 @@ $('#btn-add-scanned').addEventListener('click', async () => {
 
 window.addEventListener('focus', () => {
   renderGrid();
+  // Back from the browser with the plugin downloaded: look for it again.
+  if (!pdPluginModal.classList.contains('hidden')) refreshPdPluginModal();
 });
 
 (async function init() {

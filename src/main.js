@@ -26,6 +26,7 @@ const library = require('./library');
 const gamehelp = require('./gamehelp');
 const aihelp = require('./aihelp');
 const engines = require('./engines');
+const pdplugin = require('./pdplugin');
 let electronAutoUpdater = null;
 try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
 const ENGINE_KNOWN_GAMES = new Set(require('./engine-known-games.json').exeNames);
@@ -268,6 +269,63 @@ ipcMain.handle('injector:launch', async (_evt, { exePath, releaseFolder } = {}) 
 
 const feederCacheDir = () => path.join(userDataDir(), 'feeder-cache');
 const lumaUeCacheDir = () => path.join(userDataDir(), 'lumaue-cache');
+const pdPluginCacheDir = () => path.join(userDataDir(), 'pd-plugin');
+
+// PureDark's PDPerfPlugin.dll (pdplugin.js): the user's own download, imported once and placed in
+// every Resident Evil pd-upscaler game. Journaled by hash so Remove takes only the copy placed here.
+function deployPdPlugin(dir) {
+  const journal = readInstallMarker(dir) || {};
+  const res = pdplugin.deployToGame(dir, pdPluginCacheDir(), journal.pdPlugin || null);
+  if (res.placed || res.updated) updateInstallJournal(dir, { pdPlugin: { sha256: res.sha256 } });
+  return res;
+}
+
+function pdPluginDownloadsDirs() {
+  const dirs = [];
+  try { dirs.push(app.getPath('downloads')); } catch {}
+  return dirs;
+}
+
+ipcMain.handle('pdplugin:status', () => ({
+  cached: pdplugin.readCacheInfo(pdPluginCacheDir()),
+  candidates: pdplugin.findCandidates(pdPluginDownloadsDirs()).slice(0, 5),
+  pageUrl: reengine.PD_PLUGIN_PAGE_URL,
+  pageLabel: reengine.PD_PLUGIN_PAGE_LABEL,
+}));
+
+ipcMain.handle('pdplugin:pick', async () => {
+  const res = await dialog.showOpenDialog({
+    title: 'Select the Upscaler Base Plugin download (or PDPerfPlugin.dll)',
+    defaultPath: pdPluginDownloadsDirs()[0],
+    properties: ['openFile'],
+    filters: [{ name: 'Plugin download', extensions: ['zip', '7z', 'rar', 'dll'] }],
+  });
+  if (res.canceled || res.filePaths.length === 0) return null;
+  return res.filePaths[0];
+});
+
+// Import, then place it in every Resident Evil pd game on the grid that has OptiScaler installed.
+// The ones not installed yet get it from autoConfigureGame when they are.
+ipcMain.handle('pdplugin:import', async (_evt, { sourcePath } = {}) => {
+  try {
+    const info = await pdplugin.importPlugin(sourcePath, pdPluginCacheDir());
+    const placed = [];
+    const skipped = [];
+    const waiting = [];
+    for (const game of readJson(gamesFile(), [])) {
+      if (!game || !game.exePath || !reengine.pdUpscalerGame(game.exePath) || !fs.existsSync(game.exePath)) continue;
+      const dir = gameDir(game.exePath);
+      if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) { waiting.push(game.name); continue; }
+      const res = deployPdPlugin(dir);
+      if (res.placed || res.updated) placed.push(game.name);
+      else if (res.reason && !/already the imported copy/.test(res.reason)) skipped.push({ name: game.name, reason: res.reason });
+      else placed.push(game.name);
+    }
+    return { ok: true, info, placed, skipped, waiting };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
 
 // Whether this game needs the Feeder at all (no native DLSS), and what's already deployed --
 // same "explain, don't just disable" posture as injector:readiness.
@@ -1427,6 +1485,11 @@ async function uninstallEverything(dir) {
     await rmRel(REFRAMEWORK_CONFIG_NAME);
     await rmRel('reframework');
   }
+  // PureDark's plugin only when it is still the copy this app placed; one the user swapped in stays.
+  if (journal.pdPlugin) {
+    if (pdplugin.isOurCopy(dir, journal.pdPlugin)) await rmRel(pdplugin.PLUGIN_NAME);
+    else if (fs.existsSync(path.join(dir, pdplugin.PLUGIN_NAME))) kept.push(`${pdplugin.PLUGIN_NAME} (not the copy this app placed)`);
+  }
 
   const core = await uninstallOptiScaler(dir);
   removed.push(...core.removed); kept.push(...core.kept);
@@ -1522,6 +1585,7 @@ async function planUninstall(dir) {
   } catch {}
   if (journal.streamline && journal.streamline.dir) for (const f of journal.streamline.files || []) add(path.join(journal.streamline.dir, f));
   if (journal.reframework) { add(REFRAMEWORK_DLL_NAME); add(REFRAMEWORK_CONFIG_NAME); add('reframework'); }
+  if (journal.pdPlugin && pdplugin.isOurCopy(dir, journal.pdPlugin)) add(pdplugin.PLUGIN_NAME);
   if (journal.proxy) add(journal.proxy);
   if (journal.backedUp && has(journal.backedUp)) restore.push(`${journal.proxy} (from ${journal.backedUp})`);
   for (const n of ['OptiScaler.dll', 'OptiScaler.ini', 'OptiScaler.log', 'nvngx.dll_dlssnr.dll', 'Remove_OptiScaler.bat', 'setup_windows.bat', 'setup_linux.sh', 'nvngx_dlssnr.dll', 'OptiScaler', '!! EXTRACT ALL FILES TO GAME FOLDER !!']) add(n);
@@ -2758,6 +2822,13 @@ async function autoConfigureGame(dir, exePath) {
       }
       // nvngx_dlss.dll just landed: this is a DLSS 5 only game from here on (Dx12Upscaler=dlss).
       dlss5Only = hasNativeDlss(dir);
+      // PureDark's plugin, once the user has imported their download (pdplugin.js). Runs on Install
+      // and on every sync, so a game installed after the import gets it without asking again.
+      try {
+        reframework = { ...(reframework || {}), pdPlugin: deployPdPlugin(dir) };
+      } catch (e) {
+        reframework = { ...(reframework || {}), pdPluginError: String(e && e.message ? e.message : e) };
+      }
     }
   }
 

@@ -281,6 +281,26 @@
     </div>
   </div>
 
+  <div id="pdplugin-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <h2 data-i18n>One more file for Resident Evil</h2>
+      <p class="field-hint" data-i18n>Resident Evil 2, 3, 4, 7 and Village have no DLSS of their own. REFramework makes the DLSS call instead, through PureDark's free Upscaler Base Plugin (PDPerfPlugin.dll). It is PureDark's work and only available from Nexus Mods, so this app cannot download it for you -- but you only get it once: this app then puts it in every one of these games, now and when you install more.</p>
+      <ol class="pdplugin-steps">
+        <li data-i18n>Open the Nexus Mods page and download the main file (a free Nexus account is needed).</li>
+        <li data-i18n>Come back here. The download is found in your Downloads folder -- press Use this file. If you saved it somewhere else, press Browse.</li>
+      </ol>
+      <div class="field-row">
+        <button id="pdplugin-open-page" class="btn btn-primary" data-i18n>Open the Nexus Mods page</button>
+        <button id="pdplugin-browse" class="btn btn-ghost" data-i18n>Browse…</button>
+      </div>
+      <div id="pdplugin-found" class="pdplugin-found"></div>
+      <div id="pdplugin-status" class="status-line"></div>
+      <div class="modal-actions">
+        <button id="pdplugin-close" class="btn btn-ghost" data-i18n>Close</button>
+      </div>
+    </div>
+  </div>
+
   <div id="help-modal" class="modal-overlay hidden">
     <div class="modal modal-wide">
       <h2 id="help-title">Game Help</h2>

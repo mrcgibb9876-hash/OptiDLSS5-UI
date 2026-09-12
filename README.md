@@ -301,6 +301,16 @@ the rest of Capcom's RE Engine catalogue) also need REFramework, which uses Inse
 overlay. On these games the app switches OptiScaler's own overlay key to **Alt+O** automatically,
 so both work side by side without a manual rebind.
 
+**Resident Evil 2, 3, 4, 7 and Village** have no DLSS of their own. Install fetches REFramework's
+pd-upscaler build and `nvngx_dlss.dll`; the one file it cannot fetch is PureDark's free **Upscaler
+Base Plugin** (`PDPerfPlugin.dll`), which is only on
+[Nexus Mods](https://www.nexusmods.com/site/mods/502) and is PureDark's to distribute. The card's
+**Get plugin** button (it also pops up after installing one of these games) opens that page, then
+finds the download in your Downloads folder -- `.zip`, `.7z`, `.rar` or the DLL itself -- or takes
+one you browse to. It is imported once and placed in every one of these games, including ones you
+install later; Remove takes it back only where it is still the copy the app placed. In-game:
+Insert opens REFramework -> TemporalUpscaler -> Enabled, Upscale Type DLSS.
+
 ## Building
 
 ```
@@ -338,6 +348,7 @@ releases and never mirrored here:
 | [Luma-Framework](https://github.com/Filoppi/Luma-Framework) (Filoppi) | DLAA in place of TAA for STAR WARS Jedi: Fallen Order; fetched live after per-action consent | Custom MIT variant |
 | [OptiScaler-DLSSNR-PreSR-Multipass](https://github.com/wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass) (wilsjo2) | Optional engine build: Neural Rendering before DLSS upscaling, 1-3 passes; fetched live from its releases | GPL-3.0 |
 | [REFramework](https://github.com/praydog/REFramework) (praydog) | Required on RE Engine games | MIT |
+| [Upscaler Base Plugin](https://www.nexusmods.com/site/mods/502) (PureDark) | The DLSS call on Resident Evil 2/3/4/7/Village; downloaded by the user from Nexus, then imported and placed by the app -- never downloaded or shipped by it | PureDark's; not redistributed |
 | [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) (THS) | Frame Generation for games with no DLSS of their own; configured, never installed | Paid, Steam |
 | [DLSS5-Swapper](https://github.com/rakanki911/DLSS5-Swapper) (Rakan Alkhaldi) | `src/library.js`, as above | MIT |
 
