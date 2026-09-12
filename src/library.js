@@ -294,7 +294,7 @@ function discover(extraFolders = [], scanDrives = false, excludedRoots = [], fin
 // steamapps\common\<installdir> folder, then finds the appmanifest in that steamapps whose
 // installdir is that folder. Null for anything not under a Steam library. The install root is
 // what is matched, so an Unreal shipping exe three folders down still resolves.
-function steamAppIdFor(exePath) {
+function steamManifestFor(exePath) {
   if (!exePath) return null;
   const parts = path.resolve(exePath).split(path.sep);
   for (let i = parts.length - 2; i >= 2; i--) {
@@ -307,11 +307,43 @@ function steamAppIdFor(exePath) {
       let text = '';
       try { text = fs.readFileSync(path.join(appsDir, f), 'utf8'); } catch { continue; }
       const dir = kv(text, 'installdir');
-      if (dir && dir.toLowerCase() === installdir.toLowerCase()) return kv(text, 'appid') || null;
+      if (dir && dir.toLowerCase() === installdir.toLowerCase()) {
+        const appid = kv(text, 'appid');
+        if (!appid) return null;
+        // The manifest's name is the store's own; the folder is the fallback Steam itself uses.
+        return { appid, name: (kv(text, 'name') || installdir).replace(/\s+/g, ' ').trim(), installdir };
+      }
     }
     return null;
   }
   return null;
+}
+
+function steamAppIdFor(exePath) {
+  const m = steamManifestFor(exePath);
+  return m ? m.appid : null;
+}
+
+// A name for a game added by its exe alone. The exe's own name is the last resort: "re2",
+// "SwGame-Win64-Shipping" and "cod" tell nobody anything, and a store search for "re2" returns
+// Red Dead Redemption 2 first (seen on a real card, 2026-09-12). A Steam manifest beside it is
+// the answer where there is one; otherwise the nearest folder that is not an engine's layout
+// ("Binaries\Win64", "bin", "x64") does better than a short exe name.
+const LAYOUT_FOLDER = /^(binaries|bin|win64|win32|x64|x86|game|retail|_retail_|shipping|release|content|data|engine|build)$/i;
+function nameForExe(exePath) {
+  const m = steamManifestFor(exePath);
+  if (m) return m.name;
+  const base = path.basename(exePath, path.extname(exePath));
+  const pretty = (s) => s.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/\b\w/g, (c) => c.toUpperCase());
+  if (base.length > 4 && !/^[a-z]{1,3}\d+$/i.test(base)) return pretty(base);
+  let dir = path.dirname(path.resolve(exePath));
+  for (let up = 0; up < 4; up++) {
+    const folder = path.basename(dir);
+    if (!folder || /^[a-z]:$/i.test(folder)) break;
+    if (!LAYOUT_FOLDER.test(folder)) return pretty(folder);
+    dir = path.dirname(dir);
+  }
+  return pretty(base);
 }
 
 // The spellings to try, in order, when looking a game up on the Steam store by the name the
@@ -334,4 +366,4 @@ function bannerSearchTerms(name) {
   return terms;
 }
 
-module.exports = { discover, folder, dedupe, autoRoots, drives, isInside, filterExcluded, steam, linuxSteamRoots, steamAppIdFor, bannerSearchTerms };
+module.exports = { discover, folder, dedupe, autoRoots, drives, isInside, filterExcluded, steam, linuxSteamRoots, steamAppIdFor, steamManifestFor, nameForExe, bannerSearchTerms };

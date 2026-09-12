@@ -49,6 +49,8 @@ contextBridge.exposeInMainWorld('api', {
 
   steamSearch: (term) => ipcRenderer.invoke('steam:search', term),
   steamSearchVersion: () => ipcRenderer.invoke('steam:searchVersion'),
+  resolveBanner: (exePath, name) => ipcRenderer.invoke('banner:resolve', { exePath, name }),
+  nameForExe: (exePath) => ipcRenderer.invoke('game:nameForExe', exePath),
   validateRelease: (folder) => ipcRenderer.invoke('release:validate', folder),
   validateNrDll: (filePath) => ipcRenderer.invoke('nrdll:validate', filePath),
   autoFetchNrDll: () => ipcRenderer.invoke('nrdll:autoFetch'),

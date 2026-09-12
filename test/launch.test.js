@@ -55,3 +55,23 @@ test('the store lookup tries the spellings Steam actually finds', () => {
   assert.ok(e.includes('The Witcher 3 Wild Hunt'), 'dots, edition and version stripped: ' + JSON.stringify(e));
   assert.deepEqual(bannerSearchTerms('ab'), [], 'too short to search');
 });
+
+test('a card is named and pictured from the Steam manifest, and a bare exe name falls back to its folder', async () => {
+  const lib = scratchDir('name-steam');
+  write(path.join(lib, 'steamapps'), 'appmanifest_883710.acf', '"AppState"\n{\n\t"appid"\t\t"883710"\n\t"name"\t\t"RESIDENT EVIL 2  BIOHAZARD RE2"\n\t"installdir"\t\t"RESIDENT EVIL 2  BIOHAZARD RE2"\n}\n');
+  const re2 = fakeExe(path.join(lib, 'steamapps', 'common', 'RESIDENT EVIL 2  BIOHAZARD RE2'), 're2.exe');
+  const library = require(path.join(__dirname, '..', 'src', 'library'));
+  assert.deepEqual(library.steamManifestFor(re2), { appid: '883710', name: 'RESIDENT EVIL 2 BIOHAZARD RE2', installdir: 'RESIDENT EVIL 2  BIOHAZARD RE2' });
+  assert.equal(library.nameForExe(re2), 'RESIDENT EVIL 2 BIOHAZARD RE2');
+
+  const { invoke } = loadMain();
+  const found = await invoke('banner:resolve', { exePath: re2, name: 're2' });
+  assert.equal(found.source, 'steam-manifest');
+  assert.equal(found.appid, '883710');
+
+  // Not under Steam: a short exe name says nothing, the game folder does; engine layout folders are skipped.
+  const gog = fakeExe(path.join(scratchDir('name-gog'), 'Resident Evil 2', 'Binaries', 'Win64'), 're2.exe');
+  assert.equal(library.nameForExe(gog), 'Resident Evil 2');
+  const plain = fakeExe(scratchDir('name-plain'), 'StarWarsJediFallenOrder.exe');
+  assert.equal(library.nameForExe(plain), 'StarWarsJediFallenOrder');
+});

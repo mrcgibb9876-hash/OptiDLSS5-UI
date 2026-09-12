@@ -187,30 +187,45 @@ async function renderGrid() {
     `;
 
     setBannerWithFallback(game, card.querySelector('.card-banner'), card.querySelector('.card-banner-fallback'));
-    if (!game.bannerLocalPath && game.bannerAppId) {
+    const bannerEls = () => [card.querySelector('.card-banner'), card.querySelector('.card-banner-fallback')];
+    const applyResolved = async (found) => {
+      const localPath = await window.api.cacheSteamBanner(found.appid, found.tinyImage);
+      game.bannerAppId = String(found.appid);
+      game.bannerLocalPath = localPath || null;
+      window.api.saveGames(games);
+      setBannerWithFallback(game, ...bannerEls());
+    };
+    const autoFound = !!game.bannerSearchAttempted;
+    const staleSearch = (game.bannerSearchVersion || 1) < bannerSearchVersion;
+    if (game.bannerAppId && autoFound && staleSearch) {
+      // Art an older search picked by name is checked once against the Steam manifest beside
+      // the exe, which is exact: "re2" had been given Red Dead Redemption 2. Art the user chose
+      // themselves was never auto-found, so it is never touched here.
+      game.bannerSearchVersion = bannerSearchVersion;
+      window.api.resolveBanner(game.exePath, game.name).then(async (found) => {
+        if (found && found.source === 'steam-manifest' && String(found.appid) !== String(game.bannerAppId)) await applyResolved(found);
+        else window.api.saveGames(games);
+      });
+    } else if (!game.bannerLocalPath && game.bannerAppId) {
       window.api.cacheSteamBanner(game.bannerAppId).then((localPath) => {
         if (localPath) {
           game.bannerLocalPath = localPath;
           window.api.saveGames(games);
-          setBannerWithFallback(game, card.querySelector('.card-banner'), card.querySelector('.card-banner-fallback'));
+          setBannerWithFallback(game, ...bannerEls());
         }
       });
-    } else if (!game.bannerLocalPath && !game.bannerAppId && (!game.bannerSearchAttempted || (game.bannerSearchVersion || 1) < bannerSearchVersion)) {
+    } else if (!game.bannerLocalPath && !game.bannerAppId && (!autoFound || staleSearch)) {
       // Once per search version: a card that missed under an older, dumber search tries again
-      // after an update, and a card that still misses is not hammered on every render.
+      // after an update, and a card that still misses is not hammered on every render. The
+      // Steam manifest beside the exe wins where there is one; the store search is for the rest.
       game.bannerSearchAttempted = true;
       game.bannerSearchVersion = bannerSearchVersion;
-      window.api.steamSearch(game.name).then(async (items) => {
-        if (!items || items.length === 0) {
+      window.api.resolveBanner(game.exePath, game.name).then(async (found) => {
+        if (!found) {
           window.api.saveGames(games);
           return;
         }
-        const best = items[0];
-        const localPath = await window.api.cacheSteamBanner(best.appid, best.tinyImage);
-        game.bannerAppId = String(best.appid);
-        if (localPath) game.bannerLocalPath = localPath;
-        window.api.saveGames(games);
-        setBannerWithFallback(game, card.querySelector('.card-banner'), card.querySelector('.card-banner-fallback'));
+        await applyResolved(found);
       });
     }
 
@@ -1930,8 +1945,11 @@ $('#btn-browse-exe').addEventListener('click', async () => {
   if (!p) return;
   $('#game-exe').value = p;
   if (!$('#game-name').value) {
+    // The Steam manifest's name where the exe sits in a Steam library, else a folder or exe
+    // name that says something -- "re2" as a name found Red Dead Redemption 2's art.
     const base = p.split(/[\\/]/).pop().replace(/\.exe$/i, '');
-    const pretty = base.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    const fallback = base.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    const pretty = (await window.api.nameForExe(p)) || fallback;
     $('#game-name').value = pretty;
     $('#steam-search-term').value = pretty;
   }

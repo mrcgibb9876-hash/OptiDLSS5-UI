@@ -719,7 +719,9 @@ ipcMain.handle('pick:image', async () => {
 });
 
 // Bumped when the search gets smarter, so cards that missed under an older search try again.
-const BANNER_SEARCH_VERSION = 2;
+// 3: a Steam manifest beside the exe now decides the art, so cards whose auto-found art
+// disagrees with their manifest are corrected once.
+const BANNER_SEARCH_VERSION = 3;
 
 async function steamStoreSearch(term) {
   const url = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(term)}&l=english&cc=US`;
@@ -748,6 +750,30 @@ ipcMain.handle('steam:search', async (_evt, term) => {
 });
 
 ipcMain.handle('steam:searchVersion', () => BANNER_SEARCH_VERSION);
+
+// The art for a card, without guessing where the answer is on disk. A game under a Steam
+// library has its appid in the appmanifest beside it, which is exact; a store search by name
+// is the fallback, and only for games Steam does not own -- "re2" searched the store and got
+// Red Dead Redemption 2 (a real card, 2026-09-12).
+ipcMain.handle('banner:resolve', async (_evt, { exePath, name } = {}) => {
+  try {
+    const manifest = library.steamManifestFor(exePath);
+    if (manifest) return { appid: String(manifest.appid), name: manifest.name, tinyImage: null, source: 'steam-manifest' };
+    for (const t of library.bannerSearchTerms(name)) {
+      const items = await steamStoreSearch(t);
+      if (items.length) return { appid: String(items[0].appid), name: items[0].name, tinyImage: items[0].tinyImage, source: 'search' };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+});
+
+// What to call a game added by its exe: the Steam manifest's name where there is one, else a
+// folder or exe name that says something (library.nameForExe).
+ipcMain.handle('game:nameForExe', (_evt, exePath) => {
+  try { return library.nameForExe(exePath); } catch { return null; }
+});
 
 function findSetupBat(folder) {
   try {
