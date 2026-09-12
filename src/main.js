@@ -2747,8 +2747,10 @@ async function autoConfigureGame(dir, exePath) {
     reframework = await ensureREFrameworkForGame(dir, exePath);
     reframeworkConfig = fixREFrameworkConfig(dir);
     // The pd route's DLSS runtime: the plugin's DLSS path loads nvngx_dlss.dll from the game
-    // folder, the same file the Feeder deploy places. Never over the game's own.
-    if (reengine.pdUpscalerGame(exePath) && !nativeDlss.shipsNativeDlss(dir)) {
+    // folder, the same file the Feeder deploy places. deployNvngxDlss never overwrites one that is
+    // already there. Not gated on shipsNativeDlss: these games ship no DLSS, and a leftover
+    // sl.interposer.dll from another tool used to skip this deploy (see route.js).
+    if (reengine.pdUpscalerGame(exePath)) {
       try {
         reframework = { ...(reframework || {}), dlss: await feeder.deployNvngxDlss(dir, getRhiManifest, compareStreamlineVersions, feederCacheDir(), GITHUB_HEADERS) };
       } catch (e) {

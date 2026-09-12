@@ -118,6 +118,43 @@ test('Resident Evil 2 takes the REFramework pd-upscaler route, before and after 
   assert.equal(route.recommendRoute(feederDir, feederExe, { api: 'dx12', apis: ['dx12'], engineId: 're' }, 'nvidia').route, 'feeder');
 });
 
+// A user's RE2 folder (2026-09-12): another DLSS 5 tool had left a full Streamline set beside the
+// exe, with `.original` backups. That read as "this game ships its own DLSS", so the card said
+// "just Install" and Game Help never asked for PDPerfPlugin.dll -- OptiScaler waited for a DLSS
+// call RE2 never makes. The pd route must win over leftovers on these five games.
+test('Resident Evil 2 with another tool\'s Streamline/DLSS leftovers still takes the pd route and asks for the plugin', () => {
+  const reengine = require(path.join(REPO, 'src', 'reengine'));
+  const { diagnose } = require(path.join(REPO, 'src', 'gamehelp'));
+  const nativeDlss = require(path.join(REPO, 'src', 'native-dlss'));
+  const dir = scratchDir('route-re2-leftovers');
+  const exe = fakeExe(dir, 're2.exe');
+  write(dir, 're_chunk_000.pak', 'x');
+  for (const f of ['sl.interposer.dll', 'sl.interposer.dll.original', 'sl.common.dll', 'sl.common.dll.original', 'sl.dlss.dll',
+    'sl.dlss_g.dll', 'sl.dlss_nr.dll', 'nvngx_dlss.dll', 'nvngx_dlss.dll.original', 'nvngx_dlssg.dll', 'nvngx_dlssnr.dll.original']) {
+    write(dir, f, 'leftover');
+  }
+  assert.equal(nativeDlss.shipsNativeDlss(dir), true, 'the leftovers do look like shipped DLSS -- which is the trap');
+
+  const detected = { api: 'dx12', apis: ['dx12', 'dx11'], engineId: 're' };
+  const r = route.recommendRoute(dir, exe, detected, 'nvidia');
+  assert.equal(r.route, 'reframework-pd');
+  assert.equal(r.steps.find((s) => s.key === 'pd-plugin').done, false);
+
+  // After Install (pd REFramework + OptiScaler), Game Help asks for the one file it cannot fetch.
+  write(dir, 'dinput8.dll', 'pd');
+  reengine.writeBuildMarker(dir, { build: 'pd-upscaler', revision: 'abc' });
+  const after = route.recommendRoute(dir, exe, detected, 'nvidia');
+  assert.equal(after.route, 'reframework-pd');
+  const help = diagnose({
+    detected: { api: 'dx12', bitness: 64, antiCheat: null },
+    route: { ...after, optiInstalled: true },
+    run: { ran: false, verdict: 'no-log' },
+    foreign: [], lumaKnownBad: null, reEngine: true, reframeworkPresent: true, nrEnabledInIni: true, fixesTried: [],
+    pdUpscaler: reengine.pdStatus(dir, exe), pdPluginPage: 'https://example/plugin',
+  });
+  assert.equal(help.code, 'pd-plugin-missing');
+});
+
 test('the pd-upscaler REFramework download (zip inside a zip) yields dinput8.dll and its revision', { skip: !fs.existsSync(path.join(process.env.TEMP || '', '..', 'claude')) }, () => {
   const reengine = require(path.join(REPO, 'src', 'reengine'));
   const zip = 'C:/Users/mrcgi/AppData/Local/Temp/claude/C--Windows-system32/e7f1a758-15c5-4699-ba97-a565704fb4ec/scratchpad/pd-REFramework.zip';

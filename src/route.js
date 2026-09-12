@@ -147,8 +147,14 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
   // Upscaler Base Plugin, which the user fetches from Nexus themselves. Before the shipped-DLSS
   // branch on purpose: the nvngx_dlss.dll Install places here would otherwise read as the game's
   // own. A Feeder already on disk keeps the Feeder route, since someone chose it.
+  //
+  // Not gated on shipsDlss: these five ship no Streamline or DLSS at all, so any found beside the
+  // exe is another tool's leftover. A user's RE2 folder (2026-09-12) held a full Streamline 2.x set
+  // with `.original` backups from an earlier DLSS 5 tool; that read as "ships its own DLSS", sent
+  // the game down the plain OptiScaler route ("just Install"), and hid the PDPerfPlugin.dll step
+  // and its Game Help -- OptiScaler then waited for a DLSS call RE2 never makes.
   const pd = reengine.pdStatus(dir, exePath);
-  if (pd && !shipsDlss && !feederDeployed) {
+  if (pd && !feederDeployed) {
     return finish('reframework-pd', 'OptiScaler + REFramework upscaler',
       'No DLSS of its own. REFramework\'s pd-upscaler build adds a DLSS call from the engine\'s real motion ' +
       'vectors, which OptiScaler then hooks. Install fetches that build and nvngx_dlss.dll; the one file it ' +
