@@ -834,11 +834,16 @@ function detectInstalledBackends(dir) {
   const optiscaler = has('OptiScaler.ini') && has('nvngx_dlssnr.dll');
   // Anything else of ours still in the folder once OptiScaler itself is gone -- so the card can
   // still offer Remove and take the folder the rest of the way back.
+  // Only what an INSTALL leaves behind. The three preference markers (.dlss5ui-api.json,
+  // .dlss5ui-lossless.json, .dlss5ui-optifg-enabled) are deliberately not here: each can be set
+  // on a game before anything is installed -- choosing DX12 for Where Winds Meet in Edit wrote
+  // .dlss5ui-api.json, this list then called it a leftover, and the card's Install button turned
+  // into a red "Remove leftovers" that deleted the choice. Remove (the full uninstall) still
+  // clears them via APP_MARKERS.
   const leftovers = [
     'OptiScaler.ini', 'OptiScaler.dll', 'nvngx_dlssnr.dll', 'nvngx.dll_dlssnr.dll', 'OptiScaler',
     'dlss5-feed.addon64', 'Luma-Unreal Engine.addon', 'Luma',
-    '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.dlss5ui-lossless.json',
-    '.dlss5ui-api.json', '.dlss5ui-optifg-enabled', '.optiscaler-manager-install.json',
+    '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.optiscaler-manager-install.json',
   ].filter(has);
   return { optiscaler, leftovers };
 }
