@@ -288,11 +288,13 @@ until you press Ask AI, and the key never leaves your machine except to api.anth
 Both are rebindable, and both panels can be open at once. The panel moved off bare `Home` in
 v1.0.1 because `Home` collided with too many games; v1.0.0 still uses it.
 
-**Moving the DLSS 5 panel** (engine v1.0.14): hold the left mouse button on its background, away
-from any slider or checkbox, and drag it anywhere on screen. Where you leave it is remembered for
-that game, as a fraction of the screen, so it comes back in the same place at any resolution. A
-**Reset position** button in its title row puts it back on the left edge, and the bright red **X** at the
-far right of the title row closes it (its key opens it again).
+**Moving and resizing the DLSS 5 panel** (engine v1.0.14; resizing from v1.0.18): hold the left
+mouse button on its background, away from any slider or checkbox, and drag it anywhere. It can hang
+partly off the screen, but a strip always stays visible to grab it back. Drag any edge or the
+bottom-right corner to resize it; a panel smaller than its content scrolls. Position and size are
+remembered for that game, as fractions of the screen, so they come back at any resolution. A
+**Reset layout** button in its title row puts it back on the left edge at its natural size, and the
+bright red **X** at the far right of the title row closes it (its key opens it again).
 
 **RE Engine games** (Dragon's Dogma 2, the Resident Evil titles, Monster Hunter Rise/Wilds, and
 the rest of Capcom's RE Engine catalogue) also need REFramework, which uses Insert for its own
