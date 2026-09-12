@@ -86,6 +86,10 @@ body {
 }
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-ghost { background: transparent; }
+/* Launch is green on every theme, NVIDIA or AMD accent alike: it is the one button that starts the
+   game rather than changing it, and green says go. */
+.btn-launch { background: #1f9d4d; border-color: #1f9d4d; color: #fff; font-weight: 600; }
+.btn-launch:hover { background: #26b85b; border-color: #26b85b; }
 .btn-small { padding: 5px 10px; font-size: 12px; }
 .btn-danger { color: var(--danger); border-color: rgba(var(--danger-rgb),0.4); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }

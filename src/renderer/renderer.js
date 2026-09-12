@@ -157,7 +157,7 @@ async function renderGrid() {
         ${(status.foreign || []).length ? `<button class="btn btn-danger btn-small btn-remove-foreign" style="margin: 2px 0 6px;">${escapeHtml(t('Remove the other DLSS 5 toolchain…'))}</button>` : ''}
         <div class="card-actions">
           <button class="btn ${backends.optiscaler || (backends.leftovers || []).length ? 'btn-danger' : 'btn-primary'} btn-install">${escapeHtml(backends.optiscaler ? t('Remove OptiScaler') : (backends.leftovers || []).length ? t('Remove leftovers') : t('Install OptiScaler'))}</button>
-          <button class="btn btn-ghost btn-launch" title="${escapeHtml(t('Runs the game from its own folder -- for an Unreal game, the -Win64-Shipping.exe that OptiScaler is installed beside.'))}">&#9654; ${escapeHtml(t('Launch'))}</button>
+          <button class="btn btn-launch" title="${escapeHtml(t('Runs the game from its own folder -- for an Unreal game, the -Win64-Shipping.exe that OptiScaler is installed beside.'))}">&#9654; ${escapeHtml(t('Launch'))}</button>
         </div>
         <div class="card-actions-row2">
           <button class="btn btn-ghost btn-open">${escapeHtml(t('Open Folder'))}</button>
