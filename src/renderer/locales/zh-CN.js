@@ -407,4 +407,8 @@ window.I18N.register("zh-CN", {
   "crashed (Unreal crash report: {message})": "崩溃（Unreal 崩溃报告：{message}）",
   "see the report": "见报告",
   "the Feeder gave up this run -- see dlss5-feed.log for its own diagnosis": "本次运行中 Feeder 已放弃 -- 请查看 dlss5-feed.log 中的自行诊断",
+  "Verified {date}": "已验证 {date}",
+  "Will remove {count} item(s): {list}.": "将移除 {count} 项：{list}。",
+  "Will restore: {list}.": "将恢复：{list}。",
+  "nothing": "无",
 });

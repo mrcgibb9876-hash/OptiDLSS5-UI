@@ -45,6 +45,7 @@ const fsp = require('node:fs/promises');
 const { openZip, findEntry, findEntries, extractEntryTo } = require('./zip');
 const { setIniKey } = require('./ini-merge');
 const feeder = require('./feeder');
+const verified = require('./verified');
 
 const LUMA_RELEASES_API = 'https://api.github.com/repos/Filoppi/Luma-Framework/releases/latest';
 // The production build, not "-Test" (Luma's own debug/verbose variant -- see the repo's ReadMe).
@@ -125,14 +126,14 @@ const LUMA_UE_KNOWN_BAD = {
 };
 
 function lumaUeKnownBad(exePath) {
-  return LUMA_UE_KNOWN_BAD[path.basename(exePath || '').toLowerCase()] || null;
+  return verified.knownBad(exePath, 'lumaue') || LUMA_UE_KNOWN_BAD[path.basename(exePath || '').toLowerCase()] || null;
 }
 
 // The default route only where Luma UE has been verified end to end (Fallen Order). Every other
 // eligible UE4 D3D11 game defaults to the Feeder and gets Luma as an experimental option in Edit
 // -- the wider gate shipped in 1.25.0 on the strength of one game and broke Spyro within a day.
 function isLumaUeDefault(exePath) {
-  return isFallenOrder(exePath);
+  return isFallenOrder(exePath) || verified.defaultRoute(exePath) === 'lumaue';
 }
 
 function lumaUeDeployed(dir) {

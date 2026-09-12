@@ -213,6 +213,16 @@ both, on purpose:
 
 **DLSS-NR-on-AMD itself is never downloaded** -- see the section above for why.
 
+## Verified games
+
+The card shows a "✓ Verified" tick when a game's route has been confirmed end to end on a real
+install -- Neural Rendering actually dispatching in gameplay -- and recorded in
+[`src/verified-games.json`](src/verified-games.json). That file is also where the app learns
+which route a game defaults to when a specific mod has been proven there (Luma UE on Fallen
+Order) and which routes are known to break a game (Luma UE on Spyro). It is data, not code:
+confirm a game yourself, then add an entry by pull request with the date, the route, and what
+a player should know.
+
 ## In-game keys
 
 | | |

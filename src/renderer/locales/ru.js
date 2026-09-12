@@ -407,4 +407,8 @@ window.I18N.register("ru", {
   "crashed (Unreal crash report: {message})": "вылет (отчёт Unreal: {message})",
   "see the report": "см. отчёт",
   "the Feeder gave up this run -- see dlss5-feed.log for its own diagnosis": "Feeder прекратил работу в этом запуске -- см. dlss5-feed.log с его диагнозом",
+  "Verified {date}": "Проверено {date}",
+  "Will remove {count} item(s): {list}.": "Будет удалено элементов: {count}: {list}.",
+  "Will restore: {list}.": "Будет восстановлено: {list}.",
+  "nothing": "ничего",
 });

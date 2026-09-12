@@ -163,11 +163,19 @@ async function renderGrid() {
       });
     }
 
-    card.querySelector('.btn-install').addEventListener('click', () => {
+    card.querySelector('.btn-install').addEventListener('click', async () => {
       if (backends.optiscaler || (backends.leftovers || []).length) {
+        // The exact list first: Remove never surprises anyone with what it took.
+        const plan = await window.api.uninstallPlan(game.exePath);
+        const clip = (arr) => (arr.length > 12 ? arr.slice(0, 12).join(', ') + ' \u2026(+' + (arr.length - 12) + ')' : arr.join(', '));
+        const preview = plan && plan.ok
+          ? ' ' + t('Will remove {count} item(s): {list}.', { count: plan.remove.length, list: clip(plan.remove) || t('nothing') }) +
+            (plan.restore.length ? ' ' + t('Will restore: {list}.', { list: clip(plan.restore) }) : '') +
+            (plan.kept.length ? ' ' + t('Left alone: {list}.', { list: plan.kept.join('; ') }) : '')
+          : '';
         flipToConfirm(card, {
           title: t('Remove OptiScaler?'),
-          detail: t('Removes everything this app put in the game folder -- OptiScaler, the Feeder or Luma UE, Streamline, REFramework, swapped DLLs, its markers -- and puts back anything it renamed or replaced. No terminal.'),
+          detail: t('Removes everything this app put in the game folder -- OptiScaler, the Feeder or Luma UE, Streamline, REFramework, swapped DLLs, its markers -- and puts back anything it renamed or replaced. No terminal.') + preview,
           onConfirm: async () => {
             const res = await window.api.runUninstall(game.exePath);
             if (res.ok) await removeLosslessProfile(game);
@@ -288,6 +296,10 @@ async function applyRecommendation(game, card, backends) {
   const routeText = route.complete ? `\u2713 ${t(route.label)}` : t(route.label);
   const routeTitle = escapeHtml(route.nextStep && route.optiInstalled ? `${t(route.reason, route.reasonVars)} ${t('Next: {step}.', { step: t(route.nextStep) })}` : t(route.reason, route.reasonVars));
   chips.push(`<span class="engine-badge route-badge ${routeClass}" title="${routeTitle}">${escapeHtml(routeText)}</span>`);
+  // Only a dated, human confirmation from the registry (src/verified-games.json) earns this.
+  if (route.verified && route.verified.route === route.route) {
+    chips.push(`<span class="engine-badge engine-badge-known" title="${escapeHtml(route.verified.notes || '')}">✓ ${escapeHtml(t('Verified {date}', { date: route.verified.verified }))}</span>`);
+  }
 
   line.innerHTML = chips.join(' ');
 

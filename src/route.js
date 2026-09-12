@@ -42,6 +42,7 @@ const feeder = require('./feeder');
 const lumaue = require('./lumaue');
 const amdnr = require('./amdnr');
 const nativeDlss = require('./native-dlss');
+const verified = require('./verified');
 
 // A user's per-game API choice laid over the detection result: the chosen API becomes the
 // primary, joins the list of APIs the game runs on (so keepGamesOwnDlss writes its upscaler key
@@ -87,6 +88,7 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
     return {
       route, label, reason, reasonVars, steps, gpuVendor,
       optiInstalled, feederDeployed, lumaDeployed, feederMisdeployed,
+      verified: verified.verification(exePath),
       complete: steps.length > 0 && !next,
       nextStep: next ? next.label : null,
     };

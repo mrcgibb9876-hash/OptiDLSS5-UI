@@ -1,0 +1,60 @@
+{
+  "_readme": "Games this app's route has been confirmed on, from a real install, by a person. One entry per game. `match.exe` are lower-case exe names beside which the app installs; `match.projectFolder` is the Unreal project folder (the one above Binaries\\Win64) for games that ship several exe names. `route` is the route that was verified (optiscaler = the game's own DLSS, feeder = DLSS5 Feeder, lumaue = Luma UE). `verified` is the date it was last confirmed working end to end (NR actually dispatching in gameplay), `notes` what a user should know. `knownBad` names routes that were tried and broke the game. Add yours by pull request -- the card shows the tick only for entries here.",
+  "games": [
+    {
+      "id": "star-wars-jedi-fallen-order",
+      "name": "STAR WARS Jedi: Fallen Order",
+      "match": { "exe": ["swgame-win64-shipping.exe", "starwarsjedifallenorder.exe"], "projectFolder": "SwGame" },
+      "engine": "Unreal Engine 4.21 (D3D11)",
+      "route": "lumaue",
+      "verified": "2026-09-11",
+      "notes": "Luma UE supplies the DLSS call; OptiScaler must run it as dlss_12 (the app writes this). Select DLSS in Luma's overlay (Home) in gameplay. Known: opening menus causes pop-in and noise (Luma-Framework issue #122). Frame Generation: Lossless Scaling."
+    },
+    {
+      "id": "batman-arkham-knight",
+      "name": "Batman: Arkham Knight",
+      "match": { "exe": ["batmanak.exe"] },
+      "engine": "Unreal Engine 3 (D3D11)",
+      "route": "feeder",
+      "verified": "2026-09-09",
+      "notes": "DLSS5 Feeder + OptiScaler as dxgi.dll, ReShade loaded by OptiScaler (LoadReshade=true). Disable Enhanced Godrays in-game (a 2015 GameWorks bug on modern GPUs). Frame Generation: Lossless Scaling."
+    },
+    {
+      "id": "code-vein-2",
+      "name": "CODE VEIN 2",
+      "match": { "exe": ["codevein2-win64-shipping.exe"], "projectFolder": "CodeVein2" },
+      "engine": "Unreal Engine 5 (D3D12)",
+      "route": "optiscaler",
+      "verified": "2026-09-11",
+      "notes": "Ships DLSS and Streamline under Engine\\Plugins. OptiScaler alone; the Feeder on this game crashes it (two DLSS DLLs)."
+    },
+    {
+      "id": "mortal-shell-ii",
+      "name": "Mortal Shell II",
+      "match": { "exe": ["mortalshell2-win64-shipping.exe"], "projectFolder": "MortalShell2" },
+      "engine": "Unreal Engine 5 (D3D12)",
+      "route": "optiscaler",
+      "verified": "2026-09-11",
+      "notes": "Ships DLSS under Engine\\Plugins\\Runtime\\Nvidia. OptiScaler alone."
+    },
+    {
+      "id": "cyberpunk-2077",
+      "name": "Cyberpunk 2077",
+      "match": { "exe": ["cyberpunk2077.exe"] },
+      "engine": "RED Engine (D3D12)",
+      "route": "optiscaler",
+      "verified": "2026-09-08",
+      "notes": "Native Streamline DLSS. OptiScaler's own Frame Generation must stay off here (the app forces it): with the game's Streamline it caused a TDR crash."
+    },
+    {
+      "id": "spyro-reignited-trilogy",
+      "name": "Spyro Reignited Trilogy",
+      "match": { "exe": ["spyro-win64-shipping.exe"], "projectFolder": "Spyro" },
+      "engine": "Unreal Engine 4 (D3D11)",
+      "route": "feeder",
+      "verified": null,
+      "notes": "Feeder route only.",
+      "knownBad": { "lumaue": "does not start with Luma UE deployed (user report, 2026-09-12)" }
+    }
+  ]
+}

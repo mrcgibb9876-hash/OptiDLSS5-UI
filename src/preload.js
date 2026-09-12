@@ -67,6 +67,7 @@ contextBridge.exposeInMainWorld('api', {
   syncGameIfStale: (payload) => ipcRenderer.invoke('game:sync-if-stale', payload),
   runSetup: (exePath) => ipcRenderer.invoke('game:run-setup', exePath),
   runUninstall: (exePath) => ipcRenderer.invoke('game:run-uninstall', exePath),
+  uninstallPlan: (exePath) => ipcRenderer.invoke('game:uninstallPlan', exePath),
   openFolder: (exePath) => ipcRenderer.invoke('game:open-folder', exePath),
   lastRun: (exePath) => ipcRenderer.invoke('game:lastRun', exePath),
   supportBundle: (exePath, detected) => ipcRenderer.invoke('game:supportBundle', { exePath, detected }),

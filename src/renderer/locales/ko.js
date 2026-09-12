@@ -407,4 +407,8 @@ window.I18N.register("ko", {
   "crashed (Unreal crash report: {message})": "충돌 (Unreal 충돌 보고서: {message})",
   "see the report": "보고서 참조",
   "the Feeder gave up this run -- see dlss5-feed.log for its own diagnosis": "이번 실행에서 Feeder가 중단했습니다 -- 자체 진단은 dlss5-feed.log를 참조하세요",
+  "Verified {date}": "검증됨 {date}",
+  "Will remove {count} item(s): {list}.": "{count}개 항목 제거 예정: {list}.",
+  "Will restore: {list}.": "복원 예정: {list}.",
+  "nothing": "없음",
 });

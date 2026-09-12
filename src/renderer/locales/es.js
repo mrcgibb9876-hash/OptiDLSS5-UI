@@ -407,4 +407,8 @@ window.I18N.register("es", {
   "crashed (Unreal crash report: {message})": "se cerró (informe de fallo de Unreal: {message})",
   "see the report": "ver el informe",
   "the Feeder gave up this run -- see dlss5-feed.log for its own diagnosis": "el Feeder se rindió en esta ejecución -- mira dlss5-feed.log para su propio diagnóstico",
+  "Verified {date}": "Verificado {date}",
+  "Will remove {count} item(s): {list}.": "Quitará {count} elemento(s): {list}.",
+  "Will restore: {list}.": "Restaurará: {list}.",
+  "nothing": "nada",
 });

@@ -1206,6 +1206,68 @@ async function uninstallEverything(dir) {
   return { removed: [...new Set(removed)], restored, kept };
 }
 
+// What uninstallEverything() would do, read-only, for the confirmation text -- the same lists
+// and markers it acts on, none of the actions. Kept in step with it: a deletion that this does
+// not name is a bug in one of the two. (The Streamline deletion of 2026-09-12 is why this exists.)
+async function planUninstall(dir) {
+  const remove = new Set();
+  const restore = [];
+  const kept = [];
+  const has = (rel) => fs.existsSync(path.join(dir, ...rel.split(/[\\/]/)));
+  const add = (rel) => { if (has(rel)) remove.add(rel); };
+  const journal = readInstallMarker(dir) || {};
+  const feederMarker = readJson(path.join(dir, '.dlss5ui-feeder-deploy.json'), null);
+  const lumaMarker = readJson(path.join(dir, '.dlss5ui-lumaue-deploy.json'), null);
+  if (feeder.feederDeployed(dir)) {
+    for (const n of ['dlss5-feed.addon64', 'dlss5-feed.cfg', 'dlss5-feed.log', 'ReShade64.dll', 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log', '.dlss5ui-feeder-deploy.json']) add(n);
+    const shaders = ['DLSS5_Feed.fx', 'ReShade.fxh', 'ReShadeUI.fxh'];
+    for (const p of Object.values(feeder.MV_PROVIDERS)) shaders.push(...(p.files || []));
+    for (const f of shaders) add('reshade-shaders/Shaders/' + f);
+    if (nativeDlss.shippedDlssPath(dir) || !(feederMarker && feederMarker.placedNvngxDlss === false)) add('nvngx_dlss.dll');
+  }
+  if (lumaue.lumaUeDeployed(dir) || has('Luma-Unreal Engine.addon')) {
+    for (const n of ['Luma', 'Luma-Unreal Engine.addon', 'ReShade64.dll', 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log', '.dlss5ui-lumaue-deploy.json']) add(n);
+    if (!(lumaMarker && lumaMarker.placedNvngxDlss === false)) add('nvngx_dlss.dll');
+  }
+  try {
+    const fg = framegen.frameGenSwapState(dir);
+    if (fg.hasFrameGen && fs.existsSync(fg.dllPath + '.dlss5ui-fgbackup')) restore.push(path.basename(fg.dllPath));
+  } catch {}
+  if (journal.streamline && journal.streamline.dir) for (const f of journal.streamline.files || []) add(path.join(journal.streamline.dir, f));
+  if (journal.reframework) { add(REFRAMEWORK_DLL_NAME); add(REFRAMEWORK_CONFIG_NAME); add('reframework'); }
+  if (journal.proxy) add(journal.proxy);
+  if (journal.backedUp && has(journal.backedUp)) restore.push(`${journal.proxy} (from ${journal.backedUp})`);
+  for (const n of ['OptiScaler.dll', 'OptiScaler.ini', 'OptiScaler.log', 'nvngx.dll_dlssnr.dll', 'Remove_OptiScaler.bat', 'setup_windows.bat', 'setup_linux.sh', 'nvngx_dlssnr.dll', 'OptiScaler', '!! EXTRACT ALL FILES TO GAME FOLDER !!']) add(n);
+  for (const f of RELEASE_LICENSE_FILES) add('Licenses/' + f);
+  for (const rel of journal.added || []) add(rel);
+  for (const r of journal.replaced || []) if (has(r.backup)) restore.push(r.rel);
+  for (const m of APP_MARKERS) add(m);
+  for (const rel of LEGACY_PAYLOAD) add(rel);
+  const feederEra = has('reshade-shaders/Shaders/DLSS5_Feed.fx');
+  const foreign = foreignToolchains(dir);
+  if (feederEra && !foreign.length) for (const n of ['ReShade64.dll', 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log', 'reshade-shaders']) add(n);
+  const shippedElsewhere = nativeDlss.shippedDlssPath(dir) && !has('sl.interposer.dll') && !has('sl.interposer.dll.original');
+  if (shippedElsewhere || feederEra) add('nvngx_dlss.dll');
+  try {
+    for (const n of fs.readdirSync(dir)) {
+      if (LEGACY_PATTERNS.some((p) => p.test(n))) remove.add(n);
+      if (n.endsWith(ORIG_BACKUP_SUFFIX)) restore.push(n.slice(0, -ORIG_BACKUP_SUFFIX.length));
+    }
+  } catch {}
+  for (const f of foreign) kept.push(`${f.tool}: ${f.files.join(', ')}`);
+  if (has('streamline/sl.interposer.dll') && !(journal.streamline && journal.streamline.dir)) kept.push('streamline folder (not recorded as this app\'s deploy)');
+  return { ok: true, remove: [...remove].sort(), restore: [...new Set(restore)], kept };
+}
+
+ipcMain.handle('game:uninstallPlan', async (_evt, exePath) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    return await planUninstall(gameDir(exePath));
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
 ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
   const dir = gameDir(exePath);
   try {
