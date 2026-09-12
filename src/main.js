@@ -1430,6 +1430,31 @@ ipcMain.handle('game:supportBundle', async (_evt, { exePath, detected }) => {
   }
 });
 
+// The exe a Launch should run. An Unreal game's card may point at the launcher stub in the
+// install root (the exe the store lists); the process that actually renders is the
+// <Project>-Win64-Shipping.exe under <Project>\Binaries\Win64, and that is what OptiScaler is
+// installed beside -- so that is what runs. Anything else runs as it is.
+function launchTarget(exePath) {
+  if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+  const resolved = resolveUnrealShippingExe(exePath);
+  return fs.existsSync(resolved) ? resolved : exePath;
+}
+
+ipcMain.handle('game:launch', async (_evt, { exePath, dryRun = false } = {}) => {
+  try {
+    const target = launchTarget(exePath);
+    if (!dryRun) {
+      // Detached, own folder as cwd (Unreal and Unity both resolve their data relative to it),
+      // nothing inherited from this app: the game outlives the manager if it is closed.
+      const child = spawn(target, [], { cwd: path.dirname(target), detached: true, stdio: 'ignore', windowsHide: false });
+      child.unref();
+    }
+    return { ok: true, target };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
 ipcMain.handle('game:open-folder', (_evt, exePath) => {
   shell.openPath(gameDir(exePath));
 });

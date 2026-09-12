@@ -411,4 +411,8 @@ window.I18N.register("de", {
   "Will remove {count} item(s): {list}.": "Entfernt {count} Element(e): {list}.",
   "Will restore: {list}.": "Stellt wieder her: {list}.",
   "nothing": "nichts",
+  "Launch": "Starten",
+  "Runs the game from its own folder -- for an Unreal game, the -Win64-Shipping.exe that OptiScaler is installed beside.": "Startet das Spiel aus seinem eigenen Ordner -- bei einem Unreal-Spiel die -Win64-Shipping.exe, neben der OptiScaler installiert ist.",
+  "Could not launch {name}: {error}": "{name} konnte nicht gestartet werden: {error}",
+  "Launched {name} ({exe}).": "{name} gestartet ({exe}).",
 });

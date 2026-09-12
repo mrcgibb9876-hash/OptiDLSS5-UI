@@ -120,6 +120,7 @@ async function renderGrid() {
           <button class="btn btn-ghost btn-setup" title="${escapeHtml(t('Optional -- the app already sets up the proxy DLL. Use this for OptiPatcher or spoofing options.'))}">${escapeHtml(t('Setup script'))}</button>
         </div>
         <div class="card-actions-row2">
+          <button class="btn btn-ghost btn-launch" title="${escapeHtml(t('Runs the game from its own folder -- for an Unreal game, the -Win64-Shipping.exe that OptiScaler is installed beside.'))}">&#9654; ${escapeHtml(t('Launch'))}</button>
           <button class="btn btn-ghost btn-open">${escapeHtml(t('Open Folder'))}</button>
           <button class="btn btn-ghost btn-edit">${escapeHtml(t('Edit'))}</button>
           <button class="btn btn-ghost btn-support" title="${escapeHtml(t('Save every log and the app\'s own view of this game into one zip to share.'))}">${escapeHtml(t('Support bundle'))}</button>
@@ -239,6 +240,11 @@ async function renderGrid() {
       window.api.openPath(res.zipPath);
     });
     card.querySelector('.btn-setup').addEventListener('click', () => runSetup(game));
+    card.querySelector('.btn-launch').addEventListener('click', async () => {
+      const res = await window.api.launchGame(game.exePath);
+      if (!res.ok) { toast(t('Could not launch {name}: {error}', { name: game.name, error: res.error })); return; }
+      toast(t('Launched {name} ({exe}).', { name: game.name, exe: res.target.split(/[\\/]/).pop() }));
+    });
     card.querySelector('.btn-open').addEventListener('click', () => window.api.openFolder(game.exePath));
     card.querySelector('.btn-edit').addEventListener('click', () => openGameModal(game));
     card.querySelector('.btn-remove').addEventListener('click', () => removeGame(game));

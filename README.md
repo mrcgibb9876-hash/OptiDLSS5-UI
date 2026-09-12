@@ -223,6 +223,12 @@ Order) and which routes are known to break a game (Luma UE on Spyro). It is data
 confirm a game yourself, then add an entry by pull request with the date, the route, and what
 a player should know.
 
+## Launching a game
+
+Every card has a **Launch** button. It runs the game from its own folder, and for an Unreal game it runs the
+`<Project>-Win64-Shipping.exe` under `<Project>BinariesWin64` -- the process that actually renders and the one
+OptiScaler is installed beside -- even when the card was added from the launcher stub in the install root.
+
 ## In-game keys
 
 | | |
