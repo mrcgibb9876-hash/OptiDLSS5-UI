@@ -492,6 +492,9 @@ function helpWords(diag) {
     case 'feeder-missing': return t('This game has no DLSS of its own, so OptiScaler alone has nothing to hook. Install deploys the DLSS5 Feeder first.');
     case 'luma-missing': return t('This game\'s route is Luma UE, which is not deployed yet. Open Edit and deploy Luma UE (its licence is confirmed there), then launch.');
     case 'reframework-missing': return t('This is an RE Engine game and REFramework is missing. OptiScaler does nothing there without it. Reconfigure fetches and places it.');
+    case 'pd-build-missing': return t('This Resident Evil has no DLSS of its own, so it needs REFramework\'s pd-upscaler build and nvngx_dlss.dll beside the exe. Reconfigure fetches and places both.');
+    case 'pd-plugin-missing': return t('One file this app cannot fetch: PureDark\'s Upscaler Base Plugin (PDPerfPlugin.dll), free on Nexus Mods. Download it, put PDPerfPlugin.dll beside the game exe, then launch. REFramework\'s upscaler loads it and makes the DLSS call OptiScaler hooks.');
+    case 'pd-enable-ingame': return t('Everything is in place but the last run made no DLSS call. In-game, press Insert for REFramework\'s menu, open TemporalUpscaler, tick Enabled and set Upscale Type to DLSS. Then play a minute and quit.');
     case 'needs-run': return t('No run to judge yet. Launch the game, reach actual gameplay (not a menu), play a minute, then quit. Come back here and it is checked.');
     case 'needs-run-after-fix': return t('"{fix}" was applied. The old log still says what it said, so launch the game, reach gameplay, play a minute, quit, and this is checked again.', { fix: helpFixLabel(v.fix) });
     case 'ok': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}{api}.', { count: v.count, fps: v.fps ? t(' at {fps} fps', { fps: v.fps }) : '', api: v.api ? ' (' + v.api + ')' : '' });
@@ -526,6 +529,9 @@ function helpShort(diag) {
     case 'feeder-missing': return t('Feeder not deployed yet');
     case 'luma-missing': return t('Luma UE not deployed yet');
     case 'reframework-missing': return t('REFramework missing');
+    case 'pd-build-missing': return t('Needs the pd-upscaler REFramework');
+    case 'pd-plugin-missing': return t('Get PDPerfPlugin.dll from Nexus');
+    case 'pd-enable-ingame': return t('Enable DLSS in REFramework (Insert)');
     case 'd3d11-native': return t('Wrong D3D11 upscaler setting');
     case 'nr-disabled': return t('Neural Rendering is switched off');
     case 'feeder-technique': return t('Feeder shader missing');
@@ -561,6 +567,18 @@ function renderHelp(diag) {
     unavailable: t('Not available'), unknown: t('No rule fits'),
   }[diag.status] || '';
   body.textContent = helpWords(diag);
+  // A finding that sends the user to one page (the pd route's Nexus plugin) gets the link.
+  let linkBtn = $('#help-link');
+  if (!linkBtn) {
+    linkBtn = document.createElement('button');
+    linkBtn.id = 'help-link';
+    linkBtn.className = 'btn btn-small';
+    linkBtn.addEventListener('click', () => { if (helpDiag && helpDiag.vars && helpDiag.vars.url) window.api.openExternal(helpDiag.vars.url); });
+    body.insertAdjacentElement('afterend', linkBtn);
+  }
+  const url = diag.vars && diag.vars.url;
+  linkBtn.classList.toggle('hidden', !url);
+  if (url) linkBtn.textContent = t('Open the download page');
   const run = diag.run;
   $('#help-lastrun').textContent = run && run.ran ? t('Last run: {when} -- {verdict}', { when: new Date(run.at).toLocaleString(), verdict: describeRun(run) }) : t('Last run: none recorded');
   // One big button that does the next right thing; the rest sits behind More.

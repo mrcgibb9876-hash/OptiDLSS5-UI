@@ -94,3 +94,23 @@ test('an API error surfaces as a plain message', async () => {
   const fetchImpl = async () => ({ ok: false, status: 401, json: async () => ({ error: { message: 'invalid x-api-key' } }) });
   await assert.rejects(() => aihelp.helpSession({ apiKey: 'bad', evidence: 'x', fetchImpl, applyFix: async () => 'no' }), /invalid x-api-key/);
 });
+
+test('Resident Evil 2: the pd route asks for its three files in order, then for DLSS to be switched on in REFramework', () => {
+  const pdBase = (pd, run) => base({ route: { route: 'reframework-pd' }, run, reEngine: true, reframeworkPresent: true });
+  const t1 = pdBase();
+  t1.pdUpscaler = { game: 'RE2', reframeworkPresent: true, reframeworkBuild: 'standard', dlssPresent: false, pluginPresent: false };
+  assert.equal(diagnose(t1).code, 'pd-build-missing');
+  const t2 = pdBase();
+  t2.pdUpscaler = { game: 'RE2', reframeworkPresent: true, reframeworkBuild: 'pd-upscaler', dlssPresent: true, pluginPresent: false };
+  t2.pdPluginPage = 'https://example/plugin';
+  const d2 = diagnose(t2);
+  assert.equal(d2.status, 'step');
+  assert.equal(d2.code, 'pd-plugin-missing');
+  assert.equal(d2.vars.url, 'https://example/plugin');
+  const t3 = pdBase(null, { ran: true, verdict: 'no-dlss' });
+  t3.pdUpscaler = { game: 'RE2', reframeworkPresent: true, reframeworkBuild: 'pd-upscaler', dlssPresent: true, pluginPresent: true };
+  assert.equal(diagnose(t3).code, 'pd-enable-ingame');
+  const t4 = pdBase(null, { ran: true, verdict: 'nr-ran', nrDispatch: 50 });
+  t4.pdUpscaler = t3.pdUpscaler;
+  assert.equal(diagnose(t4).status, 'ok');
+});

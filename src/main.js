@@ -12,6 +12,7 @@ const framegen = require('./framegen');
 const injector = require('./injector');
 const feeder = require('./feeder');
 const lossless = require('./lossless');
+const reengine = require('./reengine');
 const lumaue = require('./lumaue');
 const nativeDlss = require('./native-dlss');
 const { recommendRoute, withApiOverride, API_OVERRIDE_VALUES } = require('./route');
@@ -1202,7 +1203,7 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
     // success with a footnote leaves an "Installed" badge on a game that will not start it. Failing
     // here means the folder is untouched and the user can retry once they are online.
     if (isReEngineGame(dir)) {
-      const pre = await ensureREFrameworkForGame(dir);
+      const pre = await ensureREFrameworkForGame(dir, exePath);
       if (pre && pre.error) {
         throw new Error(
           `This is an RE Engine game, which needs REFramework before OptiScaler will do anything -- ` +
@@ -1316,7 +1317,7 @@ async function removeSharedNrDllIfUnneeded(dir) {
 // journal existed still gets the fixed payload list. Nothing here guesses at a file it did not
 // place -- unknown files stay, and the report says so where a decision was made.
 const RELEASE_LICENSE_FILES = ['DirectX_LICENSE.txt', 'FidelityFX_v2_LICENSE.md', 'RenoDX_ATTRIBUTION.txt', 'XeSS_LICENSE.txt'];
-const APP_MARKERS = ['.dlss5ui-lossless.json', '.dlss5ui-framegen.json', '.dlss5ui-api.json', '.dlss5ui-optifg-enabled', '.optiscaler-manager-install.json'];
+const APP_MARKERS = ['.dlss5ui-lossless.json', '.dlss5ui-framegen.json', '.dlss5ui-api.json', '.dlss5ui-optifg-enabled', '.optiscaler-manager-install.json', reengine.REFRAMEWORK_BUILD_MARKER];
 const LEGACY_PAYLOAD = [
   'OptiScaler_DlssNr.addon64', 'OptiScaler_DlssNr.exp', 'OptiScaler_DlssNr.lib', 'OptiScaler_DlssNr.pdb', 'OptiScaler_DlssNr.dll',
   '.optdlss5-active-manifest.json', 'Verify-DLSS5Feeder.ps1', 'Run-DLSS5-Feeder-Install.bat', 'Remove_OptiScaler.bat',
@@ -1680,6 +1681,9 @@ async function helpContext(exePath, detected, fixesTried = []) {
     lumaKnownBad: route.lumaDeployed ? lumaue.lumaUeKnownBad(exePath) : null,
     reEngine,
     reframeworkPresent: reEngine ? fs.existsSync(path.join(dir, REFRAMEWORK_DLL_NAME)) : null,
+    // RE2/3/4/7/Village: the pd-upscaler route's three files (reengine.js), null elsewhere.
+    pdUpscaler: reengine.pdStatus(dir, exePath),
+    pdPluginPage: reengine.PD_PLUGIN_PAGE_URL,
     nrEnabledInIni,
     gpuVendor: vendor || 'unknown',
   };
@@ -1864,8 +1868,9 @@ ipcMain.handle('game:open-folder', (_evt, exePath) => {
 });
 
 ipcMain.handle('shell:openExternal', (_evt, url) => {
-  // Only the project's own GitHub: this is the report button, not a general browser opener.
-  if (typeof url === 'string' && url.startsWith('https://github.com/mrcgibb9876-hash/')) shell.openExternal(url);
+  // Only the project's own GitHub (the report button) and the one third-party page a route
+  // sends the user to (PureDark's Upscaler Base Plugin, reengine.js): not a general opener.
+  if (typeof url === 'string' && (url.startsWith('https://github.com/mrcgibb9876-hash/') || url === reengine.PD_PLUGIN_PAGE_URL)) shell.openExternal(url);
 });
 
 ipcMain.handle('shell:openPath', (_evt, p) => {
@@ -2415,9 +2420,27 @@ async function ensureREFrameworkCache() {
 /// dinput8.dll that this function didn't itself place there -- OptiScaler needs *a* working
 /// REFramework present, not necessarily the latest one, and a manually-supplied build may be
 /// there for a reason. Returns null for non-RE-Engine games or when a dll is already present.
-async function ensureREFrameworkForGame(dir) {
+async function ensureREFrameworkForGame(dir, exePath = null) {
   if (!isReEngineGame(dir)) return null;
   const destPath = path.join(dir, REFRAMEWORK_DLL_NAME);
+  const pdGame = reengine.pdUpscalerGame(exePath);
+
+  // The five RE Engine games with no DLSS of their own take the pd-upscaler build (reengine.js).
+  // A standard build this app placed earlier is swapped; a hand-placed dinput8.dll is left.
+  if (pdGame) {
+    const marker = reengine.readBuildMarker(dir);
+    const ours = !!(readInstallMarker(dir) || {}).reframework;
+    if (fs.existsSync(destPath) && !(ours && (!marker || marker.build !== 'pd-upscaler'))) {
+      return { installed: false, alreadyPresent: true, build: marker && marker.build ? marker.build : 'unknown', pdUpscaler: true };
+    }
+    const pd = await ensurePdReframeworkCache();
+    if (!pd) return { installed: false, error: 'could not fetch the pd-upscaler REFramework', pdUpscaler: true };
+    await fsp.copyFile(pd.dll, destPath);
+    updateInstallJournal(dir, { reframework: true });
+    reengine.writeBuildMarker(dir, { build: 'pd-upscaler', revision: pd.revision });
+    return { installed: true, version: pd.revision || 'unknown', build: 'pd-upscaler', pdUpscaler: true };
+  }
+
   if (fs.existsSync(destPath)) return { installed: false, alreadyPresent: true };
 
   const cachedDll = await ensureREFrameworkCache();
@@ -2425,8 +2448,35 @@ async function ensureREFrameworkForGame(dir) {
 
   await fsp.copyFile(cachedDll, destPath);
   updateInstallJournal(dir, { reframework: true });
+  reengine.writeBuildMarker(dir, { build: 'standard' });
   return { installed: true, version: fs.existsSync(path.join(reframeworkCacheDir(), '.version'))
     ? fs.readFileSync(path.join(reframeworkCacheDir(), '.version'), 'utf-8').trim() : 'unknown' };
+}
+
+// The pd-upscaler REFramework build, cached once per app data folder. nightly.link serves the
+// branch's latest workflow artifact; a fetch that fails falls back to whatever is cached.
+async function ensurePdReframeworkCache() {
+  const cacheDir = path.join(userDataDir(), 'reframework-pd-cache');
+  const cachedDll = path.join(cacheDir, REFRAMEWORK_DLL_NAME);
+  const revisionFile = path.join(cacheDir, '.revision');
+  const cached = () => (fs.existsSync(cachedDll)
+    ? { dll: cachedDll, revision: fs.existsSync(revisionFile) ? fs.readFileSync(revisionFile, 'utf-8').trim() : null }
+    : null);
+  if (cached()) return cached();
+  const tmpZip = path.join(os.tmpdir(), `dlss5ui-pd-reframework-${Date.now()}.zip`);
+  try {
+    const res = await feeder.fetchWithRetry(reengine.PD_UPSCALER_ZIP_URL, { headers: GITHUB_HEADERS });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await fsp.writeFile(tmpZip, Buffer.from(await res.arrayBuffer()));
+    await fsp.mkdir(cacheDir, { recursive: true });
+    const revision = reengine.extractPdReframework(tmpZip, cachedDll);
+    if (revision) await fsp.writeFile(revisionFile, revision, 'utf-8');
+    return cached();
+  } catch {
+    return cached();
+  } finally {
+    fsp.rm(tmpZip, { force: true }).catch(() => {});
+  }
 }
 
 // REFramework writes its own settings the first time the game actually runs with dinput8.dll in
@@ -2596,7 +2646,7 @@ async function autoConfigureGame(dir, exePath) {
   if (!fs.existsSync(iniPath)) return { api: null, applied: [] };
 
   const { api, apis } = withApiOverride(await detectGame(dir, exePath), readApiOverride(dir));
-  const dlss5Only = hasNativeDlss(dir);
+  let dlss5Only = hasNativeDlss(dir);
   // hasNativeDlss() just checks for nvngx_dlss.dll on disk -- for a Feeder game that file was
   // placed by the Feeder deploy itself, not the game, so this alone can't tell native DLSS
   // apart from Feeder-supplied. Excluded explicitly: Feeder + FSRFG crashed on a real game
@@ -2629,8 +2679,19 @@ async function autoConfigureGame(dir, exePath) {
 
     // OptiScaler doesn't work on RE Engine without REFramework already present -- ensure it's
     // there before anything else here matters.
-    reframework = await ensureREFrameworkForGame(dir);
+    reframework = await ensureREFrameworkForGame(dir, exePath);
     reframeworkConfig = fixREFrameworkConfig(dir);
+    // The pd route's DLSS runtime: the plugin's DLSS path loads nvngx_dlss.dll from the game
+    // folder, the same file the Feeder deploy places. Never over the game's own.
+    if (reengine.pdUpscalerGame(exePath) && !nativeDlss.shipsNativeDlss(dir)) {
+      try {
+        reframework = { ...(reframework || {}), dlss: await feeder.deployNvngxDlss(dir, getRhiManifest, compareStreamlineVersions, feederCacheDir(), GITHUB_HEADERS) };
+      } catch (e) {
+        reframework = { ...(reframework || {}), dlssError: String(e && e.message ? e.message : e) };
+      }
+      // nvngx_dlss.dll just landed: this is a DLSS 5 only game from here on (Dx12Upscaler=dlss).
+      dlss5Only = hasNativeDlss(dir);
+    }
   }
 
   // Frame gen is the game's own job, not OptiScaler's -- OptiScaler's FG bridge and a

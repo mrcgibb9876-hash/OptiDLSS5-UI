@@ -43,6 +43,7 @@ const lumaue = require('./lumaue');
 const amdnr = require('./amdnr');
 const nativeDlss = require('./native-dlss');
 const verified = require('./verified');
+const reengine = require('./reengine');
 
 // A user's per-game API choice laid over the detection result: the chosen API becomes the
 // primary, joins the list of APIs the game runs on (so keepGamesOwnDlss writes its upscaler key
@@ -136,6 +137,26 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
       [
         { key: 'feeder-remove', label: 'Remove the DLSS5 Feeder (Edit)', done: false },
         { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
+      ]);
+  }
+
+  // Resident Evil 2/3/4/7/Village: RE Engine, no DLSS of their own. Not the Feeder -- praydog's
+  // pd-upscaler REFramework build has a TemporalUpscaler that makes a real DLSS call from the
+  // engine's own motion vectors and jitter (reengine.js; what RHI does for these five). Three
+  // files: the pd build (Install fetches it), nvngx_dlss.dll (Install places it), and PureDark's
+  // Upscaler Base Plugin, which the user fetches from Nexus themselves. Before the shipped-DLSS
+  // branch on purpose: the nvngx_dlss.dll Install places here would otherwise read as the game's
+  // own. A Feeder already on disk keeps the Feeder route, since someone chose it.
+  const pd = reengine.pdStatus(dir, exePath);
+  if (pd && !shipsDlss && !feederDeployed) {
+    return finish('reframework-pd', 'OptiScaler + REFramework upscaler',
+      'No DLSS of its own. REFramework\'s pd-upscaler build adds a DLSS call from the engine\'s real motion ' +
+      'vectors, which OptiScaler then hooks. Install fetches that build and nvngx_dlss.dll; the one file it ' +
+      'cannot fetch is PureDark\'s Upscaler Base Plugin (PDPerfPlugin.dll) from Nexus Mods -- put it beside ' +
+      'the exe. In-game: Insert opens REFramework, TemporalUpscaler -> Enabled, Upscale Type DLSS.',
+      [
+        { key: 'optiscaler', label: 'Install OptiScaler (fetches the pd-upscaler REFramework and nvngx_dlss.dll)', done: optiInstalled && pd.reframeworkBuild === 'pd-upscaler' && pd.dlssPresent },
+        { key: 'pd-plugin', label: 'Put PDPerfPlugin.dll (Upscaler Base Plugin, Nexus) beside the exe', done: pd.pluginPresent },
       ]);
   }
 

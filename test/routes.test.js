@@ -85,3 +85,45 @@ test('Vulkan and OpenGL games with no DLSS of their own take the Feeder route, w
 
   assert.ok(route.API_OVERRIDE_VALUES.includes('opengl'));
 });
+
+test('Resident Evil 2 takes the REFramework pd-upscaler route, before and after the DLSS DLL it places; a Feeder on disk keeps the Feeder route', () => {
+  const reengine = require(path.join(REPO, 'src', 'reengine'));
+  const dir = scratchDir('route-re2');
+  const exe = fakeExe(dir, 're2.exe');
+  write(dir, 're_chunk_000.pak', 'x');
+  assert.equal(reengine.pdUpscalerGame(exe), 'RE2');
+  assert.equal(reengine.pdUpscalerGame(path.join(dir, 'dd2.exe')), null);
+
+  const before = route.recommendRoute(dir, exe, { api: 'dx12', apis: ['dx12'], engineId: 're' }, 'nvidia');
+  assert.equal(before.route, 'reframework-pd');
+  assert.equal(before.steps.find((s) => s.key === 'pd-plugin').done, false);
+
+  // Install placed the pd build and nvngx_dlss.dll: still this route, not "ships its own DLSS".
+  write(dir, 'dinput8.dll', 'pd');
+  write(dir, 'nvngx_dlss.dll', 'x');
+  reengine.writeBuildMarker(dir, { build: 'pd-upscaler', revision: 'abc' });
+  const after = route.recommendRoute(dir, exe, { api: 'dx12', apis: ['dx12'], engineId: 're' }, 'nvidia');
+  assert.equal(after.route, 'reframework-pd');
+  const st = reengine.pdStatus(dir, exe);
+  assert.equal(st.reframeworkBuild, 'pd-upscaler');
+  assert.equal(st.dlssPresent, true);
+  assert.equal(st.pluginPresent, false);
+  write(dir, 'PDPerfPlugin.dll', 'x');
+  assert.equal(route.recommendRoute(dir, exe, { api: 'dx12', apis: ['dx12'], engineId: 're' }, 'nvidia').steps.every((s) => s.done || s.key === 'optiscaler'), true);
+
+  const feederDir = scratchDir('route-re2-feeder');
+  const feederExe = fakeExe(feederDir, 're2.exe');
+  write(feederDir, 're_chunk_000.pak', 'x');
+  write(feederDir, 'dlss5-feed.addon64', 'x');
+  assert.equal(route.recommendRoute(feederDir, feederExe, { api: 'dx12', apis: ['dx12'], engineId: 're' }, 'nvidia').route, 'feeder');
+});
+
+test('the pd-upscaler REFramework download (zip inside a zip) yields dinput8.dll and its revision', { skip: !fs.existsSync(path.join(process.env.TEMP || '', '..', 'claude')) }, () => {
+  const reengine = require(path.join(REPO, 'src', 'reengine'));
+  const zip = 'C:/Users/mrcgi/AppData/Local/Temp/claude/C--Windows-system32/e7f1a758-15c5-4699-ba97-a565704fb4ec/scratchpad/pd-REFramework.zip';
+  if (!fs.existsSync(zip)) return;
+  const dest = path.join(scratchDir('pd-extract'), 'dinput8.dll');
+  const rev = reengine.extractPdReframework(zip, dest);
+  assert.ok(fs.statSync(dest).size > 1024 * 1024);
+  assert.ok(rev && rev.length >= 7, 'revision text present');
+});
