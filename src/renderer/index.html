@@ -69,7 +69,7 @@
 
       <div id="game-engine-section" class="hidden">
         <label class="field-label" data-i18n>OptiScaler build for this game</label>
-        <p class="field-hint" data-i18n>Two builds of the DLSS Neural Rendering engine are available. OptiScaler_DLSSNR is this project's own, with the Alt+Home DLSS 5 panel. The PreSR-Multipass fork (wilsjo2) can run Neural Rendering before DLSS upscaling, on the smaller pre-upscale image -- much faster at the same output resolution -- and can stack up to three passes; it has no Alt+Home panel (use OptiScaler's Insert menu). Changing this on an installed game re-installs it with the other build.</p>
+        <p class="field-hint" data-i18n>Two builds of the DLSS Neural Rendering engine are available, and both can run Neural Rendering before DLSS upscaling. OptiScaler_DLSSNR is this project's own, with the Alt+Home DLSS 5 panel. The PreSR-Multipass fork (wilsjo2) keeps more games on that faster path -- games whose colour image is padded inside a larger texture, where OptiScaler_DLSSNR falls back to after upscaling -- and adds experimental options; it has no Alt+Home panel (use OptiScaler's Insert menu). Changing this on an installed game takes effect when you press Install on its card.</p>
         <div class="field-row">
           <select id="game-engine-select"></select>
         </div>
@@ -77,7 +77,7 @@
 
         <div id="game-presr-block" class="field-subblock hidden">
           <label class="field-label" data-i18n>Pre-SR Neural Rendering</label>
-          <p class="field-hint" data-i18n>Run NR before DLSS upscaling: the model works on the DLSS input (1920x1080 in 4K Performance) instead of the full output frame, which is where the speed-up comes from. Passes run the model more than once with separate settings each; every extra pass costs more.</p>
+          <p class="field-hint" data-i18n>Run NR before DLSS upscaling: the model works on the DLSS input (1920x1080 in 4K Performance) instead of the full output frame, which is where the speed-up comes from. Games using Ray Reconstruction still run it after upscaling. Passes run the model more than once with separate settings each; every extra pass costs more. Written to OptiScaler.ini on Apply and on Install; after that the in-game menu can change it too.</p>
           <label class="field-label">
             <input id="game-presr-before" type="checkbox" checked />
             <span data-i18n>Run NR before DLSS upscaling (faster)</span>
@@ -335,11 +335,11 @@
       </div>
 
       <label class="field-label" data-i18n>OptiScaler build (default for new installs)</label>
-      <p class="field-hint" data-i18n>OptiScaler_DLSSNR is this project's own fork, with the Alt+Home DLSS 5 panel. OptiScaler-DLSSNR-PreSR-Multipass (wilsjo2) runs Neural Rendering before DLSS upscaling -- far cheaper at the same output resolution -- and supports up to three passes, but has no Alt+Home panel. Fetched from its GitHub releases when first chosen and kept current the same way. Any game can override this in Edit.</p>
+      <p class="field-hint" data-i18n>Both builds can run Neural Rendering before DLSS upscaling. OptiScaler_DLSSNR is this project's own fork, with the Alt+Home DLSS 5 panel. OptiScaler-DLSSNR-PreSR-Multipass (wilsjo2) keeps games with a padded colour image on that faster path too, and adds experimental options, but has no Alt+Home panel. Fetched from its GitHub releases when first chosen and kept current the same way. Any game can override this in Edit.</p>
       <div class="field-row">
         <select id="settings-engine">
           <option value="dlssnr">OptiScaler_DLSSNR (Alt+Home panel)</option>
-          <option value="presr">OptiScaler-DLSSNR-PreSR-Multipass (Pre-SR, faster)</option>
+          <option value="presr">OptiScaler-DLSSNR-PreSR-Multipass (wider Pre-SR coverage)</option>
         </select>
       </div>
       <div id="settings-engine-status" class="status-line"></div>

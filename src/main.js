@@ -973,17 +973,20 @@ function applyFrameGenMarker(dir) {
   return applied;
 }
 
-// The engine choice per game (engines.js): the Pre-SR build's RunBeforeSR / Passes keys follow
-// the marker; a game on the standard build gets them put back to auto. Only ever touches a game
-// whose marker names an engine, so a folder installed before this existed is left exactly as is.
+// The engine choice per game (engines.js). RunBeforeSR / Passes are written once when the marker
+// is pending (just installed, or just changed in Edit Game) and never again after that: both
+// builds' in-game menus save those keys too, and OptiScaler writes a default-valued key back as
+// auto, so a sync that re-forced them would silently undo a choice made in the game. A folder
+// installed before this existed has no marker and is left exactly as is.
 function applyEngineMarker(dir) {
   const iniPath = path.join(dir, 'OptiScaler.ini');
   const marker = engines.readEngineMarker(dir);
-  if (!marker || !marker.engine || !fs.existsSync(iniPath)) return [];
+  if (!marker || !marker.pendingApply || !fs.existsSync(iniPath)) return [];
   const applied = [];
   for (const { section, key, value } of engines.iniEditsFor(marker)) {
     if (ensureIniKey(iniPath, section, key, value)) applied.push({ section, key, value });
   }
+  engines.writeEngineMarker(dir, { ...marker, pendingApply: false });
   return applied;
 }
 
@@ -1010,11 +1013,15 @@ ipcMain.handle('engine:setForGame', (_evt, { exePath, engine, runBeforeSR, passe
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
     const prev = engines.readEngineMarker(dir) || {};
+    // Only what this call names is an explicit choice. A build change alone keeps the earlier
+    // choices and writes nothing new to the ini; the re-Install that switches the files does.
+    const choosing = typeof runBeforeSR === 'boolean' || passes !== undefined && passes !== null;
     const marker = {
       ...prev,
       engine: engines.normalizeEngine(engine),
-      runBeforeSR: runBeforeSR === undefined || runBeforeSR === null ? (prev.runBeforeSR === undefined ? true : !!prev.runBeforeSR) : !!runBeforeSR,
-      passes: engines.clampPasses(passes === undefined || passes === null ? prev.passes : passes),
+      ...(typeof runBeforeSR === 'boolean' ? { runBeforeSR } : {}),
+      ...(passes !== undefined && passes !== null ? { passes: engines.clampPasses(passes) } : {}),
+      pendingApply: choosing ? true : !!prev.pendingApply,
       updatedAt: new Date().toISOString(),
     };
     engines.writeEngineMarker(dir, marker);
@@ -1289,8 +1296,7 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
     // Which build went in, so autoConfigureGame can set (or clear) the Pre-SR keys and the card
     // can say which engine this game runs. Pre-SR preferences already in the marker survive.
     if (engine) {
-      const prev = engines.readEngineMarker(dir) || {};
-      engines.writeEngineMarker(dir, { ...prev, engine: engines.normalizeEngine(engine), updatedAt: new Date().toISOString() });
+      engines.writeEngineMarker(dir, { ...engines.markerForInstall(engines.readEngineMarker(dir), engine), updatedAt: new Date().toISOString() });
     }
 
     const nrDest = path.join(dir, 'nvngx_dlssnr.dll');

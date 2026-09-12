@@ -182,15 +182,20 @@ same RHI manifest the Feeder already uses -- a fresh install needs no manual dow
 **A second engine build: OptiScaler-DLSSNR-PreSR-Multipass.** Settings > "OptiScaler build" (and
 per game, Edit > "OptiScaler build for this game") can switch from this project's own
 OptiScaler_DLSSNR to [wilsjo2's PreSR-Multipass fork](https://github.com/wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass).
-That build can run Neural Rendering *before* DLSS upscaling, so the model works on the DLSS input
-(1920x1080 in 4K Performance) rather than the full output frame -- a large speed-up at the same
-output resolution -- and can stack one to three passes. It is fetched from its own GitHub
+Both builds can run Neural Rendering *before* DLSS upscaling (`[DlssNr] RunBeforeSR`), so the
+model works on the DLSS input (1920x1080 in 4K Performance) rather than the full output frame -- a
+large speed-up at the same output resolution -- and both stack one to three passes (`Passes`).
+The fork keeps more games on that path: a colour image padded inside a larger texture (2558x1439
+in 2560x1440, or a max-size allocation under dynamic resolution) stays pre-upscale there, where
+OptiScaler_DLSSNR falls back to after upscaling. It also carries experimental extras
+(finished-picture NR, a pre-SR edit carried across Ray Reconstruction). It has no Alt+Home DLSS 5
+panel; its controls live in OptiScaler's own Insert menu. It is fetched from its own GitHub
 releases the first time a game needs it (sha256 checked against the release's own checksum
 file), kept in its own managed folder beside the default build, and updated on the same schedule.
-The Pre-SR block in Edit sets `[DlssNr] RunBeforeSR` (on by default, since the fork itself
-defaults it off) and `Passes`. That build has no Alt+Home DLSS 5 panel; its Neural Rendering
-controls live in OptiScaler's own Insert menu. Switching an installed game between builds is a
-re-Install from the card; Remove clears either.
+The Pre-SR block in Edit writes `RunBeforeSR` and `Passes` for either build, on Apply and on
+Install; after that the in-game menu owns them. Installing the fork turns `RunBeforeSR` on unless
+you chose otherwise. Switching an installed game between builds is a re-Install from the card;
+Remove clears either.
 
 ## What OptiScaler covers, and what it doesn't
 

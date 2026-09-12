@@ -1124,7 +1124,7 @@ async function loadEngineSection(game) {
   for (const id of Object.keys(ENGINE_LABELS)) {
     const opt = document.createElement('option');
     opt.value = id;
-    opt.textContent = id === 'presr' ? t('{engine} (Pre-SR, faster)', { engine: engineLabel(id) }) : t('{engine} (Alt+Home panel)', { engine: engineLabel(id) });
+    opt.textContent = id === 'presr' ? t('{engine} (wider Pre-SR coverage, no Alt+Home panel)', { engine: engineLabel(id) }) : t('{engine} (Alt+Home panel)', { engine: engineLabel(id) });
     select.appendChild(opt);
   }
   select.value = game.engine && ENGINE_LABELS[game.engine] ? game.engine : '';
@@ -1140,14 +1140,22 @@ async function loadEngineSection(game) {
       ? t('Installed with {engine}.', { engine: engineLabel(installedAs) })
       : '';
 
-  presrBlock.classList.toggle('hidden', effective !== 'presr');
-  if (effective === 'presr') {
-    const marker = state.marker || {};
-    const iniBefore = state.ini && state.ini.runBeforeSR;
-    const iniPasses = state.ini && Number(state.ini.passes);
-    $('#game-presr-before').checked = marker.runBeforeSR === undefined ? !(iniBefore === 'false') : !!marker.runBeforeSR;
-    $('#game-presr-passes').value = String([1, 2, 3].includes(Number(marker.passes)) ? Number(marker.passes) : [1, 2, 3].includes(iniPasses) ? iniPasses : 1);
-    $('#game-presr-status').textContent = state.iniPresent ? '' : t('Applied on Install.');
+  // Both builds read RunBeforeSR and Passes. Once installed, the game's ini is the truth: the
+  // in-game menus write it too, and "auto" there means off / one pass in both builds. Before an
+  // install, show what Install will write.
+  presrBlock.classList.remove('hidden');
+  const marker = state.marker || {};
+  const pendingEngine = installedAs && installedAs === effective ? installedAs : effective;
+  const passesOk = (n) => [1, 2, 3].includes(n);
+  if (state.iniPresent && state.ini && installedAs === effective) {
+    $('#game-presr-before').checked = String(state.ini.runBeforeSR).toLowerCase() === 'true';
+    const n = Number(state.ini.passes);
+    $('#game-presr-passes').value = String(passesOk(n) ? n : 1);
+    $('#game-presr-status').textContent = '';
+  } else {
+    $('#game-presr-before').checked = typeof marker.runBeforeSR === 'boolean' ? marker.runBeforeSR : pendingEngine === 'presr';
+    $('#game-presr-passes').value = String(passesOk(Number(marker.passes)) ? Number(marker.passes) : 1);
+    $('#game-presr-status').textContent = t('Applied on Install.');
   }
 }
 

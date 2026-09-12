@@ -31,27 +31,30 @@ test('release assets: the zip is the zip, its .sha256 file is the checksum, neve
   assert.equal(engines.parseSha256Text('not a hash'), null);
 });
 
-test('engine ids fall back to the default; the Pre-SR keys follow the marker and clear elsewhere', () => {
+test('engine ids fall back to the default; only explicit choices become ini edits', () => {
   assert.equal(engines.normalizeEngine('presr'), 'presr');
   assert.equal(engines.normalizeEngine('nonsense'), 'dlssnr');
   assert.equal(engines.normalizeEngine(undefined), 'dlssnr');
   assert.match(engines.releasesApi('presr'), /wilsjo2\/OptiScaler-DLSSNR-PreSR-Multipass\/releases\/latest$/);
   assert.match(engines.releasesApi('dlssnr'), /mrcgibb9876-hash\/OptiScaler_DLSSNR\/releases\/latest$/);
-  assert.deepEqual(engines.iniEditsFor({ engine: 'presr' }), [
-    { section: 'DlssNr', key: 'RunBeforeSR', value: 'true' },
-    { section: 'DlssNr', key: 'Passes', value: '1' },
-  ]);
+  // Only explicit choices produce ini edits; a bare marker asks for nothing (our build's panel owns them).
+  assert.deepEqual(engines.iniEditsFor({ engine: 'dlssnr' }), []);
+  assert.deepEqual(engines.iniEditsFor({ engine: 'presr' }), []);
   assert.deepEqual(engines.iniEditsFor({ engine: 'presr', runBeforeSR: false, passes: 7 }), [
     { section: 'DlssNr', key: 'RunBeforeSR', value: 'false' },
     { section: 'DlssNr', key: 'Passes', value: '1' },
   ]);
   assert.deepEqual(engines.iniEditsFor({ engine: 'dlssnr', runBeforeSR: true, passes: 3 }), [
-    { section: 'DlssNr', key: 'RunBeforeSR', value: 'auto' },
-    { section: 'DlssNr', key: 'Passes', value: 'auto' },
+    { section: 'DlssNr', key: 'RunBeforeSR', value: 'true' },
+    { section: 'DlssNr', key: 'Passes', value: '3' },
   ]);
+  // Install: the Pre-SR fork turns RunBeforeSR on unless already chosen; ours adds nothing.
+  assert.deepEqual(engines.markerForInstall(null, 'presr'), { engine: 'presr', pendingApply: true, runBeforeSR: true });
+  assert.deepEqual(engines.markerForInstall({ runBeforeSR: false }, 'presr'), { engine: 'presr', pendingApply: true, runBeforeSR: false });
+  assert.deepEqual(engines.markerForInstall(null, 'dlssnr'), { engine: 'dlssnr', pendingApply: true });
 });
 
-test('installing with the Pre-SR build writes the marker and RunBeforeSR=true; switching back clears it', { skip: !onWindows }, async () => {
+test('installing with the Pre-SR build turns RunBeforeSR on; Edit choices apply and survive a switch of build', { skip: !onWindows }, async () => {
   const base = scratchDir('engine-install');
   const release = fakeReleaseFolder(base);
   const nr = fakeNrModel(base);
@@ -63,7 +66,7 @@ test('installing with the Pre-SR build writes the marker and RunBeforeSR=true; s
   assert.equal(inst.ok, true, inst.error);
   const ini = path.join(game, 'OptiScaler.ini');
   assert.equal(iniValue(ini, 'RunBeforeSR'), 'true');
-  assert.equal(iniValue(ini, 'Passes'), '1');
+  assert.equal(iniValue(ini, 'Passes'), null, 'nobody chose a pass count, so none is written');
   assert.equal(JSON.parse(fs.readFileSync(path.join(game, engines.ENGINE_MARKER), 'utf8')).engine, 'presr');
   assert.equal((await invoke('game:status', exe)).engine, 'presr', 'the card can name the build');
 
@@ -76,17 +79,48 @@ test('installing with the Pre-SR build writes the marker and RunBeforeSR=true; s
   assert.equal(state.marker.passes, 3);
   assert.equal(state.ini.runBeforeSR, 'false');
 
-  // Re-installing (what the renderer does to switch builds) copies the release ini wholesale;
-  // the marker keeps the passes but the build changes, so the keys go back to auto.
+  // Re-installing (what the renderer does to switch builds) copies the release ini wholesale; the
+  // explicit choices ride along, because both builds read these keys.
   const back = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: nr, proxyName: 'dxgi.dll', engine: 'dlssnr' });
   assert.equal(back.ok, true, back.error);
-  assert.equal(iniValue(ini, 'RunBeforeSR'), 'auto');
-  assert.equal(iniValue(ini, 'Passes'), 'auto');
+  assert.equal(iniValue(ini, 'RunBeforeSR'), 'false');
+  assert.equal(iniValue(ini, 'Passes'), '3');
   assert.equal((await invoke('game:status', exe)).engine, 'dlssnr');
 
   const un = await invoke('game:run-uninstall', exe);
   assert.equal(un.ok, true, un.error);
   assert.ok(!fs.existsSync(path.join(game, engines.ENGINE_MARKER)), 'Remove clears the marker');
+});
+
+// The v1.54.0 draft reset these keys to auto on every sync, which silently undid the Alt+Home
+// panel's "Before Super Resolution" toggle and passes slider. The marker applies once, then the
+// in-game menu owns the keys.
+test('a value set in the game after install survives every later sync, on either build', { skip: !onWindows }, async () => {
+  const base = scratchDir('engine-panel');
+  const release = fakeReleaseFolder(base);
+  const nr = fakeNrModel(base);
+  const { invoke } = loadMain();
+  for (const id of ['dlssnr', 'presr']) {
+    const game = path.join(base, 'game-' + id);
+    const exe = fakeExe(game, 'FakeGame.exe');
+    const inst = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: nr, proxyName: 'dxgi.dll', engine: id });
+    assert.equal(inst.ok, true, inst.error);
+    const ini = path.join(game, 'OptiScaler.ini');
+    assert.equal(iniValue(ini, 'RunBeforeSR'), id === 'presr' ? 'true' : null, id + ': install default');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(game, engines.ENGINE_MARKER), 'utf8')).pendingApply, false, id + ': applied once');
+
+    // What the in-game menu does: RunBeforeSR on (ours) / off, saved back as auto (the fork), and 2 passes.
+    let text = fs.readFileSync(ini, 'utf8').replace(/^RunBeforeSR\s*=.*$/m, '').replace(/^Passes\s*=.*$/m, '');
+    text = text.replace('[DlssNr]', '[DlssNr]\nRunBeforeSR=' + (id === 'presr' ? 'auto' : 'true') + '\nPasses=2');
+    fs.writeFileSync(ini, text);
+
+    for (let i = 0; i < 2; i++) {
+      const sync = await invoke('game:sync-if-stale', { exePath: exe, releaseFolder: release, nrDllPath: nr });
+      assert.equal(sync.ok, true, sync.error);
+    }
+    assert.equal(iniValue(ini, 'RunBeforeSR'), id === 'presr' ? 'auto' : 'true', id + ': in-game RunBeforeSR kept');
+    assert.equal(iniValue(ini, 'Passes'), '2', id + ': in-game Passes kept');
+  }
 });
 
 test('a game installed before there was a choice is left alone (no marker, no key edits)', { skip: !onWindows }, async () => {
