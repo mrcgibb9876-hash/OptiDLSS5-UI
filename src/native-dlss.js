@@ -37,7 +37,20 @@ const PLUGIN_TREE_FILES = ['nvngx_dlss.dll', 'sl.interposer.dll'];
 const GAME_TREE_FILES = ['nvngx_dlss.dll', 'sl.interposer.dll', 'sl.dlss.dll', 'nvngx_dlssg.dll'];
 
 // Folders beside the exe that THIS app fills: a hit inside them is our deploy, not the game's.
-const OWN_FOLDERS_BESIDE_EXE = new Set(['streamline', 'optiscaler', 'reshade-shaders', 'luma']);
+// streamline\ is NOT on this list unconditionally: Where Winds Meet keeps its own Streamline
+// runtime (sl.interposer.dll, sl.dlss.dll, nvngx_dlss.dll, nvngx_dlssg.dll) in
+// Engine\Binaries\Win64r\Streamline\, and this app's own deploy of that folder is journaled in
+// .optiscaler-manager-install.json (streamline.dir) -- so the journal decides, see ownStreamlineDir().
+const OWN_FOLDERS_BESIDE_EXE = new Set(['optiscaler', 'reshade-shaders', 'luma']);
+
+function ownStreamlineDir(exeDir) {
+  try {
+    const journal = JSON.parse(fs.readFileSync(path.join(exeDir, '.optiscaler-manager-install.json'), 'utf8'));
+    return journal && journal.streamline && journal.streamline.dir ? path.resolve(exeDir, journal.streamline.dir).toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
 // Where a game's install root sits: the folder whose parent is one of these is the root.
 const INSTALL_PARENTS = new Set(['common', 'games', 'epic games', 'gog games', 'gog galaxy', 'xboxgames',
   'program files', 'program files (x86)', 'ubisoft game launchers', 'ea games', 'origin games', 'battle.net']);
@@ -77,6 +90,7 @@ function findInGameTree(exeDir, names) {
   const wanted = new Set(names.map((n) => n.toLowerCase()));
   const root = installRoot(exeDir);
   const exeDirKey = path.resolve(exeDir).toLowerCase();
+  const ownStreamline = ownStreamlineDir(exeDir);
   let budget = TREE_WALK_MAX_ENTRIES;
 
   const walk = (dir, depth) => {
@@ -96,6 +110,7 @@ function findInGameTree(exeDir, names) {
     for (const e of entries) {
       if (!e.isDirectory()) continue;
       if (isExeDir && OWN_FOLDERS_BESIDE_EXE.has(e.name.toLowerCase())) continue;
+      if (ownStreamline && path.resolve(dir, e.name).toLowerCase() === ownStreamline) continue;
       const hit = walk(path.join(dir, e.name), depth + 1);
       if (hit) return hit;
     }

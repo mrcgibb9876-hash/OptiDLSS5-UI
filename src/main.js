@@ -1169,9 +1169,12 @@ async function uninstallEverything(dir) {
   // it. A game that ships DLSS beside its exe (Streamline games, Tomb Raider) keeps its own.
   const shippedElsewhere = nativeDlss.shippedDlssPath(dir) && !fs.existsSync(path.join(dir, 'sl.interposer.dll')) && !fs.existsSync(path.join(dir, 'sl.interposer.dll.original'));
   if (fs.existsSync(path.join(dir, 'nvngx_dlss.dll')) && (shippedElsewhere || feederEra)) await rmRel('nvngx_dlss.dll');
-  // A streamline\ folder beside the exe is this app's deploy: a game that ships Streamline keeps
-  // it beside the exe itself, never in a subfolder.
-  if (fs.existsSync(path.join(dir, 'streamline', 'sl.interposer.dll')) && !fs.existsSync(path.join(dir, 'sl.interposer.dll'))) await rmRel('streamline');
+  // A streamline\ folder beside the exe is only ours when the journal says so (handled above).
+  // Where Winds Meet keeps its own Streamline runtime in exactly such a subfolder, and a
+  // heuristic here deleted it once (2026-09-12) -- never again.
+  if (fs.existsSync(path.join(dir, 'streamline', 'sl.interposer.dll')) && !(journal.streamline && journal.streamline.dir)) {
+    kept.push('streamline\ (left alone: not recorded as this app\x27s deploy -- a game can keep its own Streamline runtime there)');
+  }
 
   // Another tool's files are not this app's to delete -- named so the user knows they remain.
   for (const f of foreignToolchains(dir)) kept.push(`${f.tool} files, not placed by this app: ${f.files.join(', ')}`);
