@@ -48,6 +48,7 @@ contextBridge.exposeInMainWorld('api', {
   validateRelease: (folder) => ipcRenderer.invoke('release:validate', folder),
   validateNrDll: (filePath) => ipcRenderer.invoke('nrdll:validate', filePath),
   autoFetchNrDll: () => ipcRenderer.invoke('nrdll:autoFetch'),
+  nrModelLatest: () => ipcRenderer.invoke('nrdll:latest'),
   bundledEngine: () => ipcRenderer.invoke('update:bundledEngine'),
 
   gameStatus: (exePath) => ipcRenderer.invoke('game:status', exePath),

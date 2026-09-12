@@ -388,4 +388,6 @@ window.I18N.register("zh-CN", {
   "Select the game's exe folder to clean": "选择要清理的游戏 exe 文件夹",
   "Cleaning…": "正在清理…",
   "Cleaned {folder}.": "已清理 {folder}。",
+  "A newer DLSS NR model ({version}) is published -- fetching it…": "已发布更新的 DLSS NR 模型（{version}）-- 正在获取…",
+  "DLSS NR model refreshed in: {list}.": "已在以下游戏中刷新 DLSS NR 模型：{list}。",
 });

@@ -1695,17 +1695,19 @@ async function autoSyncStaleGames() {
   const updated = [];
   const configured = [];
   const streamlined = [];
+  const nrRefreshed = [];
   const failed = [];
 
   const releaseValid = settings.releaseFolder && (await window.api.validateRelease(settings.releaseFolder)).valid;
   for (const game of games) {
     if (!releaseValid) break;
-    const res = await window.api.syncGameIfStale({ exePath: game.exePath, releaseFolder: settings.releaseFolder });
+    const res = await window.api.syncGameIfStale({ exePath: game.exePath, releaseFolder: settings.releaseFolder, nrDllPath: settings.nrDllPath });
     if (!res.ok) {
       failed.push(`${game.name} (${res.error})`);
       continue;
     }
     if (res.updated) updated.push(game.name);
+    if (res.nrUpdated) nrRefreshed.push(game.name);
     if (res.autoConfigured && res.autoConfigured.length > 0) {
       configured.push(`${game.name} (${res.api || t('detected')}: ${res.autoConfigured.map((e) => e.key).join(', ')})`);
     }
@@ -1722,6 +1724,9 @@ async function autoSyncStaleGames() {
   }
   if (streamlined.length > 0) {
     toast(t('Deployed the Streamline SDK (needed for DLSS Frame Gen) to: {list}', { list: streamlined.join(', ') }));
+  }
+  if (nrRefreshed.length > 0) {
+    toast(t('DLSS NR model refreshed in: {list}.', { list: nrRefreshed.join(', ') }));
   }
   if (failed.length > 0) {
     toast(t('Could not auto-update: {list} — close the game and retry.', { list: failed.join(', ') }));
@@ -1777,8 +1782,17 @@ async function ensureBundledEngine() {
 // The NR model used to be the one file people had to dig out of an NVIDIA driver archive by
 // hand. RHI publishes it, so fetch it unless a valid copy is already set.
 async function ensureNrModel({ force = false } = {}) {
-  if (!force && settings.nrDllPath && (await window.api.validateNrDll(settings.nrDllPath)).valid) return false;
-  toast(t('Fetching the DLSS NR model file (about 165 MB)…'));
+  if (!force && settings.nrDllPath && (await window.api.validateNrDll(settings.nrDllPath)).valid) {
+    // A model this app fetched carries its manifest version in the cache file name; a user's own
+    // copy from elsewhere does not and is left alone. Only a different published build refetches.
+    const own = /[\\/]nvngx_dlssnr_[^\\/]+\.dll$/i.exec(settings.nrDllPath);
+    let latest = null;
+    try { latest = await window.api.nrModelLatest(); } catch {}
+    if (!(own && latest && latest.ok && latest.cacheFile && !settings.nrDllPath.toLowerCase().endsWith(latest.cacheFile.toLowerCase()))) return false;
+    toast(t('A newer DLSS NR model ({version}) is published -- fetching it…', { version: latest.version }));
+  } else {
+    toast(t('Fetching the DLSS NR model file (about 165 MB)…'));
+  }
   const res = await window.api.autoFetchNrDll();
   if (!res.ok) {
     toast(t('Could not fetch the DLSS NR model automatically: {error}', { error: res.error }));
@@ -2152,8 +2166,10 @@ window.addEventListener('focus', () => {
   // releases every few hours (same path as the launch check), and the Manager's own updater
   // reports through the banner.
   setInterval(() => autoUpdateOptiScalerRelease().catch(() => {}), 6 * 60 * 60 * 1000);
+  setInterval(() => ensureNrModel().then((fetched) => { if (fetched) autoSyncStaleGames(); }).catch(() => {}), 6 * 60 * 60 * 1000);
   window.api.onManagerUpdate(renderManagerUpdate);
   renderManagerUpdate(await window.api.managerUpdateState());
   // Not awaited: a 165 MB download must not hold up the per-game sync that does not need it.
-  ensureNrModel();
+  // A newer model, once in, is pushed into every installed game by the same sync.
+  ensureNrModel().then((fetched) => { if (fetched) autoSyncStaleGames(); }).catch(() => {});
 })();

@@ -772,6 +772,21 @@ async function fetchNrModel() {
   }
 }
 
+// The newest NR model RHI publishes, and the cache file name fetchNrModel() would give it -- so
+// the renderer can tell whether the model on disk is already that one without downloading.
+ipcMain.handle('nrdll:latest', async () => {
+  try {
+    const manifest = await getRhiManifest();
+    const list = Array.isArray(manifest && manifest.dlssnr) ? manifest.dlssnr : [];
+    if (list.length === 0) return { ok: true, version: null };
+    const newest = [...list].sort((a, b) => compareStreamlineVersions(b.version, a.version))[0];
+    const safe = String(newest.version).replace(/[^0-9A-Za-z.-]/g, '_');
+    return { ok: true, version: newest.version, cacheFile: `nvngx_dlssnr_${safe}.dll` };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
 ipcMain.handle('nrdll:validate', (_evt, filePath) => {
   if (!filePath) return { valid: false, reason: 'No file set' };
   if (!fs.existsSync(filePath)) return { valid: false, reason: 'File does not exist' };
@@ -2141,7 +2156,7 @@ async function findActiveOptiScalerFile(dir) {
   return null;
 }
 
-ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) => {
+ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDllPath }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) return { ok: true, updated: false, reason: 'exe missing' };
     const dir = gameDir(exePath);
@@ -2149,14 +2164,27 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
 
     const { api, applied: autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix } = await autoConfigureGame(dir, exePath);
 
+    // The NR model beside the exe follows the one in Settings: a newer model fetched at launch
+    // reaches every installed game on the next sync instead of waiting for a reinstall. Size is
+    // the comparison -- two different builds of a 165 MB model do not share a byte count, and
+    // hashing that much per game on every launch would not be worth what it adds.
+    let nrUpdated = false;
+    if (nrDllPath && fs.existsSync(nrDllPath)) {
+      const gameNr = path.join(dir, 'nvngx_dlssnr.dll');
+      if (fs.existsSync(gameNr) && fs.statSync(gameNr).size !== fs.statSync(nrDllPath).size) {
+        await fsp.copyFile(nrDllPath, gameNr);
+        nrUpdated = true;
+      }
+    }
+
     const releaseDll = releaseFolder ? path.join(releaseFolder, 'OptiScaler.dll') : null;
     if (!releaseDll || !fs.existsSync(releaseDll)) {
-      return { ok: true, updated: autoConfigured.length > 0, reason: 'no release set', api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
+      return { ok: true, updated: autoConfigured.length > 0 || nrUpdated, nrUpdated, reason: 'no release set', api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
     }
 
     if (!hasDlssNrSection(releaseFolder)) {
       return {
-        ok: true, updated: autoConfigured.length > 0,
+        ok: true, updated: autoConfigured.length > 0 || nrUpdated, nrUpdated,
         reason: 'release folder is not the DLSS-NR fork (no [DlssNr] section) -- refusing to sync', api, autoConfigured, streamline, reEngine, reframework
       };
     }
@@ -2164,20 +2192,20 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder }) =>
     const active = await findActiveOptiScalerFile(dir);
     if (!active) {
       return {
-        ok: true, updated: autoConfigured.length > 0,
+        ok: true, updated: autoConfigured.length > 0 || nrUpdated, nrUpdated,
         reason: 'could not identify the active OptiScaler file (ambiguous proxy candidates)', api, autoConfigured, streamline, reEngine, reframework
       };
     }
 
     if (sha256File(releaseDll) === sha256File(active.file)) {
-      return { ok: true, updated: autoConfigured.length > 0, reason: 'up to date', api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
+      return { ok: true, updated: autoConfigured.length > 0 || nrUpdated, nrUpdated, reason: 'up to date', api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
     }
 
     await fsp.copyFile(releaseDll, active.file);
     const plain = path.join(dir, 'OptiScaler.dll');
     if (active.file !== plain) await fsp.copyFile(releaseDll, plain).catch(() => {});
 
-    return { ok: true, updated: true, file: path.basename(active.file), api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
+    return { ok: true, updated: true, nrUpdated, file: path.basename(active.file), api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
   } catch (err) {
     return { ok: false, error: err.message };
   }

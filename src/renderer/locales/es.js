@@ -388,4 +388,6 @@ window.I18N.register("es", {
   "Select the game's exe folder to clean": "Selecciona la carpeta del exe del juego a limpiar",
   "Cleaning…": "Limpiando…",
   "Cleaned {folder}.": "{folder} limpiada.",
+  "A newer DLSS NR model ({version}) is published -- fetching it…": "Se ha publicado un modelo DLSS NR más nuevo ({version}) -- descargándolo…",
+  "DLSS NR model refreshed in: {list}.": "Modelo DLSS NR actualizado en: {list}.",
 });

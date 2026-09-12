@@ -388,4 +388,6 @@ window.I18N.register("ru", {
   "Select the game's exe folder to clean": "Выберите папку с exe игры для очистки",
   "Cleaning…": "Очистка…",
   "Cleaned {folder}.": "{folder} очищена.",
+  "A newer DLSS NR model ({version}) is published -- fetching it…": "Опубликована более новая модель DLSS NR ({version}) -- загружаю…",
+  "DLSS NR model refreshed in: {list}.": "Модель DLSS NR обновлена в: {list}.",
 });

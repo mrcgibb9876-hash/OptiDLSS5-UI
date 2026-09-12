@@ -388,4 +388,6 @@ window.I18N.register("ko", {
   "Select the game's exe folder to clean": "정리할 게임의 exe 폴더를 선택하세요",
   "Cleaning…": "정리 중…",
   "Cleaned {folder}.": "{folder} 정리 완료.",
+  "A newer DLSS NR model ({version}) is published -- fetching it…": "더 새로운 DLSS NR 모델({version})이 게시되었습니다 -- 가져오는 중…",
+  "DLSS NR model refreshed in: {list}.": "DLSS NR 모델 갱신됨: {list}.",
 });
