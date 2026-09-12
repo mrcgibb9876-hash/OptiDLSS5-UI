@@ -117,10 +117,9 @@ async function renderGrid() {
         ${(status.foreign || []).length ? `<button class="btn btn-danger btn-small btn-remove-foreign" style="margin: 2px 0 6px;">${escapeHtml(t('Remove the other DLSS 5 toolchain…'))}</button>` : ''}
         <div class="card-actions">
           <button class="btn ${backends.optiscaler || (backends.leftovers || []).length ? 'btn-danger' : 'btn-primary'} btn-install">${escapeHtml(backends.optiscaler ? t('Remove OptiScaler') : (backends.leftovers || []).length ? t('Remove leftovers') : t('Install OptiScaler'))}</button>
-          <button class="btn btn-ghost btn-setup" title="${escapeHtml(t('Optional -- the app already sets up the proxy DLL. Use this for OptiPatcher or spoofing options.'))}">${escapeHtml(t('Setup script'))}</button>
+          <button class="btn btn-ghost btn-launch" title="${escapeHtml(t('Runs the game from its own folder -- for an Unreal game, the -Win64-Shipping.exe that OptiScaler is installed beside.'))}">&#9654; ${escapeHtml(t('Launch'))}</button>
         </div>
         <div class="card-actions-row2">
-          <button class="btn btn-ghost btn-launch" title="${escapeHtml(t('Runs the game from its own folder -- for an Unreal game, the -Win64-Shipping.exe that OptiScaler is installed beside.'))}">&#9654; ${escapeHtml(t('Launch'))}</button>
           <button class="btn btn-ghost btn-open">${escapeHtml(t('Open Folder'))}</button>
           <button class="btn btn-ghost btn-edit">${escapeHtml(t('Edit'))}</button>
           <button class="btn btn-ghost btn-support" title="${escapeHtml(t('Save every log and the app\'s own view of this game into one zip to share.'))}">${escapeHtml(t('Support bundle'))}</button>
@@ -239,7 +238,6 @@ async function renderGrid() {
       toast(t('Support bundle saved: {path} ({count} files). Last run: {verdict}', { path: res.zipPath, count: res.files.length, verdict: describeRun(res.run) }));
       window.api.openPath(res.zipPath);
     });
-    card.querySelector('.btn-setup').addEventListener('click', () => runSetup(game));
     card.querySelector('.btn-launch').addEventListener('click', async () => {
       const res = await window.api.launchGame(game.exePath);
       if (!res.ok) { toast(t('Could not launch {name}: {error}', { name: game.name, error: res.error })); return; }
@@ -518,10 +516,6 @@ function describeUninstall(res) {
 // The escape hatch. Installing no longer needs this -- the app does the rename itself -- but the
 // script also handles OptiPatcher and the spoofing questions, and someone who wants those, or who
 // hits the backup refusal, still needs a way to run it.
-async function runSetup(game) {
-  const res = await window.api.runSetup(game.exePath);
-  if (!res.ok) toast(res.error);
-}
 
 async function removeGame(game) {
   const choice = await window.api.confirmRemove(game.name);
