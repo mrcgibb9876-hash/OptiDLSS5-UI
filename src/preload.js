@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld('api', {
   losslessSetExePathInGameIni: (exePath, losslessExePath, gameTitle, profile = {}) => ipcRenderer.invoke('lossless:setExePathInGameIni', { exePath, losslessExePath, gameTitle, ...profile }),
 
   steamSearch: (term) => ipcRenderer.invoke('steam:search', term),
+  steamSearchVersion: () => ipcRenderer.invoke('steam:searchVersion'),
   validateRelease: (folder) => ipcRenderer.invoke('release:validate', folder),
   validateNrDll: (filePath) => ipcRenderer.invoke('nrdll:validate', filePath),
   autoFetchNrDll: () => ipcRenderer.invoke('nrdll:autoFetch'),

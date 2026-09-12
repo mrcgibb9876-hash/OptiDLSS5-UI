@@ -45,3 +45,13 @@ test('a game under a Steam library launches through Steam, by the appid of its i
   const loose = await invoke('game:launch', { exePath: fakeExe(path.join(lib, 'elsewhere'), 'Other.exe'), dryRun: true });
   assert.equal(loose.via, 'exe');
 });
+
+test('the store lookup tries the spellings Steam actually finds', () => {
+  const { bannerSearchTerms } = require(path.join(__dirname, '..', 'src', 'library'));
+  const t = bannerSearchTerms('Star Wars Jedi - Fallen Order');
+  assert.equal(t[0], 'Star Wars Jedi - Fallen Order', 'as given first');
+  assert.ok(t.includes('Star Wars Jedi Fallen Order'), 'then without the dash');
+  const e = bannerSearchTerms('The.Witcher.3.Wild.Hunt.GOTY.v4.04');
+  assert.ok(e.includes('The Witcher 3 Wild Hunt'), 'dots, edition and version stripped: ' + JSON.stringify(e));
+  assert.deepEqual(bannerSearchTerms('ab'), [], 'too short to search');
+});

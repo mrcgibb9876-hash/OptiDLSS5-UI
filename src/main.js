@@ -674,21 +674,36 @@ ipcMain.handle('pick:image', async () => {
   return res.filePaths[0];
 });
 
+// Bumped when the search gets smarter, so cards that missed under an older search try again.
+const BANNER_SEARCH_VERSION = 2;
+
+async function steamStoreSearch(term) {
+  const url = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(term)}&l=english&cc=US`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'OptiDLSS5-UI' } });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.items || []).slice(0, 8).map((item) => ({
+    appid: item.id,
+    name: item.name,
+    tinyImage: item.tiny_image || null
+  }));
+}
+
 ipcMain.handle('steam:search', async (_evt, term) => {
   try {
-    const url = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(term)}&l=english&cc=US`;
-    const res = await fetch(url);
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data.items || []).slice(0, 8).map((item) => ({
-      appid: item.id,
-      name: item.name,
-      tinyImage: item.tiny_image || null
-    }));
+    // The name as given first, then the spellings the store is more likely to know. The first
+    // spelling with a hit wins; a term that fails is not the end of it.
+    for (const t of library.bannerSearchTerms(term)) {
+      const items = await steamStoreSearch(t);
+      if (items.length) return items;
+    }
+    return [];
   } catch {
     return [];
   }
 });
+
+ipcMain.handle('steam:searchVersion', () => BANNER_SEARCH_VERSION);
 
 function findSetupBat(folder) {
   try {

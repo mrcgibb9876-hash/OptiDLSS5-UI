@@ -314,4 +314,24 @@ function steamAppIdFor(exePath) {
   return null;
 }
 
-module.exports = { discover, folder, dedupe, autoRoots, drives, isInside, filterExcluded, steam, linuxSteamRoots, steamAppIdFor };
+// The spellings to try, in order, when looking a game up on the Steam store by the name the
+// card carries -- usually a folder name. Steam's search returns nothing for "Star Wars Jedi -
+// Fallen Order" (the dash) and finds "Star Wars Jedi Fallen Order" at once, and folder names
+// also carry dots, underscores, trademark marks, edition suffixes and version numbers that the
+// store name does not. Each step strips more; duplicates are dropped.
+function bannerSearchTerms(name) {
+  const terms = [];
+  const add = (t) => { t = (t || '').replace(/\s+/g, ' ').trim(); if (t.length >= 3 && !terms.includes(t)) terms.push(t); };
+  const punct = (t) => t.replace(/[-_.:;,!'’"\[\]()]+/g, ' ');
+  add(name);
+  const noMark = (name || '').replace(/[™®©]/g, '');
+  // Version numbers are matched before the dots become spaces, or v4.04 turns into a harmless
+  // looking "v4 04" that nothing recognises.
+  const noVersion = noMark.replace(/\b(v?\d+(\.\d+){1,3}|build \d+|update \d+)\b/gi, '');
+  add(punct(noMark));
+  add(punct(noVersion));
+  add(punct(noVersion).replace(/\b(goty|game of the year|definitive|deluxe|ultimate|complete|gold|premium|enhanced|remastered|remaster|special|standard|anniversary|legendary|digital)( edition)?\b/gi, ''));
+  return terms;
+}
+
+module.exports = { discover, folder, dedupe, autoRoots, drives, isInside, filterExcluded, steam, linuxSteamRoots, steamAppIdFor, bannerSearchTerms };

@@ -1,4 +1,7 @@
 let games = [];
+// The store-search version this build carries, asked of the main process once (see steam:searchVersion).
+let bannerSearchVersion = 1;
+let bannerSearchVersionLoaded = false;
 let settings = { releaseFolder: '', nrDllPath: '', installedVersion: '', streamlineVersion: 'latest' };
 let editingGameId = null;
 let pendingBanner = { appid: null, localPath: null };
@@ -112,6 +115,10 @@ async function refreshBannerVisibility() {
 let renderGeneration = 0;
 
 async function renderGrid() {
+  if (!bannerSearchVersionLoaded) {
+    try { bannerSearchVersion = (await window.api.steamSearchVersion()) || 1; } catch {}
+    bannerSearchVersionLoaded = true;
+  }
   const generation = ++renderGeneration;
   grid.innerHTML = '';
   emptyState.classList.toggle('hidden', games.length > 0);
@@ -187,8 +194,11 @@ async function renderGrid() {
           setBannerWithFallback(game, card.querySelector('.card-banner'), card.querySelector('.card-banner-fallback'));
         }
       });
-    } else if (!game.bannerLocalPath && !game.bannerAppId && !game.bannerSearchAttempted) {
+    } else if (!game.bannerLocalPath && !game.bannerAppId && (!game.bannerSearchAttempted || (game.bannerSearchVersion || 1) < bannerSearchVersion)) {
+      // Once per search version: a card that missed under an older, dumber search tries again
+      // after an update, and a card that still misses is not hammered on every render.
       game.bannerSearchAttempted = true;
+      game.bannerSearchVersion = bannerSearchVersion;
       window.api.steamSearch(game.name).then(async (items) => {
         if (!items || items.length === 0) {
           window.api.saveGames(games);
