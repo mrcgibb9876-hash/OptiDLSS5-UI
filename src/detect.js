@@ -22,13 +22,16 @@ const os = require('node:os');
 const { findUnrealPluginFile } = require('./framegen');
 const emulators = require('./emulators');
 
+// 10: optiScalerProxy.matchesOurBuild reads the install journal instead of measuring an
+// OptiScaler.dll that a finished install has already renamed away -- v1.57.5 stored false for
+// every normal install, which reads as "somebody else's OptiScaler is here".
 // 9: winmm.dll and version.dll are scanned as hook DLLs, so an OptiScaler or ReShade loading
 // under either name is seen at last; detection carries optiScalerProxy with it.
 // 8: anti-cheat beside the exe is seen for a game whose own folder is called Game (every
 // FromSoftware title) -- a stored detection from before this said antiCheat: null for them.
 // 7: DX8 told apart from DX9, emulators recognised, 32-bit and DX8/DX9 games offered the
 // experimental Feeder routes (legacy.js) instead of "unsupported".
-const DETECT_VERSION = 9;
+const DETECT_VERSION = 10;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
@@ -341,8 +344,18 @@ const HOOK_NEEDLES = ['DXVK', 'vkd3d', 'vkGetInstanceProcAddr', 'ReShade', 'Opti
 
 async function inspectHookDlls(dir) {
   const out = { vulkanWrapper: null, reshadeProxy: null, optiScalerProxy: null };
-  // Our own OptiScaler.dll, to tell our build apart from somebody else's by size. Both report the
-  // same version fields, so the version says nothing; the file does.
+  // Which proxy, if any, is ours. The install journal is the authority: installProxy records the
+  // name it creates, so a proxy-named OptiScaler the journal does not name is not this app's.
+  //
+  // Size was the first attempt and it was wrong on every normal install: installProxy *renames*
+  // OptiScaler.dll into the proxy slot, so there is no OptiScaler.dll left to measure, ourSize
+  // came out 0, and every install would have been accused of harbouring a rival build. Size is
+  // kept only as a second opinion, for the hand-made setups that do still hold a copy.
+  let ourProxy = '';
+  try {
+    const journal = JSON.parse(fs.readFileSync(path.join(dir, '.optiscaler-manager-install.json'), 'utf8'));
+    if (typeof journal.proxy === 'string') ourProxy = journal.proxy.toLowerCase();
+  } catch {}
   let ourSize = 0;
   try { ourSize = fs.statSync(path.join(dir, 'OptiScaler.dll')).size; } catch {}
   for (const name of HOOK_DLLS) {
@@ -357,10 +370,14 @@ async function inspectHookDlls(dir) {
       // pass", and no neural pass ever ran while everything in this app said the route was
       // complete. Recorded here; whether it is a problem is for the caller to judge against what
       // this app installed.
-      if (!out.optiScalerProxy) {
-        let size = 0;
-        try { size = fs.statSync(file).size; } catch {}
-        out.optiScalerProxy = { file: name, size, matchesOurBuild: ourSize > 0 && size === ourSize };
+      let size = 0;
+      try { size = fs.statSync(file).size; } catch {}
+      const ours = (ourProxy && name.toLowerCase() === ourProxy) || (ourSize > 0 && size === ourSize);
+      // A folder can hold two: ours in the slot we made, theirs in another. Whichever is NOT ours
+      // is the one worth naming, and it is not necessarily the first in HOOK_DLLS order -- ours is
+      // usually dxgi.dll, which comes first, and the DOOM 3 BFG build was at winmm.dll behind it.
+      if (!out.optiScalerProxy || (out.optiScalerProxy.matchesOurBuild && !ours)) {
+        out.optiScalerProxy = { file: name, size, matchesOurBuild: ours };
       }
       continue;
     }

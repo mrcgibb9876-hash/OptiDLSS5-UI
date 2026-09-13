@@ -79,3 +79,27 @@ test('the other-toolchain removal deletes only what that tool placed, after the 
   assert.equal(r2.cancelled, true);
   assert.ok(fs.existsSync(path.join(game2, 'nvngx_dlssnr.dll.dlss5oneclick')), 'Cancel deletes nothing');
 });
+
+test('an install that adopts somebody else\'s proxy says so, and never overwrites it', { skip: !onWindows }, async () => {
+  // A user's DOOM 3 BFG ran an upstream OptiScaler as winmm.dll: our installer saw a DLL reporting
+  // OriginalFilename=OptiScaler.dll, called it "already installed", did nothing, and reported
+  // success -- while their build answered every DLSS call, with no neural pass.
+  const base = scratchDir('adopted-proxy');
+  const game = path.join(base, 'game');
+  const exe = fakeExe(game, 'Game.exe');
+  const release = fakeReleaseFolder(path.join(base, 'release'));
+  fakeNrModel(path.join(base, 'model'));
+
+  // Theirs, in the slot, with our journal recording an install that never created a proxy.
+  fs.copyFileSync(path.join(release, 'OptiScaler.dll'), path.join(game, 'winmm.dll'));
+  fs.appendFileSync(path.join(game, 'winmm.dll'), Buffer.from('a different build'));
+  const theirBytes = fs.readFileSync(path.join(game, 'winmm.dll'));
+
+  const { invoke } = loadMain({});
+  const res = await invoke('game:install', {
+    exePath: exe, releaseFolder: release, nrDllPath: path.join(base, 'model', 'nvngx_dlssnr.dll'),
+  });
+  assert.equal(res.ok, true, res.error);
+  assert.equal(res.foreignProxy, 'winmm.dll', 'the adoption we cannot account for is reported');
+  assert.deepEqual(fs.readFileSync(path.join(game, 'winmm.dll')), theirBytes, 'and their DLL is untouched');
+});

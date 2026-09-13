@@ -955,10 +955,20 @@ async function installGame(game) {
     const reframeworkConfigNote = res.reframeworkConfig && res.reframeworkConfig.length > 0
       ? ' ' + t('Set REFramework’s menu key to Insert (it had drifted to Numpad0, unreachable on a laptop) and enlarged its overlay text.')
       : '';
+    // Somebody else's OptiScaler was already in the proxy slot, so that is the build the game
+    // loads -- ours sits beside it doing nothing. Said here because every other screen would show
+    // a clean "Installed": this is the DOOM 3 BFG case (winmm.dll, an upstream build, no neural
+    // pass). Nothing of theirs is deleted; the file is named so the choice stays theirs.
+    const foreignProxyNote = res.foreignProxy
+      ? ' ' + t('WARNING: {file} here is an OptiScaler this app did not install -- the game loads that one, not ours, so Neural Rendering will not run. Remove or rename {file} and install again.', { file: res.foreignProxy })
+      : '';
+    const proxyRefreshNote = res.proxyRefreshError
+      ? ' ' + t('NOTE: the proxy DLL could not be refreshed ({error}) -- the game is still running the previous build.', { error: res.proxyRefreshError })
+      : '';
     const lumaNote = route.route === 'lumaue' && !route.lumaDeployed
       ? ' ' + t('Next: open Edit and deploy Luma UE -- OptiScaler has no DLSS call to hook in this game until Luma supplies one.')
       : '';
-    toast(`${t('Installed.')}${feederNote} ${t('Copied nvngx_dlssnr.dll ({mb} MB) to {dir}', { mb, dir: res.dir })}${proxyNote}${proxyCreatedNote}${configNote}${streamlineNote}${reEngineNote}${profileNote}${hotfixNote}${reframeworkNote}${reframeworkConfigNote}${lumaNote}`);
+    toast(`${t('Installed.')}${feederNote} ${t('Copied nvngx_dlssnr.dll ({mb} MB) to {dir}', { mb, dir: res.dir })}${proxyNote}${proxyCreatedNote}${foreignProxyNote}${proxyRefreshNote}${configNote}${streamlineNote}${reEngineNote}${profileNote}${hotfixNote}${reframeworkNote}${reframeworkConfigNote}${lumaNote}`);
     // A Resident Evil on the pd route still missing PureDark's plugin: say so now, not on a card
     // line someone may not read. Once imported it is placed automatically, so this pops only once.
     const after = await window.api.gameRoute(game.exePath, game.detectedPath);

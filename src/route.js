@@ -122,8 +122,23 @@ function withApiOverride(detected, override) {
   };
 }
 
+// The payload, and something sitting in a slot the game will actually load from.
+//
+// The payload alone used to be the whole test, so a folder holding OptiScaler.ini and the NR model
+// with no proxy at all passed it, and the card said "Install OptiScaler: done" about an install
+// that could never load. Not hypothetical: an install whose proxy step failed, or one that adopted
+// a proxy somebody else had put there, leaves exactly that shape -- a user's DOOM 3 BFG, where the
+// DLL in the slot turned out to be an upstream OptiScaler (2026-09-13).
+//
+// Presence only, deliberately. Whether that DLL is OptiScaler at all, and whether it is OURS, needs
+// the file read: detect.js does it (inspectHookDlls -> optiScalerProxy) and Game Help reports it.
+// This runs for every card on every render and stays a handful of existsSync calls.
+const PROXY_SLOTS = ['dxgi.dll', 'winmm.dll', 'version.dll', 'dbghelp.dll', 'd3d12.dll', 'wininet.dll',
+  'winhttp.dll', 'OptiScaler.asi'];
+
 function optiScalerInstalled(dir) {
-  return fs.existsSync(path.join(dir, 'OptiScaler.ini')) && fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'));
+  if (!fs.existsSync(path.join(dir, 'OptiScaler.ini')) || !fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'))) return false;
+  return PROXY_SLOTS.some((name) => fs.existsSync(path.join(dir, name)));
 }
 
 function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {

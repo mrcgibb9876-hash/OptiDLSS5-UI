@@ -1517,14 +1517,36 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
       throw new Error('The release folder itself is missing nvngx.dll_dlssnr.dll -- it looks incomplete. Re-download it via "Check for Updates" in Settings.');
     }
 
+    // Refresh the proxy to this release's build -- but only a proxy this app created.
+    //
+    // It used to refresh whichever proxy-named OptiScaler it found, which is destructive in the one
+    // case that matters: another tool's build, silently overwritten, inside a catch that threw the
+    // failure away. Now it touches only what the journal says is ours, and an adopted proxy we
+    // cannot account for is reported to the caller instead (foreignProxy), for the UI to raise.
     let proxyUpdated = null;
+    let proxyRefreshError = null;
+    let foreignProxy = null;
+    let proxyIsThisBuild = false;
     try {
       const active = await findActiveOptiScalerFile(dir);
-      if (active && active.renamed && sha256File(path.join(releaseFolder, 'OptiScaler.dll')) !== sha256File(active.file)) {
-        await fsp.copyFile(path.join(releaseFolder, 'OptiScaler.dll'), active.file);
-        proxyUpdated = path.basename(active.file);
+      if (active && active.renamed) {
+        // Byte-identical to the build being installed means it *is* this build, whatever the
+        // journal does or does not say -- installs from before the journal recorded a proxy name
+        // land here, and they are not somebody else's. Nothing is written and nobody is accused.
+        const same = sha256File(path.join(releaseFolder, 'OptiScaler.dll')) === sha256File(active.file);
+        if (same) {
+          proxyIsThisBuild = true;
+        } else if (proxyIsOurs(dir, active.file)) {
+          await fsp.copyFile(path.join(releaseFolder, 'OptiScaler.dll'), active.file);
+          proxyUpdated = path.basename(active.file);
+        } else {
+          foreignProxy = path.basename(active.file);
+        }
       }
-    } catch {
+    } catch (err) {
+      // Said out loud rather than swallowed: a proxy that could not be refreshed is a game still
+      // running the previous build, which is worth knowing when something behaves like an old bug.
+      proxyRefreshError = String(err && err.message ? err.message : err);
     }
 
     // The rename that actually makes the game load OptiScaler. Previously this only happened when
@@ -1550,10 +1572,15 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
       // Not fatal: everything else is in place, and Run Setup is still there to do it by hand.
       proxyError = err.message;
     }
+    // installProxy sees the same slot from the other side; either witness is enough to report it,
+    // except when the bytes already said it is this very build (a pre-journal install of ours).
+    if (proxy && proxy.adopted && proxy.ours === false && !foreignProxy && !proxyIsThisBuild) {
+      foreignProxy = proxy.proxy;
+    }
 
     const { api, applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix, profile } = await autoConfigureGame(dir, exePath);
 
-    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, proxy, proxyError, feederGame, api, autoConfigured: applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix, profile };
+    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, proxyRefreshError, foreignProxy, proxy, proxyError, feederGame, api, autoConfigured: applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix, profile };
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -3417,6 +3444,16 @@ const OUR_INSTALL_SIGNS = ['nvngx_dlssnr.dll', 'nvngx.dll_dlssnr.dll', INSTALL_M
 // refuses instead of overwriting it. The script does `del /F` on the old backup first, so
 // installing twice over a game that shipped its own dxgi.dll destroys the original permanently on
 // the second run. Refusing is recoverable; deleting someone's file is not.
+// Did this app create that proxy? The install journal records every proxy it makes, so this is a
+// lookup rather than a guess about bytes -- and the absence of the record is itself informative: a
+// journal with files but no proxy name means the install adopted a proxy somebody else had already
+// put there, which is exactly the DOOM 3 BFG case.
+function proxyIsOurs(dir, proxyFile) {
+  const journal = readInstallMarker(dir);
+  if (!journal || typeof journal.proxy !== 'string') return false;
+  return journal.proxy.toLowerCase() === path.basename(proxyFile).toLowerCase();
+}
+
 async function installProxy(dir, proxyName = DEFAULT_PROXY) {
   if (!PROXY_CANDIDATES.includes(proxyName)) {
     throw new Error(`${proxyName} is not one of the proxy names OptiScaler supports`);
@@ -3424,7 +3461,20 @@ async function installProxy(dir, proxyName = DEFAULT_PROXY) {
 
   const active = await findActiveOptiScalerFile(dir);
   if (active && active.renamed) {
-    return { proxy: path.basename(active.file), created: false, backedUp: null };
+    // An OptiScaler already sits in a proxy slot. Whether that is *ours* is the whole question,
+    // and until now it was never asked: any DLL reporting OriginalFilename=OptiScaler.dll counted
+    // as "already installed", so a folder holding somebody else's build got a silent no-op and an
+    // "Installed" badge, while the build that actually answered the game's NGX calls was theirs.
+    // A user's DOOM 3 BFG ran an upstream OptiScaler as winmm.dll exactly this way -- no neural
+    // pass, nothing wrong on any screen in this app.
+    //
+    // The journal is the authority: this app records the proxy it creates, so a proxy it did not
+    // record is not its own. It is still adopted either way -- refusing would break the hand-made
+    // setups that do work, and overwriting another tool's DLL unasked is the other way to get this
+    // wrong. What changes is that an adoption we cannot account for is reported (ours: false)
+    // instead of passing silently for an install of ours.
+    const ours = proxyIsOurs(dir, active.file);
+    return { proxy: path.basename(active.file), created: false, backedUp: null, adopted: true, ours };
   }
 
   const source = path.join(dir, 'OptiScaler.dll');

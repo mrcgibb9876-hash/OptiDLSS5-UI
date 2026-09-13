@@ -228,3 +228,28 @@ test('an OptiScaler under a proxy name is recognised, and told apart from ours b
   const mine = await detect.inspectHookDlls(dir);
   assert.equal(mine.optiScalerProxy.matchesOurBuild, true, 'our own install is not an intruder');
 });
+
+test('the shape a real install leaves: no OptiScaler.dll, the journal names the proxy', { skip: !onWindows }, async () => {
+  // installProxy RENAMES OptiScaler.dll into the slot, so a finished install has no OptiScaler.dll
+  // to measure. Comparing sizes against a file that is never there made every install look like
+  // somebody else's build. The journal says which proxy this app made; that is the authority.
+  const dir = scratchDir('installed-shape');
+  const dll = Buffer.concat([Buffer.from('MZ'), Buffer.alloc(4096), Buffer.from('OptiScaler', 'latin1')]);
+  fs.writeFileSync(path.join(dir, 'dxgi.dll'), dll);
+  fs.writeFileSync(path.join(dir, '.optiscaler-manager-install.json'), JSON.stringify({ proxy: 'dxgi.dll', added: ['OptiScaler.dll'] }));
+  const clean = await detect.inspectHookDlls(dir);
+  assert.equal(clean.optiScalerProxy.file, 'dxgi.dll');
+  assert.equal(clean.optiScalerProxy.matchesOurBuild, true, 'the proxy the journal names is ours');
+  assert.equal(diagnose({
+    detected: { bitness: 64, optiScalerProxy: clean.optiScalerProxy },
+    route: { route: 'feeder', optiInstalled: true, feederDeployed: true },
+    run: { ran: false, verdict: 'no-log' },
+  }).code, 'needs-run', 'a normal install is never accused');
+
+  // Now somebody else's build behind ours. dxgi.dll is scanned first and is ours, so the one that
+  // matters is only found by looking past it -- the DOOM 3 BFG shape exactly.
+  fs.writeFileSync(path.join(dir, 'winmm.dll'), Buffer.concat([dll, Buffer.alloc(64)]));
+  const both = await detect.inspectHookDlls(dir);
+  assert.equal(both.optiScalerProxy.file, 'winmm.dll', 'the one that is not ours is the one reported');
+  assert.equal(both.optiScalerProxy.matchesOurBuild, false);
+});
