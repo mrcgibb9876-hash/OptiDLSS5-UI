@@ -635,6 +635,31 @@ function agilitySdkPath(dir) {
   return null;
 }
 
+// The same Agility SDK redirect read as a risk rather than as evidence of DX12 -- the one thing
+// that can make an entire Feeder deploy silently do nothing, and a Unity report is what found it.
+//
+// An exe exporting D3D12SDKPath/D3D12SDKVersion tells Direct3D 12 to load its runtime from a
+// game-local D3D12\ folder for EVERY device created in that process. If that folder is missing,
+// empty, or holds a D3D12Core.dll of a version the exe did not ask for, every create in the
+// process fails with 0x887E0003, D3D12_ERROR_INVALID_REDIST -- including the private D3D12 device
+// the Feeder opens to run DLSS on. The Feeder's README documents this (its issues #61 and #81)
+// and notes that Unity titles commonly carry those exports.
+//
+// What makes it invisible: a Unity game rendering D3D11 never creates a D3D12 device of its own,
+// so a broken or absent redist costs the game nothing. The game runs, the Feeder deploys, the
+// shaders compile -- and DLSS 5 never starts, with nothing in the game's own behaviour to hint at
+// why. The fix the Feeder's README gives is to move that folder aside and relaunch.
+//
+// Only "the exports are there and no D3D12Core.dll can be found" is reported here. A version
+// mismatch between what the exe asks for and what the folder holds would need the value of the
+// exported UINT, a data export this app does not parse -- and that half is covered by evidence
+// instead: the Feeder writes the code into its own log, which runlog.js reads.
+function agilityRedistRisk(dir, detected = {}) {
+  if (!detected.agility) return null;
+  if (agilitySdkPath(dir)) return null;
+  return { exports: true, folder: fs.existsSync(path.join(dir, 'D3D12')) ? 'D3D12' : null };
+}
+
 // DLSS Frame Generation only runs on a D3D12 (or Vulkan) swapchain, and Unreal never defaults
 // to Vulkan on Windows -- so a UE game that ships nvngx_dlssg.dll / sl.dlss_g.dll (beside the exe
 // like Aliens: Fireteam Elite 2, or in its plugin tree like Stellar Blade's
@@ -1029,4 +1054,4 @@ async function planForeignRemoval(dir, { ours = false } = {}) {
   return { found, del: [...del].sort(), restore, notes };
 }
 
-module.exports = { DETECT_VERSION, detectGame, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, foreignToolchains, planForeignRemoval };
+module.exports = { DETECT_VERSION, detectGame, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, foreignToolchains, planForeignRemoval };

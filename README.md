@@ -155,6 +155,46 @@ shows the target it is holding.
 cannot capture an exclusive-fullscreen window at all, a limitation on its own side. A DX12 game is
 usually fine either way, since DX12 has no true exclusive fullscreen.
 
+## What the Feeder needs to actually feed: motion vectors and depth
+
+For a game with no DLSS of its own, the DLSS5 Feeder synthesises the DLSS call OptiScaler's neural
+pass hooks. It does not estimate motion itself: it reads a motion-vector shader you install, chosen
+by the `DLSS5_MV_PROVIDER` definition, and reads the scene's depth through ReShade's Generic Depth
+add-on. Both can be wrong while every file is in place, the shaders compile, and the log says frames
+are being delivered — which is exactly what "installed, and DLSS 5 still isn't doing anything" looks
+like. The app now writes both halves itself, and names it when they are wrong.
+
+**The motion-vector provider.** The default is [VORT](https://github.com/vortigern11/vort_Shaders)
+(MIT, `DLSS5_MV_PROVIDER=2`), fetched from a pinned commit with its includes and its blue-noise
+texture, and the ReShade search paths for both. LumeniteFX Kernel (provider 3, what the Feeder's
+README recommends) is one choice away in Edit and is fetched live from its author's repo after you
+confirm its licence; iMMERSE Launchpad (provider 1) is offered only if you already have it, since its
+licence forbids anyone else propagating it. The technique goes into the preset **above** `DLSS 5
+Feed`, and `DLSS5_MV_PROVIDER` is written at both levels ReShade reads, so a reload from the overlay
+cannot leave the shader compiled for one provider while another is enabled — the Feeder calls that
+its classic silent failure.
+
+> Before v1.57.0 the default was ReshadeMotionEstimation (DRME), and the Feeder's README is explicit
+> that **DRME does not compile on ReShade 6.8**, the version this app installs. So every Feeder
+> deploy before that shipped a motion-vector shader that could not compile, on every game: DLSS ran
+> on zero vectors, which looks sharp standing still and smears the moment you move. Game Help now
+> says so without waiting for a run, and one button re-deploys the whole motion-vector half.
+
+**Depth.** An install writes what is true of the engine — for Unity, reversed-Z and a depth copy
+taken before clears. If depth still reads flat, Edit offers the one Unity depth profile a
+contributor has verified end to end (the Feeder's README carries it as its Subnautica profile: clear
+index, aspect-ratio heuristic, reversed and upside-down depth). Past that it is ReShade's own
+**Add-ons ▸ Generic Depth** page in gameplay, the only thing that can see the buffers the running
+game actually has.
+
+**The Agility SDK trap, which Unity games walk into.** An exe that exports `D3D12SDKPath` /
+`D3D12SDKVersion` points Direct3D 12 at its own `D3D12\` folder for *every* device created in that
+process — the Feeder's private D3D12 device included. If that folder is empty or holds the wrong
+version, every create fails with `D3D12_ERROR_INVALID_REDIST` and no DLSS session ever opens, while
+the game itself never notices because on D3D11 it creates no D3D12 device of its own. The app reads
+that code out of `dlss5-feed.log`, says what it means, and offers to move the folder aside
+reversibly — the test the Feeder's README gives.
+
 ## What it does
 
 **Finds your games.** Reads Steam's `libraryfolders.vdf` (so every Steam library on every drive),
@@ -263,7 +303,9 @@ DLSS 5 toolchains in the folder, the verified-games registry -- against a rule t
 - **Working** -- Neural Rendering ran on the last run, with the pass count and fps.
 - **Fix available** -- the app can do it: remove another toolchain, remove a Feeder that is on a game
   with its own DLSS, remove Luma UE from a game known to break with it, reconfigure the ini
-  (`dlss_12` for D3D11, NR on, REFramework for RE Engine, the Feeder's ReShade settings), or Install.
+  (`dlss_12` for D3D11, NR on, REFramework for RE Engine, the Feeder's ReShade settings), deploy the
+  Feeder's motion-vector half again when DLSS is being fed no vectors, switch a flat-depth game to
+  the verified Unity depth profile, move a game's broken `D3D12\` Agility redist aside, or Install.
   One button applies it.
 - **Your move** -- something only you can do in-game, such as selecting DLSS in Luma's overlay.
 - **Needs a run** -- no log yet. **Launch and check** starts the game and reads the new log by itself
@@ -377,8 +419,10 @@ releases and never mirrored here:
 | ShortFuse's `nvngx_dlssnr.dll` 310.8.SF (via RHI) | Neural Rendering on RTX 20/30/40 | Modified NVIDIA DLL, as published by RHI |
 | [DLSS5-Feeder](https://github.com/jlrouzies-fr/DLSS5-Feeder) (jlrouzies-fr) | A synthesised DLSS call for games with no DLSS of their own | MIT |
 | [ReShade](https://reshade.me) (crosire) and [reshade-shaders](https://github.com/crosire/reshade-shaders) | Host for the Feeder and Luma add-ons; `ReShade.fxh`/`ReShadeUI.fxh` | BSD 3-Clause |
-| [ReshadeMotionEstimation](https://github.com/JakobPCoder/ReshadeMotionEstimation) (JakobPCoder) | Default motion-vector provider for the Feeder | CC BY-NC 4.0 |
-| [LumeniteFX](https://github.com/umar-afzaal/LumeniteFX) (umar-afzaal) | Optional motion-vector provider; fetched live from the official repo only after per-action consent | AGNYA (all rights reserved) |
+| [vort_Shaders](https://github.com/vortigern11/vort_Shaders) (vortigern11) | Default motion-vector provider for the Feeder (`vort_Motion`, `DLSS5_MV_PROVIDER=2`); fetched from a pinned commit of the author's own repo | MIT |
+| [LumeniteFX](https://github.com/umar-afzaal/LumeniteFX) (umar-afzaal) | Optional motion-vector provider, the one the Feeder's README recommends; fetched live from the official repo only after per-action consent | AGNYA (all rights reserved) |
+| [iMMERSE](https://github.com/martymcmodding/iMMERSE) (Pascal Gilcher / MartysMods) | Optional motion-vector provider (Launchpad): detected and configured if you already have it, never fetched or shipped -- its licence forbids propagating any part of it | All rights reserved |
+| [ReshadeMotionEstimation](https://github.com/JakobPCoder/ReshadeMotionEstimation) (JakobPCoder) | Former default motion-vector provider, recognised now only so an old deploy can be cleaned up: DRME does not compile on ReShade 6.8 | CC BY-NC 4.0 |
 | [Luma-Framework](https://github.com/Filoppi/Luma-Framework) (Filoppi) | DLAA in place of TAA for STAR WARS Jedi: Fallen Order; fetched live after per-action consent | Custom MIT variant |
 | [OptiScaler-DLSSNR-PreSR-Multipass](https://github.com/wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass) (wilsjo2) | Optional engine build: Neural Rendering before DLSS upscaling, 1-3 passes; fetched live from its releases | GPL-3.0 |
 | [REFramework](https://github.com/praydog/REFramework) (praydog) | Required on RE Engine games | MIT |

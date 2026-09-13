@@ -97,6 +97,33 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   const fpsMatch = [...feed.matchAll(/frame interval [\d.]+ ms \(([\d.]+) fps\)/g)].pop();
   const fps = fpsMatch ? Math.round(parseFloat(fpsMatch[1])) : null;
 
+  // The Feeder's own diagnoses, lifted from its log rather than re-derived here. Each is a line
+  // the add-on writes itself (its dlss5-feed.cpp: the MV/depth probes every 600 frames, the
+  // motion-vector problem warning, and the Agility SDK report on a failed device create), and
+  // each describes a run where everything looks installed and DLSS still gets nothing:
+  //
+  //   invalidRedist  D3D12_ERROR_INVALID_REDIST (0x887E0003). A game whose exe exports
+  //                  D3D12SDKPath/D3D12SDKVersion -- which Unity titles commonly do -- points
+  //                  Direct3D 12 at its own D3D12\ redist folder for EVERY device created in the
+  //                  process, including the Feeder's private one. If that folder is empty or
+  //                  holds the wrong version, the create fails and no session ever opens, while
+  //                  the game itself (on D3D11) never notices. The Feeder's README calls the
+  //                  rename test: move D3D12\ aside and relaunch.
+  //   mvProblem      The Feeder's own sentence for the four motion-vector failures: the provider
+  //                  is not installed, it failed to compile, it is installed but disabled, or a
+  //                  different one is enabled than DLSS5_MV_PROVIDER selects. Kept verbatim --
+  //                  it names the provider and quotes ReShade's compile error.
+  //   noMotion       The MV probe measured under 2% non-zero vectors: DLSS is reconstructing
+  //                  from a still image, which looks sharp until you move.
+  //   depthFlat      The depth probe read flat. Flat while the vectors show the scene moving is a
+  //                  real diagnosis (Generic Depth is bound to the wrong buffer -- the usual
+  //                  Unity failure); flat on its own can just be a menu.
+  const feedInvalidRedist = /D3D12_ERROR_INVALID_REDIST|0x887E0003/i.test(feed);
+  const feedMvProblem = (/\[feed\] ((?:DLSS5_Feed\.fx is compiled for motion-vector provider|motion-vector provider )[^\r\n]+)/.exec(feed) || [])[1] || null;
+  const feedNoMotion = /DLSS is getting \(almost\) no motion vectors/.test(feed);
+  const feedDepthFlatMoving = /depth is FLAT while the scene moves/.test(feed);
+  const feedDepthFlat = feedDepthFlatMoving || /sampled depth is flat/.test(feed);
+
   const crash = unrealCrashNear(dir, stat.mtimeMs);
 
   let verdict;
@@ -104,6 +131,11 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   if (feedCreateFault && feedTwoCopies) verdict = 'duplicate-dlss';
   else if (shutdownFault) verdict = 'shutdown-fault';
   else if (crash && !cleanExit) { verdict = 'ue-crash'; detail = crash.message; }
+  // Before feed-stopped and before nr-ran: a session that never opened for this reason, and a
+  // neural pass running on empty guides, both otherwise read as "no DLSS" or as a clean run.
+  else if (feedInvalidRedist) verdict = 'feed-agility-redist';
+  else if (feedMvProblem || feedNoMotion) { verdict = 'feed-no-motion'; detail = feedMvProblem; }
+  else if (feedDepthFlatMoving) verdict = 'feed-depth-flat';
   else if (feedStopped) verdict = 'feed-stopped';
   else if (nrDispatch > 0) verdict = 'nr-ran';
   else if (dlssCreated > 0) { verdict = 'dlss-no-nr'; detail = d3d11NativeFeature ? 'd3d11-native' : null; }
@@ -122,6 +154,11 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     cleanExit,
     logLevel: logLevel ? Number(logLevel) : null,
     crash,
+    feedInvalidRedist,
+    feedMvProblem,
+    feedNoMotion,
+    feedDepthFlat,
+    feedDepthFlatMoving,
     verdict,
     detail,
   };

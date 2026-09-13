@@ -9,7 +9,8 @@
 // reason), unknown (no rule fits -- the support bundle, or the AI tier, is the next step).
 //
 // Fix ids are what main.js's game:help-apply knows how to run: remove-foreign, remove-feeder,
-// remove-luma, reconfigure. 'install' is the card's own Install button, run by the renderer.
+// remove-luma, redeploy-feeder, feeder-depth-profile, disable-agility-redist, reconfigure.
+// 'install' is the card's own Install button, run by the renderer.
 //
 // fixesTried: what the renderer already applied this session, as { id, runAt } (runAt: the
 // last run's timestamp when the fix ran; a bare id string means "judge it now"). A fix that
@@ -50,6 +51,16 @@ function diagnose(ctx) {
   // Not installed, or the route's first step is missing: Install is the fix.
   if (!route.optiInstalled) return fix('not-installed', 'install');
   if (route.route === 'feeder' && !route.feederDeployed) return fix('feeder-missing', 'install');
+
+  // A Feeder whose motion-vector half cannot work is a finding now, before any run: the shader is
+  // missing, the preset and the shader name different providers, or -- for every game deployed
+  // before v1.57.0 -- the provider is DRME, which cannot compile on the ReShade this app installs
+  // and therefore writes no vectors at all. Waiting for a run would only rediscover it slowly.
+  const mv = ctx.mvProvider;
+  if (route.feederDeployed && mv && mv.id && (mv.broken || !mv.shaderPresent || mv.valueMismatch || mv.techniqueMismatch)) {
+    const why = mv.broken ? 'broken' : !mv.shaderPresent ? 'missing' : 'mismatched';
+    return fix('feeder-mv-broken', 'redeploy-feeder', { provider: mv.displayName || mv.id, why });
+  }
   // The experimental legacy routes: dgVoodoo2 or the 32-bit helper still to place. Install does both.
   if (route.route === 'feeder32' && !route.complete) return fix('not-installed', 'install');
   if (route.legacy && route.legacy.dgVoodoo && !route.dgVoodooDeployed) return fix('dgvoodoo-missing', 'install');
@@ -96,6 +107,25 @@ function diagnose(ctx) {
       if (route.lumaDeployed && !(route.verified && route.verified.route === 'lumaue')) return fix('ue-crash-luma', 'remove-luma', { message: run.detail || '' });
       if (route.feederDeployed && !(route.verified && route.verified.route === 'feeder')) return fix('ue-crash-feeder', 'remove-feeder', { message: run.detail || '' });
       return out('unknown', 'ue-crash', { message: run.detail || '' });
+    // The Feeder ran and DLSS still got nothing. Three separate faults, each with the Feeder's
+    // own log line behind it (runlog.js), and each invisible from inside the game:
+    case 'feed-no-motion':
+      // No motion vectors: the provider is missing, disabled, mismatched, or -- for anything
+      // deployed before v1.57.0 -- a shader (DRME) that cannot compile on ReShade 6.8 at all.
+      // One re-deploy rewrites the provider, its shader, both definition levels and the preset.
+      return fix('feed-no-motion', 'redeploy-feeder', { detail: run.detail || '' });
+    case 'feed-depth-flat':
+      // Depth read flat while the vectors said the scene was moving: ReShade's Generic Depth is
+      // bound to the wrong buffer, which is the classic Unity failure. The verified Unity profile
+      // is the one automatic move left; after that it is Generic Depth's own page.
+      return fix('feed-depth-flat', 'feeder-depth-profile');
+    case 'feed-agility-redist':
+      // A game-local Agility SDK folder failing every D3D12 create in the process. Moving it
+      // aside is only possible when it is actually there; otherwise the redirect comes from
+      // somewhere this app cannot reach, and saying so is the honest answer.
+      return ctx.agilityRedist && ctx.agilityRedist.folder
+        ? fix('feed-agility-redist', 'disable-agility-redist')
+        : out('step', 'feed-agility-redist-elsewhere');
     case 'feed-stopped':
       return fix('feed-stopped', 'reconfigure');
     default:
@@ -104,6 +134,6 @@ function diagnose(ctx) {
 }
 
 // The fixes in the order Game Help would try them, for the AI tier's tool list and the tests.
-const FIX_IDS = ['remove-foreign', 'remove-feeder', 'remove-luma', 'reconfigure', 'install'];
+const FIX_IDS = ['remove-foreign', 'remove-feeder', 'remove-luma', 'redeploy-feeder', 'feeder-depth-profile', 'disable-agility-redist', 'reconfigure', 'install'];
 
 module.exports = { diagnose, FIX_IDS };

@@ -92,41 +92,71 @@ const LUMENITEFX_KERNEL_INCLUDES = [
 // the Feeder's actual latest release tag.
 const FEEDER_DEPLOY_MARKER = '.dlss5ui-feeder-deploy.json';
 
-// Motion-vector provider. DLSS5_Feed.fx reads whichever shader DLSS5_MV_PROVIDER selects (a
-// preprocessor definition, five options per the Feeder's own README). Only two are wired up
-// here -- see MV_PROVIDERS below for why: the other three (iMMERSE Launchpad, VORT,
-// LumeniteFX QuantMotion) are real, valid choices the Feeder's README documents, just not ones
-// this pass sourced a verified download URL for. Not a licensing question for those three,
-// just unfinished breadth -- add them the same shape as reshade-motion-estimation below once a
-// URL is confirmed.
+// Motion-vector provider. DLSS5_Feed.fx does not estimate motion itself: it reads whichever
+// provider's output texture the DLSS5_MV_PROVIDER preprocessor definition selects (five values,
+// per the Feeder's README). Each entry here carries the provider's real technique name -- it
+// must run BEFORE DLSS5_Feed in the technique list or no vectors exist when the feed reads them
+// -- and a way of getting the shader that respects its licence.
 //
-// reshade-motion-estimation uses provider value 0 ("anything writing the shared
-// texMotionVectors" -- the Feeder's own README calls this "the old convention"), not one of
-// the four specifically-numbered/tuned providers (1-4). It is not literally broken -- the
-// README's only correctness warning under provider 0 is that a *different* shader called DRME
-// fails to compile on ReShade 6.8, not this one -- but it hasn't been confirmed against a real
-// deploy either. Flagged here rather than silently presented as equally proven as the
-// Feeder's own recommended default (LumeniteFX Kernel, provider 3).
+// Why VORT is the default and DRME is not: this is the bug behind "the Feeder is deployed and
+// nothing happens".
+//
+//   DLSS5_MV_PROVIDER=0 is the Feeder's "old convention" value ("anything writing the shared
+//   texMotionVectors texture"), and JakobPCoder's ReshadeMotionEstimation -- technique DRME --
+//   was this app's default for it. The Feeder's README is explicit that **DRME does not compile
+//   on ReShade 6.8**, the version this app pins and installs (RESHADE_SETUP_URL), and lists it
+//   as one of the four causes of its classic silent failure: the image is static-sharp but
+//   smears in motion because no vectors ever reach DLSS. So every deploy this app made with the
+//   old default shipped a motion-vector shader that could not compile -- on every game, Unity or
+//   not. The comment that used to live here read that README warning as being about a different
+//   shader; it is about this one.
+//
+//   VORT (value 2) is MIT, fetchable from its author's own repo, and the Feeder's own shader
+//   source calls it "the recommended provider". It is the default now.
+//
+// The other three are real, documented choices rather than defaults: LumeniteFX Kernel (3) is
+// what the Feeder's beta was tuned on and what its README recommends, but its licence needs
+// per-action consent (deployLumeniteFx below); iMMERSE Launchpad (1) may not be redistributed at
+// all, so it is offered only when the user's own iMMERSE install is already in the game's shader
+// folder; DRME (0) stays listed but unselectable, so a game deployed with it before this change
+// is still recognised, reported and cleaned up.
+const VORT_COMMIT = 'b410b9f0c0fbb83c8cb42164aaf1655fab386f4a';
 const MV_PROVIDERS = {
-  'reshade-motion-estimation': {
-    id: 'reshade-motion-estimation',
-    displayName: 'ReShade Motion Estimation (JakobPCoder)',
-    mvProviderValue: 0,
-    license: 'CC BY-NC 4.0',
+  vort: {
+    id: 'vort',
+    displayName: 'VORT (vortigern11)',
+    mvProviderValue: 2,
+    license: 'MIT',
     autoFetchable: true,
-    zipUrl: 'https://github.com/JakobPCoder/ReshadeMotionEstimation/archive/refs/heads/master.zip',
-    // The real ReShade technique declared inside MotionEstimation.fx ("technique DRME") --
-    // must run before DLSS5_Feed's own technique so its motion vectors exist for DLSS5_Feed to
-    // read. configurePreset() below enables this explicitly rather than counting on ReShade's
-    // own "auto-enable a newly found technique" behaviour, which is real but not something to
-    // depend on for correctness (confirmed inconsistent in practice, 2026-09-09: the ordering
-    // came out right once by that path and can't be trusted to every time).
-    techniqueFile: 'MotionEstimation.fx',
-    techniqueName: 'DRME',
-    // Everything deployMvProvider() extracts from that repo (its .fx and .fxh files), so
-    // removeFeederStack() can take exactly these back out and nothing else.
-    files: ['MotionEstimation.fx', 'MotionEstimation.fxh', 'MotionEstimationUI.fxh', 'MotionVectors.fxh'],
+    selectable: true,
     default: true,
+    // Pinned to one commit rather than a branch head: this shader is what every Feeder deploy
+    // depends on to compile, and an upstream change that broke it would break new installs
+    // silently. It is the same commit DLSS5-Swapper pins and ships with a sha256, so two
+    // projects have independently run this exact one.
+    zipUrl: `https://codeload.github.com/vortigern11/vort_Shaders/zip/${VORT_COMMIT}`,
+    // Path-preserving, unlike the flat providers below. vort_Motion.fx's own #include lines name
+    // "Includes/vort_Defs.fxh" (ReShade resolves those against the effect search path root), and
+    // the shaders it pulls in declare a texture with `source = "vort_BlueNoise.png"` -- which
+    // ReShade only finds through TextureSearchPaths, so configureReShadeIni writes that too.
+    // The whole Includes folder goes in rather than a hand-resolved include closure: the closure
+    // runs ~11 files deep through four levels, and one missing .fxh fails compilation with a
+    // preprocessor error naming the include -- exactly the silent failure this provider is here
+    // to end.
+    layout: [
+      { from: 'Shaders/vort_Motion.fx', to: 'Shaders/vort_Motion.fx' },
+      { fromDir: 'Shaders/Includes', to: 'Shaders/Includes', match: /\.fxh$/i },
+      { from: 'Textures/vort_BlueNoise.png', to: 'Textures/vort_BlueNoise.png' },
+      { from: 'Textures/vort_MLUT.png', to: 'Textures/vort_MLUT.png' },
+      { from: 'LICENSE', to: 'Licenses/VORT-LICENSE.txt' },
+    ],
+    techniqueFile: 'vort_Motion.fx',
+    techniqueName: 'vort_MotionEffects',
+    // vort_Static.fx is deliberately not deployed: only one provider technique may be enabled,
+    // and an unused effect is one more thing to compile and to explain. `files` is the static
+    // fallback for removal; a real deploy records every path it wrote in the deploy marker
+    // (mvFiles) and removeFeederStack() prefers that.
+    files: ['vort_Motion.fx'],
   },
   'lumenite-kernel': {
     id: 'lumenite-kernel',
@@ -142,6 +172,8 @@ const MV_PROVIDERS = {
     // caller passes licenseConfirmed:true -- enforced here, not just in the UI, so a UI bug
     // can't silently bypass consent.
     autoFetchable: false,
+    selectable: true,
+    recommended: true,
     officialUrl: 'https://github.com/umar-afzaal/LumeniteFX',
     licenseUrl: 'https://github.com/umar-afzaal/LumeniteFX/blob/mainline/LICENSE.md',
     licenseSummary: 'AGNYA licence (Rev 1.4), Copyright (C) 2025-2026 Afzaal (Kaidō). All rights ' +
@@ -149,16 +181,76 @@ const MV_PROVIDERS = {
       'independently hosting a copy is explicitly prohibited, which is why this always ' +
       'fetches live from the official repo rather than a cached copy. No warranty of any kind.',
     // The real declared technique name inside lumenite_Kernel.fx ("technique Lumenite_Kernel").
-    // Same ordering requirement as reshade-motion-estimation above.
     techniqueFile: 'lumenite_Kernel.fx',
     techniqueName: 'Lumenite_Kernel',
     files: [LUMENITEFX_KERNEL_FILE, ...LUMENITEFX_KERNEL_INCLUDES],
-    default: false,
+  },
+  'immerse-launchpad': {
+    id: 'immerse-launchpad',
+    displayName: 'iMMERSE Launchpad (MartysMods) -- your own copy',
+    mvProviderValue: 1,
+    license: 'All rights reserved -- martymcmodding/iMMERSE',
+    // Bring-your-own, and not for the same reason as LumeniteFX. iMMERSE's licence forbids
+    // propagation outright -- "Public propagation of this project or parts of it is strictly
+    // forbidden. This means that independently hosting a copy of this project and propagating
+    // it using this hosted version is prohibited" -- with no official-links carve-out to fetch
+    // through. So this app never downloads it: the provider becomes available only when the
+    // user's own iMMERSE install already has MartysMods_LAUNCHPAD.fx in the game's shader
+    // folder, and all this app does then is point DLSS5_MV_PROVIDER and the technique list at
+    // it. The Feeder's README also rates it the weakest of the numbered providers ("warping
+    // around flames/transparents is worst here") and its troubleshooting sends you to provider
+    // 3 -- so it is a choice for someone who already has iMMERSE, never a recommendation.
+    autoFetchable: false,
+    bringYourOwn: true,
+    selectable: true,
+    officialUrl: 'https://github.com/martymcmodding/iMMERSE',
+    licenseSummary: 'Copyright (c) Pascal Gilcher. All rights reserved. Public propagation of ' +
+      'the project or parts of it is forbidden, so this app never fetches or ships it -- ' +
+      'install iMMERSE yourself from its own official release and this provider lights up.',
+    techniqueFile: 'MartysMods_LAUNCHPAD.fx',
+    techniqueName: 'MartysMods_Launchpad',
+    // Never ours to remove: the user installed it, and other iMMERSE effects share its includes.
+    files: [],
+  },
+  'reshade-motion-estimation': {
+    id: 'reshade-motion-estimation',
+    displayName: 'ReShade Motion Estimation / DRME (JakobPCoder)',
+    mvProviderValue: 0,
+    license: 'CC BY-NC 4.0',
+    autoFetchable: true,
+    // Cannot compile on the ReShade this app installs -- see the block comment above. Left in
+    // the table, and out of the UI, purely so an existing deploy that used it is recognised:
+    // feederReadiness() reports it as broken, removeFeederStack() still takes its files back
+    // out, and configurePreset() still strips its technique when another provider replaces it.
+    selectable: false,
+    unsupportedReason: 'DRME does not compile on ReShade 6.8 (the version this app installs), ' +
+      'so it feeds no motion vectors at all -- the picture looks sharp when still and smears ' +
+      'when moving. The Feeder\'s own README names this. Deploy again with VORT or LumeniteFX.',
+    zipUrl: 'https://github.com/JakobPCoder/ReshadeMotionEstimation/archive/refs/heads/master.zip',
+    techniqueFile: 'MotionEstimation.fx',
+    techniqueName: 'DRME',
+    files: ['MotionEstimation.fx', 'MotionEstimation.fxh', 'MotionEstimationUI.fxh', 'MotionVectors.fxh'],
   },
 };
 
+// Every provider, for the Edit dialog's picker. The unselectable ones (DRME) are filtered out
+// there, not here -- main.js and the readiness report both need to look them up by id.
 function mvProviderList() {
   return Object.values(MV_PROVIDERS);
+}
+
+// The provider a fresh deploy should use when nobody has chosen one.
+function defaultMvProviderId() {
+  const chosen = Object.values(MV_PROVIDERS).find((p) => p.default && p.selectable !== false);
+  return (chosen || MV_PROVIDERS.vort).id;
+}
+
+// Is a bring-your-own provider's shader actually in this game's folder? The only check that
+// makes sense for iMMERSE Launchpad, which this app never places itself.
+function mvProviderPresent(dir, providerId) {
+  const provider = MV_PROVIDERS[providerId];
+  if (!provider || !provider.techniqueFile) return false;
+  return fs.existsSync(path.join(dir, 'reshade-shaders', 'Shaders', provider.techniqueFile));
 }
 
 // --- detection ----------------------------------------------------------------------
@@ -180,6 +272,52 @@ function needsFeeder(dir) {
 // needsFeeder() say "false" here).
 function feederDeployed(dir) {
   return fs.existsSync(path.join(dir, 'dlss5-feed.addon64'));
+}
+
+// Which motion-vector provider this game is actually set up for, and whether that set-up agrees
+// with itself. This is the check that would have caught the DRME default: a Feeder deploy can be
+// complete in every file sense and still feed no vectors, because the shader cannot compile, or
+// because the preset enables one provider's technique while DLSS5_Feed is compiled for another --
+// what the Feeder's README calls its classic silent failure. Everything here is read from the
+// game's own files, so it stays true for a deploy made by hand or by an older version of this app.
+function feederProviderStatus(dir) {
+  const marker = readFeederDeployMarker(dir);
+  const id = (marker && marker.mvProviderId) || null;
+  const provider = id ? MV_PROVIDERS[id] : null;
+  const presetPath = path.join(dir, 'ReShadePreset.ini');
+  let preset = '';
+  try { preset = fs.readFileSync(presetPath, 'utf8'); } catch {}
+
+  const definedValue = (() => {
+    for (const section of ['DLSS5_Feed.fx', '']) {
+      const defs = getIniKey(preset, section, 'PreprocessorDefinitions') || '';
+      const hit = /DLSS5_MV_PROVIDER\s*=\s*(\d+)/i.exec(defs);
+      if (hit) return Number(hit[1]);
+    }
+    return null;
+  })();
+
+  const techniques = (getIniKey(preset, '', 'Techniques') || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const enabled = Object.values(MV_PROVIDERS).find((p) => p.techniqueFile && p.techniqueName &&
+    techniques.includes(`${p.techniqueName}@${p.techniqueFile}`.toLowerCase())) || null;
+
+  const shaderPresent = provider ? mvProviderPresent(dir, id) : false;
+  return {
+    id,
+    displayName: provider ? provider.displayName : null,
+    broken: !!(provider && provider.selectable === false),
+    unsupportedReason: provider ? provider.unsupportedReason || null : null,
+    bringYourOwn: !!(provider && provider.bringYourOwn),
+    shaderPresent,
+    definedValue,
+    expectedValue: provider ? provider.mvProviderValue : null,
+    enabledTechnique: enabled ? `${enabled.techniqueName}@${enabled.techniqueFile}` : null,
+    // The two disagreements worth naming, both silent in-game: the shader is compiled for a
+    // provider the preset does not enable, and the enabled technique belongs to a different
+    // provider than the compiled-for value.
+    valueMismatch: !!(provider && definedValue !== null && definedValue !== provider.mvProviderValue),
+    techniqueMismatch: !!(enabled && definedValue !== null && enabled.mvProviderValue !== definedValue),
+  };
 }
 
 // What's deployed, what's missing, and the real reason anything blocking is blocking -- same
@@ -213,6 +351,24 @@ async function feederReadiness(dir, api, { execFileAsync = null } = {}) {
   const dlssnrInstalled = fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'));
 
   const notes = [];
+  // The motion-vector half of the stack, and the reason a "complete" deploy can still do nothing.
+  // Only worth saying once something is actually deployed -- before that, missing files are the
+  // story and the picker in Edit is where the choice gets made.
+  const mvProvider = feederProviderStatus(dir);
+  const mvBlocking = [];
+  if (addonInstalled && mvProvider.id) {
+    if (mvProvider.broken) {
+      mvBlocking.push(`${mvProvider.displayName} is the motion-vector shader here, and it cannot work: ${mvProvider.unsupportedReason}`);
+    } else if (!mvProvider.shaderPresent) {
+      mvBlocking.push(`The motion-vector shader for ${mvProvider.displayName} is not in reshade-shaders\\Shaders. ` +
+        'Deploy again to put it back -- without it DLSS is fed no motion at all, which looks like a sharp still image that smears as soon as you move.');
+    } else if (mvProvider.valueMismatch || mvProvider.techniqueMismatch) {
+      mvBlocking.push('This game\'s ReShade preset and the Feeder\'s shader disagree about which motion-vector provider to use ' +
+        `(the shader is compiled for value ${mvProvider.definedValue}, ${mvProvider.enabledTechnique || 'no provider technique'} is enabled). ` +
+        'Deploy again to write both from one answer.');
+    }
+  }
+  notes.push(...mvBlocking);
   if (api === 'vulkan') {
     notes.push('NVIDIA Smooth Motion must be off for this game: on Vulkan the driver invents its extra frames after the Feeder has run, so half the frames carry no neural pass (the Feeder\'s README, "Smooth Motion off on Vulkan"). NVIDIA app or Profile Inspector, per game.');
     if (vulkanLayer && vulkanLayer.registered && !vulkanLayer.addon) notes.push(`The ReShade Vulkan layer on this PC (${vulkanLayer.dllPath || vulkanLayer.manifestPath}) has no add-on support. ${VULKAN_LAYER_INSTRUCTION}`);
@@ -230,8 +386,14 @@ async function feederReadiness(dir, api, { execFileAsync = null } = {}) {
     headersInstalled,
     dlssInstalled,
     dlssnrInstalled,
+    mvProvider,
+    // A deploy whose motion-vector half cannot work is not "ready", however many files are in
+    // place -- the whole route exists to feed DLSS motion, and this is the half that does it.
+    mvProviderOk: mvBlocking.length === 0,
+    depthProfile: (readFeederDeployMarker(dir) || {}).depthProfile || null,
     notes,
-    complete: reshadeInstalled && addonInstalled && fxInstalled && headersInstalled && dlssInstalled && dlssnrInstalled,
+    complete: reshadeInstalled && addonInstalled && fxInstalled && headersInstalled && dlssInstalled && dlssnrInstalled
+      && mvBlocking.length === 0,
   };
 }
 
@@ -476,8 +638,22 @@ async function deployFeederAddon(dir, cacheDir, ghHeaders, { force = false } = {
   return { deployed: true, version: asset.tag };
 }
 
-// The motion-vector provider shader. Only the auto-fetchable providers reach here --
-// LumeniteFX (and any future non-fetchable entry) is the caller's job to detect, not deploy.
+// A GitHub source zip wraps everything in one folder named after the repo and ref
+// (vort_Shaders-b410b9f0…/). Layout paths are written against the repo, so that wrapper has to
+// come off; it is found rather than assumed, so a zip without one still works.
+function zipTopPrefix(zip) {
+  const first = zip.entries.map((e) => e.name.replace(/\\/g, '/')).find((n) => n.includes('/'));
+  if (!first) return '';
+  const top = first.slice(0, first.indexOf('/') + 1);
+  return zip.entries.every((e) => e.name.replace(/\\/g, '/').startsWith(top)) ? top : '';
+}
+
+// The motion-vector provider shader. Only the auto-fetchable providers reach here -- LumeniteFX
+// (deployLumeniteFx, consent) and iMMERSE Launchpad (bring-your-own, never fetched) are the
+// caller's job to detect, not deploy.
+//
+// Returns every path it wrote, relative to the game's reshade-shaders\ folder, so the deploy
+// marker can record exactly what to take back out later -- see removeFeederStack().
 async function deployMvProvider(dir, providerId, cacheDir, ghHeaders) {
   const provider = MV_PROVIDERS[providerId];
   if (!provider) throw new Error(`Unknown motion-vector provider: ${providerId}`);
@@ -485,24 +661,57 @@ async function deployMvProvider(dir, providerId, cacheDir, ghHeaders) {
     throw new Error(`${provider.displayName} is not auto-fetchable (${provider.license}) -- install it yourself, then re-check readiness.`);
   }
 
-  const shaderDir = path.join(dir, 'reshade-shaders', 'Shaders');
+  const rootDir = path.join(dir, 'reshade-shaders');
   const zipName = `${providerId}.zip`;
   const zipPath = await downloadToCache(provider.zipUrl, cacheDir, zipName, ghHeaders);
   const zip = openZip(zipPath);
+  const deployedFiles = [];
 
-  // .fx AND .fxh -- a provider repo's .fx commonly #includes sibling .fxh files (found the hard
-  // way: JakobPCoder/ReshadeMotionEstimation ships MotionEstimation.fx alongside
+  // A provider whose shader resolves its own includes by path (VORT: #include "Includes/…")
+  // needs its folder structure kept, and may need textures as well as shaders -- so the entry
+  // describes where each piece goes instead of everything being flattened into Shaders\.
+  if (provider.layout) {
+    const top = zipTopPrefix(zip);
+    const byName = new Map(zip.entries.map((e) => [e.name.replace(/\\/g, '/'), e]));
+    for (const item of provider.layout) {
+      if (item.fromDir) {
+        const prefix = `${top}${item.fromDir}/`;
+        const matched = [...byName.entries()].filter(([name]) => name.startsWith(prefix) &&
+          !name.endsWith('/') && (!item.match || item.match.test(name)));
+        if (matched.length === 0) throw new Error(`${provider.displayName}'s zip has nothing under ${item.fromDir}`);
+        for (const [name, entry] of matched) {
+          const rel = `${item.to}/${name.slice(prefix.length)}`;
+          extractEntryTo(zip, entry, path.join(rootDir, ...rel.split('/')));
+          deployedFiles.push(rel);
+        }
+        continue;
+      }
+      const entry = byName.get(`${top}${item.from}`);
+      // Only the licence copy is allowed to be absent: it is courtesy, not a dependency, and a
+      // repo that renames LICENSE must not fail a deploy over it. Anything else missing means
+      // the pinned layout no longer matches the source, which is a real error, not a warning.
+      if (!entry) {
+        if (/licen[cs]e/i.test(item.from)) continue;
+        throw new Error(`${provider.displayName}'s zip has no ${item.from}`);
+      }
+      extractEntryTo(zip, entry, path.join(rootDir, ...item.to.split('/')));
+      deployedFiles.push(item.to);
+    }
+    return { deployed: true, files: deployedFiles };
+  }
+
+  // Flat providers: .fx AND .fxh -- a provider repo's .fx commonly #includes sibling .fxh files
+  // (found the hard way: JakobPCoder/ReshadeMotionEstimation ships MotionEstimation.fx alongside
   // MotionEstimation.fxh/MotionEstimationUI.fxh/MotionVectors.fxh, and compilation fails on the
   // missing includes if only the .fx is extracted).
   const shaderEntries = zip.entries.filter((e) => /\.fxh?$/i.test(e.name));
   if (!shaderEntries.some((e) => /\.fx$/i.test(e.name))) {
     throw new Error(`No .fx files found in ${provider.displayName}'s zip`);
   }
-  const deployedFiles = [];
   for (const entry of shaderEntries) {
-    const dest = path.join(shaderDir, path.basename(entry.name));
-    extractEntryTo(zip, entry, dest);
-    deployedFiles.push(path.basename(entry.name));
+    const rel = `Shaders/${path.basename(entry.name)}`;
+    extractEntryTo(zip, entry, path.join(rootDir, ...rel.split('/')));
+    deployedFiles.push(rel);
   }
   return { deployed: true, files: deployedFiles };
 }
@@ -530,7 +739,9 @@ async function deployLumeniteFx(dir, ghHeaders, { licenseConfirmed = false } = {
     if (!res.ok) throw new Error(`Could not fetch ${relPath} from LumeniteFX's official repo: HTTP ${res.status}`);
     const dest = path.join(shaderDir, ...relPath.split('/'));
     await fsp.writeFile(dest, await res.text(), 'utf8');
-    deployed.push(relPath);
+    // reshade-shaders-relative, same as deployMvProvider's, so the deploy marker's mvFiles list
+    // means one thing whichever provider wrote it.
+    deployed.push(`Shaders/${relPath}`);
   }
   return { deployed: true, files: deployed };
 }
@@ -600,41 +811,156 @@ function configurePreset(dir, providerId) {
     list.push(...orderedTechniques);
     next = setIniKey(next, '', key, list.join(','));
   }
-  const curDefs = getIniKey(next, 'DLSS5_Feed.fx', 'PreprocessorDefinitions');
-  let defParts = curDefs ? curDefs.split(',').map((s) => s.trim()).filter((s) => s && !/^DLSS5_MV_PROVIDER\s*=/i.test(s)) : [];
-  defParts.push(`DLSS5_MV_PROVIDER=${provider.mvProviderValue}`);
-  next = setIniKey(next, 'DLSS5_Feed.fx', 'PreprocessorDefinitions', defParts.join(','));
+  // DLSS5_MV_PROVIDER goes in at both levels ReShade reads for this preset: the per-effect
+  // [DLSS5_Feed.fx] section and the preset's own root list. Per-effect wins where both exist, so
+  // setting it alone is enough for a preset this app wrote -- but a preset the user already had
+  // can carry a root-level DLSS5_MV_PROVIDER of its own, and the two then disagree the moment
+  // someone reloads effects from the overlay (which re-reads the root list). Writing both keeps
+  // the answer the same from either direction. The Feeder calls a provider mismatch its "classic
+  // silent failure": the shader compiles for one provider while a different technique is enabled,
+  // and no vectors reach DLSS.
+  for (const section of ['DLSS5_Feed.fx', '']) {
+    const cur = getIniKey(next, section, 'PreprocessorDefinitions');
+    const parts = cur ? cur.split(',').map((s) => s.trim()).filter((s) => s && !/^DLSS5_MV_PROVIDER\s*=/i.test(s)) : [];
+    parts.push(`DLSS5_MV_PROVIDER=${provider.mvProviderValue}`);
+    next = setIniKey(next, section, 'PreprocessorDefinitions', parts.join(','));
+  }
 
   fs.writeFileSync(presetPath, next, 'utf8');
   return { configured: true, mvProviderValue: provider.mvProviderValue };
 }
 
-// ReShade.ini: make sure add-on loading and the shaders folder are actually enabled. A fresh
-// ReShade64.dll deploy has no ini yet; an existing one (the user already had ReShade for other
-// effects) is merged into, never replaced.
-function configureReShadeIni(dir, { effectSearchPaths = '.\\reshade-shaders\\Shaders\\**', unity = false } = {}) {
+// Depth is where a Unity game quietly fails. The Feeder reads ReShade's depth buffer through the
+// Generic Depth add-on, and if that buffer is the wrong one -- cleared, UI-only, flipped or
+// reversed -- the feed still runs, DLSS still evaluates, the log still says "frame N delivered",
+// and the result is a picture that reconstructs from nothing. The Feeder's own troubleshooting
+// calls this "depth probe says sampled depth is flat" and offers no automatic guess.
+//
+// Two profiles, and the difference between them is how much is engine truth:
+//
+//   unity            Engine truth for Unity on D3D11/D3D12, so it is what an install writes by
+//                    itself: Unity renders reversed-Z (UNITY_REVERSED_Z on every D3D target),
+//                    which the shaders learn from RESHADE_DEPTH_INPUT_IS_REVERSED, and it clears
+//                    the depth buffer between the scene and its UI pass, so the copy has to be
+//                    taken before clears (DepthCopyBeforeClears=1 is exactly "Copy depth buffer
+//                    before clear operations" in the add-on's own UI, generic_depth_addon.cpp).
+//                    Gap-filling only: a value someone already chose on the Generic Depth page
+//                    is left alone.
+//
+//   unity-verified   The one Unity profile a human has actually confirmed end to end: the
+//                    Feeder's README carries it as the Subnautica profile (64-bit D3D11 Unity,
+//                    contributor-verified at 4K with DLAA + neural rendering). It picks a
+//                    specific clear index and aspect-ratio heuristic and declares the depth
+//                    upside down as well as reversed -- choices that are about how that game
+//                    draws, not about Unity as such, which is why it is an explicit action in
+//                    Edit ("the depth looks flat") rather than something an install assumes.
+//                    Forced, not gap-filled: it is a profile, and half of one is not it.
+//
+// Anything beyond these two is ReShade's own Add-ons -> Generic Depth page, which lists the real
+// buffers the running game has and is the only thing that can settle a stubborn case.
+const DEPTH_PROFILES = {
+  unity: {
+    force: false,
+    depth: { DepthCopyBeforeClears: '1' },
+    defines: { RESHADE_DEPTH_INPUT_IS_REVERSED: '1' },
+  },
+  'unity-verified': {
+    force: true,
+    depth: {
+      DepthCopyAtClearIndex: '1',
+      DepthCopyBeforeClears: '2',
+      DrawStatsHeuristic: '0',
+      FilterFormat: '0',
+      UseAspectRatioHeuristics: '3',
+    },
+    defines: {
+      RESHADE_DEPTH_LINEARIZATION_FAR_PLANE: '1000.0',
+      RESHADE_DEPTH_INPUT_IS_UPSIDE_DOWN: '1',
+      RESHADE_DEPTH_INPUT_IS_REVERSED: '1',
+      RESHADE_DEPTH_INPUT_IS_LOGARITHMIC: '0',
+    },
+  },
+};
+
+function depthProfileIds() {
+  return Object.keys(DEPTH_PROFILES);
+}
+
+// ReShade's own setup can seed a recursive search path as `Shaders\**\**`. Windows rejects the
+// unresolved wildcard directory with ERROR_INVALID_NAME, so the runtime finds no effects at all
+// while every .fx file is sitting right there -- a failure that looks exactly like a bad deploy.
+// (DLSS5-Swapper hit this and documents it; the collapse below is the same fix.) This also keeps
+// the user's own search locations instead of overwriting the list, which is what this function
+// used to do: someone with their own shader collection lost it from the list on every deploy.
+function mergeSearchPath(current, required) {
+  const canonical = (item) => String(item || '').trim().replace(/\//g, '\\').replace(/(?:\\\*\*){2,}$/g, '\\**');
+  const base = (item) => canonical(item).replace(/\\\*\*$/, '').replace(/\\+$/, '').toLowerCase();
+  const wanted = base(required);
+  const kept = String(current || '').split(',').map(canonical).filter(Boolean).filter((item) => base(item) !== wanted);
+  return [required, ...kept].join(',');
+}
+
+// ReShade.ini: everything that has to be true for the add-on to load, the shaders to be found and
+// the preset to be applied. A fresh ReShade64.dll deploy has no ini yet; an existing one (the user
+// already had ReShade for other effects) is merged into, never replaced.
+function configureReShadeIni(dir, {
+  effectSearchPaths = '.\\reshade-shaders\\Shaders\\**',
+  textureSearchPaths = '.\\reshade-shaders\\Textures\\**',
+  unity = false,
+  depthProfile = null,
+} = {}) {
   const iniPath = path.join(dir, 'ReShade.ini');
   const existing = fs.existsSync(iniPath) ? fs.readFileSync(iniPath, 'utf8') : '';
   let next = existing;
   next = setIniKey(next, 'ADDON', 'AddonPath', '.\\');
-  next = setIniKey(next, 'GENERAL', 'EffectSearchPaths', effectSearchPaths);
+  next = setIniKey(next, 'GENERAL', 'EffectSearchPaths',
+    mergeSearchPath(getIniKey(next, 'GENERAL', 'EffectSearchPaths'), effectSearchPaths));
+  // Textures, not just shaders: VORT's motion estimation declares a texture with
+  // `source = "vort_BlueNoise.png"`, and ReShade only resolves that through TextureSearchPaths.
+  // Without this the shader fails to compile and the Feeder has no motion vectors -- the same
+  // silent failure as a missing include, one directory over.
+  next = setIniKey(next, 'GENERAL', 'TextureSearchPaths',
+    mergeSearchPath(getIniKey(next, 'GENERAL', 'TextureSearchPaths'), textureSearchPaths));
   if (!getIniKey(next, 'GENERAL', 'PresetPath')) next = setIniKey(next, 'GENERAL', 'PresetPath', '.\\ReShadePreset.ini');
-  // Unity: the Feeder is engine-agnostic (its README lists Subnautica, 64-bit D3D11 Unity, as
-  // verified) but Unity's depth needs two things said to ReShade's Generic Depth add-on, or
-  // the Feeder's depth probe reads flat and DLSS reconstructs from nothing. Unity clears the
-  // depth buffer after the scene and before its UI pass, so the copy has to be taken before
-  // clears (DepthCopyBeforeClears=1 is exactly "Copy depth buffer before clear operations" in
-  // the add-on's own UI, generic_depth_addon.cpp); and Unity renders reversed-Z on D3D11/D3D12,
-  // which the shaders learn from RESHADE_DEPTH_INPUT_IS_REVERSED=1. Both only fill a gap: a
-  // value someone already chose on the Generic Depth page is left alone, and the definitions
-  // list keeps everything else in it.
-  if (unity) {
-    if (!getIniKey(next, 'DEPTH', 'DepthCopyBeforeClears')) next = setIniKey(next, 'DEPTH', 'DepthCopyBeforeClears', '1');
+
+  // NoReloadOnInit=1 tells ReShade not to compile effects when it initialises. Nothing then
+  // compiles until someone opens the overlay and asks -- so the Feeder's technique never runs,
+  // and a game launched normally shows no sign of anything. A user's own ReShade install can
+  // carry it; it is not compatible with this route, so it goes to 0.
+  if (getIniKey(next, 'GENERAL', 'NoReloadOnInit')) next = setIniKey(next, 'GENERAL', 'NoReloadOnInit', '0');
+  // A startup preset overrides the preset ReShade would otherwise load, which is the one this
+  // deploy just wrote the Feeder's techniques into. Cleared only when it points somewhere else --
+  // if it already names our own preset there is nothing to fix.
+  const startup = getIniKey(next, 'GENERAL', 'StartupPresetPath');
+  const preset = getIniKey(next, 'GENERAL', 'PresetPath') || '.\\ReShadePreset.ini';
+  if (startup && startup.trim() && startup.trim().toLowerCase() !== preset.trim().toLowerCase()) {
+    next = setIniKey(next, 'GENERAL', 'StartupPresetPath', '');
+  }
+  // ReShade remembers add-ons someone switched off, by name, and honours that on every launch.
+  // A deploy that leaves dlss5-feed in this list installs a feed that never loads and says
+  // nothing about why. Only our own add-on is taken off the list; anything else the user
+  // disabled stays disabled.
+  const disabled = getIniKey(next, 'ADDON', 'DisabledAddons');
+  if (disabled && /dlss5-feed/i.test(disabled)) {
+    const kept = disabled.split(',').map((s) => s.trim()).filter((s) => s && !/dlss5-feed/i.test(s));
+    next = setIniKey(next, 'ADDON', 'DisabledAddons', kept.join(','));
+  }
+
+  const profile = DEPTH_PROFILES[depthProfile] || (unity ? DEPTH_PROFILES.unity : null);
+  if (profile) {
+    for (const [key, value] of Object.entries(profile.depth)) {
+      if (profile.force || !getIniKey(next, 'DEPTH', key)) next = setIniKey(next, 'DEPTH', key, value);
+    }
     const cur = getIniKey(next, 'GENERAL', 'PreprocessorDefinitions');
-    const defs = cur ? cur.split(',').map((s) => s.trim()).filter(Boolean) : [];
-    if (!defs.some((d) => /^RESHADE_DEPTH_INPUT_IS_REVERSED\s*=/i.test(d))) defs.push('RESHADE_DEPTH_INPUT_IS_REVERSED=1');
+    let defs = cur ? cur.split(',').map((s) => s.trim()).filter(Boolean) : [];
+    for (const [name, value] of Object.entries(profile.defines)) {
+      const already = defs.findIndex((d) => new RegExp(`^${name}\\s*=`, 'i').test(d));
+      if (already === -1) defs.push(`${name}=${value}`);
+      else if (profile.force) defs[already] = `${name}=${value}`;
+    }
     next = setIniKey(next, 'GENERAL', 'PreprocessorDefinitions', defs.join(','));
   }
+
   // Marks ReShade's own first-run tutorial as already complete, so its "ReShade is now
   // installed successfully! Press Home to start the tutorial" banner never shows. This app's
   // users are here for the Feeder running silently, not for ReShade's own onboarding/UI.
@@ -646,7 +972,7 @@ function configureReShadeIni(dir, { effectSearchPaths = '.\\reshade-shaders\\Sha
   // reads that section for this key.
   if (!getIniKey(next, 'OVERLAY', 'TutorialProgress')) next = setIniKey(next, 'OVERLAY', 'TutorialProgress', '4');
   fs.writeFileSync(iniPath, next, 'utf8');
-  return { configured: true };
+  return { configured: true, depthProfile: depthProfile || (unity ? 'unity' : null) };
 }
 
 // --- update checking --------------------------------------------------------------------
@@ -701,7 +1027,7 @@ async function feederUpdateCheck(dir, ghHeaders) {
 // force: true re-fetches and overwrites everything (used by an update). licenseConfirmed: only
 // consulted when providerId names a non-auto-fetchable provider (currently just LumeniteFX) --
 // deployLumeniteFx() itself refuses without it, this just threads it through.
-async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifest, compareVersions, ghHeaders, force = false, licenseConfirmed = false, unity = false, execFileAsync = null }) {
+async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifest, compareVersions, ghHeaders, force = false, licenseConfirmed = false, unity = false, depthProfile = null, execFileAsync = null }) {
   const results = {};
   results.reshade = await deployReShade(dir, cacheDir, ghHeaders, { force, api, execFileAsync });
   results.reshadeMode = results.reshade.mode || reshadeModeForApi(api);
@@ -709,12 +1035,45 @@ async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifes
   results.addon = await deployFeederAddon(dir, cacheDir, ghHeaders, { force });
 
   const provider = MV_PROVIDERS[providerId];
-  results.mvProvider = provider && provider.autoFetchable
-    ? await deployMvProvider(dir, providerId, cacheDir, ghHeaders)
-    : await deployLumeniteFx(dir, ghHeaders, { licenseConfirmed });
+  if (!provider) throw new Error(`Unknown motion-vector provider: ${providerId}`);
+  if (provider.selectable === false) {
+    // Nothing in the UI offers DRME any more, but a saved per-game choice or an old caller could
+    // still name it. Refusing here rather than deploying a shader that cannot compile is the
+    // whole point of the change -- the readiness report says the same thing in the user's words.
+    throw new Error(`${provider.displayName} cannot be used: ${provider.unsupportedReason}`);
+  }
+  // Switching provider: the one that was here goes first. configurePreset() below stops the old
+  // technique being enabled, but its files would otherwise stay in the shader folder for good --
+  // ReShade would go on compiling them, and a later Remove works from the marker, which records
+  // one provider. Never for a bring-your-own provider: those files are the user's own install.
+  const outgoingMarker = readFeederDeployMarker(dir);
+  if (outgoingMarker && outgoingMarker.mvProviderId && outgoingMarker.mvProviderId !== providerId
+      && Array.isArray(outgoingMarker.mvFiles)) {
+    const outgoing = MV_PROVIDERS[outgoingMarker.mvProviderId];
+    if (!outgoing || !outgoing.bringYourOwn) {
+      for (const rel of outgoingMarker.mvFiles) {
+        await fsp.rm(path.join(dir, 'reshade-shaders', ...rel.split('/')), { force: true }).catch(() => {});
+      }
+    }
+  }
+  if (provider.bringYourOwn) {
+    // Never fetched (see the licence note on the provider). Either the user's own copy is in the
+    // game's shader folder and this is just a preset/definition change, or there is nothing to
+    // point at and saying so beats writing a preset that names a technique nobody has.
+    if (!mvProviderPresent(dir, providerId)) {
+      throw new Error(`${provider.displayName}: ${provider.techniqueFile} is not in this game's ` +
+        'reshade-shaders\\Shaders folder. Install it there yourself (this app cannot redistribute ' +
+        'it), or pick VORT, which it can fetch.');
+    }
+    results.mvProvider = { deployed: false, bringYourOwn: true, files: [] };
+  } else if (provider.autoFetchable) {
+    results.mvProvider = await deployMvProvider(dir, providerId, cacheDir, ghHeaders);
+  } else {
+    results.mvProvider = await deployLumeniteFx(dir, ghHeaders, { licenseConfirmed });
+  }
 
   results.dlss = await deployNvngxDlss(dir, getRhiManifest, compareVersions, cacheDir, ghHeaders);
-  results.ini = configureReShadeIni(dir, { unity });
+  results.ini = configureReShadeIni(dir, { unity, depthProfile });
   results.preset = configurePreset(dir, providerId);
 
   // The addon step only resolves the release tag when it actually deploys (fresh install, or
@@ -726,7 +1085,22 @@ async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifes
     // placedNvngxDlss: whether THIS app put nvngx_dlss.dll here (as opposed to skipping one
     // already present) -- removeFeederStack() only takes back what was placed.
     const placedNvngxDlss = results.dlss.deployed || !!(previousMarker && previousMarker.placedNvngxDlss);
-    writeFeederDeployMarker(dir, { feederVersion, mvProviderId: providerId, placedNvngxDlss, reshadeMode: results.reshadeMode, deployedAt: new Date().toISOString() });
+    // mvFiles: every path the provider step wrote, reshade-shaders-relative. The static per-
+    // provider `files` list can only describe a flat provider; VORT writes into Shaders\Includes\
+    // and Textures\, and removal has to know exactly which of those files are ours rather than
+    // guessing at a folder the user may also keep their own shaders in.
+    const mvFiles = (results.mvProvider && results.mvProvider.files && results.mvProvider.files.length)
+      ? results.mvProvider.files
+      : (previousMarker && previousMarker.mvProviderId === providerId ? previousMarker.mvFiles : null) || [];
+    writeFeederDeployMarker(dir, {
+      feederVersion,
+      mvProviderId: providerId,
+      mvFiles,
+      depthProfile: results.ini.depthProfile,
+      placedNvngxDlss,
+      reshadeMode: results.reshadeMode,
+      deployedAt: new Date().toISOString(),
+    });
   }
 
   return results;
@@ -753,11 +1127,22 @@ async function removeFeederStack(dir, { keepReShade = false } = {}) {
   for (const name of ['dlss5-feed.addon64', 'dlss5-feed.cfg', 'dlss5-feed.log']) await rm(name);
 
   const shaderDir = path.join('reshade-shaders', 'Shaders');
-  const shaders = ['DLSS5_Feed.fx', ...RESHADE_COMMON_HEADERS];
-  for (const provider of Object.values(MV_PROVIDERS)) shaders.push(...provider.files);
-  for (const rel of shaders) await rm(path.join(shaderDir, ...rel.split('/')));
-  // Only the folders the deploy created, and only once nothing else is left in them.
-  for (const rel of [path.join(shaderDir, 'include'), shaderDir, 'reshade-shaders']) {
+  for (const rel of ['DLSS5_Feed.fx', ...RESHADE_COMMON_HEADERS]) await rm(path.join(shaderDir, ...rel.split('/')));
+
+  // The provider's own files. What this deploy actually wrote is recorded in the marker
+  // (reshade-shaders-relative), and that is what comes back out -- a folder like Shaders\Includes\
+  // can hold the user's own shader packs too, so nothing is removed by folder. The static per-
+  // provider lists are the fallback for a deploy made before the marker carried mvFiles, and
+  // every provider's list is tried there because the old marker may not say which was used.
+  const mvFiles = (marker && Array.isArray(marker.mvFiles) && marker.mvFiles.length)
+    ? marker.mvFiles
+    : Object.values(MV_PROVIDERS).flatMap((p) => p.files.map((f) => `Shaders/${f}`));
+  for (const rel of mvFiles) await rm(path.join('reshade-shaders', ...rel.split('/')));
+
+  // Only the folders the deploy created, and only once nothing else is left in them. Deepest
+  // first, so a folder emptied by the level below it can go in the same pass.
+  for (const rel of [path.join(shaderDir, 'include'), path.join(shaderDir, 'Includes'), shaderDir,
+    path.join('reshade-shaders', 'Textures'), path.join('reshade-shaders', 'Licenses'), 'reshade-shaders']) {
     const p = path.join(dir, rel);
     try { if (fs.readdirSync(p).length === 0) fs.rmdirSync(p); } catch {}
   }
@@ -799,16 +1184,28 @@ function feederReShadeMode(dir) {
   return (marker && marker.reshadeMode) || 'local';
 }
 
+// Which depth profile this game's last deploy wrote, so a re-deploy keeps it rather than
+// silently dropping back to the engine default (feeder.js's DEPTH_PROFILES).
+function feederDepthProfile(dir) {
+  const marker = readFeederDeployMarker(dir);
+  return (marker && marker.depthProfile) || null;
+}
+
 module.exports = {
   MV_PROVIDERS,
   downloadToCache,
   reshadeModeForApi,
   feederReShadeMode,
+  feederDepthProfile,
   vulkanLayerStatus,
   isAddonReShadeDll,
   isReShadeDll,
   RESHADE_SETUP_URL,
   mvProviderList,
+  defaultMvProviderId,
+  mvProviderPresent,
+  feederProviderStatus,
+  depthProfileIds,
   needsFeeder,
   feederDeployed,
   feederReadiness,

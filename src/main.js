@@ -18,7 +18,7 @@ const nativeDlss = require('./native-dlss');
 const { recommendRoute, withApiOverride, API_OVERRIDE_VALUES } = require('./route');
 const gpu = require('./gpu');
 const amdnr = require('./amdnr');
-const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, peImports, peBitness, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
+const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, peImports, peBitness, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const managerUpdate = require('./manager-update');
 const runlog = require('./runlog');
@@ -611,12 +611,12 @@ ipcMain.handle('lossless:setExePathInGameIni', (_evt, { exePath, losslessExePath
 // seen and confirmed that provider's real licence text in a dedicated dialog, never as a side
 // effect of the generic Deploy button. deployLumeniteFx() itself refuses without it regardless,
 // so a renderer bug can't turn this into a silent bypass.
-ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, licenseConfirmed }) => {
+ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, licenseConfirmed, depthProfile }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
     const api = await resolveApi(dir, exePath);
-    const results = await feeder.deployFeederStack(dir, api, mvProviderId, {
+    const results = await feeder.deployFeederStack(dir, api, mvProviderId || feeder.defaultMvProviderId(), {
       cacheDir: feederCacheDir(),
       getRhiManifest,
       compareVersions: compareStreamlineVersions,
@@ -626,6 +626,10 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
       // Unity clears its depth buffer before the UI pass and renders reversed-Z; ReShade's
       // Generic Depth needs telling both, or the Feeder gets a flat depth (feeder.js).
       unity: isUnityGame(dir, exePath),
+      // A profile the user picked in Edit (the verified Unity one, for a flat-depth game) wins
+      // over the engine default above -- feeder.js's DEPTH_PROFILES explains the difference. A
+      // re-deploy with nothing passed keeps whatever the last deploy chose.
+      depthProfile: depthProfile || feeder.feederDepthProfile(dir),
       execFileAsync,
     });
     return { ok: true, ...results };
@@ -1699,9 +1703,15 @@ async function planUninstall(dir) {
   }
   if (feeder.feederDeployed(dir)) {
     for (const n of ['dlss5-feed.addon64', 'dlss5-feed.cfg', 'dlss5-feed.log', 'ReShade64.dll', 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log', '.dlss5ui-feeder-deploy.json']) add(n);
-    const shaders = ['DLSS5_Feed.fx', 'ReShade.fxh', 'ReShadeUI.fxh'];
-    for (const p of Object.values(feeder.MV_PROVIDERS)) shaders.push(...(p.files || []));
-    for (const f of shaders) add('reshade-shaders/Shaders/' + f);
+    for (const f of ['DLSS5_Feed.fx', 'ReShade.fxh', 'ReShadeUI.fxh']) add('reshade-shaders/Shaders/' + f);
+    // The provider's own files come from what the deploy recorded: a layout provider (VORT) also
+    // writes into reshade-shaders\Shaders\Includes\ and \Textures\, which a list of bare Shaders\
+    // names cannot describe. The static per-provider lists remain the fallback for a deploy made
+    // before the marker carried mvFiles.
+    const mvFiles = (feederMarker && Array.isArray(feederMarker.mvFiles) && feederMarker.mvFiles.length)
+      ? feederMarker.mvFiles
+      : Object.values(feeder.MV_PROVIDERS).flatMap((p) => (p.files || []).map((f) => `Shaders/${f}`));
+    for (const f of mvFiles) add('reshade-shaders/' + f);
     if (nativeDlss.shippedDlssPath(dir) || !(feederMarker && feederMarker.placedNvngxDlss === false)) add('nvngx_dlss.dll');
   }
   if (lumaue.lumaUeDeployed(dir) || has('Luma-Unreal Engine.addon')) {
@@ -1943,6 +1953,14 @@ async function helpContext(exePath, detected, fixesTried = []) {
     // RE2/3/4/7/Village: the pd-upscaler route's three files (reengine.js), null elsewhere.
     pdUpscaler: reengine.pdStatus(dir, exePath),
     pdPluginPage: reengine.PD_PLUGIN_PAGE_URL,
+    // The Agility SDK redirect that makes every D3D12 device in the process fail, the Feeder's
+    // private one included (detect.js). Null unless the exe really carries those exports and no
+    // D3D12Core.dll can be found for them.
+    agilityRedist: agilityRedistRisk(dir, effective),
+    // Which motion-vector provider this game is actually set up for, and whether that set-up
+    // agrees with itself -- a Feeder deploy can be complete in every file sense and still feed
+    // nothing (feeder.js's feederProviderStatus).
+    mvProvider: feeder.feederDeployed(dir) ? feeder.feederProviderStatus(dir) : null,
     nrEnabledInIni,
     gpuVendor: vendor || 'unknown',
   };
@@ -1987,6 +2005,62 @@ async function applyHelpFix(exePath, fixId) {
       const changed = (r.applied || []).map((e) => `${e.section}.${e.key}=${e.value}`);
       const refw = r.reframework && r.reframework.installed ? ', REFramework placed' : '';
       return { done: true, text: changed.length ? `set ${changed.join(', ')}${refw}` : `nothing needed changing${refw}` };
+    }
+    // Re-deploy the Feeder's own half of the stack, forced, from one answer: the provider (this
+    // app's current default unless the game's existing choice is still usable), its shader, both
+    // DLSS5_MV_PROVIDER levels, the search paths and the add-on's enabled state. The fix for
+    // every "the feed ran and DLSS got no motion vectors" verdict -- including any game deployed
+    // before v1.57.0, whose motion-vector shader (DRME) cannot compile on ReShade 6.8 at all.
+    case 'redeploy-feeder': {
+      if (!feeder.feederDeployed(dir)) return { done: false, text: 'no Feeder deployed here' };
+      const api = await resolveApi(dir, exePath);
+      const current = feeder.MV_PROVIDERS[feeder.feederProviderStatus(dir).id || ''] || null;
+      // A bring-your-own provider that is really there stays; anything unusable (DRME) or absent
+      // gives way to the default, which this app can fetch.
+      const keep = !!current && current.selectable !== false &&
+        (current.bringYourOwn ? feeder.mvProviderPresent(dir, current.id) : true);
+      const providerId = keep ? current.id : feeder.defaultMvProviderId();
+      const results = await feeder.deployFeederStack(dir, api, providerId, {
+        cacheDir: feederCacheDir(),
+        getRhiManifest,
+        compareVersions: compareStreamlineVersions,
+        ghHeaders: GITHUB_HEADERS,
+        force: true,
+        unity: isUnityGame(dir, exePath),
+        depthProfile: feeder.feederDepthProfile(dir),
+        execFileAsync,
+      });
+      await autoConfigureGame(dir, exePath);
+      const version = results.addon && results.addon.version ? `, add-on ${results.addon.version}` : '';
+      return { done: true, text: `re-deployed the Feeder with ${feeder.MV_PROVIDERS[providerId].displayName} (motion-vector shader, preset and ReShade settings rewritten)${version}` };
+    }
+    // Flat depth: move this game to the one Unity depth profile a human has confirmed end to end
+    // (the Feeder's README carries it as its Subnautica profile). Only ReShade.ini changes, so it
+    // applies on the next launch, and Remove or a re-deploy still undoes it.
+    case 'feeder-depth-profile': {
+      if (!feeder.feederDeployed(dir)) return { done: false, text: 'no Feeder deployed here' };
+      if (feeder.feederDepthProfile(dir) === 'unity-verified') {
+        return { done: false, text: 'already on the verified depth profile -- ReShade\'s own Add-ons > Generic Depth page is the next step, since it lists the real depth buffers the running game has' };
+      }
+      feeder.configureReShadeIni(dir, { depthProfile: 'unity-verified' });
+      const marker = path.join(dir, '.dlss5ui-feeder-deploy.json');
+      try {
+        const data = JSON.parse(fs.readFileSync(marker, 'utf8'));
+        fs.writeFileSync(marker, JSON.stringify({ ...data, depthProfile: 'unity-verified' }, null, 2), 'utf8');
+      } catch {}
+      return { done: true, text: 'switched to the contributor-verified Unity depth profile (clear index, aspect heuristic, reversed and upside-down depth)' };
+    }
+    // The Agility SDK redirect: move the game's own D3D12\ redist folder aside so Direct3D 12
+    // falls back to the runtime Windows ships -- the test the Feeder's README gives for
+    // D3D12_ERROR_INVALID_REDIST. Reversible by name, and the game itself says whether it needed
+    // the folder: if it refuses to start, the rename goes back.
+    case 'disable-agility-redist': {
+      const src = path.join(dir, 'D3D12');
+      const dest = path.join(dir, 'D3D12.dlss5ui-off');
+      if (!fs.existsSync(src)) return { done: false, text: 'no D3D12\\ folder beside the exe -- something else in the process is redirecting Direct3D 12 (a launcher, a mod loader, or an absolute D3D12SDKPath), so verify the game\'s files through its launcher' };
+      if (fs.existsSync(dest)) return { done: false, text: 'already moved aside, as D3D12.dlss5ui-off' };
+      await fsp.rename(src, dest);
+      return { done: true, text: 'moved D3D12\\ aside to D3D12.dlss5ui-off. Launch the game: if it starts, that folder was the problem and the Feeder can open its own device now. If it refuses to start, rename the folder back -- the redist is genuinely in use and damaged, and the game\'s files need verifying' };
     }
     case 'install':
       return { done: false, text: 'Install runs from the card: press Install OptiScaler on this game' };

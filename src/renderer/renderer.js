@@ -399,7 +399,8 @@ async function applyRecommendation(game, card, backends) {
     if (run && run.ran) {
       lastRunEl.classList.remove('hidden');
       lastRunEl.classList.toggle('status-ok', run.verdict === 'nr-ran');
-      lastRunEl.classList.toggle('status-bad', ['duplicate-dlss', 'shutdown-fault', 'ue-crash', 'feed-stopped'].includes(run.verdict));
+      lastRunEl.classList.toggle('status-bad', ['duplicate-dlss', 'shutdown-fault', 'ue-crash', 'feed-stopped',
+        'feed-no-motion', 'feed-depth-flat', 'feed-agility-redist'].includes(run.verdict));
       const when = new Date(run.at);
       const stamp = isNaN(when) ? '' : when.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
       lastRunEl.textContent = t('Last run {when}: {verdict}', { when: stamp, verdict: describeRun(run) });
@@ -522,6 +523,11 @@ function helpWords(diag) {
     case 'ue-crash-feeder': return t('The game crashed (Unreal crash report: {message}) with the Feeder deployed. Remove the Feeder and check whether it runs clean.', { message: (v.message || '').slice(0, 120) });
     case 'ue-crash': return t('The game crashed (Unreal crash report: {message}). No rule covers this. Save the bundle to share, or ask the AI.', { message: (v.message || '').slice(0, 120) });
     case 'feed-stopped': return t('The Feeder gave up on the last run. Reconfigure rewrites its ReShade settings; if it stops again, dlss5-feed.log has its own diagnosis.');
+    case 'feeder-mv-broken': return t('The Feeder is deployed here, but its motion-vector shader is {why} ({provider}). DLSS is then fed no motion at all: sharp standing still, smearing the moment you move. Re-deploying writes the provider, its shader and the preset from one answer -- the default is VORT now, which compiles on the ReShade this app installs.', v);
+    case 'feed-no-motion': return t('The Feeder ran and DLSS got no motion vectors. The Feeder\'s own log says: {detail} Re-deploying rewrites the provider, its shader, both DLSS5_MV_PROVIDER levels and the preset together.', v);
+    case 'feed-depth-flat': return t('The Feeder ran, but depth read flat while the scene was moving: ReShade\'s Generic Depth is bound to the wrong buffer, so DLSS and the neural pass reconstruct from nothing. This is the usual Unity failure. The fix switches this game to the one Unity depth profile a contributor has verified end to end; if that is not it either, ReShade\'s own Add-ons > Generic Depth page lists the real buffers the running game has.');
+    case 'feed-agility-redist': return t('Direct3D 12 refused every device create in this game\'s process with D3D12_ERROR_INVALID_REDIST -- the Feeder\'s own included -- so DLSS never started. The exe points Direct3D 12 at its own D3D12 folder (Unity games commonly do) and that redist cannot be loaded. The game itself never notices, because on D3D11 it creates no D3D12 device of its own. The fix moves that folder aside so Windows\' own Direct3D 12 runtime is used: reversible, and the game will tell you if it genuinely needed it.');
+    case 'feed-agility-redist-elsewhere': return t('Direct3D 12 refused every device create in this game\'s process with D3D12_ERROR_INVALID_REDIST, so the Feeder could not open its device. There is no D3D12 folder beside the exe, so something else in the process is redirecting Direct3D 12 at a redist it cannot load -- a launcher, a mod loader, or an absolute path inside the exe. Verify the game\'s files through its launcher; nothing this app can do works around it.');
     case 'fix-failed': return t('The fix "{fix}" was applied and the result did not change. DLSS 5 is not currently available for this game with what this app can do on its own. Save the bundle to share, or ask the AI.', v);
     default: return t('No rule covers this run ({verdict}). Save the bundle to share, or ask the AI.', { verdict: v.verdict || diag.code });
   }
@@ -553,6 +559,10 @@ function helpShort(diag) {
     case 'ue-crash-feeder': return t('Crashed with the Feeder');
     case 'ue-crash': return t('Crashed -- no known fix');
     case 'feed-stopped': return t('The Feeder gave up');
+    case 'feeder-mv-broken': return t('Motion-vector shader cannot work');
+    case 'feed-no-motion': return t('DLSS got no motion vectors');
+    case 'feed-depth-flat': return t('Depth is flat -- wrong buffer');
+    case 'feed-agility-redist': case 'feed-agility-redist-elsewhere': return t('D3D12 refused every device (redist)');
     case 'fix-failed': return t('Fix did not help -- no known fix');
     case 'dlss-no-nr': case 'init-no-feature': case 'no-hook': default: return t('Not working -- no known fix');
   }
@@ -563,6 +573,9 @@ function helpFixLabel(id) {
     case 'remove-foreign': return t('Remove the other toolchain');
     case 'remove-feeder': return t('Remove the Feeder');
     case 'remove-luma': return t('Remove Luma UE');
+    case 'redeploy-feeder': return t('Deploy the Feeder again');
+    case 'feeder-depth-profile': return t('Try the verified Unity depth profile');
+    case 'disable-agility-redist': return t('Move the game\'s D3D12 folder aside');
     case 'reconfigure': return t('Reconfigure');
     case 'install': return t('Install OptiScaler');
     default: return id;
@@ -1063,6 +1076,9 @@ function describeRun(run) {
     case 'shutdown-fault': return t('crashed on the way out inside NVIDIA\'s NGX shutdown (a Feeder on a game that ships DLSS) -- remove the Feeder');
     case 'ue-crash': return t('crashed (Unreal crash report: {message})', { message: (run.detail || '').slice(0, 120) || t('see the report') });
     case 'feed-stopped': return t('the Feeder gave up this run -- see dlss5-feed.log for its own diagnosis');
+    case 'feed-no-motion': return t('the feed ran but DLSS got no motion vectors -- sharp when still, smearing in motion; deploy the Feeder again');
+    case 'feed-depth-flat': return t('the feed ran but depth read flat while the scene moved -- Generic Depth is on the wrong buffer');
+    case 'feed-agility-redist': return t('Direct3D 12 refused every device create in the process (D3D12_ERROR_INVALID_REDIST) -- the game\'s own D3D12 redist folder blocks it');
     default: return t('not run yet');
   }
 }
@@ -1669,14 +1685,61 @@ async function loadFeederSection(game) {
     const providers = await window.api.feederMvProviders();
     for (const p of providers) {
       feederProvidersById[p.id] = p;
+      // A provider the app knows about but cannot use is left out of the picker rather than
+      // offered and then refused: DRME is in the table only so an existing deploy that used it is
+      // still recognised and cleaned up (feeder.js).
+      if (p.selectable === false) continue;
       const opt = document.createElement('option');
       opt.value = p.id;
-      opt.textContent = p.autoFetchable ? p.displayName : `${p.displayName} — ${p.license}`;
+      opt.textContent = p.bringYourOwn ? `${p.displayName} — ${t('your own install')}`
+        : p.autoFetchable ? p.displayName : `${p.displayName} — ${p.license}`;
       if (p.default) opt.selected = true;
       select.appendChild(opt);
     }
     feederProvidersLoaded = true;
   }
+  // The provider this game is actually on, not just the default -- someone opening Edit after a
+  // deploy should see what is deployed.
+  if (readiness.mvProvider && readiness.mvProvider.id && feederProvidersById[readiness.mvProvider.id]
+      && feederProvidersById[readiness.mvProvider.id].selectable !== false) {
+    select.value = readiness.mvProvider.id;
+  }
+
+  // Depth, for a game whose Feeder is in and whose depth may be the thing that is wrong. Only the
+  // two profiles feeder.js defines: the engine default an install writes by itself, and the one
+  // Unity profile a contributor verified end to end. Beyond those it is ReShade's own Generic
+  // Depth page, which is the only thing that can see the running game's real buffers.
+  let depthEl = $('#game-feeder-depth');
+  if (!depthEl) {
+    depthEl = document.createElement('div');
+    depthEl.id = 'game-feeder-depth';
+    depthEl.className = 'field-hint';
+    notesEl.insertAdjacentElement('afterend', depthEl);
+  }
+  depthEl.innerHTML = '';
+  if (readiness.addonInstalled) {
+    const verified = readiness.depthProfile === 'unity-verified';
+    const line = document.createElement('div');
+    line.textContent = verified
+      ? t('Depth: the contributor-verified Unity profile is in use. If depth still reads flat, open ReShade (Home) > Add-ons > Generic Depth in gameplay and pick the buffer that holds the scene.')
+      : t('Depth: engine defaults. If the picture looks sharp when still and mushy in motion, or dlss5-feed.log says depth is flat, try the verified Unity profile.');
+    depthEl.appendChild(line);
+    if (!verified) {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-small';
+      btn.textContent = t('Use the verified Unity depth profile');
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        const res = await window.api.gameHelpApply(game.exePath, 'feeder-depth-profile');
+        btn.disabled = false;
+        toast(res.ok ? (res.done ? t('Done: {text}', { text: res.text }) : t('Not done: {text}', { text: res.text }))
+          : t('The fix failed: {error}', { error: res.error }));
+        if (res.ok && res.done) loadFeederSection(game);
+      });
+      depthEl.appendChild(btn);
+    }
+  }
+  depthEl.classList.toggle('hidden', depthEl.childElementCount === 0);
 
   const missing = [
     readiness.reshadeInstalled ? null : 'ReShade',
@@ -1685,6 +1748,10 @@ async function loadFeederSection(game) {
     readiness.headersInstalled ? null : 'ReShade.fxh/ReShadeUI.fxh',
     readiness.dlssInstalled ? null : 'nvngx_dlss.dll',
     readiness.dlssnrInstalled ? null : t('nvngx_dlssnr.dll (install this yourself first)'),
+    // The motion-vector half: a deploy can have every file and still feed nothing (feeder.js's
+    // feederProviderStatus). The notes above carry the full sentence; this keeps the status line
+    // from reading "fully deployed" while it is true.
+    readiness.mvProviderOk === false ? t('a working motion-vector shader') : null,
   ].filter(Boolean);
 
   status.className = 'status-line';
