@@ -488,3 +488,29 @@ test('a Feeder game is configured with Neural Rendering before SR switched off',
   assert.match(ini, /RunBeforeSR\s*=\s*false/, 'pre-SR is forced off for a Feeder game');
   assert.match(ini, /LoadReshade\s*=\s*true/, 'and the existing forcing still happens');
 });
+
+test('a stuck Inspect tool does not survive the app configuring the game', async () => {
+  // "Hold frame" freezes the picture while the game runs on behind it, and it persists in the ini
+  // -- a user who ticks it once sees a broken-looking game on every later launch. Reported from a
+  // user on two DX12 games with no upscaler of their own.
+  const { loadMain, fakeExe } = require('./helpers');
+  const base = scratchDir('inspect-neutral');
+  const dir = path.join(base, 'common', 'Some Game');
+  const exe = fakeExe(dir, 'game.exe');
+  if (!fs.existsSync(exe)) return; // needs a real PE (Windows only)
+  write(dir, 'OptiScaler.ini', [
+    '[DlssNr]', 'Enabled = true', 'HoldFrame = true', 'Compare = 2', 'CompareSwap = true',
+    'DebugView = 3', 'ApplyModel = false', '',
+  ].join('\n'));
+
+  const { invoke } = loadMain({ userData: scratchDir('inspect-ud') });
+  const res = await invoke('game:help-apply', { exePath: exe, fixId: 'reconfigure' });
+  assert.ok(res.ok, res.error || 'reconfigured');
+
+  const ini = fs.readFileSync(path.join(dir, 'OptiScaler.ini'), 'utf8');
+  assert.match(ini, /HoldFrame\s*=\s*false/, 'the frozen frame is released');
+  assert.match(ini, /^Compare\s*=\s*0/m);
+  assert.match(ini, /CompareSwap\s*=\s*false/);
+  assert.match(ini, /DebugView\s*=\s*0/);
+  assert.match(ini, /ApplyModel\s*=\s*true/, 'and the model is applied again');
+});

@@ -3043,6 +3043,35 @@ const FEEDER_PRE_SR_OFF = [
   { section: 'DlssNr', key: 'RunBeforeSR', value: 'false' },
 ];
 
+// The panel's Inspect tools, put back to neutral whenever this app configures a game.
+//
+// They are session tools that persist like preferences, and one of them costs people hours.
+// "Hold frame" freezes the frame the model works on; the game's own HUD and post-processing run
+// after the pass and keep updating, and the panel's own help says "close the panel and it stays
+// held". So: tick it once while exploring, close the panel, and every launch from then on is a
+// frozen picture with a live game behind it -- which reads as a broken install rather than as a
+// setting, and reinstalling never helps, because reinstalling never touched the ini key.
+//
+// Reported by a user on two DX12 games with no upscaler of their own (Doom 3 BFG with the DX12 mod,
+// A Plague Tale: Innocence): "everything activated and OptiScaler was reading the feeder, but it
+// became a freeze frame with the game running fine behind" -- and they could not reproduce their
+// one working run afterwards. That is this key, persisted.
+//
+// Compare (side by side / wipe), DebugView (vectors, depth or masks instead of the picture) and
+// ApplyModel=false have the same shape and the same silent persistence.
+//
+// Forced at configure time only -- Install, Reconfigure, a Feeder deploy. Nothing fights the panel
+// during a session, so the tools behave exactly as before while they are being used; they just do
+// not outlive the app touching the game again. It also makes Reconfigure a real answer to "it looks
+// frozen and I have no idea why".
+const INSPECT_NEUTRAL = [
+  { section: 'DlssNr', key: 'HoldFrame', value: 'false' },
+  { section: 'DlssNr', key: 'Compare', value: '0' },
+  { section: 'DlssNr', key: 'CompareSwap', value: 'false' },
+  { section: 'DlssNr', key: 'DebugView', value: '0' },
+  { section: 'DlssNr', key: 'ApplyModel', value: 'true' },
+];
+
 // OptiScaler's own Frame Generation, opted into per game -- see optiFgReadiness() below for
 // why this only ever applies to a D3D12 game. FSRFG specifically (not DLSSG/XeFG): it's plain
 // ini config with no Streamline dependency, which is what makes it reachable through a Feeder
@@ -3201,6 +3230,9 @@ async function autoConfigureGame(dir, exePath) {
   // Luma UE deploys its own ReShade64.dll the same non-proxying way the Feeder does (see
   // lumaue.js's file header) -- OptiScaler needs the same explicit LoadReshade nudge to load it.
   if (lumaue.lumaUeDeployed(dir)) forced = [...forced, ...patchIniValues(iniPath, LOAD_RESHADE_FORCED)];
+  // Every game, not just the Feeder ones: a stuck Inspect tool looks like a broken install on any
+  // of them, and none of these is a preference worth carrying across a reconfigure.
+  forced = [...forced, ...patchIniValues(iniPath, INSPECT_NEUTRAL)];
   forced = [...forced, ...applyLosslessMarker(dir)];
   forced = [...forced, ...applyFrameGenMarker(dir)];
   forced = [...forced, ...applyEngineMarker(dir)];
