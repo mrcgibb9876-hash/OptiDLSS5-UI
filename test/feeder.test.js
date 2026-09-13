@@ -440,3 +440,28 @@ test('switching provider takes the old one\'s files out, but never a bring-your-
   }).catch(() => {});
   assert.ok(fs.existsSync(path.join(dir, 'reshade-shaders', 'Shaders', 'MartysMods_LAUNCHPAD.fx')), 'still the user\'s own');
 });
+
+test('switching away from a provider deployed before mvFiles existed still takes its files out', async () => {
+  const dir = scratchDir('feeder-legacy-switch');
+  const cacheDir = path.join(dir, 'cache');
+  for (const rel of ['ReShade64.dll', 'dlss5-feed.addon64', 'nvngx_dlss.dll']) write(dir, rel);
+  for (const rel of ['DLSS5_Feed.fx', 'ReShade.fxh', 'ReShadeUI.fxh']) write(dir, `reshade-shaders/Shaders/${rel}`);
+  // DRME's four files, and a marker of the shape v1.56.0 wrote: provider id, no file list.
+  for (const rel of ['MotionEstimation.fx', 'MotionEstimation.fxh', 'MotionEstimationUI.fxh', 'MotionVectors.fxh']) {
+    write(dir, `reshade-shaders/Shaders/${rel}`);
+  }
+  write(dir, '.dlss5ui-feeder-deploy.json', JSON.stringify({
+    feederVersion: 'v1.16.0-beta.1', mvProviderId: 'reshade-motion-estimation', placedNvngxDlss: true,
+  }));
+
+  await feeder.deployFeederStack(dir, 'dx11', 'vort', {
+    cacheDir, ghHeaders: { 'User-Agent': 't' },
+    getRhiManifest: async () => ({ dlss: [] }), compareVersions: () => 0,
+  });
+
+  for (const rel of ['MotionEstimation.fx', 'MotionEstimation.fxh', 'MotionEstimationUI.fxh', 'MotionVectors.fxh']) {
+    assert.equal(fs.existsSync(path.join(dir, 'reshade-shaders', 'Shaders', rel)), false,
+      `${rel} left behind: ReShade would fail to compile it on every launch`);
+  }
+  assert.ok(fs.existsSync(path.join(dir, 'reshade-shaders', 'Shaders', 'vort_Motion.fx')), 'and the new provider is in');
+});

@@ -1047,11 +1047,20 @@ async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifes
   // ReShade would go on compiling them, and a later Remove works from the marker, which records
   // one provider. Never for a bring-your-own provider: those files are the user's own install.
   const outgoingMarker = readFeederDeployMarker(dir);
-  if (outgoingMarker && outgoingMarker.mvProviderId && outgoingMarker.mvProviderId !== providerId
-      && Array.isArray(outgoingMarker.mvFiles)) {
+  if (outgoingMarker && outgoingMarker.mvProviderId && outgoingMarker.mvProviderId !== providerId) {
     const outgoing = MV_PROVIDERS[outgoingMarker.mvProviderId];
-    if (!outgoing || !outgoing.bringYourOwn) {
-      for (const rel of outgoingMarker.mvFiles) {
+    if (outgoing && !outgoing.bringYourOwn) {
+      // What the deploy recorded, or -- for a marker written before mvFiles existed -- that
+      // provider's own static list. The fallback is the case that actually bites: every game
+      // deployed before v1.57.0 carries DRME, whose marker has no file list, so a re-deploy with
+      // VORT used to leave MotionEstimation.fx sitting there. ReShade then compiles it on every
+      // launch and fails ("error X3020 ... cannot sample from texture that is also used as render
+      // target"), which is both the noise that made DRME unusable and a second provider in the
+      // folder for the Feeder's own "which one is enabled" check to trip over.
+      const stale = (Array.isArray(outgoingMarker.mvFiles) && outgoingMarker.mvFiles.length)
+        ? outgoingMarker.mvFiles
+        : (outgoing.files || []).map((f) => `Shaders/${f}`);
+      for (const rel of stale) {
         await fsp.rm(path.join(dir, 'reshade-shaders', ...rel.split('/')), { force: true }).catch(() => {});
       }
     }
