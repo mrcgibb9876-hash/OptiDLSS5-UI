@@ -2773,6 +2773,17 @@ async function deployStreamlineFolder(dir, exePath) {
 // crash as "the compute restore fought the quirks table". On this evidence that was the wrong half:
 // the graphics restore is the one that kills it, and the compute restore is required. Setting them
 // explicitly and in opposite directions is what was actually needed.
+// Only for the pd-upscaler route (RE2/3/4/7/8 through REFramework + PureDark's plugin), from
+// OptiScaler's own wiki page for these games. Kept apart from RE_ENGINE_HOTFIX because Dragon's
+// Dogma 2 and the other modern RE Engine titles hook the game's own DLSS call and need none of it.
+const PD_UPSCALER_HOTFIX = [
+  { section: 'Spoofing', key: 'Dxgi', value: 'false' },
+  { section: 'Menu', key: 'OverlayMenu', value: 'false' },
+];
+// What OptiScaler v10 put in its OptiScaler\ subfolder that PureDark's plugin still expects beside
+// the exe. libxess.dll is the one the wiki names; the other two are its siblings and cost nothing.
+const PD_UPSCALER_ROOT_DLLS = ['libxess.dll', 'libxess_dx11.dll', 'libxell.dll'];
+
 const RE_ENGINE_HOTFIX = [
   { section: 'Menu', key: 'ShortcutKey', value: '0x14F' },
   { section: 'Hotfix', key: 'RestoreComputeSignature', value: 'true' },
@@ -3209,6 +3220,40 @@ async function autoConfigureGame(dir, exePath) {
         reframework = { ...(reframework || {}), pdPlugin: deployPdPlugin(dir) };
       } catch (e) {
         reframework = { ...(reframework || {}), pdPluginError: String(e && e.message ? e.message : e) };
+      }
+      // The two settings OptiScaler's own wiki calls required on this route, and the file its v10
+      // release moved out from under the plugin. None of them were being applied, and all three are
+      // invisible until the game is already misbehaving:
+      //
+      //   Spoofing.Dxgi=false, Menu.OverlayMenu=false  the wiki's "required for the OptiScaler menu
+      //       to function correctly", said to be auto-applied since Opti 0.9 -- it is not, on the
+      //       v10 build this app ships, where both were still sitting at auto (2026-09-13).
+      //
+      //   libxess.dll beside the exe  OptiScaler v10 moved its upscaler DLLs into an OptiScaler\
+      //       subfolder. PureDark's plugin looks for them next to the game exe, so TemporalUpscaler
+      //       fails to initialise and the whole route quietly does nothing; OptiScaler's own log
+      //       says "CheckUpscalerFiles libxess.dll not found!" and nothing else explains it.
+      //       Copied rather than moved: OptiScaler still wants its own copy in the subfolder.
+      reEngineHotfix = [...reEngineHotfix, ...patchIniValues(iniPath, PD_UPSCALER_HOTFIX)];
+      const copiedToRoot = [];
+      for (const name of PD_UPSCALER_ROOT_DLLS) {
+        const from = path.join(dir, 'OptiScaler', name);
+        const to = path.join(dir, name);
+        try {
+          if (fs.existsSync(from) && !fs.existsSync(to)) {
+            fs.copyFileSync(from, to);
+            copiedToRoot.push(name);
+          }
+        } catch { /* a missing optional backend is not worth failing the install over */ }
+      }
+      // Journaled, or Remove leaves them behind -- these are files this app put in the folder like
+      // any other, and the round-trip test is what noticed.
+      if (copiedToRoot.length) {
+        const journal = readInstallMarker(dir) || {};
+        const added = Array.isArray(journal.added) ? journal.added : [];
+        const merged = [...added];
+        for (const name of copiedToRoot) if (!merged.includes(name)) merged.push(name);
+        updateInstallJournal(dir, { added: merged });
       }
     }
   }
