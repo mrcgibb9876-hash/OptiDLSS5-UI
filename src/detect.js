@@ -22,11 +22,13 @@ const os = require('node:os');
 const { findUnrealPluginFile } = require('./framegen');
 const emulators = require('./emulators');
 
+// 9: winmm.dll and version.dll are scanned as hook DLLs, so an OptiScaler or ReShade loading
+// under either name is seen at last; detection carries optiScalerProxy with it.
 // 8: anti-cheat beside the exe is seen for a game whose own folder is called Game (every
 // FromSoftware title) -- a stored detection from before this said antiCheat: null for them.
 // 7: DX8 told apart from DX9, emulators recognised, 32-bit and DX8/DX9 games offered the
 // experimental Feeder routes (legacy.js) instead of "unsupported".
-const DETECT_VERSION = 8;
+const DETECT_VERSION = 9;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
@@ -329,16 +331,39 @@ function apiFromFileName(exePath) {
 // to report and install for), a ReShade proxy already living in the slot OptiScaler would take
 // (Install would replace it -- Launch mode: Injector keeps both), and OptiScaler's own proxy,
 // which is neither. Names only; the version resource is not consulted, the strings are enough.
-const HOOK_DLLS = ['dxgi.dll', 'd3d12.dll', 'd3d11.dll', 'd3d9.dll', 'opengl32.dll', 'dinput8.dll'];
+// winmm.dll and version.dll earn their place here: both are proxy names OptiScaler and ReShade
+// use, and ones this app picks itself for a Vulkan or OpenGL Feeder game. Without them an upstream
+// OptiScaler loading as winmm.dll was invisible to every check in this file -- which is how a
+// user's DOOM 3 BFG came to run somebody else's build, with no neural pass, while this app
+// reported the route complete (2026-09-13).
+const HOOK_DLLS = ['dxgi.dll', 'd3d12.dll', 'd3d11.dll', 'd3d9.dll', 'opengl32.dll', 'dinput8.dll', 'winmm.dll', 'version.dll'];
 const HOOK_NEEDLES = ['DXVK', 'vkd3d', 'vkGetInstanceProcAddr', 'ReShade', 'OptiScaler'].map((t) => makeNeedle(t, t, { exactCase: true }));
 
 async function inspectHookDlls(dir) {
-  const out = { vulkanWrapper: null, reshadeProxy: null };
+  const out = { vulkanWrapper: null, reshadeProxy: null, optiScalerProxy: null };
+  // Our own OptiScaler.dll, to tell our build apart from somebody else's by size. Both report the
+  // same version fields, so the version says nothing; the file does.
+  let ourSize = 0;
+  try { ourSize = fs.statSync(path.join(dir, 'OptiScaler.dll')).size; } catch {}
   for (const name of HOOK_DLLS) {
     const file = path.join(dir, name);
     if (!fs.existsSync(file)) continue;
     const hits = await scanFile(file, HOOK_NEEDLES, { maxBytes: SIBLING_SCAN_MAX_BYTES });
-    if (hits.has('OptiScaler')) continue;
+    if (hits.has('OptiScaler')) {
+      // An OptiScaler under a proxy name. Usually ours -- that is how this app installs one -- but
+      // a folder can hold somebody else's build under a different name, and THAT is the one that
+      // loads and answers the game's NGX calls. A user's DOOM 3 BFG had an upstream OptiScaler as
+      // winmm.dll beside our install; the Feeder found it, reported "upstream build, no neural
+      // pass", and no neural pass ever ran while everything in this app said the route was
+      // complete. Recorded here; whether it is a problem is for the caller to judge against what
+      // this app installed.
+      if (!out.optiScalerProxy) {
+        let size = 0;
+        try { size = fs.statSync(file).size; } catch {}
+        out.optiScalerProxy = { file: name, size, matchesOurBuild: ourSize > 0 && size === ourSize };
+      }
+      continue;
+    }
     if (!out.vulkanWrapper && !hits.has('ReShade') && hits.has('vkGetInstanceProcAddr') && (hits.has('DXVK') || hits.has('vkd3d'))) {
       out.vulkanWrapper = { file: name, kind: hits.has('DXVK') ? 'DXVK' : 'vkd3d' };
     }
@@ -833,7 +858,13 @@ function resolveUnrealShippingExe(exePath) {
 // OptiScaler + Luma, with the other tool's Feeder crash dump sitting beside them. Marker files
 // only, never guessed from generic names; the report names the tool and the files.
 const FOREIGN_TOOLCHAINS = [
-  { tool: 'DLSS5oneclick', files: ['INSTALL-DLSSNR.md', 'nvngx_dlssnr.dll.dlss5oneclick', '!! EXTRACT ALL FILES TO GAME FOLDER !!.dlss5oneclick', 'Core/dlss5-feed.addon64', 'Core/renodx-dlss5.addon64', 'get_streamline.ps1', 'get_streamline.bat', 'get_streamline.cmd'], pattern: /\.dlss5oneclick$/i },
+  // INSTALL-DLSSNR.md is deliberately NOT in this list, though DLSS5oneclick does place one: it is
+  // also the name of a file in OptiScaler_DLSSNR's own repo, so this app's own installs have put it
+  // in game folders. A user's DOOM 3 BFG (2026-09-13) was flagged as carrying a rival toolchain on
+  // the strength of a file our own installer had journaled as `added` -- and the removal that
+  // offers is the one below, which lists dlss5-feed.addon64. A marker has to be unambiguous, and
+  // every other one here is: the .dlss5oneclick suffix, its Core\ layout, its streamline scripts.
+  { tool: 'DLSS5oneclick', files: ['nvngx_dlssnr.dll.dlss5oneclick', '!! EXTRACT ALL FILES TO GAME FOLDER !!.dlss5oneclick', 'Core/dlss5-feed.addon64', 'Core/renodx-dlss5.addon64', 'get_streamline.ps1', 'get_streamline.bat', 'get_streamline.cmd'], pattern: /\.dlss5oneclick$/i },
   { tool: 'DLSS5-Swapper', files: ['_DLSS5_Backup/manifest.json', 'renodx-dlss5.addon64', 'host64/renodx-dlss5.addon64', 'dlss5-feed-host64.exe'] },
   { tool: 'DLSSNR-Cost-Scaler', files: ['nvngx_dlssnr_proxy.dll'] },
   { tool: 'a RenoDX DLSS 5 add-on', pattern: /^renodx-dlss.*\.addon(64|32)?$/i },
@@ -866,15 +897,34 @@ const NEVER_GAME_OWNED = /^(nvngx_dlssnr|nvngx\.dll_dlssnr|OptiScaler|!! EXTRACT
 // another tool's backup of nvngx_dlssnr.dll must not take our NR model with it.
 const OUR_PAYLOAD = ['nvngx_dlssnr.dll', 'nvngx.dll_dlssnr.dll', 'OptiScaler.ini', 'OptiScaler.dll', 'OptiScaler', '!! EXTRACT ALL FILES TO GAME FOLDER !!', 'setup_windows.bat', 'setup_linux.sh', 'Licenses'];
 
+// Files this app put here itself, from its own install journal. Evidence that another tool was
+// here cannot be a file we placed -- that is how a DOOM 3 BFG install came to be accused of
+// carrying DLSS5oneclick on the strength of INSTALL-DLSSNR.md, which our own installer had
+// extracted and journaled. The signature list is the first defence and this is the second, because
+// the next collision will be with a filename nobody has thought about yet.
+function filesWePlaced(dir) {
+  try {
+    const journal = JSON.parse(fs.readFileSync(path.join(dir, '.optiscaler-manager-install.json'), 'utf8'));
+    const added = Array.isArray(journal.added) ? journal.added : [];
+    return new Set(added.map((n) => String(n).toLowerCase()));
+  } catch {
+    return new Set();
+  }
+}
+
 function foreignToolchains(dir) {
   let names = [];
   try { names = fs.readdirSync(dir); } catch { return []; }
+  const ours = filesWePlaced(dir);
   const out = [];
   for (const t of FOREIGN_TOOLCHAINS) {
     if (t.unless && fs.existsSync(path.join(dir, t.unless))) continue;
     const found = new Set();
-    for (const rel of t.files || []) if (fs.existsSync(path.join(dir, ...rel.split('/')))) found.add(rel);
-    if (t.pattern) for (const n of names) if (t.pattern.test(n)) found.add(n);
+    for (const rel of t.files || []) {
+      if (ours.has(rel.toLowerCase())) continue;
+      if (fs.existsSync(path.join(dir, ...rel.split('/')))) found.add(rel);
+    }
+    if (t.pattern) for (const n of names) if (t.pattern.test(n) && !ours.has(n.toLowerCase())) found.add(n);
     if (found.size) out.push({ tool: t.tool, files: [...found] });
   }
   return out;
@@ -992,6 +1042,8 @@ async function detectGame(dir, exePath) {
     emulator: null,
     vulkanWrapper: hooks.vulkanWrapper,
     reshadeProxy: hooks.reshadeProxy,
+    // An OptiScaler loading under a proxy name that is not the build this app installed.
+    optiScalerProxy: hooks.optiScalerProxy,
     antiCheat: antiCheatPresent(dir, exePath),
     // The door out of an anti-cheat stub, if there is one -- see antiCheatStub().
     protectedLauncher: antiCheatStub(dir),
@@ -1035,6 +1087,8 @@ async function detectEmulator(dir, exePath, emu) {
     emulator: { key: emu.key, name: emu.name, system: emu.system, hint: emu.hint, apis: emu.apis },
     vulkanWrapper: hooks.vulkanWrapper,
     reshadeProxy: hooks.reshadeProxy,
+    // An OptiScaler loading under a proxy name that is not the build this app installed.
+    optiScalerProxy: hooks.optiScalerProxy,
     antiCheat: null,
     protectedLauncher: null,
     oldShaderCompiler: oldShaderCompiler(dir),
@@ -1124,6 +1178,25 @@ async function planForeignRemoval(dir, { ours = false } = {}) {
   }
   const oursInstalled = exists('.optiscaler-manager-install.json') || (exists('OptiScaler.ini') && exists('nvngx_dlssnr.dll'));
   if (oursInstalled) for (const n of OUR_PAYLOAD) del.delete(n);
+  // And anything this app's own install journal claims. A name can belong to both projects --
+  // INSTALL-DLSSNR.md does -- so when a real rival install IS present, the copy we put here is
+  // still ours and stays.
+  const placedByUs = filesWePlaced(dir);
+  for (const n of [...del]) if (placedByUs.has(n.toLowerCase())) del.delete(n);
+  // The Feeder stack, when this app's own deploy marker says the Feeder here is ours.
+  //
+  // Several of these names appear in another tool's removal list because that tool ships them too
+  // -- DLSS5oneclick places a dlss5-feed.addon64 of its own. Deleting ours on the strength of that
+  // takes out a working route, and the file it takes is the one the whole route depends on. Anything
+  // this app journaled as its own is already protected above; this covers the deploy that keeps its
+  // record in a different file.
+  if (exists('.dlss5ui-feeder-deploy.json')) {
+    for (const n of ['dlss5-feed.addon64', 'dlss5-feed.addon32', 'dlss5-feed.cfg', 'dlss5-feed.log',
+      'ReShade64.dll', 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log', 'reshade-shaders']) del.delete(n);
+  }
+  if (exists('.dlss5ui-lumaue-deploy.json')) {
+    for (const n of ['ReShade64.dll', 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log', 'reshade-shaders']) del.delete(n);
+  }
   for (const r of restore) del.delete(r.backup);
   return { found, del: [...del].sort(), restore, notes };
 }

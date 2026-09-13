@@ -521,6 +521,7 @@ function helpWords(diag) {
     case 'd3d11-native': return t('DLSS was created on the native D3D11 path, so the Neural Rendering pass never ran. Dx11Upscaler must be dlss_12. Reconfigure writes it.');
     case 'nr-disabled': return t('DLSS ran but Neural Rendering is switched off in OptiScaler.ini. Reconfigure turns it on.');
     case 'dlss-no-nr': return t('DLSS was created and Neural Rendering is on, yet the pass never ran. This is not a known case. Save the bundle to share, or ask the AI.');
+    case 'foreign-optiscaler': return t('Another OptiScaler build is in this folder as {file}, and it is not the one this app installed. That copy is what the game loads and what answers the DLSS calls -- an upstream OptiScaler has no neural pass, so DLSS 5 can never run while it is there, however complete everything else looks. Delete {file} (it is not ours to remove for you), then press Install here.', v);
     case 'dlss-runtime-missing': return t('OptiScaler switched DLSS off a second into the run, because nvngx_dlss.dll is not beside the game exe -- its log says so in as many words. Nothing this app builds can make a DLSS call without it: not the Feeder\x27s synthesised one, not REFramework\x27s upscaler on a Resident Evil, not a DLSS 5 only profile. Reconfigure fetches and places it.');
     case 'feeder-technique': return t('DLSS initialised but the Feeder\'s shader technique was missing. Install again to redeploy the Feeder.');
     case 'luma-select-dlss': return t('Luma UE is deployed but no DLSS call happened. In-game, press Home for Luma\'s overlay and select DLSS as the upscaler, in gameplay. Then check again.');
@@ -561,6 +562,7 @@ function helpShort(diag) {
     case 'pd-enable-ingame': return t('Enable DLSS in REFramework (Insert)');
     case 'd3d11-native': return t('Wrong D3D11 upscaler setting');
     case 'nr-disabled': return t('Neural Rendering is switched off');
+    case 'foreign-optiscaler': return t('Another OptiScaler loads first');
     case 'dlss-runtime-missing': return t('nvngx_dlss.dll is missing');
     case 'feeder-technique': return t('Feeder shader missing');
     case 'luma-select-dlss': return t('Select DLSS in Luma\'s overlay (Home)');

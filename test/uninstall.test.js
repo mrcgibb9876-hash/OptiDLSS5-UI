@@ -72,8 +72,10 @@ test('the other-toolchain removal deletes only what that tool placed, after the 
   const declined = loadMain({ dialogResponse: 1 });
   const game2 = path.join(base, 'game2');
   const exe2 = fakeExe(game2, 'Game.exe');
-  write(game2, 'INSTALL-DLSSNR.md');
+  // An unambiguous marker. INSTALL-DLSSNR.md alone no longer accuses anyone: OptiScaler_DLSSNR
+  // ships a file of that name, and this app's own installs have put it in game folders.
+  write(game2, 'nvngx_dlssnr.dll.dlss5oneclick');
   const r2 = await declined.invoke('game:removeForeign', exe2);
   assert.equal(r2.cancelled, true);
-  assert.ok(fs.existsSync(path.join(game2, 'INSTALL-DLSSNR.md')), 'Cancel deletes nothing');
+  assert.ok(fs.existsSync(path.join(game2, 'nvngx_dlssnr.dll.dlss5oneclick')), 'Cancel deletes nothing');
 });

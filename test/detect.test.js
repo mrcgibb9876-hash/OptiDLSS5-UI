@@ -6,6 +6,8 @@ const fs = require('node:fs');
 const { REPO, scratchDir, write, fakeExe } = require('./helpers');
 const detect = require(path.join(REPO, 'src', 'detect'));
 const nativeDlss = require(path.join(REPO, 'src', 'native-dlss'));
+const { diagnose } = require(path.join(REPO, 'src', 'gamehelp'));
+const onWindows = process.platform === 'win32';
 
 test('apiFromFileName reads the renderer suffix games put in exe names', () => {
   assert.equal(detect.apiFromFileName('C:/x/farcry3_d3d11.exe'), 'dx11');
@@ -164,4 +166,65 @@ test('an anti-cheat stub is told apart from anti-cheat with no way past it', () 
   write(driver, 'vanguard/readme.txt');
   assert.equal(detect.antiCheatStub(driver), null);
   assert.match(detect.antiCheatPresent(driver, path.join(driver, 'Game.exe')), /vanguard/i);
+});
+
+test('a file this app placed itself is never evidence of another toolchain', async () => {
+  // A user's DOOM 3 BFG was told to "remove the other toolchain" because INSTALL-DLSSNR.md was in
+  // the folder -- a file our own installer had extracted and journaled. The removal that offers
+  // lists dlss5-feed.addon64, so a false positive could take out a working Feeder route.
+  const dir = scratchDir('foreign-false-positive');
+  write(dir, 'INSTALL-DLSSNR.md', 'ours, from the OptiScaler_DLSSNR release');
+  write(dir, '.optiscaler-manager-install.json', JSON.stringify({ added: ['INSTALL-DLSSNR.md', 'OptiScaler.ini'] }));
+  assert.deepEqual(detect.foreignToolchains(dir), [], 'our own file accuses nobody');
+
+  // The unambiguous markers still work -- the suffix no other tool uses.
+  write(dir, 'nvngx_dlssnr.dll.dlss5oneclick', 'theirs');
+  const found = detect.foreignToolchains(dir);
+  assert.equal(found.length, 1);
+  assert.equal(found[0].tool, 'DLSS5oneclick');
+  assert.ok(!found[0].files.includes('INSTALL-DLSSNR.md'), 'and it is not what convicted them');
+});
+
+test('a foreign removal never takes this app\'s own Feeder stack with it', async () => {
+  const dir = scratchDir('foreign-keeps-feeder');
+  // Their marker, and our Feeder deploy beside it.
+  write(dir, 'nvngx_dlssnr.dll.dlss5oneclick', 'theirs');
+  write(dir, '.optiscaler-manager-install.json', JSON.stringify({ added: [] }));
+  write(dir, '.dlss5ui-feeder-deploy.json', JSON.stringify({ feederVersion: 'v1', mvProviderId: 'vort' }));
+  for (const n of ['dlss5-feed.addon64', 'dlss5-feed.cfg', 'ReShade64.dll', 'ReShade.ini', 'ReShadePreset.ini']) write(dir, n);
+  write(dir, 'reshade-shaders/Shaders/DLSS5_Feed.fx');
+
+  const plan = await detect.planForeignRemoval(dir, { ours: true });
+  assert.ok(plan.found.length, 'their marker is still recognised');
+  for (const kept of ['dlss5-feed.addon64', 'dlss5-feed.cfg', 'ReShade64.dll', 'ReShade.ini', 'ReShadePreset.ini', 'reshade-shaders']) {
+    assert.ok(!plan.del.includes(kept), `${kept} is ours and must survive`);
+  }
+  assert.ok(plan.del.includes('nvngx_dlssnr.dll.dlss5oneclick'), 'theirs still goes');
+});
+
+test('an OptiScaler under a proxy name is recognised, and told apart from ours by its file', { skip: !onWindows }, async () => {
+  // A user's DOOM 3 BFG: an upstream OptiScaler as winmm.dll beside our install. That copy is the
+  // one the game loads, it has no neural pass, and every other check said the route was complete.
+  const dir = scratchDir('other-optiscaler');
+  const ourDll = Buffer.concat([Buffer.from('MZ'), Buffer.alloc(4096), Buffer.from('OptiScaler', 'latin1')]);
+  fs.writeFileSync(path.join(dir, 'OptiScaler.dll'), ourDll);
+  // Theirs: an OptiScaler too, but a different build, so a different size.
+  fs.writeFileSync(path.join(dir, 'winmm.dll'), Buffer.concat([ourDll, Buffer.alloc(64)]));
+  const hooks = await detect.inspectHookDlls(dir);
+  assert.equal(hooks.optiScalerProxy.file, 'winmm.dll');
+  assert.equal(hooks.optiScalerProxy.matchesOurBuild, false, 'a different build from the one we installed');
+
+  const diag = diagnose({
+    detected: { bitness: 64, optiScalerProxy: hooks.optiScalerProxy },
+    route: { route: 'feeder', optiInstalled: true, feederDeployed: true },
+    run: { ran: false, verdict: 'no-log' },
+  });
+  assert.equal(diag.code, 'foreign-optiscaler');
+  assert.equal(diag.vars.file, 'winmm.dll');
+
+  // Our own proxy, same bytes, is not a finding.
+  fs.copyFileSync(path.join(dir, 'OptiScaler.dll'), path.join(dir, 'dxgi.dll'));
+  fs.rmSync(path.join(dir, 'winmm.dll'));
+  const mine = await detect.inspectHookDlls(dir);
+  assert.equal(mine.optiScalerProxy.matchesOurBuild, true, 'our own install is not an intruder');
 });

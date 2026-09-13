@@ -49,6 +49,14 @@ function diagnose(ctx) {
 
   // Two stacks on one DLSS call crash before anything else can be judged.
   if (foreign.length) return fix('foreign', 'remove-foreign', { tool: foreign.map((f) => f.tool).join(', ') });
+  // A second OptiScaler, under a proxy name, that is not the build this app installed. It is the
+  // one the game loads and the one that answers the NGX calls -- so an upstream build there means
+  // no neural pass, whatever this app has put beside it. Nothing here deletes another tool's DLL
+  // without being asked, so this is the user's move, with the file named.
+  const otherOpti = d.optiScalerProxy;
+  if (otherOpti && otherOpti.file && otherOpti.matchesOurBuild === false) {
+    return out('step', 'foreign-optiscaler', { file: otherOpti.file });
+  }
   if (route.feederMisdeployed) return fix('feeder-misdeployed', 'remove-feeder');
   if (route.lumaDeployed && ctx.lumaKnownBad) return fix('luma-known-bad', 'remove-luma', { reason: ctx.lumaKnownBad });
 
