@@ -106,6 +106,22 @@ test('anti-cheat is read from the files beside the exe, and Call of Duty HQ coun
   const clean = game('Clean');
   write(clean, 'data.pak');
   assert.equal(detect.antiCheatPresent(clean, path.join(clean, 'Game.exe')), null);
+
+  // FromSoftware ships every game as <Game Name>\Game\<exe>, and "Game" is a name the
+  // library-root guard matches -- so the climb used to stop on its own first step and miss
+  // EasyAntiCheat sitting right beside the exe. Confirmed on the real Elden Ring and Armored
+  // Core VI installs on this machine, neither of which showed any warning.
+  const fromSoft = path.join(game('ARMORED CORE VI'), 'Game');
+  write(fromSoft, 'EasyAntiCheat/settings.json');
+  write(fromSoft, 'start_protected_game.exe');
+  assert.equal(detect.antiCheatPresent(fromSoft, path.join(fromSoft, 'armoredcore6.exe')), 'EasyAntiCheat');
+
+  // The guard still does its job for ancestors: a loose installer parked in the library folder
+  // is not evidence about a game underneath it.
+  write(root, 'EasyAntiCheat_Setup.exe');
+  const innocent = path.join(game('Innocent'), 'Binaries', 'Win64');
+  fs.mkdirSync(innocent, { recursive: true });
+  assert.equal(detect.antiCheatPresent(innocent, path.join(innocent, 'Game.exe')), null);
 });
 
 test('a 64-bit game that links only OpenGL is an OpenGL Feeder game, not unsupported', async () => {

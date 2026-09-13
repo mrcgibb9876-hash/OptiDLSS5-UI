@@ -22,9 +22,11 @@ const os = require('node:os');
 const { findUnrealPluginFile } = require('./framegen');
 const emulators = require('./emulators');
 
+// 8: anti-cheat beside the exe is seen for a game whose own folder is called Game (every
+// FromSoftware title) -- a stored detection from before this said antiCheat: null for them.
 // 7: DX8 told apart from DX9, emulators recognised, 32-bit and DX8/DX9 games offered the
 // experimental Feeder routes (legacy.js) instead of "unsupported".
-const DETECT_VERSION = 7;
+const DETECT_VERSION = 8;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
@@ -360,12 +362,24 @@ const RICOCHET_EXES = /^cod\.exe$/i;
 
 function antiCheatPresent(dir, exePath = null) {
   if (exePath && RICOCHET_EXES.test(path.basename(exePath))) return 'Ricochet (Call of Duty HQ)';
-  let current = dir;
-  for (let up = 0; up <= 3; up++) {
-    if (LIBRARY_ROOT.test(path.basename(current) || current)) break;
+  const scan = (folder) => {
     let entries = [];
-    try { entries = fs.readdirSync(current); } catch { entries = []; }
-    const hit = entries.find((name) => ANTI_CHEAT.test(name));
+    try { entries = fs.readdirSync(folder); } catch { entries = []; }
+    return entries.find((name) => ANTI_CHEAT.test(name)) || null;
+  };
+  // The exe's own folder is always read, before the library-root guard gets a say. FromSoftware
+  // ships every game as <Game Name>\Game\<exe> -- Elden Ring, Armored Core VI, Dark Souls III --
+  // and LIBRARY_ROOT's `games?` alternative matches that folder's own name, so the climb used to
+  // stop on its first step and see nothing. Both of those games have EasyAntiCheat and
+  // start_protected_game.exe sitting right beside the exe, and the card showed no warning at all
+  // (confirmed on both installs, 2026-09-13). The guard is about not blaming a game for a loose
+  // installer in D:\Games, which is a statement about ancestors, never about the exe's own folder.
+  const here = scan(dir);
+  if (here) return here;
+  let current = path.dirname(dir);
+  for (let up = 0; up < 3; up++) {
+    if (LIBRARY_ROOT.test(path.basename(current) || current)) break;
+    const hit = scan(current);
     if (hit) return hit;
     const parent = path.dirname(current);
     if (parent === current) break;
