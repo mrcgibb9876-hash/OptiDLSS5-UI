@@ -162,7 +162,9 @@ test('import from the app places it in every installed Resident Evil, the rest g
     zipFolder(path.dirname(src), zip);
     const st = await invoke('pdplugin:status');
     assert.ok(st.candidates.some((c) => c.path === zip), 'status finds the download');
-    assert.equal(st.pageUrl, 'https://www.nexusmods.com/site/mods/502');
+    // The link lands on file 2293 -- version 1.1.2 -- because OptiScaler's own wiki says 1.2.0
+    // "doesn't load the back-end properly", and this is the one file the user fetches by hand.
+    assert.equal(st.pageUrl, 'https://www.nexusmods.com/site/mods/502?tab=files&file_id=2293');
 
     const res = await invoke('pdplugin:import', { sourcePath: zip });
     assert.equal(res.ok, true, res.error);

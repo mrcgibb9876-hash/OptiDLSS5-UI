@@ -2864,7 +2864,7 @@ async function ensureREFrameworkForGame(dir, exePath = null) {
     if (fs.existsSync(destPath) && !(ours && (!marker || marker.build !== 'pd-upscaler'))) {
       return { installed: false, alreadyPresent: true, build: marker && marker.build ? marker.build : 'unknown', pdUpscaler: true };
     }
-    const pd = await ensurePdReframeworkCache();
+    const pd = await ensurePdReframeworkCache(pdGame);
     if (!pd) return { installed: false, error: 'could not fetch the pd-upscaler REFramework', pdUpscaler: true };
     await fsp.copyFile(pd.dll, destPath);
     updateInstallJournal(dir, { reframework: true });
@@ -2884,10 +2884,15 @@ async function ensureREFrameworkForGame(dir, exePath = null) {
     ? fs.readFileSync(path.join(reframeworkCacheDir(), '.version'), 'utf-8').trim() : 'unknown' };
 }
 
-// The pd-upscaler REFramework build, cached once per app data folder. nightly.link serves the
-// branch's latest workflow artifact; a fetch that fails falls back to whatever is cached.
-async function ensurePdReframeworkCache() {
-  const cacheDir = path.join(userDataDir(), 'reframework-pd-cache');
+// The pd-upscaler REFramework build for one game, cached per game in the app data folder.
+//
+// Per game because the source is: the build moved from praydog's nightly.link artifact (404 since
+// at least 2026-09-13 -- that route was silently broken for every RE game) to TheRazerMD's
+// releases, which publish RE2.zip, RE3.zip and so on separately. See reengine.js for why.
+// A fetch that fails falls back to whatever is already cached for that game.
+async function ensurePdReframeworkCache(game) {
+  if (!game) return null;
+  const cacheDir = path.join(userDataDir(), 'reframework-pd-cache', game);
   const cachedDll = path.join(cacheDir, REFRAMEWORK_DLL_NAME);
   const revisionFile = path.join(cacheDir, '.revision');
   const cached = () => (fs.existsSync(cachedDll)
@@ -2896,7 +2901,20 @@ async function ensurePdReframeworkCache() {
   if (cached()) return cached();
   const tmpZip = path.join(os.tmpdir(), `dlss5ui-pd-reframework-${Date.now()}.zip`);
   try {
-    const res = await feeder.fetchWithRetry(reengine.PD_UPSCALER_ZIP_URL, { headers: GITHUB_HEADERS });
+    const listRes = await feeder.fetchWithRetry(reengine.PD_UPSCALER_RELEASES_API, { headers: GITHUB_HEADERS });
+    if (!listRes.ok) throw new Error(`HTTP ${listRes.status} listing ${reengine.PD_UPSCALER_SOURCE_LABEL}`);
+    const releases = await listRes.json();
+    const wanted = reengine.pdUpscalerAssetName(game).toLowerCase();
+    // The newest release that actually carries this game's asset -- a release can be cut for one
+    // game and not another, and taking a different game's build would attach to the wrong type
+    // database and fail in the game rather than here.
+    let asset = null;
+    for (const release of Array.isArray(releases) ? releases : []) {
+      asset = (release.assets || []).find((a) => String(a.name).toLowerCase() === wanted);
+      if (asset) break;
+    }
+    if (!asset) throw new Error(`no ${reengine.pdUpscalerAssetName(game)} in ${reengine.PD_UPSCALER_SOURCE_LABEL}`);
+    const res = await feeder.fetchWithRetry(asset.browser_download_url, { headers: GITHUB_HEADERS });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     await fsp.writeFile(tmpZip, Buffer.from(await res.arrayBuffer()));
     await fsp.mkdir(cacheDir, { recursive: true });

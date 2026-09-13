@@ -23,10 +23,32 @@ const path = require('node:path');
 const { openZip, findEntry, extractEntry, extractEntryTo } = require('./zip');
 
 const PD_UPSCALER_EXES = { 're2.exe': 'RE2', 're3.exe': 'RE3', 're4.exe': 'RE4', 're7.exe': 'RE7', 're8.exe': 'RE8' };
-const PD_UPSCALER_ZIP_URL = 'https://nightly.link/praydog/REFramework/workflows/dev-release/pd-upscaler/REFramework.zip';
+// Where the pd-upscaler build comes from, and why it moved.
+//
+// It used to be praydog's own branch artifact through nightly.link. That URL answers 404 -- checked
+// live, 2026-09-13 -- and OptiScaler's own wiki page for Resident Evil 2 says why: the official
+// repo's artifact links have expired, and PDPerfPlugin does not work with the new unified
+// monolithic REFramework in any case. The wiki points at TheRazerMD's fork, which publishes the
+// same pd-upscaler build as a release, and that is where this fetches from now.
+//
+// The shape changed with the source: one zip per game (RE2.zip, RE3.zip, ...), each holding
+// dinput8.dll on its own, rather than one build for all five nested zip-in-zip. So the cache is per
+// game now, and a game whose asset is missing from the release says so instead of silently taking
+// another game's build.
+//
+// That release also carries `_TDB` variants -- RE2_TDB66, RE3_TDB67, RE7_TDB49. Those are for the
+// pre-ray-tracing versions of those games, whose type database differs; REFramework refuses to
+// attach to the wrong one and says so in its own log. This fetches the ordinary asset, which is the
+// current build a default Steam install gets.
+const PD_UPSCALER_RELEASES_API = 'https://api.github.com/repos/TheRazerMD/REFramework/releases';
+const PD_UPSCALER_SOURCE_LABEL = 'TheRazerMD/REFramework (pd-upscaler builds)';
 const PD_PLUGIN_NAME = 'PDPerfPlugin.dll';
-const PD_PLUGIN_PAGE_URL = 'https://www.nexusmods.com/site/mods/502';
-const PD_PLUGIN_PAGE_LABEL = 'Upscaler Base Plugin by PureDark on Nexus Mods';
+// 1.1.2 specifically, not "latest". OptiScaler's wiki is explicit that 1.2.0 "doesn't load the
+// back-end properly", and the plugin is the piece the user has to fetch by hand -- so the link they
+// are given has to land on the version that works, not on the newest file.
+const PD_PLUGIN_PAGE_URL = 'https://www.nexusmods.com/site/mods/502?tab=files&file_id=2293';
+const PD_PLUGIN_PAGE_LABEL = 'Upscaler Base Plugin 1.1.2 by PureDark on Nexus Mods';
+const PD_PLUGIN_WANTED_VERSION = '1.1.2';
 // Which REFramework build this app placed, so a standard one it put there earlier can be
 // swapped for the pd build without touching a hand-placed dinput8.dll.
 const REFRAMEWORK_BUILD_MARKER = '.dlss5ui-reframework.json';
@@ -61,8 +83,15 @@ function pdStatus(dir, exePath) {
   };
 }
 
-// The nightly.link artifact is a zip holding REFramework.zip, which holds dinput8.dll and
-// reframework_revision.txt. Returns the revision text (the build's commit) once extracted.
+// The asset in that release for one game code: RE2 -> RE2.zip.
+function pdUpscalerAssetName(game) {
+  return `${game}.zip`;
+}
+
+// Handles both shapes on purpose: TheRazerMD's per-game zip holds dinput8.dll flat, while the old
+// nightly.link artifact was a zip holding REFramework.zip holding the dll. A cached copy from
+// before this change is still a valid zip of the second kind. Returns the revision text (the
+// build's commit) when the zip carries one.
 function extractPdReframework(zipPath, destDll) {
   const outer = openZip(zipPath);
   let inner = outer;
@@ -76,6 +105,7 @@ function extractPdReframework(zipPath, destDll) {
 }
 
 module.exports = {
-  PD_UPSCALER_EXES, PD_UPSCALER_ZIP_URL, PD_PLUGIN_NAME, PD_PLUGIN_PAGE_URL, PD_PLUGIN_PAGE_LABEL, REFRAMEWORK_BUILD_MARKER,
+  PD_UPSCALER_EXES, PD_UPSCALER_RELEASES_API, PD_UPSCALER_SOURCE_LABEL, pdUpscalerAssetName,
+  PD_PLUGIN_NAME, PD_PLUGIN_PAGE_URL, PD_PLUGIN_PAGE_LABEL, PD_PLUGIN_WANTED_VERSION, REFRAMEWORK_BUILD_MARKER,
   pdUpscalerGame, pdStatus, readBuildMarker, writeBuildMarker, extractPdReframework,
 };
