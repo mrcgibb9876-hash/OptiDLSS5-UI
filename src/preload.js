@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('api', {
   saveSettings: (settings) => ipcRenderer.invoke('data:save-settings', settings),
 
   pickExe: () => ipcRenderer.invoke('pick:exe'),
+  exeCandidates: (exePath) => ipcRenderer.invoke('game:exe-candidates', exePath),
   pickFolder: (title) => ipcRenderer.invoke('pick:folder', title),
   pickDll: () => ipcRenderer.invoke('pick:dll'),
   pickImage: () => ipcRenderer.invoke('pick:image'),

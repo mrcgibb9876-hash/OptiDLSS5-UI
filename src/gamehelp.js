@@ -40,7 +40,11 @@ function diagnose(ctx) {
   // Hard stops first: nothing the app deploys can run in these. A 32-bit game has an experimental
   // route now (legacy.js); only one that route cannot serve (32-bit Vulkan) is a stop.
   if (d.bitness === 32 && route.route !== 'feeder32') return out('unavailable', 'bit32');
-  if (d.antiCheat) return out('unavailable', 'anticheat', { antiCheat: d.antiCheat });
+  // Anti-cheat with no way past it is still a hard stop. Anti-cheat the game is *launched through*
+  // is not: that stub can be stepped around (detect.js's antiCheatStub; game:launch does it, after
+  // asking), so the route stays open and the trade -- no online play, and a ban risk for going
+  // online anyway -- is the user's to make. The card shows the anti-cheat warning either way.
+  if (d.antiCheat && !d.protectedLauncher) return out('unavailable', 'anticheat', { antiCheat: d.antiCheat });
   if (route.route === 'unsupported') return out('unavailable', 'unsupported', { reason: route.reason || '' });
 
   // Two stacks on one DLSS call crash before anything else can be judged.
@@ -78,7 +82,18 @@ function diagnose(ctx) {
   }
 
   // What the last run said.
-  if (!run.ran || run.verdict === 'no-log') return out('needs-run', 'needs-run');
+  if (!run.ran || run.verdict === 'no-log') {
+    // On a stub game, "no log at all" is the expected outcome of launching through Steam: the
+    // anti-cheat refuses to start a game with an unsigned DLL beside it and writes nothing
+    // anywhere, so waiting for a run that can never happen is the wrong answer. Say which button
+    // starts the game without the stub instead.
+    if (d.protectedLauncher && route.optiInstalled) {
+      return out('step', 'anticheat-launch-direct', {
+        antiCheat: d.antiCheat || '', stub: d.protectedLauncher.stub || '',
+      });
+    }
+    return out('needs-run', 'needs-run');
+  }
   switch (run.verdict) {
     case 'nr-ran':
       return out('ok', 'ok', { count: run.nrDispatch, fps: run.fps || 0, api: (run.runtimeApi || '').toUpperCase() });

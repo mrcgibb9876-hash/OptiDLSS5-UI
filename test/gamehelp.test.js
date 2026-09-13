@@ -114,3 +114,33 @@ test('Resident Evil 2: the pd route asks for its three files in order, then for 
   t4.pdUpscaler = t3.pdUpscaler;
   assert.equal(diagnose(t4).status, 'ok');
 });
+
+test('anti-cheat is a hard stop only when there is no stub to step around', () => {
+  const base = {
+    detected: { bitness: 64, antiCheat: 'EasyAntiCheat' },
+    route: { route: 'feeder', optiInstalled: true, feederDeployed: true },
+    run: { ran: false, verdict: 'no-log' },
+  };
+  // No stub: nothing this app installs can ever run, and saying so is the honest answer.
+  const blocked = diagnose(base);
+  assert.equal(blocked.status, 'unavailable');
+  assert.equal(blocked.code, 'anticheat');
+
+  // A stub: the route stays open, and "no log at all" is explained rather than waited on -- that
+  // launch cannot write a log, so Game Help points at the button that starts the game directly.
+  const withStub = diagnose({
+    ...base,
+    detected: { ...base.detected, protectedLauncher: { stub: 'start_protected_game.exe', antiCheat: 'EasyAntiCheat' } },
+  });
+  assert.equal(withStub.status, 'step');
+  assert.equal(withStub.code, 'anticheat-launch-direct');
+  assert.equal(withStub.vars.stub, 'start_protected_game.exe');
+
+  // Once a run has happened, the run is the finding again -- the stub note never hides a verdict.
+  const ran = diagnose({
+    ...base,
+    detected: { ...base.detected, protectedLauncher: { stub: 'start_protected_game.exe' } },
+    run: { ran: true, verdict: 'nr-ran', nrDispatch: 40, fps: 90 },
+  });
+  assert.equal(ran.status, 'ok');
+});

@@ -44,6 +44,12 @@
         <input id="game-exe" type="text" data-i18n-placeholder placeholder="Browse for the game's .exe, or paste a path..." />
         <button id="btn-browse-exe" class="btn btn-ghost" data-i18n>Browse</button>
       </div>
+      <!-- The exes this game's own folder holds, the automatic guess first. That guess is right for
+           most games and wrong for some (several exes, or a launcher that looks like the game), and
+           this is how it gets corrected without leaving Edit. Everything below follows the exe, so
+           changing it re-runs detection for the new one. -->
+      <select id="game-exe-candidates" class="hidden"></select>
+      <p id="game-exe-note" class="field-hint hidden"></p>
 
       <label class="field-label" data-i18n>Display name</label>
       <input id="game-name" type="text" data-i18n-placeholder placeholder="Game name" />

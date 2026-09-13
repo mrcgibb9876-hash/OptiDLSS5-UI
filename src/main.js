@@ -7,7 +7,8 @@ const { spawn, execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const crypto = require('node:crypto');
 
-const { scanForGames } = require('./discover');
+const discover = require('./discover');
+const { scanForGames } = discover;
 const framegen = require('./framegen');
 const injector = require('./injector');
 const feeder = require('./feeder');
@@ -18,7 +19,7 @@ const nativeDlss = require('./native-dlss');
 const { recommendRoute, withApiOverride, API_OVERRIDE_VALUES } = require('./route');
 const gpu = require('./gpu');
 const amdnr = require('./amdnr');
-const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, peImports, peBitness, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
+const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, antiCheatPresent, peImports, peBitness, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const managerUpdate = require('./manager-update');
 const runlog = require('./runlog');
@@ -883,8 +884,31 @@ ipcMain.handle('pick:exe', async () => {
     filters: [{ name: 'Executable', extensions: ['exe'] }]
   });
   if (res.canceled || res.filePaths.length === 0) return null;
-  // An Unreal root launcher stub is swapped for the shipping exe it spawns -- see detect.js.
-  return resolveUnrealShippingExe(res.filePaths[0]);
+  // An Unreal root launcher stub is swapped for the shipping exe it spawns (detect.js) -- but the
+  // swap is now reported rather than silently applied. Someone who browses to a particular exe and
+  // gets a different path back reads that as the app overruling them, which is the "I change it in
+  // Edit and it defaults back" report. Edit shows what happened and offers the original.
+  const picked = res.filePaths[0];
+  const resolved = resolveUnrealShippingExe(picked);
+  return { path: resolved, picked, swapped: resolved.toLowerCase() !== picked.toLowerCase() };
+});
+
+// Every exe in this game's folder tree, best candidates first, so Edit can offer the real choices
+// rather than only a Browse dialog. Same walker and scoring the library scan uses, so the list and
+// its order match what the scan would propose -- with the game's current exe always in it, even
+// when the scoring would not have picked that one.
+ipcMain.handle('game:exe-candidates', (_evt, exePath) => {
+  try {
+    if (!exePath) return { ok: true, candidates: [], root: null };
+    const root = nativeDlss.installRoot(gameDir(exePath));
+    const picked = discover.chooseExe(root, path.basename(root));
+    const ordered = picked ? [picked.exePath, ...(picked.alternatives || [])] : [];
+    const candidates = [...new Set([path.resolve(exePath), ...ordered.map((p) => path.resolve(p))])]
+      .filter((p) => fs.existsSync(p));
+    return { ok: true, root, candidates };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error), candidates: [], root: null };
+  }
 });
 
 ipcMain.handle('pick:folder', async (_evt, title) => {
@@ -2154,13 +2178,87 @@ function launchTarget(exePath) {
   return fs.existsSync(resolved) ? resolved : exePath;
 }
 
+// Has this app put anything in this folder? The anti-cheat stub question below only arises for a
+// game this app has actually modified -- an untouched game should launch exactly as Steam intends.
+function stackInstalledHere(dir) {
+  return ['.optiscaler-manager-install.json', '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json']
+    .some((name) => fs.existsSync(path.join(dir, name)));
+}
+
+// Launching past an anti-cheat stub: asked once per game, remembered on a yes, and never assumed.
+// The consequence is real (an account, if someone then goes online), so the wording says it.
+async function confirmLaunchWithoutAntiCheat(exePath, { stub, antiCheat, appId }) {
+  const settings = readJson(settingsFile(), {});
+  const remembered = settings.launchWithoutAntiCheat || {};
+  const key = String(exePath).toLowerCase();
+  if (remembered[key]) return true;
+
+  const name = path.basename(exePath);
+  const res = await dialog.showMessageBox({
+    type: 'question',
+    buttons: ['Launch without anti-cheat', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1,
+    title: 'This game starts through its anti-cheat',
+    message: `${name} runs under ${antiCheat || 'anti-cheat'}.`,
+    detail: `Steam does not start the game directly: it runs ${stub}, which starts ${antiCheat || 'the anti-cheat service'} `
+      + 'and then the game under it. Anti-cheat will not let the game start with OptiScaler\'s DLL in the folder, so that '
+      + `launch fails with nothing written to any log at all.\n\nStarting ${name} directly skips the stub. `
+      + 'Single-player works. Online play and matchmaking do not, and playing online with these files in place can get '
+      + 'the account banned -- so keep this game offline while it is modded, and use Remove before going back online.',
+    checkboxLabel: 'Do not ask again for this game',
+    checkboxChecked: false,
+    noLink: true,
+  });
+  if (res.response !== 0) return false;
+  if (res.checkboxChecked) {
+    writeJson(settingsFile(), { ...settings, launchWithoutAntiCheat: { ...remembered, [key]: true } });
+  }
+  return true;
+}
+
 ipcMain.handle('game:launch', async (_evt, { exePath, dryRun = false } = {}) => {
   try {
     const target = launchTarget(exePath);
+    const dir = path.dirname(target);
+    const steamAppId = library.steamAppIdFor(target);
+    // An anti-cheat stub (detect.js's antiCheatStub) is a dead end for everything this app
+    // installs: Steam runs the stub, the stub starts the anti-cheat, and the game then refuses to
+    // start at all -- no log, nothing to diagnose (Armored Core VI, 2026-09-13). The game's own
+    // exe is right beside it and starts without the anti-cheat, so that is what gets launched,
+    // once the person has said yes to what it costs (no online play, and a ban risk if they go
+    // online anyway). Only for a game this app has modified, and never silently.
+    const stubInfo = stackInstalledHere(dir) ? antiCheatStub(dir) : null;
+    if (stubInfo) {
+      // The exe on record can itself be the stub -- a BattlEye game's <Game>_BE.exe is what a
+      // launcher points at, and it is the one a user picks when adding the game by hand. The stub
+      // names the exe it fronts, so launch that instead of re-running the stub.
+      const real = stubInfo.gameExe && path.basename(target).toLowerCase() === stubInfo.stub.toLowerCase()
+        ? path.join(dir, stubInfo.gameExe)
+        : target;
+      const stub = stubInfo.stub;
+      const antiCheat = stubInfo.antiCheat || antiCheatPresent(dir, real);
+      if (dryRun) return { ok: true, target: real, via: 'exe-no-anticheat', steamAppId, stub, antiCheat };
+      if (!(await confirmLaunchWithoutAntiCheat(real, { stub, antiCheat, appId: steamAppId }))) {
+        return { ok: true, cancelled: true, target: real, via: 'exe-no-anticheat', stub, antiCheat };
+      }
+      // steam_api64.dll reads SteamAppId (or steam_appid.txt) to initialise when the game was not
+      // started by Steam itself. Passed in the environment rather than written into the game
+      // folder: nothing to clean up afterwards, and no file for a verify-files pass to fight over.
+      // Steam still has to be running and still has to own the game -- this is not a DRM bypass.
+      const env = { ...process.env };
+      if (steamAppId) { env.SteamAppId = String(steamAppId); env.SteamGameId = String(steamAppId); }
+      const child = spawn(target, [], { cwd: dir, detached: true, stdio: 'ignore', windowsHide: false, env });
+      await new Promise((resolve, reject) => {
+        child.once('spawn', resolve);
+        child.once('error', (e) => reject(new Error(`could not start ${path.basename(target)}: ${e && e.message ? e.message : e}`)));
+      });
+      child.unref();
+      return { ok: true, target, via: 'exe-no-anticheat', steamAppId, stub, antiCheat };
+    }
     // A Steam-installed game goes through Steam: its DRM, overlay, cloud saves and launch
     // options all expect that, and some games refuse to start any other way. Steam then runs the
     // same exe (through the game's own stub where it has one). Everything else runs directly.
-    const steamAppId = library.steamAppIdFor(target);
     if (steamAppId) {
       if (!dryRun) await shell.openExternal(`steam://rungameid/${steamAppId}`);
       return { ok: true, target, via: 'steam', steamAppId };

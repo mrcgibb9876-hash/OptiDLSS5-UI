@@ -293,6 +293,26 @@ its own folder, and for an Unreal game that means the
 `<Project>-Win64-Shipping.exe` under `<Project>BinariesWin64` -- the process that actually renders and the one
 OptiScaler is installed beside -- even when the card was added from the launcher stub in the install root.
 
+**A game that starts through an anti-cheat stub is the exception**, and it is the one launch that cannot work
+any other way. Steam does not start such a game directly: it runs a small launcher -- EasyAntiCheat's
+`start_protected_game.exe` (FromSoftware's titles, and plenty of Unity and Unreal EAC games) or BattlEye's
+`<Game>_BE.exe` -- which starts the anti-cheat and then the game under it. The anti-cheat will not let the game
+run with OptiScaler's DLL in the folder, and the failure is silent: no OptiScaler.log, no ReShade.log, no
+dlss5-feed.log, nothing to read at all. So for a game this app has modified, **Launch starts the game's own exe
+instead**, passing the Steam appid in the environment so the game still initialises against Steam (which still
+has to be running, and still has to own the game -- nothing here touches DRM). It asks first, once per game, and
+says what it costs: single-player works, **online play and matchmaking do not, and playing online with these
+files in place can get the account banned**. Use **Remove** before going back online. Game Help says the same
+thing when it sees a modded stub game with nothing logged, instead of waiting for a run that can never happen.
+
+**Picking a different exe.** The app proposes one exe per game and is right for nearly all of them, but a game
+with several -- or one whose launcher looks more like the game than the game does -- needs correcting. Edit's
+**Game .exe** field lists the exes in that game's own folder, best guess first, and saving a new one re-detects
+the game for it rather than keeping the old exe's answers (which is what used to leave a card reading "unknown
+support"). Browsing to an Unreal launcher stub still resolves to the shipping exe it spawns, but it now says so
+and keeps your original one click away. A game whose exe you changed is also no longer re-proposed by the next
+library scan as a second card.
+
 ## Game Help
 
 Every card has a **Game Help** button. It checks what the app already knows about the game -- the
@@ -307,7 +327,8 @@ DLSS 5 toolchains in the folder, the verified-games registry -- against a rule t
   Feeder's motion-vector half again when DLSS is being fed no vectors, switch a flat-depth game to
   the verified Unity depth profile, move a game's broken `D3D12\` Agility redist aside, or Install.
   One button applies it.
-- **Your move** -- something only you can do in-game, such as selecting DLSS in Luma's overlay.
+- **Your move** -- something only you can do: selecting DLSS in Luma's overlay in-game, or launching a
+  stub-protected game from this app rather than through Steam (see above).
 - **Needs a run** -- no log yet. **Launch and check** starts the game and reads the new log by itself
   once you have reached gameplay and quit.
 - **Not available** -- DLSS 5 cannot work here with what this app deploys: a 32-bit game, anti-cheat,

@@ -133,3 +133,35 @@ test('a 64-bit game that links only OpenGL is an OpenGL Feeder game, not unsuppo
   assert.equal(d.recommend, 'optiscaler');
   assert.match(d.reason, /opengl32\.dll/);
 });
+
+test('an anti-cheat stub is told apart from anti-cheat with no way past it', () => {
+  const root = path.join(scratchDir('stub'), 'Games');
+  const game = (name) => { const d = path.join(root, name); fs.mkdirSync(d, { recursive: true }); return d; };
+
+  // EasyAntiCheat's own launcher: the name says nothing about which exe it fronts, and the game's
+  // own exe is the one the app already has on record.
+  const eac = path.join(game('ARMORED CORE VI'), 'Game');
+  write(eac, 'start_protected_game.exe');
+  write(eac, 'EasyAntiCheat/settings.json');
+  write(eac, 'armoredcore6.exe');
+  assert.deepEqual(detect.antiCheatStub(eac), { stub: 'start_protected_game.exe', antiCheat: 'EasyAntiCheat', gameExe: null });
+
+  // BattlEye's names the exe it fronts, so the launch can be pointed at it.
+  const be = game('WithBattlEye');
+  write(be, 'RainbowSix_BE.exe');
+  write(be, 'RainbowSix.exe');
+  assert.deepEqual(detect.antiCheatStub(be), { stub: 'RainbowSix_BE.exe', antiCheat: 'BattlEye', gameExe: 'RainbowSix.exe' });
+
+  // A _BE.exe with nothing to front is not a door this app can use: guessing would launch a file
+  // that is not there.
+  const orphan = game('OrphanStub');
+  write(orphan, 'Something_BE.exe');
+  assert.equal(detect.antiCheatStub(orphan), null);
+
+  // Anti-cheat with no stub at all (a service or a kernel driver) stays a hard stop.
+  const driver = game('WithVanguard');
+  write(driver, 'vgc.exe');
+  write(driver, 'vanguard/readme.txt');
+  assert.equal(detect.antiCheatStub(driver), null);
+  assert.match(detect.antiCheatPresent(driver, path.join(driver, 'Game.exe')), /vanguard/i);
+});

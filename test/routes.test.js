@@ -7,6 +7,7 @@ const { REPO, scratchDir, write, fakeExe } = require('./helpers');
 const route = require(path.join(REPO, 'src', 'route'));
 const lumaue = require(path.join(REPO, 'src', 'lumaue'));
 const runlog = require(path.join(REPO, 'src', 'runlog'));
+const discover = require(path.join(REPO, 'src', 'discover'));
 
 const UE4_DX11 = { engineId: 'unreal', engine: 'Unreal Engine 4.21', engineVersion: '4.21', api: 'dx11' };
 
@@ -163,4 +164,25 @@ test('the pd-upscaler REFramework download (zip inside a zip) yields dinput8.dll
   const rev = reengine.extractPdReframework(zip, dest);
   assert.ok(fs.statSync(dest).size > 1024 * 1024);
   assert.ok(rev && rev.length >= 7, 'revision text present');
+});
+
+test('a game already on the grid is not re-proposed after its exe was changed by hand', () => {
+  // The library scan used to dedupe on the exact exe it would pick. Someone who corrected a game's
+  // exe in Edit got that game offered again as a new card, pointing back at the wrong exe.
+  const root = path.join(scratchDir('rescan'), 'common');
+  const dir = path.join(root, 'Some Game');
+  fs.mkdirSync(dir, { recursive: true });
+  write(dir, 'SomeGame.exe', 'x'.repeat(4096));
+  write(dir, 'SomeGame_Launcher.exe', 'x'.repeat(4096));
+  const picked = discover.chooseExe(dir, 'Some Game');
+  assert.ok(picked, 'the scan picks something');
+
+  const scan = (knownExePaths) => discover.scanForGames({ extraFolders: [root], knownExePaths }).games
+    .filter((g) => g.dir.toLowerCase() === dir.toLowerCase());
+
+  assert.equal(scan([]).length, 1, 'an unknown game is offered');
+  assert.equal(scan([picked.exePath]).length, 0, 'the exe the scan would pick is known');
+  // The one that matters: a different exe in the same folder, which is what a hand-correction
+  // leaves behind.
+  assert.equal(scan([path.join(dir, 'SomeGame_Launcher.exe')]).length, 0, 'same folder, different exe: still known');
 });

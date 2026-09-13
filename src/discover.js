@@ -5,7 +5,10 @@ const path = require('path');
 const { discover } = require('./library');
 const { resolveUnrealShippingExe } = require('./detect');
 // Installers, launchers, anti-cheat helpers, script extenders: never the game itself.
-const NOT_A_GAME_EXE = /^(unins|setup|install|vcredist|vc_redist|dxsetup|dxwebsetup|dotnet|dotnetfx|oalinst|crashpad|crashreport|crashhandler|launcher_installer|easyanticheat|eac|battleye|be_service|activation|patch|update|touchup|rapidcrc|autorun|autoplay|quicksfv|readme|config|cleanup|modorganizer|redlauncher|skse\d*_loader|steamerrorreporter|dgvoodoocpl|reshade_setup|gamelaunchhelper)/i;
+// start_protected_game.exe is EasyAntiCheat's own launcher (detect.js's antiCheatStub): it starts
+// the anti-cheat and then the real exe, so it is never the game and never what this app installs
+// beside -- it was showing up as a candidate for every FromSoftware game.
+const NOT_A_GAME_EXE = /^(unins|setup|install|vcredist|vc_redist|dxsetup|dxwebsetup|dotnet|dotnetfx|oalinst|crashpad|crashreport|crashhandler|launcher_installer|easyanticheat|eac|battleye|be_service|start_protected_game|belauncher|eaclauncher|activation|patch|update|touchup|rapidcrc|autorun|autoplay|quicksfv|readme|config|cleanup|modorganizer|redlauncher|skse\d*_loader|steamerrorreporter|dgvoodoocpl|reshade_setup|gamelaunchhelper)/i;
 const NOT_THE_GAME = /(launcher|crashreport|crashhandler|redist|touchup|activation|eac|easyanticheat|battleye|be_service|steam_api|dxwebsetup|helper|updater|report|benchmark|editor|server|dedicated)/i;
 const GOOD_DIRS = /(?:^|[\\/])(binaries[\\/]win64|binaries[\\/]win32|bin[\\/]x64|bin[\\/]win64|bin|x64|win64|game)(?:[\\/]|$)/i;
 
@@ -117,6 +120,19 @@ function scanForGames({ extraFolders = [], scanDrives = false, excludedRoots = [
     const { games, roots } = discover(extraFolders, scanDrives, excludedRoots);
 
     const known = new Set(knownExePaths.map((p) => String(p).toLowerCase()));
+    // A game already on the grid is skipped by its folder, not only by the exact exe this scan
+    // would pick for it. Matching the exe alone re-proposed a game whose exe someone had changed
+    // by hand in Edit: the scan picked its own candidate again, that path was not "known", and the
+    // same game came back as a second card pointing at the exe they had just moved away from.
+    const knownExeDirs = [...known]
+        .map((p) => path.dirname(p).toLowerCase() + path.sep)
+        .filter((d) => d.length > 1);
+    const alreadyOnTheGrid = (dir) => {
+        const root = path.resolve(String(dir)).toLowerCase().replace(/[\\/]+$/, '') + path.sep;
+        // Either direction: the known exe sits inside this game's folder (an Unreal game's
+        // Binaries\Win64), or this game's folder is itself inside the known exe's folder.
+        return knownExeDirs.some((d) => d.startsWith(root) || root.startsWith(d));
+    };
     const found = [];
 
     for (const game of games) {
@@ -124,6 +140,7 @@ function scanForGames({ extraFolders = [], scanDrives = false, excludedRoots = [
         if (!picked) continue;
 
         if (known.has(picked.exePath.toLowerCase())) continue;
+        if (alreadyOnTheGrid(game.dir)) continue;
 
         found.push({
             name: game.name,
@@ -140,4 +157,4 @@ function scanForGames({ extraFolders = [], scanDrives = false, excludedRoots = [
     return { games: found, roots };
 }
 
-module.exports = { scanForGames, chooseExe };
+module.exports = { scanForGames, chooseExe, walkExes };

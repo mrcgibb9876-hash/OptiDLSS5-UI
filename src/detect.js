@@ -388,6 +388,63 @@ function antiCheatPresent(dir, exePath = null) {
   return null;
 }
 
+// The anti-cheat *stub*: a small launcher whose whole job is to start the anti-cheat service and
+// then the game under it. It is the difference between "anti-cheat is here and nothing this app
+// installs can ever run" and "anti-cheat is here, and the game's own exe starts without it".
+//
+// Why it earns its own answer: a launch through a stub fails in the most confusing way available.
+// Steam runs the stub, the stub starts the anti-cheat, the anti-cheat refuses to start a game with
+// an unsigned DLL beside it -- and nothing is written anywhere. No OptiScaler.log, no ReShade.log,
+// no dlss5-feed.log, no crash report, so Game Help would answer "no run to judge yet" for ever.
+// Confirmed on Armored Core VI (2026-09-13): a complete, correct install and not one byte of log.
+// Launching the game's own exe skips the stub entirely.
+//
+// The stub conventions this covers are the anti-cheats' own, not any one studio's or engine's --
+// Unity, Unreal and in-house games all ship the same two launchers:
+//
+//   start_protected_game.exe  EasyAntiCheat's own launcher, shipped with EAC rather than written
+//                             per game: FromSoftware's titles (Elden Ring, Armored Core VI, Dark
+//                             Souls III) and plenty of Unity and Unreal EAC games.
+//   <Game>_BE.exe, BELauncher.exe
+//                             BattlEye's: the stub starts BEService and then <Game>.exe. Here the
+//                             stub's own name says which exe it fronts, so gameExe can name it.
+//
+// What this deliberately does not promise is that the game is worth playing this way. An
+// online-only game will start and then fail to connect, because there the anti-cheat is the point.
+// That is the user's call, which is why launching this way asks first and says what it costs. A
+// game whose anti-cheat is only a service or a kernel driver, with no stub at all (Vanguard), has
+// no door of this kind, and antiCheatPresent() remains the whole answer there.
+const ANTI_CHEAT_STUBS = [
+  { name: 'start_protected_game.exe', antiCheat: 'EasyAntiCheat' },
+  { name: 'BELauncher.exe', antiCheat: 'BattlEye' },
+  { name: 'EACLauncher.exe', antiCheat: 'EasyAntiCheat' },
+  { match: /^(.+)_BE\.exe$/i, antiCheat: 'BattlEye' },
+  { match: /^(.+)_EAC\.exe$/i, antiCheat: 'EasyAntiCheat' },
+];
+
+// { stub, antiCheat, gameExe } for the stub in this folder, or null. gameExe is set only when the
+// stub's own name names the exe it fronts and that exe is really there: for EAC's generic launcher
+// the name says nothing, and the game's own exe is the one the app already has on record.
+function antiCheatStub(dir) {
+  let entries = [];
+  try { entries = fs.readdirSync(dir); } catch { return null; }
+  for (const rule of ANTI_CHEAT_STUBS) {
+    for (const entry of entries) {
+      if (rule.name) {
+        if (entry.toLowerCase() !== rule.name.toLowerCase()) continue;
+        return { stub: entry, antiCheat: rule.antiCheat, gameExe: null };
+      }
+      const hit = rule.match.exec(entry);
+      if (!hit) continue;
+      // Paired, or not a stub this app can route around: <Game>_BE.exe with no <Game>.exe beside
+      // it would send the launch at a file that is not there.
+      const paired = entries.find((e) => e.toLowerCase() === `${hit[1].toLowerCase()}.exe`);
+      if (paired) return { stub: entry, antiCheat: rule.antiCheat, gameExe: paired };
+    }
+  }
+  return null;
+}
+
 // A D3DCompiler_47.dll beside the exe that predates Windows 10 (Spider-Man Remastered ships
 // 6.3.9600 from Windows 8.1) is what the loader hands OptiScaler's D3DCompile, and Shader Model
 // 5.1 is unknown to it: the pass then compiles to nothing while everything reports success.
@@ -936,6 +993,8 @@ async function detectGame(dir, exePath) {
     vulkanWrapper: hooks.vulkanWrapper,
     reshadeProxy: hooks.reshadeProxy,
     antiCheat: antiCheatPresent(dir, exePath),
+    // The door out of an anti-cheat stub, if there is one -- see antiCheatStub().
+    protectedLauncher: antiCheatStub(dir),
     oldShaderCompiler: oldShaderCompiler(dir),
     runtimeApi: found.runtimeApi || null,
     // What OptiScaler.log looked like when this was decided -- a later run of the game is new
@@ -977,6 +1036,7 @@ async function detectEmulator(dir, exePath, emu) {
     vulkanWrapper: hooks.vulkanWrapper,
     reshadeProxy: hooks.reshadeProxy,
     antiCheat: null,
+    protectedLauncher: null,
     oldShaderCompiler: oldShaderCompiler(dir),
     runtimeApi: runtime ? runtime.api : null,
     runtimeLogMtime: logStat ? logStat.mtimeMs : null,
@@ -1068,4 +1128,4 @@ async function planForeignRemoval(dir, { ours = false } = {}) {
   return { found, del: [...del].sort(), restore, notes };
 }
 
-module.exports = { DETECT_VERSION, detectGame, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, foreignToolchains, planForeignRemoval };
+module.exports = { DETECT_VERSION, detectGame, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, foreignToolchains, planForeignRemoval };

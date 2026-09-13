@@ -302,9 +302,14 @@ async function renderGrid() {
     card.querySelector('.btn-launch').addEventListener('click', async () => {
       const res = await window.api.launchGame(game.exePath);
       if (!res.ok) { toast(t('Could not launch {name}: {error}', { name: game.name, error: res.error })); return; }
+      if (res.cancelled) { toast(t('Not launched.')); return; }
+      const exe = res.target.split(/[\\/]/).pop();
       toast(res.via === 'steam'
         ? t('Launching {name} through Steam.', { name: game.name })
-        : t('Launched {name} ({exe}).', { name: game.name, exe: res.target.split(/[\\/]/).pop() }));
+        // Said out loud on every launch, remembered choice or not: what started, and what it costs.
+        : res.via === 'exe-no-anticheat'
+          ? t('Launched {name} without {antiCheat} ({exe}) -- online play will not work while it is modded.', { name: game.name, antiCheat: res.antiCheat || t('anti-cheat'), exe })
+          : t('Launched {name} ({exe}).', { name: game.name, exe }));
     });
     card.querySelector('.btn-open').addEventListener('click', () => window.api.openFolder(game.exePath));
     card.querySelector('.btn-edit').addEventListener('click', () => openGameModal(game));
@@ -497,6 +502,7 @@ function helpWords(diag) {
     case 'bit32': return t('DLSS 5 is not currently available for this game: it is a 32-bit game, and OptiScaler and the NR model are 64-bit only.');
     case 'dgvoodoo-missing': return t('This DirectX 9 game needs dgVoodoo2 in front of it before the DLSS5 Feeder can work. Install puts it there, asking first -- antivirus flags its download, so the choice is yours.');
     case 'anticheat': return t('DLSS 5 is not currently available for this game: it runs under {antiCheat}, which blocks the DLL this app relies on. Using it there can also get an account banned.', v);
+    case 'anticheat-launch-direct': return t('Nothing has been logged, and on this game that is expected: Steam starts it through {stub}, which starts {antiCheat} first, and {antiCheat} will not let the game run with OptiScaler\'s DLL in the folder -- it fails without writing a single log. Use this app\'s own Launch button: it starts the game\'s exe directly, so {antiCheat} never loads. Single-player works; online play and matchmaking do not, and going online with these files can get the account banned -- Remove puts the game back before you do.', v);
     case 'unsupported': return t('DLSS 5 is not currently available for this game: {reason}', v);
     case 'foreign': return t('Another DLSS 5 toolchain is in this folder ({tool}). Two stacks hooking the same DLSS call crash the game. Remove it first.', v);
     case 'feeder-misdeployed': return t('The DLSS5 Feeder is deployed on a game that ships its own DLSS. Two DLSS DLLs load and the game crashes. Remove the Feeder; OptiScaler alone is the route here.');
@@ -541,6 +547,7 @@ function helpShort(diag) {
     case 'anticheat': return t('Not available: anti-cheat ({antiCheat})', v);
     case 'unsupported': return t('Not available here');
     case 'foreign': return t('Another DLSS 5 tool is in the folder');
+    case 'anticheat-launch-direct': return t('Launch from here, not Steam');
     case 'feeder-misdeployed': return t('Feeder on a game with its own DLSS');
     case 'luma-known-bad': return t('Luma UE breaks this game');
     case 'not-installed': return t('Not installed yet');
@@ -1108,6 +1115,7 @@ async function removeGame(game) {
   window.api.saveGames(games);
   renderGrid();
 }
+let lastPickedExe = null;
 const gameModal = $('#game-modal');
 
 async function openGameModal(game) {
@@ -1115,6 +1123,9 @@ async function openGameModal(game) {
   $('#game-modal-title').textContent = game ? t('Edit Game') : t('Add Game');
   $('#game-exe').value = game ? game.exePath : '';
   $('#game-name').value = game ? game.name : '';
+  lastPickedExe = null;
+  exeNote('');
+  loadExeCandidates(game);
   pendingBanner = {
     appid: game ? game.bannerAppId || null : null,
     localPath: game ? game.bannerLocalPath || null : null
@@ -2338,10 +2349,60 @@ $('#btn-add-game').addEventListener('click', () => openGameModal(null));
 $('#btn-add-game-empty').addEventListener('click', () => openGameModal(null));
 $('#btn-cancel-game').addEventListener('click', closeGameModal);
 
+// The exes in this game's folder, as a list to choose from. Shown only when there is a real choice
+// to make; the game's current exe is always the selected one, whatever the scoring thinks.
+async function loadExeCandidates(game) {
+  const select = $('#game-exe-candidates');
+  select.innerHTML = '';
+  select.classList.add('hidden');
+  if (!game || !game.exePath) return;
+  const res = await window.api.exeCandidates(game.exePath);
+  const candidates = (res && res.candidates) || [];
+  if (candidates.length < 2) return;
+  for (const p of candidates) {
+    const opt = document.createElement('option');
+    opt.value = p;
+    // The path relative to the game's folder reads better than a repeated absolute prefix.
+    opt.textContent = res.root && p.toLowerCase().startsWith(res.root.toLowerCase())
+      ? p.slice(res.root.length).replace(/^[\\/]+/, '')
+      : p;
+    select.appendChild(opt);
+  }
+  select.value = candidates.find((p) => p.toLowerCase() === game.exePath.toLowerCase()) || candidates[0];
+  select.classList.remove('hidden');
+  select.onchange = () => {
+    $('#game-exe').value = select.value;
+    exeNote(t('Save to use this exe -- the game is detected again for it.'));
+  };
+}
+
+function exeNote(text) {
+  const note = $('#game-exe-note');
+  note.textContent = text || '';
+  note.classList.toggle('hidden', !text);
+}
+
 $('#btn-browse-exe').addEventListener('click', async () => {
-  const p = await window.api.pickExe();
-  if (!p) return;
+  const res = await window.api.pickExe();
+  if (!res) return;
+  const p = typeof res === 'string' ? res : res.path;
   $('#game-exe').value = p;
+  // An Unreal launcher stub was swapped for the shipping exe it spawns. Said out loud, with the
+  // original one click away -- the swap is right for a packaged Unreal game and wrong for anything
+  // it misreads, and silently overruling the choice is what made this look broken.
+  if (res && res.swapped) {
+    exeNote(t('That exe only launches {shipping}, which is the process this app has to install beside -- so it was used instead. Click Browse again and pick the same file to keep {picked} anyway.',
+      { shipping: p.split(/[\\/]/).pop(), picked: res.picked.split(/[\\/]/).pop() }));
+    // A second identical pick means they meant it: honour the original next time round.
+    if (lastPickedExe && lastPickedExe.toLowerCase() === res.picked.toLowerCase()) {
+      $('#game-exe').value = res.picked;
+      exeNote(t('Using {picked}, as picked.', { picked: res.picked.split(/[\\/]/).pop() }));
+    }
+    lastPickedExe = res.picked;
+  } else {
+    exeNote('');
+    lastPickedExe = null;
+  }
   if (!$('#game-name').value) {
     // The Steam manifest's name where the exe sits in a Steam library, else a folder or exe
     // name that says something -- "re2" as a name found Red Dead Redemption 2's art.
@@ -2401,11 +2462,28 @@ $('#btn-save-game').addEventListener('click', async () => {
 
   if (editingGameId) {
     const g = games.find((x) => x.id === editingGameId);
+    // A changed exe changes every answer about the game: its API, its engine, its route, whether it
+    // ships DLSS. The stored detection belongs to the old exe, so it goes -- keeping it is what
+    // left a card reading "unknown support" after someone corrected the exe by hand, since
+    // detection only re-runs when it is missing or when DETECT_VERSION has moved on.
+    const exeChanged = String(g.exePath || '').toLowerCase() !== exePath.toLowerCase();
     g.exePath = exePath;
     g.name = name;
     g.bannerAppId = pendingBanner.appid;
     g.bannerLocalPath = pendingBanner.localPath;
     g.launchMode = launchMode;
+    if (exeChanged) {
+      g.detectedPath = null;
+      // Chosen by a person: nothing should quietly re-resolve it afterwards.
+      g.exeLocked = true;
+      await window.api.saveGames(games);
+      // Detected now rather than on the next render, so the card is right the moment it reappears.
+      g.detectedPath = await window.api.detectPath(exePath);
+      toast(t('Now using {exe}. Detected again: {reason}', {
+        exe: exePath.split(/[\\/]/).pop(),
+        reason: (g.detectedPath && g.detectedPath.reason) || t('nothing conclusive -- Edit has a manual render-API override'),
+      }));
+    }
   } else {
     games.push({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
