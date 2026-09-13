@@ -3020,6 +3020,11 @@ const LOAD_RESHADE_FORCED = [
   { section: 'Plugins', key: 'LoadReshade', value: 'true' },
 ];
 
+// See the Feeder branch in autoConfigureGame() for the measurement behind this one.
+const FEEDER_PRE_SR_OFF = [
+  { section: 'DlssNr', key: 'RunBeforeSR', value: 'false' },
+];
+
 // OptiScaler's own Frame Generation, opted into per game -- see optiFgReadiness() below for
 // why this only ever applies to a D3D12 game. FSRFG specifically (not DLSSG/XeFG): it's plain
 // ini config with no Streamline dependency, which is what makes it reachable through a Feeder
@@ -3160,6 +3165,20 @@ async function autoConfigureGame(dir, exePath) {
     // OptiScaler would be two ReShades.
     const local = feeder.feederReShadeMode(dir) === 'local';
     forced = [...forced, ...patchIniValues(iniPath, local ? LOAD_RESHADE_FORCED : [{ section: 'Plugins', key: 'LoadReshade', value: 'false' }])];
+    // Neural Rendering before Super Resolution: off, on a Feeder game specifically.
+    //
+    // Measured on Armored Core VI (2026-09-13) -- same game, same frame contract, one setting
+    // apart, twice each way. With RunBeforeSR off the model evaluated (1.99 ms measured) and
+    // frames were delivered; with it on, the evaluate faulted inside nvngx_dlssnr.dll reading
+    // 0xFFFFFFFFFFFFFFFF and the feed stopped on the spot.
+    //
+    // Pre-SR runs the neural pass on the game's own pre-upscale colour. A Feeder game has no such
+    // thing: the "upscaler input" is a synthetic DLAA contract the Feeder builds out of ReShade's
+    // capture, so the placement the setting asks for is not there to use. Forced rather than
+    // defaulted, like the keys above, because the in-game panel writes this one back on every
+    // change -- and a crash is not a preference. The panel can still turn it on for a native-DLSS
+    // game, where it is a real choice and works.
+    forced = [...forced, ...patchIniValues(iniPath, FEEDER_PRE_SR_OFF)];
   }
   // Luma UE deploys its own ReShade64.dll the same non-proxying way the Feeder does (see
   // lumaue.js's file header) -- OptiScaler needs the same explicit LoadReshade nudge to load it.

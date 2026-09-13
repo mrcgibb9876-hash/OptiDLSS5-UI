@@ -465,3 +465,26 @@ test('switching away from a provider deployed before mvFiles existed still takes
   }
   assert.ok(fs.existsSync(path.join(dir, 'reshade-shaders', 'Shaders', 'vort_Motion.fx')), 'and the new provider is in');
 });
+
+test('a Feeder game is configured with Neural Rendering before SR switched off', async () => {
+  // Measured on Armored Core VI: pre-SR on that path faults inside the model and stops the feed,
+  // because a Feeder game has no pre-upscale colour of its own for the pass to run on.
+  const { loadMain, fakeExe, fakeReleaseFolder, fakeNrModel } = require('./helpers');
+  const base = scratchDir('presr-off');
+  const dir = path.join(base, 'common', 'Feeder Game');
+  const exe = fakeExe(dir, 'game.exe');
+  if (!fs.existsSync(exe)) return; // needs a real PE (Windows only)
+  write(dir, 'dlss5-feed.addon64');
+  write(dir, 'ReShade64.dll');
+  write(dir, 'nvngx_dlss.dll');
+  write(dir, '.dlss5ui-feeder-deploy.json', JSON.stringify({ feederVersion: 'v1', mvProviderId: 'vort', reshadeMode: 'local' }));
+  write(dir, 'OptiScaler.ini', '[DlssNr]\nEnabled = true\nRunBeforeSR = true\n\n[Plugins]\nLoadReshade = auto\n');
+
+  const { invoke } = loadMain({ userData: scratchDir('presr-ud') });
+  // The same entry point Game Help's Reconfigure uses.
+  const res = await invoke('game:help-apply', { exePath: exe, fixId: 'reconfigure' });
+  assert.ok(res.ok, res.error || 'reconfigured');
+  const ini = fs.readFileSync(path.join(dir, 'OptiScaler.ini'), 'utf8');
+  assert.match(ini, /RunBeforeSR\s*=\s*false/, 'pre-SR is forced off for a Feeder game');
+  assert.match(ini, /LoadReshade\s*=\s*true/, 'and the existing forcing still happens');
+});
