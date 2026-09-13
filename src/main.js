@@ -2778,7 +2778,20 @@ async function deployStreamlineFolder(dir, exePath) {
 // Dogma 2 and the other modern RE Engine titles hook the game's own DLSS call and need none of it.
 const PD_UPSCALER_HOTFIX = [
   { section: 'Spoofing', key: 'Dxgi', value: 'false' },
-  { section: 'Menu', key: 'OverlayMenu', value: 'false' },
+  // OverlayMenu=TRUE, against the wiki, which calls false "required for the OptiScaler menu to
+  // function correctly" on these games. On the v10 build this app ships, false is what crashes.
+  //
+  // false selects the old overlay, which draws onto the upscaled image -- and on this route that
+  // image belongs to PureDark's plugin, on PureDark's own command list. Menu_Dx12::Render access
+  // violates on it. That is the whole crash: Resident Evil 2 died about 450 upscaled frames in,
+  // every run, on every OptiScaler tried including upstream 0.9.4, and the faulting address
+  // resolved through a link map to Menu_Dx12::Render+0xAF, not to the upscaler at all. With
+  // OverlayMenu=true the same install ran 40,000+ dispatches with Neural Rendering active and no
+  // crash (2026-09-13).
+  //
+  // The cost is the one the wiki was buying: the overlay is the new swapchain one, so the OptiScaler
+  // menu no longer draws only while upscaling is running. That is a better trade than a crash.
+  { section: 'Menu', key: 'OverlayMenu', value: 'true' },
 ];
 // What OptiScaler v10 put in its OptiScaler\ subfolder that PureDark's plugin still expects beside
 // the exe. libxess.dll is the one the wiki names; the other two are its siblings and cost nothing.
