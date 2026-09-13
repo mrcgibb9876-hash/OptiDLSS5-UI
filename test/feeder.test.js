@@ -538,3 +538,44 @@ test('OptiScaler switching DLSS off for a missing nvngx_dlss.dll is read straigh
   assert.equal(diag.code, 'dlss-runtime-missing');
   assert.equal(diag.fix.id, 'reconfigure', 'and Reconfigure is what places the file');
 });
+
+test('a run that dropped every frame, and a run that was not DLSS at all, stop reading as "DLSS 5 ran"', async () => {
+  // Both taken from a real Resident Evil 2 session (REFramework pd-upscaler + PureDark's plugin,
+  // 2026-09-13). The neural pass dispatches in both, which is exactly why they used to come back
+  // as a clean run while the user was looking at a black screen.
+  const dir = scratchDir('re2-verdicts');
+  const nrRan = 'DlssNr_Dx12::Dispatch DLSS-NR running after SR: target 2560x1570, model 2560x1570, guides 1157x710\n';
+  const head = 'Log.LogLevel: 1\nNVSDK_NGX_D3D12_Init_Ext AppId: 231313132\nTryCreateOptiFeature Creating OptiScaler feature, HandleId: 1000000\n';
+
+  // The black screen: OptiScaler refused to dispatch on PureDark's command list, every frame.
+  write(dir, 'OptiScaler.log', head + nrRan
+    + "TryEvaluateOptiFeature Skipping upscaling because can't restore root signature\n".repeat(3));
+  let run = await runlog.analyzeRun(dir);
+  assert.equal(run.verdict, 'upscale-skipped', 'not nr-ran, even though the neural pass dispatched');
+  assert.equal(run.upscaleSkipped, 3);
+  let diag = diagnose({
+    detected: { bitness: 64 },
+    route: { route: 'reframework-pd', optiInstalled: true },
+    run,
+  });
+  assert.equal(diag.code, 'upscale-skipped');
+  assert.equal(diag.status, 'unavailable', 'no fix is offered: the alternative is a crash');
+
+  // The silent substitution: DLSS would not create, so something else did the upscaling.
+  write(dir, 'OptiScaler.log', head
+    + 'DLSSFeatureDx12::InitDLSS _CreateFeature result: BAD0000B\n'
+    + "TryCreateOptiFeature Feature 'DLSS' initialization failed falling back to FSR 2.1.2\n"
+    + nrRan);
+  run = await runlog.analyzeRun(dir);
+  assert.equal(run.verdict, 'sr-backend-fallback');
+  assert.deepEqual(run.srBackendFallback, { from: 'DLSS', to: 'FSR 2.1.2' });
+  assert.equal(run.srCreateResult, 'BAD0000B', 'the NGX result is carried for a bug report');
+  diag = diagnose({ detected: { bitness: 64 }, route: { route: 'reframework-pd', optiInstalled: true }, run });
+  assert.equal(diag.code, 'sr-backend-fallback');
+  assert.equal(diag.vars.backend, 'FSR 2.1.2');
+
+  // A clean run is still a clean run.
+  write(dir, 'OptiScaler.log', head + nrRan);
+  run = await runlog.analyzeRun(dir);
+  assert.equal(run.verdict, 'nr-ran');
+});

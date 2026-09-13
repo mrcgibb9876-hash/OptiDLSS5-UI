@@ -103,6 +103,22 @@ function diagnose(ctx) {
     return out('needs-run', 'needs-run');
   }
   switch (run.verdict) {
+    // Every frame reached the upscaler and none came back. OptiScaler will not dispatch unless it
+    // can put the root signature back afterwards, and on the pd-upscaler route it never can: the
+    // DLSS call comes in on PureDark's own command list, which carries no root signature to track.
+    // Nothing is written to the output texture, so the game presents a black frame and keeps
+    // running behind it. There is no setting this app can change that fixes it -- clearing the
+    // [Hotfix] restores lets the dispatch through and OptiScaler then crashes in it instead
+    // (measured on Resident Evil 2, 2026-09-13, on every OptiScaler build tried) -- so this names
+    // what is happening rather than offering a fix that trades one broken state for another.
+    case 'upscale-skipped':
+      return out('unavailable', 'upscale-skipped', { count: run.detail || '', route: route.route || '' });
+    // DLSS could not be created and OptiScaler substituted another upscaler without saying so.
+    // The neural pass still runs on top, which is why this used to read as a clean run.
+    case 'sr-backend-fallback':
+      return out('step', 'sr-backend-fallback', {
+        backend: run.detail || '', result: run.srCreateResult || '',
+      });
     case 'nr-ran':
       return out('ok', 'ok', { count: run.nrDispatch, fps: run.fps || 0, api: (run.runtimeApi || '').toUpperCase() });
     case 'shutdown-fault':

@@ -95,6 +95,30 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   const shutdownFault = /faulted inside its own NVSDK_NGX_D3D12_Shutdown1/.test(opti);
   const logLevel = (/Log\.LogLevel: (\d)/.exec(opti) || [])[1];
 
+  // OptiScaler could not create the upscaler it was configured for and quietly used another. Two
+  // [E] lines it always writes, whatever the log level -- the NGX result, then the substitution:
+  //
+  //   [E] DLSSFeatureDx12::InitDLSS _CreateFeature result: BAD0000B
+  //   [E] TryCreateOptiFeature Feature 'DLSS' initialization failed falling back to FSR 2.1.2
+  //
+  // This matters because the neural pass runs either way: DLSS-NR dispatches on top of whatever
+  // upscaled, so the run reads as a clean "DLSS 5 ran" while the game is not running DLSS at all.
+  // On Resident Evil 2 (REFramework + PureDark's plugin, 2026-09-13) DLSS creation failed on every
+  // launch, every OptiScaler build tried, and the FSR fallback it landed on is the path that then
+  // crashed -- none of which was visible anywhere in this app.
+  const srFallback = /TryCreateOptiFeature Feature '([^']+)' initialization failed falling back to ([^\r\n]+)/.exec(opti);
+  const srBackendFallback = srFallback ? { from: srFallback[1], to: srFallback[2].trim() } : null;
+  // The NGX result behind it, kept verbatim: BAD0000B is FAIL_UnableToInitializeFeature, and the
+  // code is the one thing a bug report upstream needs.
+  const srCreateResult = (/_CreateFeature result: ([0-9A-Fa-f]{8})/.exec(opti) || [])[1] || null;
+  // Every frame handed to the upscaler was dropped on the floor. OptiScaler refuses to dispatch
+  // when it cannot put the root signature back (D3D12_Hooks.cpp CanRestoreRootSignature), which on
+  // the pd-upscaler route is always: the DLSS call arrives on PureDark's own command list, which
+  // never carries a root signature for it to track. The output texture is never written, so the
+  // game presents a black frame while running normally behind it. LOG_DEBUG, so it is only in the
+  // log at LogLevel 0 or 1 -- absence here is not evidence of absence.
+  const upscaleSkipped = count(opti, /Skipping upscaling because can't restore root signature/g);
+
   const feedFrames = count(feed, /frame \d+ delivered/g);
   const feedCreateFault = /CreateFeature raised 0xC0000005/.test(feed);
   const feedTwoCopies = /two copies of the DLSS NGX module are loaded/.test(feed);
@@ -143,6 +167,12 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   else if (feedMvProblem || feedNoMotion) { verdict = 'feed-no-motion'; detail = feedMvProblem; }
   else if (feedDepthFlatMoving) verdict = 'feed-depth-flat';
   else if (feedStopped) verdict = 'feed-stopped';
+  // Both of these outrank nr-ran deliberately. The neural pass dispatching says the plumbing is
+  // intact; it does not say the frame reached the screen, or that DLSS did the upscaling. A run
+  // that skipped every upscale is the black screen, and a run on a substituted backend is not the
+  // thing the user installed -- calling either of them "DLSS 5 ran" is how this went unseen.
+  else if (upscaleSkipped > 0) { verdict = 'upscale-skipped'; detail = String(upscaleSkipped); }
+  else if (srBackendFallback) { verdict = 'sr-backend-fallback'; detail = srBackendFallback.to; }
   else if (nrDispatch > 0) verdict = 'nr-ran';
   else if (dlssCreated > 0) { verdict = 'dlss-no-nr'; detail = d3d11NativeFeature ? 'd3d11-native' : null; }
   else if (dlssInit) { verdict = 'init-no-feature'; detail = feedTechniqueMissing ? 'feeder-technique-missing' : null; }
@@ -161,6 +191,9 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     logLevel: logLevel ? Number(logLevel) : null,
     crash,
     dlssRuntimeMissing,
+    srBackendFallback,
+    srCreateResult,
+    upscaleSkipped,
     feedInvalidRedist,
     feedMvProblem,
     feedNoMotion,
