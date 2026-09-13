@@ -110,10 +110,15 @@ function diagnose(ctx) {
       if (ctx.nrEnabledInIni === false) return fix('nr-disabled', 'reconfigure');
       return out('unknown', 'dlss-no-nr');
     case 'init-no-feature':
+      if (run.dlssRuntimeMissing) return fix('dlss-runtime-missing', 'reconfigure');
       if (run.detail === 'feeder-technique-missing') return fix('feeder-technique', 'install');
       if (route.lumaDeployed) return out('step', 'luma-select-dlss');
       return out('unknown', 'init-no-feature');
     case 'no-dlss':
+      // OptiScaler said why itself, a line into the log: no nvngx_dlss.dll beside the exe, so it
+      // switched DLSS off before the game drew anything. That turns "nothing called DLSS" -- which
+      // reads as a mystery -- into one missing file that Reconfigure puts back.
+      if (run.dlssRuntimeMissing) return fix('dlss-runtime-missing', 'reconfigure');
       if (route.lumaDeployed) return out('step', 'luma-select-dlss');
       if (route.route === 'feeder' && route.feederDeployed) return out('unknown', 'no-hook');
       if (route.route === 'lumaue') return out('step', 'luma-missing');

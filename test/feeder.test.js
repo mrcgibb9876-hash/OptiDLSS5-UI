@@ -514,3 +514,27 @@ test('a stuck Inspect tool does not survive the app configuring the game', async
   assert.match(ini, /DebugView\s*=\s*0/);
   assert.match(ini, /ApplyModel\s*=\s*true/, 'and the model is applied again');
 });
+
+test('OptiScaler switching DLSS off for a missing nvngx_dlss.dll is read straight out of its log', async () => {
+  // From a user's Resident Evil 2 log: everything else looked healthy, and one line at load said
+  // DLSS was off for the session. Without that file no route this app builds can make a DLSS call.
+  const dir = scratchDir('dlss-runtime-missing');
+  write(dir, 'OptiScaler.log', [
+    '[22:26:04.759650] [W] OptiScaler v10.0.0-dev loaded',
+    '[22:26:04.766916] [I] Check for DLSS files',
+    '[22:26:04.814388] [W] nvngx_dlss.dll not found, disabling DLSS',
+    '[22:26:04.816287] [I] CheckWorkingMode OptiScaler working as dxgi.dll, system dll loaded',
+  ].join('\n'));
+
+  const run = await runlog.analyzeRun(dir);
+  assert.equal(run.dlssRuntimeMissing, true);
+  assert.equal(run.verdict, 'no-dlss', 'nothing called DLSS, because DLSS was switched off');
+
+  const diag = diagnose({
+    detected: { bitness: 64 },
+    route: { route: 'reframework-pd', optiInstalled: true },
+    run,
+  });
+  assert.equal(diag.code, 'dlss-runtime-missing');
+  assert.equal(diag.fix.id, 'reconfigure', 'and Reconfigure is what places the file');
+});

@@ -85,6 +85,12 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   const dlssCreated = count(opti, /NVSDK_NGX_D3D1[12]_CreateFeature Creating new DLSS feature|NVSDK_NGX_VULKAN_CreateFeature Creating new DLSS feature|TryCreateOptiFeature Creating OptiScaler feature/g);
   const dlssInit = /NVSDK_NGX_(?:D3D1[12]|VULKAN)_Init/.test(opti);
   const d3d11NativeFeature = /DLSSFeatureDx11::InitInternal/.test(opti);
+  // OptiScaler's own load-time check, one line into the log: no nvngx_dlss.dll beside the exe, so
+  // it turns DLSS off for the whole session before the game has drawn anything. Every route this
+  // app builds needs that file there -- the Feeder's synthetic call, REFramework's pd-upscaler
+  // (PureDark's plugin loads the runtime from the game folder), and a DLSS-5-only profile alike.
+  // Seen in the wild on a Resident Evil 2 install whose log otherwise looked healthy.
+  const dlssRuntimeMissing = /nvngx_dlss\.dll not found, disabling DLSS/.test(opti);
   const cleanExit = /DLL_PROCESS_DETACH/.test(opti);
   const shutdownFault = /faulted inside its own NVSDK_NGX_D3D12_Shutdown1/.test(opti);
   const logLevel = (/Log\.LogLevel: (\d)/.exec(opti) || [])[1];
@@ -154,6 +160,7 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     cleanExit,
     logLevel: logLevel ? Number(logLevel) : null,
     crash,
+    dlssRuntimeMissing,
     feedInvalidRedist,
     feedMvProblem,
     feedNoMotion,
