@@ -995,7 +995,7 @@ const FOREIGN_REMOVALS = {
 const NEVER_GAME_OWNED = /^(nvngx_dlssnr|nvngx\.dll_dlssnr|OptiScaler|!! EXTRACT|dlss5-feed|renodx|ReShade)/i;
 // This app's own payload is never part of a foreign removal while its install is present here --
 // another tool's backup of nvngx_dlssnr.dll must not take our NR model with it.
-const OUR_PAYLOAD = ['nvngx_dlssnr.dll', 'nvngx.dll_dlssnr.dll', 'OptiScaler.ini', 'OptiScaler.dll', 'OptiScaler', '!! EXTRACT ALL FILES TO GAME FOLDER !!', 'setup_windows.bat', 'setup_linux.sh', 'Licenses'];
+const OUR_PAYLOAD = ['nvngx_dlssnr.dll', 'nvngx.dll_dlssnr.dll', 'OptiScaler.ini', 'OptiScaler.dll', 'OptiScaler_OpticalFlow.dll', 'OptiScaler', '!! EXTRACT ALL FILES TO GAME FOLDER !!', 'setup_windows.bat', 'setup_linux.sh', 'Licenses'];
 
 // Files this app put here itself, from its own install journal. Evidence that another tool was
 // here cannot be a file we placed -- that is how a DOOM 3 BFG install came to be accused of

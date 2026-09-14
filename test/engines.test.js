@@ -159,6 +159,34 @@ test('a game marked keep-as-is is not touched by sync: engine, model and ini all
   assert.ok(!fs.existsSync(path.join(game, '.dlss5ui-keep-as-is')));
 });
 
+// Engine v1.0.27 ships OptiScaler_OpticalFlow.dll beside OptiScaler.dll. A game installed before it existed
+// gets it on sync, a changed one is refreshed, and Remove takes it.
+test('the engine\'s optical-flow DLL reaches an already-installed game on sync and leaves with Remove', { skip: !onWindows }, async () => {
+  const base = scratchDir('engine-companion');
+  const release = fakeReleaseFolder(base);
+  const nr = fakeNrModel(base);
+  const game = path.join(base, 'game');
+  const exe = fakeExe(game, 'FakeGame.exe');
+  const { invoke } = loadMain();
+  const inst = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: nr, proxyName: 'dxgi.dll' });
+  assert.equal(inst.ok, true, inst.error);
+  const companion = path.join(game, 'OptiScaler_OpticalFlow.dll');
+  assert.ok(!fs.existsSync(companion), 'the old release had none');
+
+  write(release, 'OptiScaler_OpticalFlow.dll', 'optical flow v1');
+  const sync = await invoke('game:sync-if-stale', { exePath: exe, releaseFolder: release, nrDllPath: nr });
+  assert.equal(sync.ok, true, sync.error);
+  assert.equal(fs.readFileSync(companion, 'utf8'), 'optical flow v1', 'placed on sync');
+
+  write(release, 'OptiScaler_OpticalFlow.dll', 'optical flow v2');
+  await invoke('game:sync-if-stale', { exePath: exe, releaseFolder: release, nrDllPath: nr });
+  assert.equal(fs.readFileSync(companion, 'utf8'), 'optical flow v2', 'refreshed when the release changes');
+
+  const un = await invoke('game:run-uninstall', exe);
+  assert.equal(un.ok, true, un.error);
+  assert.ok(!fs.existsSync(companion), 'Remove takes it');
+});
+
 test('a game installed before there was a choice is left alone (no marker, no key edits)', { skip: !onWindows }, async () => {
   const base = scratchDir('engine-legacy');
   const release = fakeReleaseFolder(base);

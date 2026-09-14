@@ -1377,7 +1377,7 @@ function detectInstalledBackends(dir) {
   // into a red "Remove leftovers" that deleted the choice. Remove (the full uninstall) still
   // clears them via APP_MARKERS.
   const leftovers = [
-    'OptiScaler.ini', 'OptiScaler.dll', 'nvngx_dlssnr.dll', 'nvngx.dll_dlssnr.dll', 'OptiScaler',
+    'OptiScaler.ini', 'OptiScaler.dll', 'OptiScaler_OpticalFlow.dll', 'nvngx_dlssnr.dll', 'nvngx.dll_dlssnr.dll', 'OptiScaler',
     'dlss5-feed.addon64', 'Luma-Unreal Engine.addon', 'Luma',
     '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.optiscaler-manager-install.json',
     legacy.MARKER, 'dlss5-feed.addon32',
@@ -1686,7 +1686,7 @@ async function removeSharedNrDllIfUnneeded(dir) {
 // as replaced (put back from its backup), and every marker. A folder installed before the
 // journal existed still gets the fixed payload list. Nothing here guesses at a file it did not
 // place -- unknown files stay, and the report says so where a decision was made.
-const RELEASE_LICENSE_FILES = ['DirectX_LICENSE.txt', 'FidelityFX_v2_LICENSE.md', 'RenoDX_ATTRIBUTION.txt', 'DXL_ATTRIBUTION.txt', 'XeSS_LICENSE.txt'];
+const RELEASE_LICENSE_FILES = ['DirectX_LICENSE.txt', 'FidelityFX_v2_LICENSE.md', 'FidelityFX_OpticalFlow_LICENSE.txt', 'RenoDX_ATTRIBUTION.txt', 'DXL_ATTRIBUTION.txt', 'XeSS_LICENSE.txt'];
 
 // A game working the way its user wants, pinned so a new engine or model reaching every other game on
 // sync does not reach this one (asked for Resident Evil Requiem, 2026-09-14, when the engine gained the
@@ -1861,7 +1861,7 @@ async function planUninstall(dir) {
   if (journal.pdPlugin && pdplugin.isOurCopy(dir, journal.pdPlugin)) add(pdplugin.PLUGIN_NAME);
   if (journal.proxy) add(journal.proxy);
   if (journal.backedUp && has(journal.backedUp)) restore.push(`${journal.proxy} (from ${journal.backedUp})`);
-  for (const n of ['OptiScaler.dll', 'OptiScaler.ini', 'OptiScaler.log', 'nvngx.dll_dlssnr.dll', 'Remove_OptiScaler.bat', 'setup_windows.bat', 'setup_linux.sh', 'nvngx_dlssnr.dll', 'OptiScaler', '!! EXTRACT ALL FILES TO GAME FOLDER !!']) add(n);
+  for (const n of ['OptiScaler.dll', 'OptiScaler_OpticalFlow.dll', 'OptiScaler.ini', 'OptiScaler.log', 'nvngx.dll_dlssnr.dll', 'Remove_OptiScaler.bat', 'setup_windows.bat', 'setup_linux.sh', 'nvngx_dlssnr.dll', 'OptiScaler', '!! EXTRACT ALL FILES TO GAME FOLDER !!']) add(n);
   for (const f of RELEASE_LICENSE_FILES) add('Licenses/' + f);
   for (const rel of journal.added || []) add(rel);
   for (const r of journal.replaced || []) if (has(r.backup)) restore.push(r.rel);
@@ -3526,8 +3526,23 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDl
       };
     }
 
+    // The engine's companion DLLs beside OptiScaler (engine v1.0.27: OptiScaler_OpticalFlow.dll, the Present
+    // route's motion vectors) follow the release too -- Install copies every release file, but a game
+    // installed before a companion existed would otherwise never get it.
+    let companionsUpdated = false;
+    for (const name of ENGINE_COMPANION_DLLS) {
+      const src = path.join(releaseFolder, name);
+      const dest = path.join(dir, name);
+      if (!fs.existsSync(src)) continue;
+      if (fs.existsSync(dest) && sha256File(src) === sha256File(dest)) continue;
+      try {
+        await fsp.copyFile(src, dest);
+        companionsUpdated = true;
+      } catch {}
+    }
+
     if (sha256File(releaseDll) === sha256File(active.file)) {
-      return { ok: true, updated: autoConfigured.length > 0 || nrUpdated, nrUpdated, reason: 'up to date', api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
+      return { ok: true, updated: autoConfigured.length > 0 || nrUpdated || companionsUpdated, nrUpdated, reason: 'up to date', api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
     }
 
     await fsp.copyFile(releaseDll, active.file);
@@ -3551,6 +3566,9 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDl
 // knows or has a sane default for.
 
 const INSTALL_MARKER = '.optiscaler-manager-install.json';
+
+// DLLs the engine release carries beside OptiScaler.dll, kept current by sync and taken by Remove.
+const ENGINE_COMPANION_DLLS = ['OptiScaler_OpticalFlow.dll'];
 
 // dxgi.dll is what the script offers as option 1 and what nearly every DX11/DX12/Vulkan game on
 // Windows already loads.
@@ -3700,7 +3718,7 @@ async function uninstallOptiScaler(dir) {
     }
   }
 
-  for (const name of ['OptiScaler.dll', 'OptiScaler.ini', 'OptiScaler.log', 'nvngx.dll_dlssnr.dll',
+  for (const name of ['OptiScaler.dll', 'OptiScaler_OpticalFlow.dll', 'OptiScaler.ini', 'OptiScaler.log', 'nvngx.dll_dlssnr.dll',
                       'Remove_OptiScaler.bat', 'setup_windows.bat', 'setup_linux.sh', INSTALL_MARKER]) {
     const f = path.join(dir, name);
     if (fs.existsSync(f)) {
