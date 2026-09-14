@@ -208,37 +208,67 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   };
 }
 
+const BUNDLE_FILES = ['OptiScaler.log', 'OptiScaler.ini', 'ReShade.log', 'ReShade.ini', 'ReShadePreset.ini', 'dlss5-feed.log', 'dlss5-feed.cfg', '.optiscaler-manager-install.json', '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.dlss5ui-api.json', '.dlss5ui-lossless.json', '.dlss5ui-legacy.json'];
+
+function folderListing(dir) {
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true }).map((e) => {
+      let size = '';
+      let mtime = '';
+      try { const st = fs.statSync(path.join(dir, e.name)); size = e.isDirectory() ? '<dir>' : String(st.size); mtime = st.mtime.toISOString(); } catch {}
+      return `${mtime}  ${size.padStart(12)}  ${e.name}`;
+    });
+  } catch {
+    return [];
+  }
+}
+
 // Everything a helper needs to see, in one folder -> zip: our logs and inis, the newest Unreal
 // crash report, a listing of the exe folder, and the detection/route/verdict the app itself
 // holds. Nothing outside the game folder and the app's own data; no saves, no credentials.
-async function collectSupportBundle(dir, { zipPath, extra = {}, execFileAsync }) {
+//
+// optiDir: where OptiScaler actually lives, when that is not the game folder. On the 32-bit route
+// it is host64\ beside the game (legacy.js), and everything OptiScaler writes -- its log and its
+// ini, the two files any diagnosis starts from -- is in there. Without this the bundle for the one
+// route hardest to reason about contained no OptiScaler log at all, and its own app-view.json
+// reported "no-log" while the helper's log was full of neural passes. Found while answering a user
+// whose DX9 game ran correctly and showed no in-game menu, 2026-09-14: the feature for "send me
+// your logs" was blind in exactly the case it was needed for.
+async function collectSupportBundle(dir, { zipPath, extra = {}, execFileAsync, optiDir = dir }) {
   const staging = path.join(os.tmpdir(), `dlss5ui-support-${Date.now()}`);
   await fsp.mkdir(staging, { recursive: true });
   const copied = [];
-  for (const name of ['OptiScaler.log', 'OptiScaler.ini', 'ReShade.log', 'ReShade.ini', 'ReShadePreset.ini', 'dlss5-feed.log', 'dlss5-feed.cfg', '.optiscaler-manager-install.json', '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.dlss5ui-api.json', '.dlss5ui-lossless.json']) {
+  for (const name of BUNDLE_FILES) {
     const src = path.join(dir, name);
     if (!fs.existsSync(src)) continue;
     await fsp.copyFile(src, path.join(staging, name));
     copied.push(name);
   }
-  const run = await analyzeRun(dir);
+  // The helper's own copies, named for where they came from so nobody has to guess which
+  // OptiScaler.log they are reading.
+  const hostPrefix = path.basename(optiDir);
+  if (path.resolve(optiDir) !== path.resolve(dir)) {
+    for (const name of BUNDLE_FILES) {
+      const src = path.join(optiDir, name);
+      if (!fs.existsSync(src)) continue;
+      const as = `${hostPrefix}-${name}`;
+      await fsp.copyFile(src, path.join(staging, as));
+      copied.push(as);
+    }
+  }
+  const run = await analyzeRun(dir, { optiDir });
   if (run.crash && run.crash.path) {
     for (const name of ['CrashContext.runtime-xml', 'CrashReportClient.ini']) {
       const src = path.join(run.crash.path, name);
       if (fs.existsSync(src)) { await fsp.copyFile(src, path.join(staging, 'UE-crash-' + name)); copied.push('UE-crash-' + name); }
     }
   }
-  let listing = [];
-  try {
-    listing = fs.readdirSync(dir, { withFileTypes: true }).map((e) => {
-      let size = '';
-      let mtime = '';
-      try { const st = fs.statSync(path.join(dir, e.name)); size = e.isDirectory() ? '<dir>' : String(st.size); mtime = st.mtime.toISOString(); } catch {}
-      return `${mtime}  ${size.padStart(12)}  ${e.name}`;
-    });
-  } catch {}
-  await fsp.writeFile(path.join(staging, 'folder-listing.txt'), `${dir}\n\n${listing.join('\n')}\n`, 'utf8');
-  await fsp.writeFile(path.join(staging, 'app-view.json'), JSON.stringify({ generatedAt: new Date().toISOString(), dir, run, ...extra }, null, 2), 'utf8');
+  let listingText = `${dir}\n\n${folderListing(dir).join('\n')}\n`;
+  if (path.resolve(optiDir) !== path.resolve(dir)) {
+    listingText += `\n${optiDir}\n\n${folderListing(optiDir).join('\n')}\n`;
+  }
+  await fsp.writeFile(path.join(staging, 'folder-listing.txt'), listingText, 'utf8');
+  await fsp.writeFile(path.join(staging, 'app-view.json'), JSON.stringify({ generatedAt: new Date().toISOString(), dir, optiDir, run, ...extra }, null, 2), 'utf8');
   copied.push('folder-listing.txt', 'app-view.json');
 
   await fsp.rm(zipPath, { force: true }).catch(() => {});

@@ -2027,7 +2027,7 @@ ipcMain.handle('game:supportBundle', async (_evt, { exePath, detected }) => {
       backends: detectInstalledBackends(dir),
       foreign: foreignToolchains(dir),
     };
-    const out = await runlog.collectSupportBundle(dir, { zipPath: res.filePath, extra, execFileAsync });
+    const out = await runlog.collectSupportBundle(dir, { zipPath: res.filePath, extra, execFileAsync, optiDir: optiScalerDirFor(dir) });
     return { ok: true, cancelled: false, ...out };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
