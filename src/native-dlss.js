@@ -29,6 +29,7 @@
 const path = require('node:path');
 const fs = require('node:fs');
 const { findUnrealPluginFile } = require('./framegen');
+const emulators = require('./emulators');
 
 const STREAMLINE_BESIDE_EXE = ['sl.interposer.dll', 'sl.interposer.dll.original'];
 const PLUGIN_TREE_FILES = ['nvngx_dlss.dll', 'sl.interposer.dll'];
@@ -139,13 +140,35 @@ function installRoot(exeDir) {
   return path.resolve(exeDir);
 }
 
+// An emulator (emulators.js) never has DLSS of its own: it makes no DLSS call, whatever console game
+// it runs, so the Feeder is always its DLSS source. Asked of the folder rather than the exe because
+// every gate here only has the folder. Without this, RPCS3 was told it "already has native DLSS" and
+// kept off the Feeder -- by the nvngx_dlss.dll the Feeder deploy itself places beside the exe, or by
+// the install-tree walk finding DLSS files that belong to something else under the same root.
+const emulatorCache = new Map();
+
+function isEmulatorDir(dir) {
+  const key = path.resolve(dir).toLowerCase();
+  const now = Date.now();
+  const hit = emulatorCache.get(key);
+  if (hit && now - hit.at < SHIPPED_CACHE_TTL_MS) return hit.result;
+  let result = false;
+  try {
+    result = fs.readdirSync(dir).some((name) => emulators.profileFor(name) !== null);
+  } catch {
+    result = false;
+  }
+  emulatorCache.set(key, { at: now, result });
+  return result;
+}
+
 // Full path of the game's own DLSS/Streamline file, or null.
 function shippedDlssPath(dir) {
   const key = path.resolve(dir).toLowerCase();
   const now = Date.now();
   const hit = shippedCache.get(key);
   if (hit && now - hit.at < SHIPPED_CACHE_TTL_MS) return hit.result;
-  const result = findShippedDlss(dir);
+  const result = isEmulatorDir(dir) ? null : findShippedDlss(dir);
   shippedCache.set(key, { at: now, result });
   return result;
 }
@@ -155,7 +178,8 @@ function shipsNativeDlss(dir) {
 }
 
 function hasNativeDlss(dir) {
+  if (isEmulatorDir(dir)) return false;
   return shipsNativeDlss(dir) || fs.existsSync(path.join(dir, 'nvngx_dlss.dll'));
 }
 
-module.exports = { shippedDlssPath, shipsNativeDlss, hasNativeDlss, installRoot, findInGameTree };
+module.exports = { shippedDlssPath, shipsNativeDlss, hasNativeDlss, installRoot, findInGameTree, isEmulatorDir };

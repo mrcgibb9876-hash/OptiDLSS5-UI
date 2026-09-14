@@ -126,6 +126,25 @@ test('Resident Evil 2 takes the REFramework pd-upscaler route, before and after 
   assert.equal(route.recommendRoute(feederDir, feederExe, { api: 'dx12', apis: ['dx12'], engineId: 're' }, 'nvidia').route, 'feeder');
 });
 
+// Devil May Cry 5 (2026-09-14) took the Feeder route, which collides with the engine's Present route.
+test('Devil May Cry 5 and Street Fighter 6 take the Present route; a Feeder this app deployed does not hold them, one placed by hand does', () => {
+  const reengine = require(path.join(REPO, 'src', 'reengine'));
+  const detected = { api: 'dx12', apis: ['dx12'], engineId: 're' };
+  for (const exeName of ['DevilMayCry5.exe', 'StreetFighter6.exe']) {
+    const dir = scratchDir('route-present-' + exeName);
+    const exe = fakeExe(dir, exeName);
+    write(dir, 're_chunk_000.pak', 'x');
+    assert.ok(reengine.presentRouteGame(exe));
+    assert.equal(reengine.pdUpscalerGame(exe), null, 'not one of the five pd games');
+    assert.equal(route.recommendRoute(dir, exe, detected, 'nvidia').route, 'reframework-pd');
+
+    write(dir, 'dlss5-feed.addon64', 'x');
+    assert.equal(route.recommendRoute(dir, exe, detected, 'nvidia').route, 'feeder', 'a hand-placed Feeder is a choice');
+    write(dir, '.dlss5ui-feeder-deploy.json', '{}');
+    assert.equal(route.recommendRoute(dir, exe, detected, 'nvidia').route, 'reframework-pd', 'ours is the old route');
+  }
+});
+
 // A user's RE2 folder (2026-09-12): another DLSS 5 tool had left a full Streamline set beside the
 // exe, with `.original` backups. That read as "this game ships its own DLSS", so the card said
 // "just Install" -- the wrong route for a game with no DLSS call. The RE route must win over

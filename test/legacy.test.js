@@ -69,6 +69,29 @@ test('emulator profiles: exe names map to the emulator, with this app\'s API nam
   assert.equal(emulators.profileFor('notagame.exe'), null);
 });
 
+test('an emulator never counts as having DLSS of its own, so the Feeder stays its route (RPCS3)', () => {
+  const feeder = require('../src/feeder');
+  const emu = scratchDir('rpcs3-native');
+  write(emu, 'rpcs3.exe', 'x');
+  // What the Feeder deploy places beside the exe, and a Streamline file the tree walk could find.
+  write(emu, 'nvngx_dlss.dll', 'x');
+  write(emu, 'sl.interposer.dll', 'x');
+  assert.equal(nativeDlss.isEmulatorDir(emu), true);
+  assert.equal(nativeDlss.shipsNativeDlss(emu), false);
+  assert.equal(nativeDlss.hasNativeDlss(emu), false);
+  assert.equal(feeder.needsFeeder(emu), true);
+  const det = { api: 'vulkan', apis: ['vulkan', 'opengl'], bitness: 64, recommend: 'optiscaler', emulator: { key: 'rpcs3', name: 'RPCS3', system: 'PlayStation 3', hint: 'x' } };
+  write(emu, 'dlss5-feed.addon64', 'x');
+  const r = route.recommendRoute(emu, path.join(emu, 'rpcs3.exe'), det, 'nvidia');
+  assert.equal(r.route, 'feeder');
+  assert.equal(r.feederMisdeployed, false);
+
+  const game = scratchDir('not-an-emulator');
+  write(game, 'game.exe', 'x');
+  write(game, 'sl.interposer.dll', 'x');
+  assert.equal(nativeDlss.hasNativeDlss(game), true, 'the same files on an ordinary game still mean shipped DLSS');
+});
+
 test('detection: emulators, 32-bit and DirectX 8/9 games are offered experimental routes', { skip: !onWindows }, async () => {
   const base = scratchDir('legacy-detect');
   const pcsx2 = await detect.detectGame(path.join(base, 'pcsx2'), exeWith(path.join(base, 'pcsx2'), 'pcsx2-qt.exe'));

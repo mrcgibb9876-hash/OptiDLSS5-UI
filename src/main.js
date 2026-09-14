@@ -3331,8 +3331,20 @@ async function autoConfigureGame(dir, exePath) {
     // plugin copy only when the journal proves it is ours -- and REFramework's TemporalUpscaler is
     // switched off, since that mod swaps the game's TAA for a DLSS call nothing answers any more.
     // Runs on Install and on every sync, so a game set up the old way is moved over on its own.
-    if (reengine.pdUpscalerGame(exePath)) {
-      const presentRoute = { temporalUpscalerOff: reengine.presentRouteConfigure(dir), pluginRemoved: false };
+    if (reengine.presentRouteGame(exePath)) {
+      const presentRoute = { temporalUpscalerOff: reengine.presentRouteConfigure(dir), pluginRemoved: false, feederRemoved: false };
+      // A Feeder this app deployed (its deploy marker says so) is the old route on these games, and it
+      // stops the Present route from running at all: its ReShade wraps the D3D12 device. Taken out, with
+      // OptiScaler's ReShade loading switched back to auto. One placed by hand is left.
+      try {
+        if (feeder.feederDeployed(dir) && fs.existsSync(path.join(dir, '.dlss5ui-feeder-deploy.json'))) {
+          const removed = await feeder.removeFeederStack(dir, { keepReShade: lumaue.lumaUeDeployed(dir) });
+          if (!lumaue.lumaUeDeployed(dir)) patchIniValues(iniPath, [{ section: 'Plugins', key: 'LoadReshade', value: 'auto' }]);
+          presentRoute.feederRemoved = removed.removed.length > 0;
+        }
+      } catch (e) {
+        presentRoute.feederError = String(e && e.message ? e.message : e);
+      }
       try {
         const journal = readInstallMarker(dir) || {};
         if (journal.pdPlugin && pdplugin.isOurCopy(dir, journal.pdPlugin)) {

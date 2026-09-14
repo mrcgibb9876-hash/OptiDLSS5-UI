@@ -272,14 +272,22 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
   // Since the engine's Present route (2026-09-14) none of those files is the route any more: DLSS 5 runs at
   // Present over the game's own TAA and the engine finds the depth itself, so Install needs no plugin and
   // no DLSS DLL -- one step. The route id stays 'reframework-pd' so a game's saved state still matches.
+  //
+  // The same route covers Devil May Cry 5 and Street Fighter 6 (reengine.presentRouteGame). A Feeder this
+  // app deployed on one of them is not someone's choice but the old route, and sync removes it -- so it
+  // does not hold the game on the Feeder route; one deployed by hand still does.
   const pd = reengine.pdStatus(dir, exePath);
-  if (pd && !feederDeployed) {
+  const presentGame = reengine.presentRouteGame(exePath);
+  const feederIsOurs = feederDeployed && fs.existsSync(path.join(dir, '.dlss5ui-feeder-deploy.json'));
+  if (presentGame && (!feederDeployed || feederIsOurs)) {
+    const reframeworkPresent = pd ? pd.reframeworkPresent : fs.existsSync(path.join(dir, 'dinput8.dll'));
+    const temporalUpscalerOn = pd ? pd.temporalUpscalerOn : reengine.temporalUpscalerOn(dir);
     return finish('reframework-pd', 'OptiScaler + REFramework',
       'No DLSS of its own. DLSS 5 runs at the end of each frame on top of the game\'s own anti-aliasing, and ' +
       'OptiScaler finds the game\'s depth itself -- nothing to download by hand. Install places OptiScaler and ' +
       'REFramework and keeps REFramework\'s TemporalUpscaler off. Load a save: menus have no depth to work with.',
       [
-        { key: 'optiscaler', label: 'Install OptiScaler (and REFramework)', done: optiInstalled && pd.reframeworkPresent && !pd.temporalUpscalerOn },
+        { key: 'optiscaler', label: 'Install OptiScaler (and REFramework)', done: optiInstalled && reframeworkPresent && !temporalUpscalerOn && !feederDeployed },
       ]);
   }
 

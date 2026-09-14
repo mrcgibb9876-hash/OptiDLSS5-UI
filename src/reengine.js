@@ -69,6 +69,17 @@ function pdUpscalerGame(exePath) {
   return PD_UPSCALER_EXES[path.basename(exePath).toLowerCase()] || null;
 }
 
+// Every game the engine runs on its Present route: the five above plus the other RE Engine titles in the
+// engine's OldOverlayMenu quirk list (misc/Quirks.h). Devil May Cry 5 was left out at first and so took the
+// DLSS5 Feeder route; the Feeder's ReShade wraps the D3D12 device, the Present route then saw a different
+// device from the swapchain's, and neither path ran DLSS 5 (2026-09-14). These games get no Feeder.
+const PRESENT_ROUTE_EXTRA_EXES = { 'devilmaycry5.exe': 'DMC5', 'streetfighter6.exe': 'SF6' };
+
+function presentRouteGame(exePath) {
+  if (!exePath) return null;
+  return pdUpscalerGame(exePath) || PRESENT_ROUTE_EXTRA_EXES[path.basename(exePath).toLowerCase()] || null;
+}
+
 function readBuildMarker(dir) {
   try { return JSON.parse(fs.readFileSync(path.join(dir, REFRAMEWORK_BUILD_MARKER), 'utf8')); } catch { return null; }
 }
@@ -161,4 +172,5 @@ module.exports = {
   PD_PLUGIN_NAME, PD_PLUGIN_PAGE_URL, PD_PLUGIN_PAGE_LABEL, PD_PLUGIN_WANTED_VERSION, REFRAMEWORK_BUILD_MARKER,
   pdUpscalerGame, pdStatus, readBuildMarker, writeBuildMarker, extractPdReframework,
   TEMPORAL_UPSCALER_KEY, reframeworkConfigFiles, temporalUpscalerOn, presentRouteConfigure,
+  PRESENT_ROUTE_EXTRA_EXES, presentRouteGame,
 };
