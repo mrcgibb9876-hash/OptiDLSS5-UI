@@ -679,6 +679,8 @@ function helpWords(diag) {
     case 'ue-crash-feeder': return t('The game crashed (Unreal crash report: {message}) with the Feeder deployed. Remove the Feeder and check whether it runs clean.', { message: (v.message || '').slice(0, 120) });
     case 'ue-crash': return t('The game crashed (Unreal crash report: {message}). No rule covers this. Save the bundle to share, or ask the AI.', { message: (v.message || '').slice(0, 120) });
     case 'feed-stopped': return t('The Feeder gave up on the last run. Reconfigure rewrites its ReShade settings; if it stops again, dlss5-feed.log has its own diagnosis.');
+    case 'dgvoodoo-crash': return t('The game crashed as it started, inside dgVoodoo2\'s {dll} -- before the DLSS5 Feeder or OptiScaler had done anything. This DirectX 9 route cannot work without dgVoodoo2, and no dgVoodoo2 setting is known to get past this: where it was first seen, every setting tried hung or crashed the same way while the game ran fine without dgVoodoo2. The same fault can also show as a black screen that never responds, which leaves no log. Removing puts the game back exactly as it was.', v);
+    case 'wrapper-crash': return t('The game crashed as it started, inside {dll} in its own folder -- a DirectX wrapper this app did not place. No rule covers this. Save the bundle to share, or ask the AI.', v);
     case 'feeder-mv-broken': return t('The Feeder is deployed here, but its motion-vector shader is {why} ({provider}). DLSS is then fed no motion at all: sharp standing still, smearing the moment you move. Re-deploying writes the provider, its shader and the preset from one answer -- the default is VORT now, which compiles on the ReShade this app installs.', v);
     case 'feed-no-motion': return t('The Feeder ran and DLSS got no motion vectors. The Feeder\'s own log says: {detail} Re-deploying rewrites the provider, its shader, both DLSS5_MV_PROVIDER levels and the preset together.', v);
     case 'feed-depth-flat': return t('The Feeder ran, but depth read flat while the scene was moving: ReShade\'s Generic Depth is bound to the wrong buffer, so DLSS and the neural pass reconstruct from nothing. This is the usual Unity failure. The fix switches this game to the one Unity depth profile a contributor has verified end to end; if that is not it either, ReShade\'s own Add-ons > Generic Depth page lists the real buffers the running game has.');
@@ -720,6 +722,8 @@ function helpShort(diag) {
     case 'ue-crash-feeder': return t('Crashed with the Feeder');
     case 'ue-crash': return t('Crashed -- no known fix');
     case 'feed-stopped': return t('The Feeder gave up');
+    case 'dgvoodoo-crash': return t('dgVoodoo2 crashes this game');
+    case 'wrapper-crash': return t('Crashed in {dll} -- no known fix', v);
     case 'feeder-mv-broken': return t('Motion-vector shader cannot work');
     case 'feed-no-motion': return t('DLSS got no motion vectors');
     case 'feed-depth-flat': return t('Depth is flat -- wrong buffer');
@@ -741,6 +745,7 @@ function helpFixLabel(id) {
     case 'feeder-depth-profile': return t('Try the verified Unity depth profile');
     case 'disable-agility-redist': return t('Move the game\'s D3D12 folder aside');
     case 'reconfigure': return t('Reconfigure');
+    case 'remove-all': return t('Remove everything this app placed');
     case 'install': return t('Install OptiScaler');
     default: return id;
   }
@@ -874,7 +879,7 @@ $('#help-launch').addEventListener('click', async () => {
   // A changed stamp alone would judge a half-written log seconds after launch ("nothing called
   // DLSS"), so the run counts once it is over: the log records a clean exit or a recognised
   // crash, or its stamp has stood still for a few polls after changing.
-  const CRASHED = ['ue-crash', 'shutdown-fault', 'duplicate-dlss'];
+  const CRASHED = ['ue-crash', 'shutdown-fault', 'duplicate-dlss', 'wrapper-crash'];
   let seenAt = null;
   let stableTicks = 0;
   helpPoll = setInterval(async () => {
@@ -1254,6 +1259,7 @@ function describeRun(run) {
     case 'feed-no-motion': return t('the feed ran but DLSS got no motion vectors -- sharp when still, smearing in motion; deploy the Feeder again');
     case 'feed-depth-flat': return t('the feed ran but depth read flat while the scene moved -- Generic Depth is on the wrong buffer');
     case 'feed-agility-redist': return t('Direct3D 12 refused every device create in the process (D3D12_ERROR_INVALID_REDIST) -- the game\'s own D3D12 redist folder blocks it');
+    case 'wrapper-crash': return t('crashed as it started, inside {dll} (a DirectX wrapper in the game folder)', { dll: run.detail || '' });
     default: return t('not run yet');
   }
 }

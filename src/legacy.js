@@ -455,6 +455,21 @@ function removalPlan(dir) {
   return { remove, restore };
 }
 
+// Removes root and every folder under it that holds no file, deepest first.
+function pruneEmptyDirs(root) {
+  const dirs = [];
+  const walk = (d) => {
+    let entries;
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    dirs.push(d);
+    for (const e of entries) if (e.isDirectory()) walk(path.join(d, e.name));
+  };
+  walk(root);
+  for (const d of dirs.reverse()) {
+    try { if (fs.readdirSync(d).length === 0) fs.rmdirSync(d); } catch {}
+  }
+}
+
 async function removeLegacy(dir) {
   const marker = readMarker(dir);
   const removed = [];
@@ -481,10 +496,10 @@ async function removeLegacy(dir) {
     const p = path.join(dir, rel);
     if (fs.existsSync(p)) { await fsp.rm(p, { force: true }); removed.push(rel); }
   }
-  for (const rel of [path.join('reshade-shaders', 'Shaders', 'include'), path.join('reshade-shaders', 'Shaders'), 'reshade-shaders']) {
-    const p = path.join(dir, rel);
-    try { if (fs.readdirSync(p).length === 0) fs.rmdirSync(p); } catch {}
-  }
+  // Folders the shaders brought (VORT adds Shaders\Includes, Textures, Licenses) go once they are
+  // empty, deepest first; anything still holding a file of someone else's stays. Castlevania: Lords
+  // of Shadow 2 kept four empty folders after Remove when only Shaders\include was checked.
+  pruneEmptyDirs(path.join(dir, 'reshade-shaders'));
   await fsp.rm(path.join(dir, MARKER), { force: true });
   return { removed, restored };
 }

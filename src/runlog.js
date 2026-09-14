@@ -14,6 +14,8 @@
 //   init-no-feature    NGX initialised but no feature was ever created (Luma: DLSS not selected
 //                      in its overlay; Feeder: its shader technique missing)
 //   no-dlss            nothing called DLSS at all (nothing to hook, or the proxy did not load)
+//   wrapper-crash      the game crashed inside a DirectX 8/9 wrapper in its own folder as it started
+//                      (dgVoodoo2's D3D9.dll on Castlevania: Lords of Shadow 2)
 //
 // Bounded reads (first few MB of each log) so a card render never stalls on a huge log.
 
@@ -73,15 +75,52 @@ function unrealCrashNear(dir, whenMs) {
   return { path: best.path, at: new Date(best.mtimeMs).toISOString(), message };
 }
 
+// The Feeder records the first access violation in the process with the module it happened in:
+//
+//   ### EXCEPTION RECORDED ###  exception 0xC0000005 (reading address 00000000) at 69611E10 in
+//   D:\Games\Castlevania Lords of Shadow 2\bin\d3d9.dll; this add-on was last doing: nothing yet
+//
+// A fault inside a DirectX 8/9 wrapper DLL sitting in the game folder -- dgVoodoo2's D3D8.dll or
+// D3D9.dll on the legacy route -- is the wrapper failing as the game starts, before the Feeder or
+// OptiScaler has done anything (Castlevania: Lords of Shadow 2, 2026-09-14: a null D3D11 device
+// inside Direct3DCreate9). Only a DLL in the game folder counts; System32's d3d9.dll is Windows'.
+function wrapperFault(feed, dir) {
+  const m = /### EXCEPTION RECORDED ###[^\r\n]*? in ([A-Za-z]:[\\/][^\r\n;]*?[\\/](d3d8|d3d9|ddraw|d3dimm)\.dll)\s*;/i.exec(feed);
+  if (!m) return null;
+  if (path.resolve(path.dirname(m[1])).toLowerCase() !== path.resolve(dir).toLowerCase()) return null;
+  return path.basename(m[1]);
+}
+
 // optiDir: where OptiScaler (and its log) lives when that is not the game folder -- a 32-bit game's
 // DLSS work runs in the Feeder's 64-bit helper, in host64\ beside it (legacy.js). The Feeder's own
 // log stays beside the game.
 async function analyzeRun(dir, { optiDir = dir } = {}) {
   const optiPath = path.join(optiDir, 'OptiScaler.log');
+  const feedPath = path.join(dir, 'dlss5-feed.log');
+  const feed = (await readHead(feedPath)) || '';
+  const wrapperCrash = wrapperFault(feed, dir);
   let stat;
-  try { stat = fs.statSync(optiPath); } catch { return { ran: false, verdict: 'no-log' }; }
+  try { stat = fs.statSync(optiPath); } catch {
+    // A wrapper that crashes the game at startup leaves no OptiScaler.log at all -- on the 32-bit
+    // route the helper that would write it never starts -- so the Feeder's log is the run.
+    if (!wrapperCrash) return { ran: false, verdict: 'no-log' };
+    let feedStat;
+    try { feedStat = fs.statSync(feedPath); } catch { return { ran: false, verdict: 'no-log' }; }
+    return {
+      ran: true, at: feedStat.mtime.toISOString(), runtimeApi: null, nrDispatch: 0, nrComposition: 0, dlssCreated: 0,
+      fps: null, feedFrames: 0, cleanExit: false, logLevel: null, crash: null, dlssRuntimeMissing: false,
+      srBackendFallback: null, srCreateResult: null, upscaleSkipped: 0, feedInvalidRedist: false, feedMvProblem: null,
+      feedNoMotion: false, feedDepthFlat: false, feedDepthFlatMoving: false, wrapperCrash,
+      verdict: 'wrapper-crash', detail: wrapperCrash,
+    };
+  }
+  // The Feeder's log is rewritten every launch; the helper's OptiScaler.log is not, so after a
+  // crash it can be the older of the two. The run is as recent as the newer one.
+  try {
+    const feedStat = fs.statSync(feedPath);
+    if (feedStat.mtimeMs > stat.mtimeMs) stat = feedStat;
+  } catch {}
   const opti = (await readHead(optiPath)) || '';
-  const feed = (await readHead(path.join(dir, 'dlss5-feed.log'))) || '';
 
   const runtime = await optiScalerRuntimeApi(optiDir);
   const nrDispatch = count(opti, /DlssNr_(?:Dx12|Vk)::Dispatch DLSS-NR (?:running|composition)/g);
@@ -162,7 +201,10 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
 
   let verdict;
   let detail = null;
-  if (feedCreateFault && feedTwoCopies) verdict = 'duplicate-dlss';
+  // First: a game that died in its own DirectX wrapper as it started ran nothing else worth judging,
+  // whatever an older OptiScaler.log still says.
+  if (wrapperCrash) { verdict = 'wrapper-crash'; detail = wrapperCrash; }
+  else if (feedCreateFault && feedTwoCopies) verdict = 'duplicate-dlss';
   else if (shutdownFault) verdict = 'shutdown-fault';
   else if (crash && !cleanExit) { verdict = 'ue-crash'; detail = crash.message; }
   // Before feed-stopped and before nr-ran: a session that never opened for this reason, and a
@@ -203,6 +245,7 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     feedNoMotion,
     feedDepthFlat,
     feedDepthFlatMoving,
+    wrapperCrash,
     verdict,
     detail,
   };

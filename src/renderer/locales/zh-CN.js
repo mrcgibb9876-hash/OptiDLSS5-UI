@@ -602,4 +602,11 @@ window.I18N.register("zh-CN", {
   "DLSS5 Feeder updates": "DLSS5 Feeder 更新",
   "The Feeder is deployed per game, from its author's newest stable release. Tick this to take pre-releases as well, which is what you want when the author asks you to test a beta against a bug you reported. Untick it and deploy again to go back to stable.": "Feeder 按游戏部署，取自作者最新的稳定版本。勾选此项也会获取预发布版本，当作者请你针对你报告的缺陷测试测试版时正需要它。取消勾选并重新部署即可回到稳定版本。",
   "Include DLSS5 Feeder pre-releases": "包含 DLSS5 Feeder 预发布版本",
+  // Game Help: a DirectX wrapper (dgVoodoo2) crashing the game at startup.
+  "The game crashed as it started, inside dgVoodoo2's {dll} -- before the DLSS5 Feeder or OptiScaler had done anything. This DirectX 9 route cannot work without dgVoodoo2, and no dgVoodoo2 setting is known to get past this: where it was first seen, every setting tried hung or crashed the same way while the game ran fine without dgVoodoo2. The same fault can also show as a black screen that never responds, which leaves no log. Removing puts the game back exactly as it was.": "游戏在启动时崩溃于 dgVoodoo2 的 {dll} 内 -- 当时 DLSS5 Feeder 和 OptiScaler 都还没有做任何事。这条 DirectX 9 路径离不开 dgVoodoo2，而且目前没有已知的 dgVoodoo2 设置能绕过这个问题：在最初发现它的游戏上，尝试过的每项设置都同样卡死或崩溃，而去掉 dgVoodoo2 后游戏运行正常。同一故障也可能表现为始终无响应的黑屏，这种情况不会留下日志。移除会把游戏完全恢复原样。",
+  "The game crashed as it started, inside {dll} in its own folder -- a DirectX wrapper this app did not place. No rule covers this. Save the bundle to share, or ask the AI.": "游戏在启动时崩溃于其自身文件夹中的 {dll} 内 -- 这是一个并非本应用放置的 DirectX 包装器。没有规则涵盖此情况。请保存分享包或询问 AI。",
+  "dgVoodoo2 crashes this game": "dgVoodoo2 导致此游戏崩溃",
+  "Crashed in {dll} -- no known fix": "在 {dll} 中崩溃 -- 无已知修复",
+  "Remove everything this app placed": "移除本应用放置的所有内容",
+  "crashed as it started, inside {dll} (a DirectX wrapper in the game folder)": "启动时崩溃于 {dll} 内（游戏文件夹中的 DirectX 包装器）",
 });

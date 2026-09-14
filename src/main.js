@@ -2209,6 +2209,25 @@ async function applyHelpFix(exePath, fixId) {
       await fsp.rename(src, dest);
       return { done: true, text: 'moved D3D12\\ aside to D3D12.dlss5ui-off. Launch the game: if it starts, that folder was the problem and the Feeder can open its own device now. If it refuses to start, rename the folder back -- the redist is genuinely in use and damaged, and the game\'s files need verifying' };
     }
+    // The card's Remove, for a route that cannot run on this game at all (dgVoodoo2 crashing it at
+    // startup). Everything this app placed goes and anything it set aside comes back -- asked first,
+    // since it undoes the whole install rather than one setting.
+    case 'remove-all': {
+      const answer = await dialog.showMessageBox({
+        type: 'question',
+        buttons: ['Remove', 'Cancel'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+        title: 'Remove from this game',
+        message: 'Remove everything this app placed in this game\'s folder?',
+        detail: 'The game goes back to how it was before Install. You can Install again later.',
+      });
+      if (answer.response !== 0) return { done: false, text: 'cancelled by the user' };
+      const r = await uninstallEverything(dir);
+      invalidateDetection(dir);
+      return { done: true, text: `removed ${(r.removed || []).length} item(s)${(r.restored || []).length ? ', restored ' + r.restored.length : ''} -- the game is back to how it was` };
+    }
     case 'install':
       return { done: false, text: 'Install runs from the card: press Install OptiScaler on this game' };
     default:

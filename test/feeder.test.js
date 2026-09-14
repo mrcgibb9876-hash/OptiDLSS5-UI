@@ -630,3 +630,45 @@ test('a release published without the zip is skipped, and nothing usable is an e
   await assert.rejects(() => feeder.resolveFeederAsset({}, { allowPrerelease: true, fetchImpl: limited }),
     /Unexpected answer/);
 });
+
+test('a game that crashes inside dgVoodoo2 as it starts is a run, and Game Help offers Remove', async () => {
+  // The Feeder's own log from Castlevania: Lords of Shadow 2 (32-bit DX9, 2026-09-14). The helper
+  // never started, so there is no OptiScaler.log anywhere -- which used to read as "not run yet".
+  const game = scratchDir('wrapper-crash');
+  const feedLog = (dll) => [
+    '13:54:58.631  dlss5-feed32 1.16.0-beta.2 commit a6c23bd (built Sep 14 2026 08:15:48) attached AGAIN in the same process.',
+    `13:54:58.671  ### EXCEPTION RECORDED ###  exception 0xC0000005 (reading address 00000000) at 69611E10 in ${dll}; this add-on was last doing: nothing yet -- no feed work has run in this process`,
+    `13:54:58.776  [feed32] crash dump written: ${path.join(game, 'dlss5-feed-crash.dmp')}`,
+  ].join('\n');
+  write(game, 'dlss5-feed.log', feedLog(path.join(game, 'd3d9.dll')));
+  const host = path.join(game, 'host64');
+
+  const run = await runlog.analyzeRun(game, { optiDir: host });
+  assert.equal(run.ran, true, 'the crash is the run');
+  assert.equal(run.verdict, 'wrapper-crash');
+  assert.equal(run.detail, 'd3d9.dll');
+  assert.ok(run.at);
+
+  const legacyRoute = { route: 'feeder32', complete: true, optiInstalled: true, dgVoodooDeployed: true, legacy: { dgVoodoo: { arch: 'x86', dll: 'D3D9.dll' } } };
+  const diag = diagnose({ detected: { bitness: 32, api: 'dx9' }, route: legacyRoute, run });
+  assert.equal(diag.code, 'dgvoodoo-crash');
+  assert.equal(diag.fix.id, 'remove-all');
+
+  // The same crash in a wrapper this app did not place: named, not removed.
+  const other = diagnose({ detected: { bitness: 32, api: 'dx11' }, route: { ...legacyRoute, dgVoodooDeployed: false, legacy: { dgVoodoo: null } }, run });
+  assert.equal(other.code, 'wrapper-crash');
+  assert.equal(other.fix, null);
+
+  // Windows' own d3d9.dll faulting is not a wrapper in the game folder.
+  write(game, 'dlss5-feed.log', feedLog('C:\Windows\SysWOW64\d3d9.dll'));
+  assert.equal((await runlog.analyzeRun(game, { optiDir: host })).verdict, 'no-log');
+
+  // An older helper log from a run that worked does not hide a newer wrapper crash.
+  write(host, 'OptiScaler.log', 'DlssNr_Dx12::Dispatch DLSS-NR running after SR: target 2560x1600\nDLL_PROCESS_DETACH\n');
+  const past = new Date(Date.now() - 60 * 60 * 1000);
+  fs.utimesSync(path.join(host, 'OptiScaler.log'), past, past);
+  write(game, 'dlss5-feed.log', feedLog(path.join(game, 'd3d9.dll')));
+  const again = await runlog.analyzeRun(game, { optiDir: host });
+  assert.equal(again.verdict, 'wrapper-crash');
+  assert.ok(Date.parse(again.at) > past.getTime(), 'the run is dated by the newer log');
+});

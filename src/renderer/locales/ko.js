@@ -602,4 +602,11 @@ window.I18N.register("ko", {
   "DLSS5 Feeder updates": "DLSS5 Feeder 업데이트",
   "The Feeder is deployed per game, from its author's newest stable release. Tick this to take pre-releases as well, which is what you want when the author asks you to test a beta against a bug you reported. Untick it and deploy again to go back to stable.": "Feeder는 제작자의 최신 안정 릴리스에서 게임별로 배포됩니다. 프리릴리스까지 받으려면 이것을 체크하세요. 여러분이 보고한 버그에 대해 제작자가 베타 테스트를 요청할 때 필요합니다. 체크를 해제하고 다시 배포하면 안정 버전으로 돌아갑니다.",
   "Include DLSS5 Feeder pre-releases": "DLSS5 Feeder 프리릴리스 포함",
+  // Game Help: a DirectX wrapper (dgVoodoo2) crashing the game at startup.
+  "The game crashed as it started, inside dgVoodoo2's {dll} -- before the DLSS5 Feeder or OptiScaler had done anything. This DirectX 9 route cannot work without dgVoodoo2, and no dgVoodoo2 setting is known to get past this: where it was first seen, every setting tried hung or crashed the same way while the game ran fine without dgVoodoo2. The same fault can also show as a black screen that never responds, which leaves no log. Removing puts the game back exactly as it was.": "게임이 시작하자마자 dgVoodoo2의 {dll} 안에서 충돌했습니다 -- DLSS5 Feeder나 OptiScaler가 아무것도 하기 전입니다. 이 DirectX 9 경로는 dgVoodoo2 없이는 작동하지 않으며, 이를 넘어서는 dgVoodoo2 설정은 알려진 것이 없습니다: 처음 발견된 곳에서는 시도한 모든 설정이 똑같이 멈추거나 충돌했고, 게임은 dgVoodoo2 없이 정상 실행되었습니다. 같은 문제가 응답하지 않는 검은 화면으로 나타날 수도 있으며, 이때는 로그가 남지 않습니다. 제거하면 게임이 원래 상태로 정확히 돌아갑니다.",
+  "The game crashed as it started, inside {dll} in its own folder -- a DirectX wrapper this app did not place. No rule covers this. Save the bundle to share, or ask the AI.": "게임이 시작하자마자 자체 폴더의 {dll} 안에서 충돌했습니다 -- 이 앱이 넣지 않은 DirectX 래퍼입니다. 해당하는 규칙이 없습니다. 번들을 저장해 공유하거나 AI에게 물어보세요.",
+  "dgVoodoo2 crashes this game": "dgVoodoo2가 이 게임을 충돌시킴",
+  "Crashed in {dll} -- no known fix": "{dll}에서 충돌함 -- 알려진 해결책 없음",
+  "Remove everything this app placed": "이 앱이 넣은 모든 것 제거",
+  "crashed as it started, inside {dll} (a DirectX wrapper in the game folder)": "시작하자마자 {dll} 안에서 충돌함(게임 폴더의 DirectX 래퍼)",
 });

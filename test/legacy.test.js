@@ -241,11 +241,15 @@ test('the 32-bit route: dgVoodoo2, the game-side ReShade and add-on, the host64 
     ...comps,
     releaseFolder: release,
     nrDllPath: nr,
+    // VORT's real layout: its includes, texture and licence sit in folders of their own, and Remove
+    // has to take those folders too (Castlevania: Lords of Shadow 2 kept them, empty).
     deployShaders: async (dir) => {
-      write(dir, 'reshade-shaders/Shaders/vort_Motion.fx', '// mv');
+      const mv = ['reshade-shaders/Shaders/vort_Motion.fx', 'reshade-shaders/Shaders/Includes/vort_Defs.fxh',
+        'reshade-shaders/Textures/vort_BlueNoise.png', 'reshade-shaders/Licenses/VORT-LICENSE.txt'];
+      for (const f of mv) write(dir, f, '// vort');
       write(dir, 'ReShade.ini', '[ADDON]\nAddonPath=.\\\n');
       write(dir, 'ReShadePreset.ini', 'Techniques=DLSS5_Feed@DLSS5_Feed.fx\n');
-      return ['reshade-shaders/Shaders/vort_Motion.fx'];
+      return mv;
     },
     deployNvngxDlss: async (hostDir) => write(hostDir, 'nvngx_dlss.dll', 'dlss'),
   });

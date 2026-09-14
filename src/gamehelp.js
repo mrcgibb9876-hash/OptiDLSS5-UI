@@ -9,7 +9,8 @@
 // reason), unknown (no rule fits -- the support bundle, or the AI tier, is the next step).
 //
 // Fix ids are what main.js's game:help-apply knows how to run: remove-foreign, remove-feeder,
-// remove-luma, redeploy-feeder, feeder-depth-profile, disable-agility-redist, reconfigure.
+// remove-luma, redeploy-feeder, feeder-depth-profile, disable-agility-redist, reconfigure,
+// remove-all (the card's Remove, after a confirmation).
 // 'install' is the card's own Install button, run by the renderer.
 //
 // fixesTried: what the renderer already applied this session, as { id, runAt } (runAt: the
@@ -182,12 +183,23 @@ function diagnose(ctx) {
         : out('step', 'feed-agility-redist-elsewhere');
     case 'feed-stopped':
       return fix('feed-stopped', 'reconfigure');
+    // The game died inside a DirectX 8/9 wrapper in its own folder as it started. When that wrapper
+    // is the dgVoodoo2 this app placed, there is no setting to try: on Castlevania: Lords of Shadow 2
+    // (2026-09-14) VRAM, output API, windowed mode, adapter, GPU preference, CPU affinity and the
+    // previous dgVoodoo2 release all hung or crashed the same way, while the game ran clean without
+    // it. DirectX 8/9 has no Feeder path without dgVoodoo2, so the honest fix is putting the game
+    // back as it was. A wrapper that is not ours is named and left alone.
+    case 'wrapper-crash': {
+      const ours = route.dgVoodooDeployed && route.legacy && route.legacy.dgVoodoo &&
+        String(route.legacy.dgVoodoo.dll || '').toLowerCase() === String(run.detail || '').toLowerCase();
+      return ours ? fix('dgvoodoo-crash', 'remove-all', { dll: run.detail || '' }) : out('unknown', 'wrapper-crash', { dll: run.detail || '' });
+    }
     default:
       return out('unknown', 'unknown', { verdict: run.verdict });
   }
 }
 
 // The fixes in the order Game Help would try them, for the AI tier's tool list and the tests.
-const FIX_IDS = ['remove-foreign', 'remove-feeder', 'remove-luma', 'redeploy-feeder', 'feeder-depth-profile', 'disable-agility-redist', 'reconfigure', 'install'];
+const FIX_IDS = ['remove-foreign', 'remove-feeder', 'remove-luma', 'redeploy-feeder', 'feeder-depth-profile', 'disable-agility-redist', 'reconfigure', 'remove-all', 'install'];
 
 module.exports = { diagnose, FIX_IDS };
