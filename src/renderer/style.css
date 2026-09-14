@@ -529,6 +529,9 @@ html[lang="ko"] { word-break: keep-all; }
 /* A game that is up right now. The dot pulses because the point of the line is that something is
    happening this second: the settings below reach the running game as they are changed, which is
    not a thing anyone would think to try unless the card said so. */
+/* Without the dot the line is still a state, just not a live one -- a running game that is not
+   on the 32-bit route gets the plain colour. */
+.card-live:has(.card-live-dot.hidden) { color: var(--text-dim); }
 .card-live {
   display: flex;
   align-items: center;

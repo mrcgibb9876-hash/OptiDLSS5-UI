@@ -149,16 +149,25 @@ function applyRunningState(card, isRunning) {
   const live = card.querySelector('.card-live');
   const tune = card.querySelector('.btn-tune');
   const lastRun = card.querySelector('.card-lastrun');
+  const dot = card.querySelector('.card-live-dot');
   if (!live || !tune) return;
   live.classList.toggle('hidden', !isRunning);
   tune.classList.toggle('hidden', !isRunning);
   // The last run is history the moment there is a current one.
   if (lastRun) lastRun.classList.toggle('hidden', isRunning || !lastRun.textContent);
-  if (isRunning) {
-    card.querySelector('.card-live-text').textContent =
-      t('Running -- DLSS 5 tuning reaches this game as you change it');
-    live.title = t('This game is up, and OptiScaler re-reads its settings while it runs. Open Tune DLSS 5, move something, and the next frame in the game is already different -- no in-game menu needed, which is the only way to reach the settings at all on the 32-bit route.');
-  }
+  if (!isRunning) return;
+
+  // Only the 32-bit route is tunable live: that is the one place OptiScaler has no window of its
+  // own, and the only place the engine watches its ini for changes. Anywhere else a change here is
+  // real but waits for the next launch, and the panel is on a keypress -- so say that instead.
+  const liveTuning = card.dataset.liveTuning === '1';
+  if (dot) dot.classList.toggle('hidden', !liveTuning);
+  card.querySelector('.card-live-text').textContent = liveTuning
+    ? t('Running -- DLSS 5 tuning reaches this game as you change it')
+    : t('Running -- changes here apply next launch; Insert opens the panel in-game');
+  live.title = liveTuning
+    ? t('This game is up, and OptiScaler re-reads its settings while it runs. Open Tune DLSS 5, move something, and the next frame in the game is already different -- which on the 32-bit route is the only way to reach the settings at all, because OptiScaler is in a helper process with no window.')
+    : t('This game is up. OptiScaler is inside it and its own panel opens on Insert, so that is the quickest way to try something now. Changes made here are written to the ini and taken on the next launch: the engine only watches the file on the 32-bit route, where there is no panel to reach.');
 }
 
 async function pollRunningGames() {
@@ -479,6 +488,9 @@ async function applyRecommendation(game, card, backends, generation = renderGene
     chips.push(`<span class="engine-badge api-badge ${badgeClass}" title="${title}">${escapeHtml(detected.apiBadge)}</span>`);
   }
 
+  // Read back by applyRunningState, which runs from the poll and has no route of its own.
+  card.dataset.liveTuning = route.route === 'feeder32' ? '1' : '';
+
   const routeClass = route.route === 'unsupported' ? 'route-badge-unsupported'
     : route.route === 'unknown' ? 'route-badge-unknown'
     : route.complete ? 'route-badge-done'
@@ -574,6 +586,9 @@ async function applyRecommendation(game, card, backends, generation = renderGene
       panelEl.title = t('Expect nothing on screen in the game: no OptiScaler splash when it loads, and no menu on any key. A 32-bit game cannot run DLSS in its own process, so the neural pass runs in the 64-bit helper beside the game -- and OptiScaler runs there with it, in a process with no window to draw on. Press "Show the DLSS 5 panel in-game" in the add-on first; Insert then opens OptiScaler\'s menu inside it. Needs windowed or borderless. Game Help spells it out.');
     }
   }
+
+  // The route is only known now, and the poll may already have decided this card was running.
+  if (runningGames.has(game.exePath)) applyRunningState(card, true);
 
   const nextEl = card.querySelector('.card-route-next');
   if (nextEl) {
