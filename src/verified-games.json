@@ -1,10 +1,16 @@
 {
-  "_readme": "Games this app's route has been confirmed on, from a real install, by a person. One entry per game. `match.exe` are lower-case exe names beside which the app installs; `match.projectFolder` is the Unreal project folder (the one above Binaries\\Win64) for games that ship several exe names. `route` is the route that was verified (optiscaler = the game's own DLSS, feeder = DLSS5 Feeder, lumaue = Luma UE). `verified` is the date it was last confirmed working end to end (NR actually dispatching in gameplay), `notes` what a user should know. `knownBad` names routes that were tried and broke the game. Add yours by pull request -- the card shows the tick only for entries here.",
+  "_readme": "Games this app's route has been confirmed on, from a real install, by a person. One entry per game. `match.exe` are lower-case exe names beside which the app installs; `match.projectFolder` is the Unreal project folder (the one above Binaries\\Win64) for games that ship several exe names. `route` is the route that was verified (optiscaler = the game's own DLSS, feeder = DLSS5 Feeder, feeder32 = the 32-bit Feeder with its 64-bit helper, lumaue = Luma UE). `verified` is the date it was last confirmed working end to end (NR actually dispatching in gameplay), `notes` what a user should know. `knownBad` names routes that were tried and broke the game. Add yours by pull request -- the card shows the tick only for entries here.",
   "games": [
     {
       "id": "star-wars-jedi-fallen-order",
       "name": "STAR WARS Jedi: Fallen Order",
-      "match": { "exe": ["swgame-win64-shipping.exe", "starwarsjedifallenorder.exe"], "projectFolder": "SwGame" },
+      "match": {
+        "exe": [
+          "swgame-win64-shipping.exe",
+          "starwarsjedifallenorder.exe"
+        ],
+        "projectFolder": "SwGame"
+      },
       "engine": "Unreal Engine 4.21 (D3D11)",
       "route": "lumaue",
       "verified": "2026-09-11",
@@ -13,7 +19,11 @@
     {
       "id": "batman-arkham-knight",
       "name": "Batman: Arkham Knight",
-      "match": { "exe": ["batmanak.exe"] },
+      "match": {
+        "exe": [
+          "batmanak.exe"
+        ]
+      },
       "engine": "Unreal Engine 3 (D3D11)",
       "route": "feeder",
       "verified": "2026-09-09",
@@ -22,7 +32,12 @@
     {
       "id": "code-vein-2",
       "name": "CODE VEIN 2",
-      "match": { "exe": ["codevein2-win64-shipping.exe"], "projectFolder": "CodeVein2" },
+      "match": {
+        "exe": [
+          "codevein2-win64-shipping.exe"
+        ],
+        "projectFolder": "CodeVein2"
+      },
       "engine": "Unreal Engine 5 (D3D12)",
       "route": "optiscaler",
       "verified": "2026-09-11",
@@ -31,7 +46,12 @@
     {
       "id": "mortal-shell-ii",
       "name": "Mortal Shell II",
-      "match": { "exe": ["mortalshell2-win64-shipping.exe"], "projectFolder": "MortalShell2" },
+      "match": {
+        "exe": [
+          "mortalshell2-win64-shipping.exe"
+        ],
+        "projectFolder": "MortalShell2"
+      },
       "engine": "Unreal Engine 5 (D3D12)",
       "route": "optiscaler",
       "verified": "2026-09-11",
@@ -40,7 +60,11 @@
     {
       "id": "cyberpunk-2077",
       "name": "Cyberpunk 2077",
-      "match": { "exe": ["cyberpunk2077.exe"] },
+      "match": {
+        "exe": [
+          "cyberpunk2077.exe"
+        ]
+      },
       "engine": "RED Engine (D3D12)",
       "route": "optiscaler",
       "verified": "2026-09-08",
@@ -49,12 +73,33 @@
     {
       "id": "spyro-reignited-trilogy",
       "name": "Spyro Reignited Trilogy",
-      "match": { "exe": ["spyro-win64-shipping.exe"], "projectFolder": "Spyro" },
+      "match": {
+        "exe": [
+          "spyro-win64-shipping.exe"
+        ],
+        "projectFolder": "Spyro"
+      },
       "engine": "Unreal Engine 4 (D3D11)",
       "route": "feeder",
       "verified": null,
       "notes": "Feeder route only.",
-      "knownBad": { "lumaue": "does not start with Luma UE deployed (user report, 2026-09-12)" }
+      "knownBad": {
+        "lumaue": "does not start with Luma UE deployed (user report, 2026-09-12)"
+      }
+    },
+    {
+      "id": "castlevania-lords-of-shadow",
+      "name": "Castlevania: Lords of Shadow",
+      "match": {
+        "exe": [
+          "castlevania.exe",
+          "castlevanialordsofshadow.exe"
+        ]
+      },
+      "engine": "MercurySteam (DirectX 9, 32-bit)",
+      "route": "feeder32",
+      "verified": "2026-09-14",
+      "notes": "First game confirmed on the experimental 32-bit route. dgVoodoo2 presents its DirectX 9 as Direct3D 11, the Feeder's 32-bit add-on ships each frame to host64\\dlss5-feed-host64.exe, and OptiScaler DLSS-NR runs the neural pass there as host64\\winmm.dll; VORT supplies motion vectors. Expect nothing on screen in the game -- no OptiScaler splash, no menu on any key -- because OptiScaler is in the helper, which has no window. Home opens ReShade, Add-ons -> DLSS 5 Feed, \"Show the DLSS 5 panel in-game\", then Insert."
     }
   ]
 }

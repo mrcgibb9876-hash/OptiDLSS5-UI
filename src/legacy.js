@@ -1,7 +1,11 @@
 // EXPERIMENTAL: 32-bit games and DirectX 8/9 games, through the DLSS5 Feeder's own documented paths
 // (its README: "Install for a 32-bit game", "Install for a DirectX 9 game"), with OptiScaler_DLSSNR
-// as the neural consumer the Feeder names ("Alternative: OptiScaler DLSS-NR"). Nothing here has run
-// on a live game on the machine it was written on -- the card says Experimental for that reason.
+// as the neural consumer the Feeder names ("Alternative: OptiScaler DLSS-NR").
+//
+// Confirmed on a live game 2026-09-14: Castlevania: Lords of Shadow (32-bit, DirectX 9), dgVoodoo2
+// presenting it as Direct3D 11, VORT supplying motion vectors, 3976 frames delivered to
+// host64\dlss5-feed-host64.exe with OptiScaler DLSS-NR attached as host64\winmm.dll. The add-on's
+// own status panel was the evidence. Still marked Experimental: one game, one machine.
 //
 // Two separate pieces, which a game may need one or both of:
 //

@@ -107,11 +107,21 @@ test('routes and Game Help for the experimental cases', { skip: !onWindows }, ()
   assert.equal(r32.experimental, true);
   assert.deepEqual(r32.steps.map((s) => s.key), ['dgvoodoo', 'feeder32']);
   assert.equal(r32.reasonVars.dx, 'DirectX 9');
-  assert.equal(r32.reason, route.ROUTE_TEXT.host32DgVoodoo);
+  // The three 32-bit route texts used to be three copies of one paragraph, and all three said the
+  // wrong key. They share it now, so assert what the reader is told rather than which constant
+  // was concatenated.
+  assert.match(r32.reason, /dgVoodoo2 turns it into DirectX 11/, 'the DX9 half');
+  assert.match(r32.reason, /"Show the DLSS 5 panel in-game", then Insert/,
+    'Insert is what opens OptiScaler in the helper -- the add-on says so itself');
+  assert.ok(!/Alt\+Home/.test(r32.reason), 'Alt+Home is the panel key inside OptiScaler, not the way in');
+  assert.match(r32.reason, /no OptiScaler splash when it loads/,
+    'the missing splash is the symptom users report first');
 
   const r32gl = route.recommendRoute(dir, exe, { api: 'opengl', apis: ['opengl'], bitness: 32, recommend: 'optiscaler' }, 'nvidia');
   assert.deepEqual(r32gl.steps.map((s) => s.key), ['feeder32']);
   assert.equal(r32gl.legacy.reshadeName, 'opengl32.dll');
+  assert.match(r32gl.reason, /On OpenGL, ReShade goes in as the game's opengl32\.dll/, 'the OpenGL half');
+  assert.match(r32gl.reason, /then Insert/, 'and the shared paragraph, from the one place it lives');
 
   const r64dx9 = route.recommendRoute(dir, exe, { api: 'dx9', apis: ['dx9'], bitness: 64, recommend: 'optiscaler' }, 'nvidia');
   assert.equal(r64dx9.route, 'feeder');

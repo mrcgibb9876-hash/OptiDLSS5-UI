@@ -60,28 +60,21 @@ const ROUTE_TEXT = {
   labelDx9: 'OptiScaler + Feeder (DX9)',
   stepDgVoodoo: 'Put dgVoodoo2 in front of the game (Install asks first)',
   stepFeeder32: 'Deploy the 32-bit Feeder and its 64-bit helper with OptiScaler',
-  host32:
+  // How to reach OptiScaler on this route, in the add-on's own words. Photographed on a live
+  // install 2026-09-14: "OptiScaler has its own menu with every neural-rendering control ... It
+  // opens with Insert in the host window: press 'Show the DLSS 5 panel in-game' above and then
+  // Insert, or run with host_window=1." Alt+Home is the DLSS 5 panel's key inside OptiScaler; it
+  // is Insert that opens OptiScaler in the helper, and this text said Alt+Home until then.
+  host32Panel:
+    'Nothing appears in the game itself -- no OptiScaler splash when it loads, no menu on any key -- because ' +
+    'OptiScaler is in that helper, which has no window of its own. To reach it: Home opens ReShade in the game, ' +
+    'Add-ons -> DLSS 5 Feed, press "Show the DLSS 5 panel in-game", then Insert. The add-on\'s Toggle key starts as ' +
+    '"none", so set one there if you want it back without opening ReShade each time. Windowed or borderless; ' +
+    '"Show as texture (fullscreen too)" is the Feeder\'s option for exclusive fullscreen.',
+  host32Lead:
     'Experimental. A 32-bit game cannot run DLSS in its own process -- NVIDIA ships no 32-bit version -- so the DLSS5 ' +
     'Feeder\'s 32-bit add-on sends each frame to its 64-bit helper beside the game, and OptiScaler runs Neural Rendering ' +
-    'there. The DLSS 5 panel (Alt+Home) lives in that helper, not in the game: open ReShade in the game (Home), go to ' +
-    'Add-ons -> DLSS 5 Feed, press "Show the DLSS 5 panel in-game", then Alt+Home -- the helper\'s window is shown over ' +
-    'the game with your clicks and keys passed to it. That needs windowed or borderless; "Show as texture" is the ' +
-    'Feeder\'s option for exclusive fullscreen.',
-  host32DgVoodoo:
-    'Experimental. A 32-bit game cannot run DLSS in its own process -- NVIDIA ships no 32-bit version -- so the DLSS5 ' +
-    'Feeder\'s 32-bit add-on sends each frame to its 64-bit helper beside the game, and OptiScaler runs Neural Rendering ' +
-    'there. {dx} has no Feeder path of its own, so dgVoodoo2 turns it into DirectX 11 first (Install asks before ' +
-    'downloading it). The DLSS 5 panel (Alt+Home) lives in that helper, not in the game: open ReShade in the game ' +
-    '(Home), go to Add-ons -> DLSS 5 Feed, press "Show the DLSS 5 panel in-game", then Alt+Home -- the helper\'s window ' +
-    'is shown over the game with your clicks and keys passed to it. That needs windowed or borderless; "Show as ' +
-    'texture" is the Feeder\'s option for exclusive fullscreen.',
-  host32OpenGl:
-    'Experimental. A 32-bit game cannot run DLSS in its own process -- NVIDIA ships no 32-bit version -- so the DLSS5 ' +
-    'Feeder\'s 32-bit add-on sends each frame to its 64-bit helper beside the game, and OptiScaler runs Neural Rendering ' +
-    'there. On OpenGL, ReShade goes in as the game\'s opengl32.dll. The DLSS 5 panel (Alt+Home) lives in that helper, ' +
-    'not in the game: open ReShade in the game (Home), go to Add-ons -> DLSS 5 Feed, press "Show the DLSS 5 panel ' +
-    'in-game", then Alt+Home -- the helper\'s window is shown over the game with your clicks and keys passed to it. ' +
-    'That needs windowed or borderless; "Show as texture" is the Feeder\'s option for exclusive fullscreen.',
+    'there. ',
   emulator:
     'Experimental. {name} emulates {system} and makes no DLSS call, so the DLSS5 Feeder synthesises one inside it, for ' +
     'every game it runs. Set its renderer first ({hint}) and pick the same API in Edit if it is not {api}. Depth is the ' +
@@ -229,7 +222,10 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
     const steps = [];
     if (plan.dgVoodoo) steps.push({ key: 'dgvoodoo', label: ROUTE_TEXT.stepDgVoodoo, done: legacyStatus.dgVoodoo });
     steps.push({ key: 'feeder32', label: ROUTE_TEXT.stepFeeder32, done: legacyStatus.host32 && legacyStatus.feeder32 && legacyStatus.hostOptiScaler });
-    const text = plan.dgVoodoo ? ROUTE_TEXT.host32DgVoodoo : plan.api === 'opengl' ? ROUTE_TEXT.host32OpenGl : ROUTE_TEXT.host32;
+    const middle = plan.dgVoodoo
+      ? '{dx} has no Feeder path of its own, so dgVoodoo2 turns it into DirectX 11 first (Install asks before downloading it). '
+      : plan.api === 'opengl' ? 'On OpenGL, ReShade goes in as the game\'s opengl32.dll. ' : '';
+    const text = ROUTE_TEXT.host32Lead + middle + ROUTE_TEXT.host32Panel;
     return finish('feeder32', ROUTE_TEXT.labelHost32, text, steps,
       { dx: plan.api === 'dx8' ? 'DirectX 8' : 'DirectX 9' }, { experimental: true, legacy: plan });
   }
