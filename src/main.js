@@ -630,6 +630,13 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
+    // This is the 64-bit stack (ReShade64.dll, dlss5-feed.addon64), and a 32-bit game can load
+    // none of it. Edit's Deploy button and Game Help's redeploy fix reach here without the route
+    // check Install makes, and on Castlevania: Lords of Shadow 2 (2026-09-14) that left a folder
+    // the game ran straight past with no DLSS at all. Install owns the 32-bit route (legacy.js).
+    if ((await peBitness(exePath)) === 32) {
+      throw new Error('this is a 32-bit game, and the 64-bit Feeder cannot load in it -- use Install, which sets up the experimental 32-bit route');
+    }
     const api = await resolveApi(dir, exePath);
     const results = await feeder.deployFeederStack(dir, api, mvProviderId || feeder.defaultMvProviderId(), {
       cacheDir: feederCacheDir(),
@@ -671,8 +678,9 @@ function legacyPlanFor(dir, exePath, detected) {
   return legacy.planFor(withApiOverride(detected || {}, readApiOverride(dir)));
 }
 
-// dgVoodoo2 in front of a DirectX 8/9 game. Asks first, every time it would download: Windows Defender
-// flags the official zip, and that is the user's call, not this app's.
+// dgVoodoo2 in front of a DirectX 8/9 game. Fetched like every other component, with no prompt:
+// the zip Defender flags is never written (legacy.js). Only when that fetch fails -- offline, a
+// checksum mismatch, a scanner taking one of the files -- is the user offered a zip of their own.
 ipcMain.handle('legacy:dgvoodoo', async (_evt, { exePath, detected } = {}) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
@@ -680,34 +688,26 @@ ipcMain.handle('legacy:dgvoodoo', async (_evt, { exePath, detected } = {}) => {
     const plan = legacyPlanFor(dir, exePath, detected);
     if (!plan.supported || !plan.dgVoodoo) return { ok: true, skipped: true };
     if (legacy.status(dir).dgVoodoo && fs.existsSync(path.join(dir, plan.dgVoodoo.dll))) return { ok: true, already: true };
-    let zip = legacy.cachedDgVoodooZip(feederCacheDir());
-    if (!zip) {
+    let source;
+    try {
+      source = await legacy.ensureDgVoodoo(feederCacheDir(), { headers: GITHUB_HEADERS });
+    } catch (fetchError) {
       const answer = await dialog.showMessageBox({
         type: 'warning',
-        buttons: ['Download dgVoodoo2', 'Use a dgVoodoo2 zip I have…', 'Cancel'],
+        buttons: ['Use a dgVoodoo2 zip I have…', 'Cancel'],
         defaultId: 0,
-        cancelId: 2,
+        cancelId: 1,
         noLink: true,
         title: 'dgVoodoo2 (experimental DirectX 8/9 route)',
-        message: 'This game needs dgVoodoo2, which turns DirectX 8/9 into DirectX 11 so the DLSS5 Feeder can work.',
-        detail:
-          `dgVoodoo2 is Dege's freeware graphics wrapper. This app downloads version ${legacy.DGVOODOO.version} from its official ` +
-          `GitHub release (${legacy.DGVOODOO.page}) and checks it against a known checksum.\n\n` +
-          'Heads-up: Windows Defender currently reports that official zip as "Trojan:Win32/Kepavll!rfn" -- a ' +
-          'reputation-based detection -- and may delete it. This app never adds antivirus exclusions or works around ' +
-          'your antivirus. If it is removed, the choice of what to trust is yours: Windows Security\'s protection ' +
-          'history, or a dgVoodoo2 zip you already have.',
+        message: 'dgVoodoo2 could not be set up automatically.',
+        detail: `${fetchError.message}\n\nIf you have a dgVoodoo2 release zip (${legacy.DGVOODOO.page}), pick it and Install carries on.`,
       });
-      if (answer.response === 2) return { ok: true, cancelled: true };
-      if (answer.response === 1) {
-        const pick = await dialog.showOpenDialog({ title: 'Select a dgVoodoo2 release zip', properties: ['openFile'], filters: [{ name: 'dgVoodoo2 zip', extensions: ['zip'] }] });
-        if (pick.canceled || pick.filePaths.length === 0) return { ok: true, cancelled: true };
-        zip = await legacy.importDgVoodooZip(pick.filePaths[0], feederCacheDir());
-      } else {
-        zip = await legacy.ensureDgVoodooZip(feederCacheDir(), { headers: GITHUB_HEADERS });
-      }
+      if (answer.response !== 0) throw fetchError;
+      const pick = await dialog.showOpenDialog({ title: 'Select a dgVoodoo2 release zip', properties: ['openFile'], filters: [{ name: 'dgVoodoo2 zip', extensions: ['zip'] }] });
+      if (pick.canceled || pick.filePaths.length === 0) return { ok: true, cancelled: true };
+      source = await legacy.importDgVoodooZip(pick.filePaths[0], feederCacheDir());
     }
-    const res = await legacy.deployDgVoodoo(dir, plan, zip);
+    const res = await legacy.deployDgVoodoo(dir, plan, source);
     return { ok: true, ...res };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error), code: error && error.code ? error.code : null };

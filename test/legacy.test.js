@@ -157,22 +157,66 @@ test('dgVoodoo2: pinned release, its layout checked, configured in the right sec
   assert.match(conf, /dgVoodooWatermark\s*=\s*false/);
   assert.match(conf, /OutputAPI\s*=\s*d3d11_fl11_0/);
 
-  // A download that does not match the pin is refused.
+  // A download that does not match the pin is refused, and nothing is cached.
   await assert.rejects(
-    legacy.ensureDgVoodooZip(path.join(base, 'cache-a'), { fetchImpl: async () => ({ ok: true, status: 200, arrayBuffer: async () => Buffer.from('not dgvoodoo') }) }),
+    legacy.ensureDgVoodoo(path.join(base, 'cache-a'), { fetchImpl: async () => ({ ok: true, status: 200, arrayBuffer: async () => Buffer.from('not dgvoodoo') }) }),
     (e) => e.code === 'dgvoodoo-checksum');
+  assert.equal(legacy.cachedDgVoodoo(path.join(base, 'cache-a')), null);
 
-  // A zip that is written and then taken away (what antivirus quarantine looks like) is reported as such.
+  // A file that is written and then taken away (what antivirus quarantine looks like) is reported as such.
   const cache = path.join(base, 'cache-b');
   process.env.LEGACY_QUARANTINE_WAIT_MS = '60';
-  const timer = setInterval(() => { try { fs.rmSync(path.join(cache, 'dgVoodoo2-user.zip'), { force: true }); } catch {} }, 5);
+  const timer = setInterval(() => { try { fs.rmSync(path.join(cache, 'dgVoodoo2-user', 'MS', 'x86', 'D3D9.dll'), { force: true }); } catch {} }, 5);
   try {
-    await assert.rejects(legacy.importDgVoodooZip(dgZip, cache), (e) => e.code === 'dgvoodoo-quarantined' && /will not work around your antivirus/.test(e.message));
+    await assert.rejects(legacy.importDgVoodooZip(dgZip, cache), (e) => e.code === 'dgvoodoo-quarantined');
   } finally {
     clearInterval(timer);
     process.env.LEGACY_QUARANTINE_WAIT_MS = '0';
   }
+  assert.equal(legacy.cachedDgVoodoo(cache), null, 'a folder missing a file is not a usable cache');
   await assert.rejects(legacy.importDgVoodooZip(path.join(base, 'feeder-src', 'dlss5-feed.addon32'), cache), /not a dgVoodoo2 release zip/);
+});
+
+test('dgVoodoo2: the release zip Defender flags is never written -- only the files a route uses are cached', { skip: !onWindows }, async () => {
+  // Windows Defender deletes the official dgVoodoo2 2.87.4 zip on sight ("Kepavll!rfn", reputation
+  // based) but not the DLLs inside it (checked 2026-09-14). The pin is pointed at this fake zip.
+  const base = scratchDir('legacy-dg-memory');
+  const { dgZip } = fakeComponents(base);
+  const zipBytes = fs.readFileSync(dgZip);
+  const pinned = legacy.DGVOODOO.sha256;
+  legacy.DGVOODOO.sha256 = require('node:crypto').createHash('sha256').update(zipBytes).digest('hex');
+  const cache = path.join(base, 'cache');
+  let fetches = 0;
+  const fetchImpl = async () => { fetches++; return { ok: true, status: 200, arrayBuffer: async () => zipBytes }; };
+  try {
+    const folder = await legacy.ensureDgVoodoo(cache, { fetchImpl });
+    assert.equal(fetches, 1);
+    assert.deepEqual(fs.readdirSync(cache).filter((f) => /\.zip$/i.test(f)), [], 'no zip in the cache');
+    assert.equal(path.basename(folder), legacy.DGVOODOO.cacheName);
+    for (const rel of ['MS/x86/D3D9.dll', 'MS/x86/D3D8.dll', 'MS/x64/D3D9.dll', 'dgVoodoo.conf', 'dgVoodooCpl.exe']) {
+      assert.ok(fs.existsSync(path.join(folder, ...rel.split('/'))), rel);
+    }
+    assert.equal(await legacy.ensureDgVoodoo(cache, { fetchImpl }), folder);
+    assert.equal(fetches, 1, 'a complete cache is not downloaded again');
+
+    // A zip an older build cached is unpacked instead of downloading, then removed.
+    const cache2 = path.join(base, 'cache-old');
+    fs.mkdirSync(cache2, { recursive: true });
+    fs.writeFileSync(path.join(cache2, legacy.DGVOODOO.fileName), zipBytes);
+    await legacy.ensureDgVoodoo(cache2, { fetchImpl });
+    assert.equal(fetches, 1);
+    assert.ok(!fs.existsSync(path.join(cache2, legacy.DGVOODOO.fileName)), 'the old cached zip is gone');
+    assert.ok(legacy.cachedDgVoodoo(cache2));
+
+    // It deploys from the folder.
+    const game = path.join(base, 'game');
+    exeWith(game, 'OldGame.exe', { bits: 32, marker: 'Direct3DCreate9' });
+    const res = await legacy.deployDgVoodoo(game, legacy.planFor({ bitness: 32, api: 'dx9' }), folder);
+    assert.equal(res.dll, 'D3D9.dll');
+    assert.equal(fs.readFileSync(path.join(game, 'D3D9.dll'), 'utf8'), 'dgVoodoo x86 d3d9');
+  } finally {
+    legacy.DGVOODOO.sha256 = pinned;
+  }
 });
 
 test('the 32-bit route: dgVoodoo2, the game-side ReShade and add-on, the host64 helper with OptiScaler; Remove restores the folder', { skip: !onWindows }, async () => {
@@ -250,6 +294,10 @@ test('the 32-bit route: dgVoodoo2, the game-side ReShade and add-on, the host64 
   const install64 = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: nr });
   assert.equal(install64.ok, false);
   assert.match(install64.error, /32-bit/);
+  const feeder64 = await invoke('feeder:deploy', { exePath: exe, mvProviderId: 'vort' });
+  assert.equal(feeder64.ok, false, 'the 64-bit Feeder is refused on a 32-bit game');
+  assert.match(feeder64.error, /32-bit game/);
+  assert.ok(!fs.existsSync(path.join(game, 'dlss5-feed.addon64')) && !fs.existsSync(path.join(game, 'ReShade64.dll')));
 
   // A newer engine reaches the helper on sync.
   fs.writeFileSync(path.join(release, 'OptiScaler.dll'), 'a newer OptiScaler build OptiScaler');

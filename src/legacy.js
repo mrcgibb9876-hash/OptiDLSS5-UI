@@ -33,10 +33,13 @@
 // (src/core/apply.js, runtime-components.js, feeder-config.js; MIT, Copyright (c) 2026 Rakan
 // Alkhaldi -- third_party/DLSS5-Swapper-LICENSE.txt).
 //
-// A note on dgVoodoo2 and antivirus: on the machine this was written on, Windows Defender deleted the
-// official dgVoodoo2 2.87.4 zip seconds after download ("Trojan:Win32/Kepavll!rfn", a reputation-based
-// detection). This app never works around that. It asks before downloading dgVoodoo2 at all, says
-// plainly when the file was removed, and lets the user supply a copy they trust instead.
+// A note on dgVoodoo2 and antivirus: Windows Defender deletes the official dgVoodoo2 2.87.4 *zip*
+// ("Trojan:Win32/Kepavll!rfn", a reputation-based "!rfn" detection) wherever it lands on disk -- a
+// browser's Downloads as much as this app's cache. The files a route uses from it (x86/x64 D3D9.dll,
+// D3D8.dll, dgVoodooCpl.exe, dgVoodoo.conf) are not flagged: written, read back and custom-scanned
+// on 2026-09-14, no detection. So the archive is held in memory, checked against the pinned sha256,
+// and only those files are cached. Nothing is excluded or disabled -- the antivirus scans each file
+// as it is written, and if it does remove one, that is reported as quarantine, not retried.
 'use strict';
 
 const fs = require('node:fs');
@@ -55,8 +58,21 @@ const DGVOODOO = {
   url: 'https://github.com/dege-diosg/dgVoodoo2/releases/download/v2.87.4/dgVoodoo2_87_4.zip',
   sha256: '74aeb464d829db80e3f4aa8fae235e6e3b38fc01188776c5c2376bb0dea0956e',
   fileName: 'dgVoodoo2_87_4.zip',
+  cacheName: 'dgVoodoo2_87_4',
+  userCacheName: 'dgVoodoo2-user',
   page: 'https://github.com/dege-diosg/dgVoodoo2/releases',
 };
+
+// The only parts of the release any route uses (planFor's arch/dll pairs, plus the config and its
+// control panel). Required ones make a zip "a dgVoodoo2 release"; the rest are taken when present.
+const DG_FILES = [
+  { rel: 'MS/x86/D3D9.dll', required: true },
+  { rel: 'MS/x86/D3D8.dll', required: false },
+  { rel: 'MS/x64/D3D9.dll', required: false },
+  { rel: 'dgVoodoo.conf', required: true },
+  { rel: 'dgVoodooCpl.exe', required: true },
+];
+const DG_MANIFEST = 'files.json';
 
 // Zip entry names: the Feeder's release uses backslashes (host64\dlss5-feed-host64.exe).
 const sep = '[\\\\/]';
@@ -123,67 +139,114 @@ function sha256(buf) {
   return crypto.createHash('sha256').update(buf).digest('hex');
 }
 
-function isDgVoodooZip(zipPath) {
+const dgEntry = (zip, rel) => findEntry(zip, new RegExp(`^${rel.split('/').map((s) => s.replace(/\./g, '\\.')).join(sep)}$`, 'i'));
+
+// bufOrPath: a zip on disk (a file the user picked) or one held in memory (the download).
+function isDgVoodooZip(bufOrPath) {
   try {
-    const zip = openZip(zipPath);
-    return !!(findEntry(zip, /^MS[\\/]x86[\\/]D3D9\.dll$/i) && findEntry(zip, /^dgVoodoo\.conf$/i) && findEntry(zip, /^dgVoodooCpl\.exe$/i));
+    const zip = openZip(bufOrPath);
+    return DG_FILES.every((f) => !f.required || dgEntry(zip, f.rel));
   } catch {
     return false;
   }
 }
 
-// The pinned release, verified. Separate errors for "the download was bad" and "it was verified,
-// written, and then gone" -- the second is antivirus quarantine, and retrying does not help.
-async function ensureDgVoodooZip(cacheDir, { fetchImpl = fetch, headers = {} } = {}) {
-  const dest = path.join(cacheDir, DGVOODOO.fileName);
-  try {
-    if (sha256(fs.readFileSync(dest)) === DGVOODOO.sha256) return dest;
-  } catch {}
-  const res = await fetchImpl(DGVOODOO.url, { headers });
-  if (!res.ok) throw Object.assign(new Error(`dgVoodoo2 download failed: HTTP ${res.status}`), { code: 'dgvoodoo-network' });
-  const buf = Buffer.from(await res.arrayBuffer());
-  const got = sha256(buf);
-  if (got !== DGVOODOO.sha256) {
-    throw Object.assign(new Error(`dgVoodoo2 download did not match its checksum (expected ${DGVOODOO.sha256.slice(0, 12)}…, got ${got.slice(0, 12)}…)`), { code: 'dgvoodoo-checksum' });
+// A cache folder is usable when its manifest names every required file and each one on disk still
+// hashes to what was unpacked -- so a file a scanner took, or a half-written unpack, reads as absent.
+function readDgFolder(folder) {
+  let manifest;
+  try { manifest = JSON.parse(fs.readFileSync(path.join(folder, DG_MANIFEST), 'utf8')); } catch { return null; }
+  if (!manifest || typeof manifest.files !== 'object') return null;
+  for (const f of DG_FILES) if (f.required && !manifest.files[f.rel]) return null;
+  for (const [rel, hash] of Object.entries(manifest.files)) {
+    try {
+      if (sha256(fs.readFileSync(path.join(folder, ...rel.split('/')))) !== hash) return null;
+    } catch {
+      return null;
+    }
   }
-  await fsp.mkdir(cacheDir, { recursive: true });
-  await fsp.writeFile(dest, buf);
-  await quarantineCheck(dest, DGVOODOO.sha256);
+  return manifest;
+}
+
+// Writes the files a route uses out of a dgVoodoo2 zip held in memory into cacheDir/<name>, via a
+// .partial folder so a failed unpack never looks complete, then checks they are all still there.
+async function unpackDgVoodoo(buf, cacheDir, name, source) {
+  if (!isDgVoodooZip(buf)) throw new Error('not a dgVoodoo2 release zip (no MS\\x86\\D3D9.dll, dgVoodoo.conf and dgVoodooCpl.exe)');
+  const zip = openZip(buf);
+  const dest = path.join(cacheDir, name);
+  const partial = `${dest}.partial`;
+  await fsp.rm(partial, { recursive: true, force: true });
+  const files = {};
+  for (const f of DG_FILES) {
+    const entry = dgEntry(zip, f.rel);
+    if (!entry) continue;
+    const data = extractEntry(zip, entry);
+    const out = path.join(partial, ...f.rel.split('/'));
+    await fsp.mkdir(path.dirname(out), { recursive: true });
+    await fsp.writeFile(out, data);
+    files[f.rel] = sha256(data);
+  }
+  await fsp.writeFile(path.join(partial, DG_MANIFEST), JSON.stringify({ source, zipSha256: sha256(buf), files }, null, 2), 'utf8');
+  await fsp.rm(dest, { recursive: true, force: true });
+  await fsp.rename(partial, dest);
+  await quarantineCheck(dest);
   return dest;
 }
 
-// A security tool removes or locks the file a moment after it is written.
-async function quarantineCheck(file, expected) {
+// The pinned release, verified, as a folder of the files a route uses. Separate errors for "the
+// download was bad" and "it was verified, written, and then gone" -- the second is antivirus
+// quarantine, and retrying does not help.
+async function ensureDgVoodoo(cacheDir, { fetchImpl = fetch, headers = {} } = {}) {
+  const cached = cachedDgVoodoo(cacheDir);
+  if (cached) return cached;
+  await fsp.mkdir(cacheDir, { recursive: true });
+  // A zip an older build cached (and that survived): unpack it rather than download again, then
+  // drop it -- the archive is the one thing Defender deletes.
+  const oldZip = path.join(cacheDir, DGVOODOO.fileName);
+  let buf = null;
+  try {
+    const b = fs.readFileSync(oldZip);
+    if (sha256(b) === DGVOODOO.sha256) buf = b;
+  } catch {}
+  if (!buf) {
+    const res = await fetchImpl(DGVOODOO.url, { headers });
+    if (!res.ok) throw Object.assign(new Error(`dgVoodoo2 download failed: HTTP ${res.status}`), { code: 'dgvoodoo-network' });
+    buf = Buffer.from(await res.arrayBuffer());
+    const got = sha256(buf);
+    if (got !== DGVOODOO.sha256) {
+      throw Object.assign(new Error(`dgVoodoo2 download did not match its checksum (expected ${DGVOODOO.sha256.slice(0, 12)}…, got ${got.slice(0, 12)}…)`), { code: 'dgvoodoo-checksum' });
+    }
+  }
+  const dest = await unpackDgVoodoo(buf, cacheDir, DGVOODOO.cacheName, `official ${DGVOODOO.version}`);
+  await fsp.rm(oldZip, { force: true });
+  return dest;
+}
+
+// A security tool removes or locks a file a moment after it is written.
+async function quarantineCheck(folder) {
   const wait = Number(process.env.LEGACY_QUARANTINE_WAIT_MS ?? 1500);
   if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-  let ok = false;
-  try { ok = sha256(fs.readFileSync(file)) === expected; } catch { ok = false; }
-  if (!ok) {
+  if (!readDgFolder(folder)) {
     throw Object.assign(new Error(
-      'dgVoodoo2 was downloaded and verified, then removed or blocked on this PC -- that is what antivirus ' +
-      'quarantine looks like (Windows Defender reports the official dgVoodoo2 zip as "Trojan:Win32/Kepavll!rfn", a ' +
-      'reputation-based detection). This app will not work around your antivirus. Check Windows Security\'s ' +
-      'protection history and decide for yourself, or use "Use a dgVoodoo2 zip I have".'), { code: 'dgvoodoo-quarantined' });
+      'dgVoodoo2 was downloaded and verified, then one of its files was removed or blocked on this PC -- that is what ' +
+      'antivirus quarantine looks like. Check Windows Security\'s protection history.'), { code: 'dgvoodoo-quarantined' });
   }
 }
 
 // A dgVoodoo2 zip the user picked: must be dgVoodoo's layout. Not held to the pinned hash -- it may
-// be another version they trust -- but copied into the cache under its own name.
+// be another version they trust -- and unpacked the same way, into its own cache folder.
 async function importDgVoodooZip(sourcePath, cacheDir) {
   if (!sourcePath || !fs.existsSync(sourcePath)) throw new Error('the picked file does not exist');
-  if (!isDgVoodooZip(sourcePath)) throw new Error(`${path.basename(sourcePath)} is not a dgVoodoo2 release zip (no MS\\x86\\D3D9.dll, dgVoodoo.conf and dgVoodooCpl.exe)`);
-  await fsp.mkdir(cacheDir, { recursive: true });
-  const dest = path.join(cacheDir, 'dgVoodoo2-user.zip');
   const buf = fs.readFileSync(sourcePath);
-  await fsp.writeFile(dest, buf);
-  await quarantineCheck(dest, sha256(buf));
-  return dest;
+  if (!isDgVoodooZip(buf)) throw new Error(`${path.basename(sourcePath)} is not a dgVoodoo2 release zip (no MS\\x86\\D3D9.dll, dgVoodoo.conf and dgVoodooCpl.exe)`);
+  await fsp.mkdir(cacheDir, { recursive: true });
+  return unpackDgVoodoo(buf, cacheDir, DGVOODOO.userCacheName, path.basename(sourcePath));
 }
 
-function cachedDgVoodooZip(cacheDir) {
-  for (const name of [DGVOODOO.fileName, 'dgVoodoo2-user.zip']) {
+function cachedDgVoodoo(cacheDir) {
+  for (const name of [DGVOODOO.cacheName, DGVOODOO.userCacheName]) {
     const p = path.join(cacheDir, name);
-    if (fs.existsSync(p) && isDgVoodooZip(p)) return p;
+    if (readDgFolder(p)) return p;
   }
   return null;
 }
@@ -250,29 +313,34 @@ function emptyMarker(existing) {
     : { version: 1, files: [], backups: [], dirs: [] };
 }
 
-async function deployDgVoodoo(dir, plan, zipPath) {
+// source: a cache folder from ensureDgVoodoo/importDgVoodooZip.
+async function deployDgVoodoo(dir, plan, source) {
   if (!plan || !plan.dgVoodoo) throw new Error('this game does not need dgVoodoo2');
+  if (!readDgFolder(source)) throw new Error('dgVoodoo2 is not in the cache (or one of its files has gone) -- press Install again');
+  const read = (rel) => {
+    try { return fs.readFileSync(path.join(source, ...rel.split('/'))); } catch { return null; }
+  };
+  const dllRel = `MS/${plan.dgVoodoo.arch}/${plan.dgVoodoo.dll}`;
+  const dll = read(dllRel);
+  const conf = read('dgVoodoo.conf');
+  const cpl = read('dgVoodooCpl.exe');
+  if (!dll || !conf || !cpl) throw new Error(`the dgVoodoo2 files have no ${dllRel.replace(/\//g, '\\')}`);
   const marker = emptyMarker(readMarker(dir));
   const rec = recorder(dir, marker);
-  const zip = openZip(zipPath);
-  const dllEntry = findEntry(zip, new RegExp(`^MS[\\\\/]${plan.dgVoodoo.arch}[\\\\/]${plan.dgVoodoo.dll.replace('.', '\\.')}$`, 'i'));
-  const confEntry = findEntry(zip, /^dgVoodoo\.conf$/i);
-  const cplEntry = findEntry(zip, /^dgVoodooCpl\.exe$/i);
-  if (!dllEntry || !confEntry || !cplEntry) throw new Error(`the dgVoodoo2 zip has no MS\\${plan.dgVoodoo.arch}\\${plan.dgVoodoo.dll}`);
   const isDg = (p) => fileMentions(p, 'dgVoodoo');
-  await rec.write(path.join(dir, plan.dgVoodoo.dll), extractEntry(zip, dllEntry), { ours: isDg });
-  await rec.write(path.join(dir, 'dgVoodooCpl.exe'), extractEntry(zip, cplEntry), { ours: isDg });
+  await rec.write(path.join(dir, plan.dgVoodoo.dll), dll, { ours: isDg });
+  await rec.write(path.join(dir, 'dgVoodooCpl.exe'), cpl, { ours: isDg });
   const confPath = path.join(dir, 'dgVoodoo.conf');
-  const base = fs.existsSync(confPath) ? fs.readFileSync(confPath, 'utf8') : extractEntry(zip, confEntry).toString('utf8');
+  const base = fs.existsSync(confPath) ? fs.readFileSync(confPath, 'utf8') : conf.toString('utf8');
   await rec.write(confPath, Buffer.from(configureDgVoodoo(base), 'utf8'), { ours: () => true });
-  marker.dgVoodoo = { arch: plan.dgVoodoo.arch, dll: plan.dgVoodoo.dll, zip: path.basename(zipPath) };
+  marker.dgVoodoo = { arch: plan.dgVoodoo.arch, dll: plan.dgVoodoo.dll, source: path.basename(source) };
   marker.placedAt = new Date().toISOString();
   writeMarker(dir, marker);
   // Antivirus can take the wrapper out of the game folder just as it can out of the cache.
   if (!(await stillThere(path.join(dir, plan.dgVoodoo.dll)))) {
     throw Object.assign(new Error(
       `${plan.dgVoodoo.dll} (dgVoodoo2) was placed beside the game and then removed or blocked -- that is what antivirus ` +
-      'quarantine looks like. This app will not work around your antivirus; check Windows Security\'s protection history.'), { code: 'dgvoodoo-quarantined' });
+      'quarantine looks like. Check Windows Security\'s protection history.'), { code: 'dgvoodoo-quarantined' });
   }
   return { deployed: true, dll: plan.dgVoodoo.dll, arch: plan.dgVoodoo.arch };
 }
@@ -422,6 +490,6 @@ async function removeLegacy(dir) {
 }
 
 module.exports = {
-  MARKER, HOST_DIR, DGVOODOO, planFor, status, readMarker, ensureDgVoodooZip, importDgVoodooZip, cachedDgVoodooZip,
+  MARKER, HOST_DIR, DGVOODOO, planFor, status, readMarker, ensureDgVoodoo, importDgVoodooZip, cachedDgVoodoo,
   isDgVoodooZip, configureDgVoodoo, deployDgVoodoo, deployHost32, removalPlan, removeLegacy,
 };

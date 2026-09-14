@@ -58,7 +58,7 @@ const API_NAMES = { dx12: 'DX12', dx11: 'DX11', vulkan: 'Vulkan', opengl: 'OpenG
 const ROUTE_TEXT = {
   labelHost32: 'OptiScaler + Feeder (32-bit)',
   labelDx9: 'OptiScaler + Feeder (DX9)',
-  stepDgVoodoo: 'Put dgVoodoo2 in front of the game (Install asks first)',
+  stepDgVoodoo: 'Put dgVoodoo2 in front of the game',
   stepFeeder32: 'Deploy the 32-bit Feeder and its 64-bit helper with OptiScaler',
   // How to reach OptiScaler on this route, in the add-on's own words. Photographed on a live
   // install 2026-09-14: "OptiScaler has its own menu with every neural-rendering control ... It
@@ -95,8 +95,8 @@ const ROUTE_TEXT = {
     'over OpenGL, so the DLSS 5 panel (Alt+Home) will not appear; use the emulator\'s Direct3D or Vulkan renderer ' +
     'if it has one.',
   dx9:
-    'Experimental. DirectX 9 has no Feeder path of its own, so dgVoodoo2 turns it into DirectX 11 (Install asks before ' +
-    'downloading it -- antivirus flags that download), then the DLSS5 Feeder synthesises the DLSS call and OptiScaler ' +
+    'Experimental. DirectX 9 has no Feeder path of its own, so dgVoodoo2 turns it into DirectX 11, ' +
+    'then the DLSS5 Feeder synthesises the DLSS call and OptiScaler ' +
     'runs Neural Rendering. The DLSS 5 panel (Alt+Home) opens over the game as usual. If dgVoodoo2 crashes the game, ' +
     'this route is not for it yet.',
 };
@@ -212,8 +212,7 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
 
   // EXPERIMENTAL -- 32-bit games (legacy.js). NVIDIA ships no 32-bit NGX, so the Feeder's 32-bit
   // add-on hands each frame to its 64-bit helper in host64\, where OptiScaler runs Neural
-  // Rendering. D3D8/D3D9 go through dgVoodoo2 first. Install does all of it; dgVoodoo2 is asked
-  // about first, because antivirus flags its download.
+  // Rendering. D3D8/D3D9 go through dgVoodoo2 first. Install does all of it.
   if (detected.bitness === 32) {
     const plan = legacy.planFor({ bitness: 32, api });
     if (!plan.supported) {
@@ -223,7 +222,7 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
     if (plan.dgVoodoo) steps.push({ key: 'dgvoodoo', label: ROUTE_TEXT.stepDgVoodoo, done: legacyStatus.dgVoodoo });
     steps.push({ key: 'feeder32', label: ROUTE_TEXT.stepFeeder32, done: legacyStatus.host32 && legacyStatus.feeder32 && legacyStatus.hostOptiScaler });
     const middle = plan.dgVoodoo
-      ? '{dx} has no Feeder path of its own, so dgVoodoo2 turns it into DirectX 11 first (Install asks before downloading it). '
+      ? '{dx} has no Feeder path of its own, so dgVoodoo2 turns it into DirectX 11 first. '
       : plan.api === 'opengl' ? 'On OpenGL, ReShade goes in as the game\'s opengl32.dll. ' : '';
     const text = ROUTE_TEXT.host32Lead + middle + ROUTE_TEXT.host32Panel;
     return finish('feeder32', ROUTE_TEXT.labelHost32, text, steps,

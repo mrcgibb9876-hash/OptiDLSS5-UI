@@ -647,7 +647,7 @@ function helpWords(diag) {
   const v = diag.vars || {};
   switch (diag.code) {
     case 'bit32': return t('DLSS 5 is not currently available for this game: it is a 32-bit game, and OptiScaler and the NR model are 64-bit only.');
-    case 'dgvoodoo-missing': return t('This DirectX 9 game needs dgVoodoo2 in front of it before the DLSS5 Feeder can work. Install puts it there, asking first -- antivirus flags its download, so the choice is yours.');
+    case 'dgvoodoo-missing': return t('This DirectX 9 game needs dgVoodoo2 in front of it before the DLSS5 Feeder can work. Install puts it there.');
     case 'anticheat': return t('DLSS 5 is not currently available for this game: it runs under {antiCheat}, which blocks the DLL this app relies on. Using it there can also get an account banned.', v);
     case 'anticheat-launch-direct': return t('Nothing has been logged, and on this game that is expected: Steam starts it through {stub}, which starts {antiCheat} first, and {antiCheat} will not let the game run with OptiScaler\'s DLL in the folder -- it fails without writing a single log. Use this app\'s own Launch button: it starts the game\'s exe directly, so {antiCheat} never loads. Single-player works; online play and matchmaking do not, and going online with these files can get the account banned -- Remove puts the game back before you do.', v);
     case 'unsupported': return t('DLSS 5 is not currently available for this game: {reason}', v);
@@ -997,10 +997,11 @@ async function installGame(game) {
   }
   const route = await window.api.gameRoute(game.exePath, game.detectedPath);
 
-  // Experimental DirectX 8/9 routes: dgVoodoo2 goes in first. The main process asks before any
-  // download (antivirus flags it), so a cancel stops the install here with nothing placed.
+  // Experimental DirectX 8/9 routes: dgVoodoo2 goes in first. The main process fetches it without
+  // asking and only offers a zip of the user's own if that fails; a cancel there stops the install
+  // here with nothing placed.
   if (route.legacy && route.legacy.dgVoodoo && !route.dgVoodooDeployed) {
-    toast(t('Setting up dgVoodoo2 first (it asks before downloading)…'));
+    toast(t('Setting up dgVoodoo2 first…'));
     const dg = await window.api.legacyDgVoodoo(game.exePath, game.detectedPath);
     if (!dg.ok) {
       toast(t('dgVoodoo2 could not be set up: {error}', { error: dg.error }));
