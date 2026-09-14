@@ -1380,10 +1380,61 @@ async function loadDlssNrSection(game) {
   dlssNrFields = res.fields;
   dlssNrForced = res.forced || {};
   status.textContent = '';
+  const route = await window.api.gameRoute(game.exePath, game.detectedPath);
+  dlssNrEmulator = !!(route && route.emulator);
   renderDlssNrFields(game);
 }
 
+// ── Emulators: the model's resolution as a resolution ───────────────────────────────────────────
+//
+// An emulator's frame is its window, so DLSS 5 works at display size whatever internal resolution
+// the emulator renders at: an RPCS3 user at 4K had to drop the desktop to 1440p to get the cost
+// back (2026-09-14). WorkingScale already fixes that; this names it the way that user thinks of it.
+let dlssNrEmulator = false;
+
+const EMULATOR_MODEL_HEIGHTS = [2160, 1800, 1440, 1080, 900, 720];
+
+// The monitor the app is on, in physical pixels -- the emulator's fullscreen size on that monitor.
+function displayPixels() {
+  const ratio = window.devicePixelRatio || 1;
+  return { width: Math.round(window.screen.width * ratio), height: Math.round(window.screen.height * ratio) };
+}
+
+function renderDlssNrEmulator(game) {
+  const block = $('#game-dlssnr-emulator');
+  block.classList.toggle('hidden', !dlssNrEmulator);
+  if (!dlssNrEmulator) return;
+
+  const select = $('#game-dlssnr-emulator-res');
+  const note = $('#game-dlssnr-emulator-note');
+  const display = displayPixels();
+  const scale = Number(dlssNrValueOf('WorkingScale')) || 1;
+  const sizeAt = (s) => `${Math.round(display.width * s)}x${Math.round(display.height * s)}`;
+
+  select.innerHTML = '';
+  const add = (value, text) => {
+    const o = document.createElement('option');
+    o.value = value; o.textContent = text; select.appendChild(o);
+  };
+  add('1', t('Display resolution ({size}) -- default', { size: `${display.width}x${display.height}` }));
+  for (const h of EMULATOR_MODEL_HEIGHTS) {
+    const s = h / display.height;
+    if (s >= 0.999 || s < 0.25) continue;
+    add(String(Math.round(s * 100) / 100), t('{h}p ({size}, {pct}% of the work area)', { h, size: sizeAt(s), pct: Math.round(s * 100) }));
+  }
+  // A value set elsewhere (the slider below, the in-game panel) that is none of the above.
+  const current = String(Math.round(scale * 100) / 100);
+  if (![...select.options].some((o) => o.value === current)) add(current, t('Custom: {pct}% ({size})', { pct: Math.round(scale * 100), size: sizeAt(scale) }));
+  select.value = current;
+
+  note.textContent = scale < 0.999
+    ? t('The model works at {size}: about {pct}% of the display-resolution cost.', { size: sizeAt(scale), pct: Math.round(scale * scale * 100) })
+    : '';
+  select.onchange = () => applyDlssNr(game, 'WorkingScale', Number(select.value) >= 0.999 ? null : Number(select.value));
+}
+
 function renderDlssNrFields(game) {
+  renderDlssNrEmulator(game);
   const host = $('#game-dlssnr-fields');
   host.innerHTML = '';
   const groups = [...new Set(dlssNrFields.map((f) => f.group))];

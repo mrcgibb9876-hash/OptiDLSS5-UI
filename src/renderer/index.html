@@ -185,6 +185,14 @@
         <label class="field-label" data-i18n>DLSS 5 neural rendering settings</label>
         <p class="field-hint" data-i18n>The same controls as the in-game DLSS 5 panel, written straight into this game's OptiScaler.ini. They apply the next time the game starts. The in-game panel saves the whole file whenever you change something in it, so if you have it open, close it before changing anything here.</p>
         <p class="field-hint hidden" id="game-dlssnr-helper-note" data-i18n><strong>This game runs the 32-bit route</strong>, so these are read from and written to host64\OptiScaler.ini -- the copy the helper process actually loads. That is also why the panel never appears over the game.</p>
+        <div id="game-dlssnr-emulator" class="field-subblock hidden">
+          <label class="field-label" data-i18n>Emulator: DLSS 5 resolution</label>
+          <p class="field-hint" data-i18n>An emulator hands DLSS 5 its whole window, so the model works at your display resolution whatever internal resolution is set in the emulator -- at 4K that is four times the work of 1080p. Pick the resolution the model should work at instead; the picture stays at display size and only the model's own work is done smaller and enlarged. Match it to the emulator's internal resolution for the best cost/quality. This sets Model resolution below, and the same slider is in the in-game panel (Alt+Home).</p>
+          <div class="field-row">
+            <select id="game-dlssnr-emulator-res"></select>
+          </div>
+          <span id="game-dlssnr-emulator-note" class="status-line"></span>
+        </div>
         <div id="game-dlssnr-fields"></div>
         <div class="field-row">
           <button id="btn-dlssnr-reset" class="btn btn-ghost" data-i18n>Reset all to default</button>
