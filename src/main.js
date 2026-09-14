@@ -2410,7 +2410,7 @@ ipcMain.handle('game:detect-path', async (_evt, exePath) => {
 
 ipcMain.handle('game:detect-path-if-stale', async (_evt, { exePath, stored }) => {
   const dir = exePath && fs.existsSync(exePath) ? gameDir(exePath) : null;
-  if (!isDetectionStale(stored, dir)) return null;
+  if (!isDetectionStale(stored, dir, exePath)) return null;
   try {
     if (!exePath || !fs.existsSync(exePath)) return { recommend: 'unknown', reason: 'executable not found' };
     return await detectGameCached(gameDir(exePath), exePath);

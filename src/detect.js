@@ -893,6 +893,14 @@ function unrealStaticApi(dir, found, engine) {
 // game with the DLSS5 Feeder also has one D3D12 device -- the Feeder's own private NGX session.
 const RUNTIME_LOG_MAX_BYTES = 4 * 1024 * 1024;
 
+// The executable as it was when a detection was made. A game patched by its store is a different
+// program -- it can ship a renderer it did not ship before -- so a stored answer about it expires.
+// Until v1.59.0 nothing needed this: autoConfigureGame re-scanned the exe on every sync and simply
+// absorbed the cost. Now that it does not, this is what keeps a stored answer honest.
+function exeStamp(exePath) {
+  try { const st = fs.statSync(exePath); return `${st.size}:${st.mtimeMs}`; } catch { return null; }
+}
+
 function optiScalerLogStat(dir) {
   try { return fs.statSync(path.join(dir, 'OptiScaler.log')); } catch { return null; }
 }
@@ -1144,6 +1152,8 @@ async function detectGame(dir, exePath) {
     // What OptiScaler.log looked like when this was decided -- a later run of the game is new
     // evidence, and isDetectionStale re-runs detection when the log has changed since.
     runtimeLogMtime: logStat ? logStat.mtimeMs : null,
+    // ... and what the exe itself looked like, so a game update expires this answer.
+    exeStamp: exeStamp(exePath),
     detectVersion: DETECT_VERSION,
   };
 }
@@ -1186,6 +1196,7 @@ async function detectEmulator(dir, exePath, emu) {
     oldShaderCompiler: oldShaderCompiler(dir),
     runtimeApi: runtime ? runtime.api : null,
     runtimeLogMtime: logStat ? logStat.mtimeMs : null,
+    exeStamp: exeStamp(exePath),
     detectVersion: DETECT_VERSION,
   };
 }
@@ -1239,6 +1250,7 @@ async function folderEvidence(dir, exePath) {
     protectedLauncher: antiCheatStub(dir),
     oldShaderCompiler: oldShaderCompiler(dir),
     runtimeLogMtime: logStat ? logStat.mtimeMs : null,
+    exeStamp: exeStamp(exePath),
   };
 }
 
@@ -1266,7 +1278,7 @@ async function detectGameCached(dir, exePath, { stored = null } = {}) {
   if (hit && hit.signature === signature && !(hit.expires && Date.now() > hit.expires)) return hit.promise;
   // The promise is cached, not the result: a grid render fires several calls for the same game at
   // once, and they have to share the one scan instead of each starting their own.
-  const promise = stored && !isDetectionStale(stored, dir)
+  const promise = stored && !isDetectionStale(stored, dir, exePath)
     ? detectFromStored(dir, exePath, stored)
     : detectGame(dir, exePath);
   const entry = { signature, promise, expires: 0 };
@@ -1288,8 +1300,12 @@ function invalidateDetection(dir) {
   for (const key of [...detectCache.keys()]) if (key.startsWith(prefix)) detectCache.delete(key);
 }
 
-function isDetectionStale(stored, dir) {
+function isDetectionStale(stored, dir, exePath = null) {
   if (!stored || stored.detectVersion !== DETECT_VERSION) return true;
+  // The game was patched since this was decided, so the exe it describes is not the exe on disk.
+  // A stored answer from before exeStamp existed has nothing to compare and is left alone rather
+  // than re-scanning every game in a library at once on the first launch after an update.
+  if (exePath && stored.exeStamp && stored.exeStamp !== exeStamp(exePath)) return true;
   // A provisional Unity answer waits on Player.log, which nothing below tracks, so it re-runs
   // every time; a provisional Unreal answer waits on OptiScaler.log, tracked by mtime below --
   // re-scanning a 100 MB exe on every grid render would buy nothing until the game has run.
@@ -1387,4 +1403,4 @@ async function planForeignRemoval(dir, { ours = false } = {}) {
   return { found, del: [...del].sort(), restore, notes };
 }
 
-module.exports = { DETECT_VERSION, openPeResources, RT_ICON, RT_GROUP_ICON, RT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, foreignToolchains, planForeignRemoval };
+module.exports = { DETECT_VERSION, exeStamp, openPeResources, RT_ICON, RT_GROUP_ICON, RT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, foreignToolchains, planForeignRemoval };

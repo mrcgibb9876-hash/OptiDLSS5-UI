@@ -79,3 +79,26 @@ test('a version number in a folder name is dropped rather than left to match not
   assert.ok(terms.indexOf('Some Game') > terms.indexOf('Some Game v1.2.3'));
   assert.ok(library.bannerSearchTerms('Aliens.Fireteam.Elite.2').includes('Aliens Fireteam Elite 2'));
 });
+
+test('a curly apostrophe is the same name as a straight one', () => {
+  // A store title carries "Director’s Cut" and a folder carries "Director's Cut"; after the
+  // punctuation pass it is "Director S Cut". All three have to tokenise alike, or the same game
+  // scores as three different ones.
+  const want = ['ghost', 'of', 'tsushima'];
+  assert.deepEqual(library.titleTokens("Ghost of Tsushima DIRECTOR'S CUT"), want);
+  assert.deepEqual(library.titleTokens('Ghost of Tsushima DIRECTOR’S CUT'), want);
+  assert.deepEqual(library.titleTokens('Ghost of Tsushima DIRECTOR S CUT'), want);
+  assert.equal(
+    pick("Ghost of Tsushima Director's Cut", 'Ghost of Tsushima DIRECTOR’S CUT'),
+    'Ghost of Tsushima DIRECTOR’S CUT'
+  );
+});
+
+test('nothing to choose from is answered, not thrown', () => {
+  // pickBannerMatch is exported; a caller handing it an empty or absent result must get "no
+  // match" rather than an exception that takes the whole render down.
+  assert.equal(library.pickBannerMatch('anything', null), null);
+  assert.equal(library.pickBannerMatch('anything', undefined), null);
+  assert.equal(library.pickBannerMatch('anything', []), null);
+  assert.equal(library.pickBannerMatch('anything', [{ name: null }]), null);
+});

@@ -353,13 +353,18 @@ function nameForExe(exePath) {
 // store name does not. Each step strips more; duplicates are dropped.
 // The edition and packaging words a store title carries and a folder name does not, or the other
 // way round. Stripped from both sides before two titles are compared.
-const EDITION_WORDS = /\b(goty|game of the year|definitive|deluxe|ultimate|complete|gold|premium|enhanced|remastered|remaster|special|standard|anniversary|legendary|digital|director'?s cut|ultimate edition|edition|bundle|collection|pack)\b/gi;
+const EDITION_WORDS = /\b(goty|game of the year|definitive|deluxe|ultimate|complete|gold|premium|enhanced|remastered|remaster|special|standard|anniversary|legendary|digital|director[\s'’]*s cut|ultimate edition|edition|bundle|collection|pack)\b/gi;
+
+// Curly quotes are what a store title carries and a folder name almost never does. Folded before
+// anything is compared, so the two spellings of one name cannot disagree.
+const straightenQuotes = (t) => (t || '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
 
 // A dotted acronym is written both ways in the wild and Steam only knows one of them:
 // "S.T.A.L.K.E.R." is what the folder says, "STALKER" is what the search finds.
 const collapseAcronyms = (t) => t.replace(/\b(?:[A-Za-z]\.){2,}/g, (m) => m.replace(/\./g, ''));
 
-function bannerSearchTerms(name) {
+function bannerSearchTerms(rawName) {
+  const name = straightenQuotes(rawName);
   const terms = [];
   const add = (t) => { t = (t || '').replace(/\s+/g, ' ').trim(); if (t.length >= 3 && !terms.includes(t)) terms.push(t); };
   const punct = (t) => t.replace(/[-_.:;,!'’"\[\]()]+/g, ' ');
@@ -402,7 +407,7 @@ function bannerSearchTerms(name) {
 // Redemption 2" does not contain "re2" at all and is refused outright, leaving no art rather than
 // the wrong art.
 function titleTokens(title) {
-  return (title || '')
+  return straightenQuotes(title)
     .replace(/[™®©]/g, '')
     .replace(EDITION_WORDS, ' ')
     .toLowerCase()
@@ -415,6 +420,7 @@ function titleTokens(title) {
 const WEAK_TOKENS = new Set(['the', 'a', 'an', 'of', 'and', 'or', 'for', 'to', 'in', 'on', 'at', 'de', 'le', 'la']);
 
 function pickBannerMatch(query, items) {
+  if (!Array.isArray(items) || items.length === 0) return null;
   const wanted = titleTokens(query);
   const strong = wanted.filter((w) => !WEAK_TOKENS.has(w));
   if (strong.length === 0) return null;

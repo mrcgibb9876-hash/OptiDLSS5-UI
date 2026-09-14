@@ -92,3 +92,27 @@ test('peOriginalFilename reads the name a DLL was built as', { skip: !onWindows 
   fs.copyFileSync(notepad, renamed);
   assert.equal(detect.peOriginalFilename(renamed).toLowerCase(), 'notepad.exe');
 });
+
+test('a game patched by its store expires its stored detection', async () => {
+  // Until v1.59.0 nothing needed to notice this: autoConfigureGame re-scanned the exe on every
+  // sync and absorbed the cost. Now that a stored answer is reused instead, a patched game --
+  // which can ship a renderer it did not ship before -- has to expire it.
+  const dir = scratchDir('cache-patched');
+  const exe = fakeExe(dir);
+  const found = await detect.detectGameCached(dir, exe);
+  assert.ok(found.exeStamp, 'the detection records the exe it describes');
+  assert.equal(detect.isDetectionStale(found, dir, exe), false);
+
+  const later = new Date(Date.now() + 120_000);
+  fs.utimesSync(exe, later, later);
+  assert.equal(detect.isDetectionStale(found, dir, exe), true, 'a changed exe is a changed answer');
+
+  // A detection stored before exeStamp existed has nothing to compare, and must not send a whole
+  // library back through a full scan on the first launch after an update.
+  const beforeThisExisted = { ...found };
+  delete beforeThisExisted.exeStamp;
+  assert.equal(detect.isDetectionStale(beforeThisExisted, dir, exe), false);
+  // ... and reusing one re-stamps it, so it is watched from then on.
+  const reused = await detect.detectGameCached(dir, exe, { stored: beforeThisExisted });
+  assert.ok(reused.exeStamp, 'the reused answer carries a current stamp');
+});

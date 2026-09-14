@@ -85,3 +85,22 @@ test('the cached icon is keyed on the exe, and a patched exe gets a fresh one', 
 
   assert.equal(exeicon.cacheIcon(path.join(dir, 'nope.exe'), cache), null);
 });
+
+test('two games with the same exe name in sibling folders get separate icons', { skip: !onWindows }, () => {
+  // The cache key used to be the tail of the path's base64, so
+  // .../AAA/Binaries/Win64/Game-Win64-Shipping.exe and .../BBB/Binaries/Win64/Game-Win64-Shipping.exe
+  // -- two Unreal games side by side, the most ordinary layout there is -- produced the same key.
+  const dir = scratchDir('exeicon-siblings');
+  const cache = path.join(dir, 'banners');
+  const made = ['AAA', 'BBB'].map((name) => {
+    const exe = path.join(dir, name, 'Binaries', 'Win64', 'Game-Win64-Shipping.exe');
+    fs.mkdirSync(path.dirname(exe), { recursive: true });
+    fs.copyFileSync(path.join(system32, 'notepad.exe'), exe);
+    // Identical bytes and identical timestamps: the size-and-mtime suffix cannot save this.
+    const when = new Date(1700000000000);
+    fs.utimesSync(exe, when, when);
+    return exeicon.cacheIcon(exe, cache);
+  });
+  assert.ok(made[0] && made[1], 'both games got an icon');
+  assert.notEqual(made[0], made[1], 'and they are not the same file');
+});

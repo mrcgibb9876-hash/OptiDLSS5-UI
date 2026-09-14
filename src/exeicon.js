@@ -13,6 +13,7 @@
 // around it. Chromium renders the result directly -- no image library, no conversion, no network.
 'use strict';
 
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { openPeResources, RT_ICON, RT_GROUP_ICON } = require('./detect');
@@ -124,7 +125,7 @@ function iconBytes(exePath) {
 function cacheIcon(exePath, cacheDir) {
   let stamp = '';
   try { const st = fs.statSync(exePath); stamp = `${st.size}-${Math.round(st.mtimeMs)}`; } catch { return null; }
-  const key = Buffer.from(path.resolve(exePath).toLowerCase(), 'utf8').toString('base64url').slice(-40);
+  const key = crypto.createHash('sha256').update(path.resolve(exePath).toLowerCase()).digest('hex').slice(0, 16);
   const dest = path.join(cacheDir, `exeicon-${key}-${stamp}.ico`);
   if (fs.existsSync(dest)) return dest;
   const bytes = iconBytes(exePath);

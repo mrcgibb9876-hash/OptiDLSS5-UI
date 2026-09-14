@@ -224,8 +224,8 @@ async function renderGrid() {
       setBannerWithFallback(game, ...bannerEls());
     };
     // Nothing on the store knows this game, so fall back to what the game knows about itself.
-    // Re-tried on a later render only if the icon file has gone: it costs one read of the exe's
-    // resource directory and no network, so there is nothing to ration.
+    // Written once and then remembered like any other art; if that file later goes missing the
+    // image's own onerror puts the initials back, the same as for a Steam banner.
     const applyExeIcon = async (g, els) => {
       const iconPath = await window.api.exeIconBanner(g.exePath);
       if (!iconPath) return false;
