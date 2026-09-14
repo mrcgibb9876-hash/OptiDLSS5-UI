@@ -29,8 +29,12 @@ async function readHead(file, max = MAX_READ) {
   let fh;
   try { fh = await fsp.open(file, 'r'); } catch { return null; }
   try {
-    const buf = Buffer.alloc(max);
-    const { bytesRead } = await fh.read(buf, 0, max, 0);
+    // Sized to the log, not to the cap. Buffer.alloc(6 MB) zero-filled six megabytes on every
+    // call for a log that is usually a few dozen kilobytes, and this runs for every card.
+    const size = Math.min((await fh.stat()).size, max);
+    if (size <= 0) return '';
+    const buf = Buffer.allocUnsafe(size);
+    const { bytesRead } = await fh.read(buf, 0, size, 0);
     return buf.subarray(0, bytesRead).toString('latin1');
   } catch {
     return null;

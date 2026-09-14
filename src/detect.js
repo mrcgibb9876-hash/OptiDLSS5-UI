@@ -216,9 +216,9 @@ async function peBitness(filePath) {
   }
 }
 
-// VS_FIXEDFILEINFO out of the RT_VERSION resource, "6.3.9600.16384" style -- ported from
-// DLSS5-Swapper's pe.js. Synchronous and bounded (a few small reads); used for one file.
-function readFileVersion(filePath) {
+// The RT_VERSION resource of a PE file, as bytes -- ported from DLSS5-Swapper's pe.js.
+// Synchronous and bounded (a few small reads, then at most 64 KB); used for one file.
+function versionResourceBlob(filePath) {
   let fd;
   try {
     fd = fs.openSync(filePath, 'r');
@@ -271,18 +271,48 @@ function readFileVersion(filePath) {
     const dataOff = rvaToOffset(data.readUInt32LE(0));
     const dataSize = data.readUInt32LE(4);
     if (dataOff < 0 || !dataSize) return null;
-    const blob = readAt(dataOff, Math.min(dataSize, 64 * 1024));
-    const sig = blob.indexOf(Buffer.from([0xbd, 0x04, 0xef, 0xfe]));
-    if (sig < 0 || sig + 16 > blob.length) return null;
-    const ms = blob.readUInt32LE(sig + 8);
-    const ls = blob.readUInt32LE(sig + 12);
-    const fixed = [ms >>> 16, ms & 0xffff, ls >>> 16, ls & 0xffff].join('.');
-    return fixed === '0.0.0.0' ? null : fixed;
+    return readAt(dataOff, Math.min(dataSize, 64 * 1024));
   } catch {
     return null;
   } finally {
     if (fd !== undefined) try { fs.closeSync(fd); } catch {}
   }
+}
+
+// VS_FIXEDFILEINFO out of that resource, "6.3.9600.16384" style.
+function readFileVersion(filePath) {
+  const blob = versionResourceBlob(filePath);
+  if (!blob) return null;
+  const sig = blob.indexOf(Buffer.from([0xbd, 0x04, 0xef, 0xfe]));
+  if (sig < 0 || sig + 16 > blob.length) return null;
+  const ms = blob.readUInt32LE(sig + 8);
+  const ls = blob.readUInt32LE(sig + 12);
+  const fixed = [ms >>> 16, ms & 0xffff, ls >>> 16, ls & 0xffff].join('.');
+  return fixed === '0.0.0.0' ? null : fixed;
+}
+
+// One StringFileInfo value out of the same resource. A String entry is wLength, wValueLength,
+// wType, szKey (UTF-16, NUL-terminated), padding to a 4-byte boundary, then the value.
+function peVersionString(filePath, key) {
+  const blob = versionResourceBlob(filePath);
+  if (!blob) return null;
+  const needle = Buffer.from(key + '\0', 'utf16le');
+  const at = blob.indexOf(needle);
+  if (at < 0) return null;
+  let p = at + needle.length;
+  while (p % 4 !== 0) p += 2;
+  let end = p;
+  while (end + 1 < blob.length && blob.readUInt16LE(end) !== 0) end += 2;
+  return blob.subarray(p, end).toString('utf16le').trim() || null;
+}
+
+// Which file a DLL was built as, whatever it has been renamed to. This is how the app tells its
+// own OptiScaler apart from a game's real dxgi.dll: OptiScaler's OriginalFilename stays
+// "OptiScaler.dll" under every proxy name. Read natively because the PowerShell that used to read
+// it (Get-Item .VersionInfo) costs about 700 ms per game folder in process start-up alone -- with
+// twenty installed games that was fifteen seconds of the main process, on every sync.
+function peOriginalFilename(filePath) {
+  return peVersionString(filePath, 'OriginalFilename');
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -831,8 +861,12 @@ async function optiScalerRuntimeApi(dir) {
   try { fh = await fsp.open(path.join(dir, 'OptiScaler.log'), 'r'); } catch { return null; }
   let text;
   try {
-    const buf = Buffer.alloc(RUNTIME_LOG_MAX_BYTES);
-    const { bytesRead } = await fh.read(buf, 0, RUNTIME_LOG_MAX_BYTES, 0);
+    // Sized to the log, not to the cap: Buffer.alloc(4 MB) per call zero-filled four megabytes
+    // for a log that is usually a few dozen kilobytes.
+    const size = Math.min((await fh.stat()).size, RUNTIME_LOG_MAX_BYTES);
+    if (size <= 0) return null;
+    const buf = Buffer.allocUnsafe(size);
+    const { bytesRead } = await fh.read(buf, 0, size, 0);
     text = buf.subarray(0, bytesRead).toString('latin1');
   } catch {
     return null;
@@ -1115,8 +1149,102 @@ async function detectEmulator(dir, exePath, emu) {
   };
 }
 
-async function detectRenderApi(dir, exePath) {
-  return (await detectGame(dir, exePath)).api;
+async function detectRenderApi(dir, exePath, opts) {
+  return (await detectGameCached(dir, exePath, opts)).api;
+}
+
+// ── Detection cache ───────────────────────────────────────────────────────────────────────────
+//
+// detectGame scans the executable byte by byte when a string it looks for is absent, which on a
+// big title means reading the whole file: measured on a real library, 11 s for Star Wars Outlaws,
+// 10 s for Resident Evil Requiem, 52 s for twenty games. autoConfigureGame called it uncached, and
+// autoConfigureGame runs for every installed game on every sync -- so one app start spent about a
+// minute inside this function with the main process blocked, and every IPC call the grid made
+// queued behind it. That was the lag.
+//
+// Cached per executable against a signature nothing has to remember: the rules' version, the exe,
+// the game folder's own mtime (which NTFS moves when a file beside the exe is added, removed or
+// renamed) and OptiScaler.log's mtime (a new run of the game is new evidence -- the same signal
+// isDetectionStale already watched). A change this signature cannot see -- something deployed into
+// a subfolder -- is dropped explicitly by whoever deployed it, through invalidateDetection().
+const detectCache = new Map();
+const DETECT_CACHE_MAX = 256;
+// A provisional answer is waiting on evidence no signature here can watch: a Unity game's own
+// Player.log, which lives under LocalLow and moves when the game is played, not when its folder
+// changes. isDetectionStale re-ran those on every single grid render, which is what made a Unity
+// game the most expensive card on the screen. Held briefly instead -- long enough that a render
+// costs nothing, short enough that playing the game is still what settles the answer.
+const PROVISIONAL_TTL_MS = 60 * 1000;
+
+function detectSignature(dir, exePath) {
+  const stamp = (p) => {
+    try { const st = fs.statSync(p); return `${st.size}:${st.mtimeMs}`; } catch { return '-'; }
+  };
+  return [DETECT_VERSION, stamp(exePath), stamp(dir), stamp(path.join(dir, 'OptiScaler.log'))].join('|');
+}
+
+// The half of a detection that comes from the game folder rather than the executable: what is
+// sitting beside the exe right now. Cheap enough to redo whenever the folder changes, which is
+// what lets a stored detection be reused for the expensive half -- the engine and API, which come
+// out of the exe and do not change until the game is patched.
+async function folderEvidence(dir, exePath) {
+  const hooks = await inspectHookDlls(dir);
+  const logStat = optiScalerLogStat(dir);
+  return {
+    vulkanWrapper: hooks.vulkanWrapper,
+    reshadeProxy: hooks.reshadeProxy,
+    optiScalerProxy: hooks.optiScalerProxy,
+    antiCheat: antiCheatPresent(dir, exePath),
+    protectedLauncher: antiCheatStub(dir),
+    oldShaderCompiler: oldShaderCompiler(dir),
+    runtimeLogMtime: logStat ? logStat.mtimeMs : null,
+  };
+}
+
+// A stored detection plus fresh folder evidence. The exe scan is skipped; everything a file
+// appearing beside the exe can change is read again, including the Vulkan-wrapper override that
+// detectGame applies on top of its own answer.
+async function detectFromStored(dir, exePath, stored) {
+  const evidence = await folderEvidence(dir, exePath);
+  let out = { ...stored, ...evidence };
+  if (evidence.vulkanWrapper && out.api && out.api !== 'vulkan') {
+    out = {
+      ...out, api: 'vulkan', apis: [...new Set(['vulkan', ...(out.apis || [])])], uncertain: false,
+      reason: `Vulkan -- ${evidence.vulkanWrapper.file} beside the executable is ${evidence.vulkanWrapper.kind}, which presents the game's Direct3D through Vulkan`,
+    };
+  }
+  return out;
+}
+
+// `stored`: the detection already saved for this game (games.json). When it is still current by
+// isDetectionStale's own rules, the executable is not scanned again -- only the folder is re-read.
+async function detectGameCached(dir, exePath, { stored = null } = {}) {
+  const key = `${dir}\u0000${exePath}`;
+  const signature = detectSignature(dir, exePath);
+  const hit = detectCache.get(key);
+  if (hit && hit.signature === signature && !(hit.expires && Date.now() > hit.expires)) return hit.promise;
+  // The promise is cached, not the result: a grid render fires several calls for the same game at
+  // once, and they have to share the one scan instead of each starting their own.
+  const promise = stored && !isDetectionStale(stored, dir)
+    ? detectFromStored(dir, exePath, stored)
+    : detectGame(dir, exePath);
+  const entry = { signature, promise, expires: 0 };
+  detectCache.set(key, entry);
+  promise.then(
+    (found) => { if (found && found.uncertain && found.engineId !== 'unreal') entry.expires = Date.now() + PROVISIONAL_TTL_MS; },
+    // A scan that threw must not be remembered as this signature's answer.
+    () => { if (detectCache.get(key) === entry) detectCache.delete(key); }
+  );
+  if (detectCache.size > DETECT_CACHE_MAX) detectCache.delete(detectCache.keys().next().value);
+  return promise;
+}
+
+// Call after changing a game folder in a way detectSignature cannot see: a DLL written into a
+// subfolder, a plugin tree placed, a proxy renamed. No argument clears everything.
+function invalidateDetection(dir) {
+  if (!dir) { detectCache.clear(); return; }
+  const prefix = `${dir}\u0000`;
+  for (const key of [...detectCache.keys()]) if (key.startsWith(prefix)) detectCache.delete(key);
 }
 
 function isDetectionStale(stored, dir) {
@@ -1218,4 +1346,4 @@ async function planForeignRemoval(dir, { ours = false } = {}) {
   return { found, del: [...del].sort(), restore, notes };
 }
 
-module.exports = { DETECT_VERSION, detectGame, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, foreignToolchains, planForeignRemoval };
+module.exports = { DETECT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, foreignToolchains, planForeignRemoval };

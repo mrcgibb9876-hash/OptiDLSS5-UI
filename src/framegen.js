@@ -121,7 +121,19 @@ function isDir(p) {
 
 // Read the DLL's FileVersion so the UI can show "game currently has 3.7.20" and so a swap
 // decision is informed by what is actually there, not a guess.
+//
+// Read out of the PE version resource (detect.js) rather than by asking PowerShell, which costs
+// about 700 ms of process start-up -- a stall on opening Edit, for a string. PowerShell is still
+// the fallback where the resource cannot be parsed. The two disagree on Windows' own serviced
+// binaries, where Get-Item reports a version other than the one in the file; for the DLLs this
+// reads -- NVIDIA's nvngx_dlssg.dll and nvngx_dlssnr.dll -- they agree, and where they do not, the
+// resource is what the game actually loads.
 async function readDllVersion(execFileAsync, dllPath) {
+  // Required here, not at the top: detect.js requires this module, so a top-level require back
+  // into it would see a half-built module.
+  const { peVersionString } = require('./detect');
+  const native = peVersionString(dllPath, 'FileVersion');
+  if (native) return native;
   try {
     const { stdout } = await execFileAsync('powershell.exe', [
       '-NoProfile', '-NonInteractive', '-Command',

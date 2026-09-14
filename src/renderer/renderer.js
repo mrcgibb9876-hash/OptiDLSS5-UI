@@ -73,6 +73,25 @@ function toast(msg) {
   toast._t = setTimeout(() => el.classList.add('hidden'), 4000);
 }
 
+// Every card can decide during a render that it has something to store -- art it just resolved, a
+// detection it just refreshed -- and each one used to write the whole games list to disk on its own.
+// Twenty cards meant twenty full writes of the same file, overlapping, while the grid was being
+// built. They are the same array, so one write after the render settles says everything they had
+// to say. Anything the user does deliberately still saves through window.api.saveGames directly.
+let saveGamesTimer = null;
+function saveGamesSoon() {
+  clearTimeout(saveGamesTimer);
+  saveGamesTimer = setTimeout(flushSaveGames, 400);
+}
+function flushSaveGames() {
+  if (!saveGamesTimer) return;
+  clearTimeout(saveGamesTimer);
+  saveGamesTimer = null;
+  window.api.saveGames(games);
+}
+// Closed inside the window: art just resolved would otherwise be looked up again next launch.
+window.addEventListener('beforeunload', flushSaveGames);
+
 function toFileUrl(p) {
   return `file:///${p.replace(/\\/g, '/')}`;
 }
@@ -125,9 +144,13 @@ async function renderGrid() {
   emptyState.classList.toggle('hidden', games.length > 0);
   grid.classList.toggle('hidden', games.length === 0);
 
-  for (const game of games) {
-    const status = await window.api.gameStatus(game.exePath);
-    if (generation !== renderGeneration) return;
+  // Asked for all at once rather than a card at a time: the main process answers them in turn
+  // either way, but the renderer no longer waits out a full round trip before starting the next.
+  const statuses = await Promise.all(games.map((game) => window.api.gameStatus(game.exePath).catch(() => ({ exeMissing: true }))));
+  if (generation !== renderGeneration) return;
+
+  for (const [index, game] of games.entries()) {
+    const status = statuses[index];
     const card = document.createElement('div');
     card.className = 'card';
 
@@ -193,7 +216,7 @@ async function renderGrid() {
       const localPath = await window.api.cacheSteamBanner(found.appid, found.tinyImage);
       game.bannerAppId = String(found.appid);
       game.bannerLocalPath = localPath || null;
-      window.api.saveGames(games);
+      saveGamesSoon();
       setBannerWithFallback(game, ...bannerEls());
     };
     const autoFound = !!game.bannerSearchAttempted;
@@ -205,13 +228,13 @@ async function renderGrid() {
       game.bannerSearchVersion = bannerSearchVersion;
       window.api.resolveBanner(game.exePath, game.name).then(async (found) => {
         if (found && found.source === 'steam-manifest' && String(found.appid) !== String(game.bannerAppId)) await applyResolved(found);
-        else window.api.saveGames(games);
+        else saveGamesSoon();
       });
     } else if (!game.bannerLocalPath && game.bannerAppId) {
       window.api.cacheSteamBanner(game.bannerAppId).then((localPath) => {
         if (localPath) {
           game.bannerLocalPath = localPath;
-          window.api.saveGames(games);
+          saveGamesSoon();
           setBannerWithFallback(game, ...bannerEls());
         }
       });
@@ -223,7 +246,7 @@ async function renderGrid() {
       game.bannerSearchVersion = bannerSearchVersion;
       window.api.resolveBanner(game.exePath, game.name).then(async (found) => {
         if (!found) {
-          window.api.saveGames(games);
+          saveGamesSoon();
           return;
         }
         await applyResolved(found);
@@ -320,22 +343,26 @@ async function renderGrid() {
       card._onFlipConfirm?.();
     });
 
-    applyRecommendation(game, card, backends);
+    applyRecommendation(game, card, backends, generation);
 
     grid.appendChild(card);
   }
 }
-async function applyRecommendation(game, card, backends) {
+async function applyRecommendation(game, card, backends, generation = renderGeneration) {
+  // Every await below belongs to one render of one card. A newer render has already replaced the
+  // card this is filling in, so the work behind it is thrown away rather than finished.
+  const current = () => generation === renderGeneration;
   const line = card.querySelector('.card-recommend');
   const install = card.querySelector('.btn-install');
   let detected = game.detectedPath;
 
   // Re-detects when the cached result predates the current detection rules or was provisional.
   const fresh = await window.api.detectPathIfStale(game.exePath, detected);
+  if (!current()) return;
   if (fresh && JSON.stringify(fresh) !== JSON.stringify(detected)) {
     detected = fresh;
     game.detectedPath = fresh;
-    window.api.saveGames(games);
+    saveGamesSoon();
   }
   detected = detected || fresh || { recommend: 'unknown', reason: t('not detected yet') };
 
@@ -349,7 +376,11 @@ async function applyRecommendation(game, card, backends) {
   // whether it is all there yet -- decided in main.js (route.js) from the folder and the cached
   // detection above, so the card answers "what do I click" before the Edit dialog ever opens.
   // It also carries the user's per-game API choice, which the API chip shows in place of the guess.
-  const route = await window.api.gameRoute(game.exePath, detected);
+  const [route, diag] = await Promise.all([
+    window.api.gameRoute(game.exePath, detected),
+    window.api.gameHelp(game.exePath, game.detectedPath || null, helpTriedFor(game)),
+  ]);
+  if (!current()) return;
 
   const engineText = detected.engine || (detected.apiBadge ? null : (detected.badge || t('Unknown')));
   const chips = [];
@@ -400,7 +431,9 @@ async function applyRecommendation(game, card, backends) {
   // What the last run's logs say, in one line -- the card answers "did it work" itself.
   const lastRunEl = card.querySelector('.card-lastrun');
   if (lastRunEl) {
-    const run = await window.api.lastRun(game.exePath);
+    // The verdict game:help already worked out, rather than a second analysis of the same logs.
+    const run = diag && diag.ok ? diag.run : await window.api.lastRun(game.exePath);
+    if (!current()) return;
     if (run && run.ran) {
       lastRunEl.classList.remove('hidden');
       lastRunEl.classList.toggle('status-ok', run.verdict === 'nr-ran');
@@ -419,7 +452,6 @@ async function applyRecommendation(game, card, backends) {
   // Nobody reads a README; the card has to do the telling.
   const helpEl = card.querySelector('.card-help');
   if (helpEl) {
-    const diag = await window.api.gameHelp(game.exePath, game.detectedPath || null, helpTriedFor(game));
     const show = diag && diag.ok && ['fix', 'step', 'unavailable', 'unknown'].includes(diag.status);
     helpEl.classList.toggle('hidden', !show);
     if (show) {
@@ -2704,7 +2736,19 @@ $('#btn-close-settings').addEventListener('click', async () => {
   settingsModal.classList.add('hidden');
   renderGrid();
 });
-async function autoSyncStaleGames() {
+// Called from start-up, from a settings change and from the model fetch finishing, which can land
+// close enough together to overlap. Two passes would copy the same files over each other and write
+// the same ini twice, at twice the cost.
+let autoSyncInFlight = null;
+function autoSyncStaleGames() {
+  if (!autoSyncInFlight) {
+    autoSyncInFlight = runAutoSyncStaleGames().finally(() => { autoSyncInFlight = null; });
+    autoSyncInFlight.catch(() => {});
+  }
+  return autoSyncInFlight;
+}
+
+async function runAutoSyncStaleGames() {
   if (games.length === 0) return;
 
   const updated = [];
@@ -3287,8 +3331,13 @@ $('#btn-add-scanned').addEventListener('click', async () => {
   closeScanModal();
 });
 
+// Focus arrives for every native dialog the app opens and closes as well as for the user coming
+// back to the window, and each one used to rebuild the whole grid on the spot. Coalesced, so
+// clicking through a dialog costs one render instead of one per dialog.
+let focusRenderTimer = null;
 window.addEventListener('focus', () => {
-  renderGrid();
+  clearTimeout(focusRenderTimer);
+  focusRenderTimer = setTimeout(() => { focusRenderTimer = null; renderGrid(); }, 250);
   // Back from the browser with the plugin downloaded: look for it again.
   if (!pdPluginModal.classList.contains('hidden')) refreshPdPluginModal();
 });

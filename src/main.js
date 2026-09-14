@@ -19,7 +19,7 @@ const nativeDlss = require('./native-dlss');
 const { recommendRoute, withApiOverride, API_OVERRIDE_VALUES } = require('./route');
 const gpu = require('./gpu');
 const amdnr = require('./amdnr');
-const { detectGame, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, antiCheatPresent, peImports, peBitness, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
+const { detectGameCached, invalidateDetection, peOriginalFilename, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, antiCheatPresent, peImports, peBitness, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const managerUpdate = require('./manager-update');
 const runlog = require('./runlog');
@@ -57,9 +57,14 @@ function readJson(file, fallback) {
   }
 }
 
+// Written beside the target and renamed over it: writeFileSync truncates first, so a reader that
+// arrived in that window got half a file or none. games.json is written from the grid while the
+// grid is also reading it, and a corrupt games.json reads back as an empty library.
 function writeJson(file, data) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf-8');
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf-8');
+  fs.renameSync(tmp, file);
 }
 
 function createWindow() {
@@ -357,7 +362,7 @@ ipcMain.handle('feeder:readiness', async (_evt, exePath) => {
   // Fallen Order gets its DLSS call from Luma UE (lumaue.js), not the Feeder. Both deploy a plain
   // ReShade64.dll into the same folder, so offering both here let a user deploy one over the
   // other. Only a Feeder already on disk keeps this section open for that game.
-  const detected = withApiOverride(await detectGame(dir, exePath), readApiOverride(dir));
+  const detected = withApiOverride(await detectFor(dir, exePath), readApiOverride(dir));
   if ((lumaue.isLumaUeDefault(exePath) || lumaue.lumaUeDeployed(dir)) && !feeder.feederDeployed(dir)) {
     return { ready: false, needed: false, reason: 'This game uses Luma UE for its DLSS call, not the Feeder -- see the Luma UE section.' };
   }
@@ -792,7 +797,7 @@ ipcMain.handle('lumaue:readiness', async (_evt, { exePath }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) return { ok: false, error: 'Game .exe not found' };
     const dir = gameDir(exePath);
-    const detected = withApiOverride(await detectGame(dir, exePath), readApiOverride(dir));
+    const detected = withApiOverride(await detectFor(dir, exePath), readApiOverride(dir));
     return { ok: true, ...lumaue.lumaUeReadiness(dir, exePath, detected) };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
@@ -806,7 +811,7 @@ ipcMain.handle('lumaue:deploy', async (_evt, { exePath, force, licenseConfirmed 
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
-    const detected = withApiOverride(await detectGame(dir, exePath), readApiOverride(dir));
+    const detected = withApiOverride(await detectFor(dir, exePath), readApiOverride(dir));
     if (!lumaue.isLumaUeGame(exePath, detected)) throw new Error('Luma UE is for Unreal Engine 4 games rendering with DirectX 11 and no DLSS of their own');
     if (lumaue.lumaUeKnownBad(exePath)) throw new Error('Luma UE is known not to work with this game: ' + lumaue.lumaUeKnownBad(exePath));
     // Hand-over from the Feeder: the two are both ReShade add-ons supplying the DLSS call and
@@ -1312,9 +1317,40 @@ function writeApiOverride(dir, api) {
   writeJson(file, { api, setAt: new Date().toISOString() });
 }
 
+// ── Detection, once ──────────────────────────────────────────────────────────────────────────
+//
+// Every detection in the main process goes through detectFor. Behind it, detect.js caches the
+// answer per executable and reuses the one already stored for the game (games.json) while the
+// rules, the folder and OptiScaler.log still agree with it -- only the folder evidence is re-read.
+//
+// This is the fix for the app's own slowness. detectGame scans the executable byte by byte when a
+// string it looks for is absent, which on a big title means reading the whole file: measured on
+// this library, 11 s for Star Wars Outlaws, 10 s for Resident Evil Requiem, 52 s for all twenty
+// games. autoConfigureGame called it uncached, and autoConfigureGame runs for every installed game
+// on every sync -- so a start-up spent about a minute of the main process inside detection, with
+// every IPC call the grid made queued behind it. Measured on that library: 70 s for one sync pass
+// before, 2 s for the first pass now, and 10 ms for every pass after it.
+const storedDetections = { mtimeMs: null, byExe: new Map() };
+function storedDetectionFor(exePath) {
+  let mtimeMs = null;
+  try { mtimeMs = fs.statSync(gamesFile()).mtimeMs; } catch {}
+  if (mtimeMs !== storedDetections.mtimeMs) {
+    storedDetections.mtimeMs = mtimeMs;
+    storedDetections.byExe = new Map();
+    for (const game of readJson(gamesFile(), [])) {
+      if (game && game.exePath && game.detectedPath) storedDetections.byExe.set(game.exePath.toLowerCase(), game.detectedPath);
+    }
+  }
+  return storedDetections.byExe.get(String(exePath || '').toLowerCase()) || null;
+}
+
+function detectFor(dir, exePath) {
+  return detectGameCached(dir, exePath, { stored: storedDetectionFor(exePath) });
+}
+
 // The primary API every handler should act on: the user's choice if there is one, else detection.
 async function resolveApi(dir, exePath) {
-  return readApiOverride(dir) || detectRenderApi(dir, exePath);
+  return readApiOverride(dir) || (await detectFor(dir, exePath)).api;
 }
 
 ipcMain.handle('game:setApiOverride', async (_evt, { exePath, api }) => {
@@ -1586,6 +1622,7 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
       foreignProxy = proxy.proxy;
     }
 
+    invalidateDetection(dir);
     const { api, applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix, profile } = await autoConfigureGame(dir, exePath);
 
     return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, proxyRefreshError, foreignProxy, proxy, proxyError, feederGame, api, autoConfigured: applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix, profile };
@@ -1824,6 +1861,7 @@ ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
     // a console the app cannot see, and decides what to restore by guessing from filenames. This
     // reverses what the install recorded it did -- and every other stack this app deploys.
     const result = await uninstallEverything(dir);
+    invalidateDetection(dir);
     return { ok: true, ...result };
   } catch (err) {
     return { ok: false, error: err.message };
@@ -2351,7 +2389,7 @@ ipcMain.handle('shell:openPath', (_evt, p) => {
 ipcMain.handle('game:detect-path', async (_evt, exePath) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) return { recommend: 'unknown', reason: 'executable not found' };
-    return await detectGame(gameDir(exePath), exePath);
+    return await detectGameCached(gameDir(exePath), exePath);
   } catch (error) {
     return { recommend: 'unknown', reason: String(error && error.message ? error.message : error) };
   }
@@ -2362,7 +2400,7 @@ ipcMain.handle('game:detect-path-if-stale', async (_evt, { exePath, stored }) =>
   if (!isDetectionStale(stored, dir)) return null;
   try {
     if (!exePath || !fs.existsSync(exePath)) return { recommend: 'unknown', reason: 'executable not found' };
-    return await detectGame(gameDir(exePath), exePath);
+    return await detectGameCached(gameDir(exePath), exePath);
   } catch (error) {
     return { recommend: 'unknown', reason: String(error && error.message ? error.message : error) };
   }
@@ -3164,7 +3202,7 @@ async function autoConfigureGame(dir, exePath) {
   const iniPath = path.join(dir, 'OptiScaler.ini');
   if (!fs.existsSync(iniPath)) return { api: null, applied: [] };
 
-  const { api, apis } = withApiOverride(await detectGame(dir, exePath), readApiOverride(dir));
+  const { api, apis } = withApiOverride(await detectFor(dir, exePath), readApiOverride(dir));
   let dlss5Only = hasNativeDlss(dir);
   // hasNativeDlss() just checks for nvngx_dlss.dll on disk -- for a Feeder game that file was
   // placed by the Feeder deploy itself, not the game, so this alone can't tell native DLSS
@@ -3281,8 +3319,26 @@ async function autoConfigureGame(dir, exePath) {
 
 const PROXY_CANDIDATES = ['dxgi.dll', 'winmm.dll', 'version.dll', 'dbghelp.dll', 'd3d12.dll', 'wininet.dll', 'winhttp.dll', 'OptiScaler.asi'];
 
+// Keyed on size and mtime, so a file that changes is hashed again and one that has not is not.
+// The release OptiScaler.dll is 26 MB and sync-if-stale hashes it to compare against every
+// installed game: twenty games meant reading and hashing half a gigabyte per sync pass.
+const hashCache = new Map();
+const HASH_CACHE_MAX = 64;
+
 function sha256File(filePath) {
-  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+  let key = null;
+  try {
+    const st = fs.statSync(filePath);
+    key = `${filePath}|${st.size}|${st.mtimeMs}`;
+    const hit = hashCache.get(key);
+    if (hit) return hit;
+  } catch {}
+  const hash = crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+  if (key) {
+    if (hashCache.size >= HASH_CACHE_MAX) hashCache.delete(hashCache.keys().next().value);
+    hashCache.set(key, hash);
+  }
+  return hash;
 }
 
 async function findActiveOptiScalerFile(dir) {
@@ -3291,23 +3347,16 @@ async function findActiveOptiScalerFile(dir) {
     const plain = path.join(dir, 'OptiScaler.dll');
     return fs.existsSync(plain) ? { file: plain, renamed: false } : null;
   }
+  // OriginalFilename is read out of the PE version resource directly (detect.js). This used to
+  // ask PowerShell for it -- Get-Item .VersionInfo -- which is correct but costs about 700 ms per
+  // game folder in process start-up alone: fifteen seconds of the main process across twenty
+  // installed games, on every sync pass, for an answer that takes 1.5 ms to read. Checked against
+  // the PowerShell it replaces on all twenty installed games: the same answer every time.
   try {
-    const psScript = `
-      $names = @(${present.map((n) => `'${n.replace(/'/g, "''")}'`).join(',')})
-      $out = foreach ($n in $names) {
-        $p = Join-Path $env:OSM_DIR $n
-        $vi = (Get-Item -LiteralPath $p).VersionInfo
-        [PSCustomObject]@{ Name = $n; Orig = $vi.OriginalFilename }
-      }
-      ConvertTo-Json -InputObject $out -Compress
-    `;
-    const { stdout } = await execFileAsync('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-Command', psScript
-    ], { env: { ...process.env, OSM_DIR: dir } });
-    let parsed = JSON.parse(stdout || 'null');
-    if (parsed && !Array.isArray(parsed)) parsed = [parsed];
-    const match = (parsed || []).find((e) => (e.Orig || '').toLowerCase() === 'optiscaler.dll');
-    if (match) return { file: path.join(dir, match.Name), renamed: true };
+    for (const name of present) {
+      const orig = peOriginalFilename(path.join(dir, name));
+      if ((orig || '').toLowerCase() === 'optiscaler.dll') return { file: path.join(dir, name), renamed: true };
+    }
   } catch {
   }
   // One proxy-named DLL and no version resource to say what it is: only OptiScaler if its bytes say
