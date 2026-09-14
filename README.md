@@ -104,20 +104,20 @@ DLSS-only game) is unverified upstream.
 
 ## Language
 
-The manager runs in English, Brazilian Portuguese, Russian, Korean, Simplified Chinese, Spanish or
-German. It follows Windows by default (any Portuguese locale gets pt-BR, any Chinese locale gets
+The manager runs in English, Brazilian Portuguese, Russian, Korean, Simplified Chinese, Spanish,
+German or French. It follows Windows by default (any Portuguese locale gets pt-BR, any Chinese locale gets
 zh-CN, and so on) and Settings has a Language selector to pin one. Every string the manager draws
 goes through `src/renderer/i18n.js`; a language is one flat file under `src/renderer/locales/`
 mapping the English text to its translation. Anything a file does not cover falls back to English.
 
-The in-game DLSS 5 panel (Alt+Home) speaks the same seven languages from engine v1.0.11. It follows
+The in-game DLSS 5 panel (Alt+Home) speaks the same languages from engine v1.0.11 (French from v1.0.30). It follows
 Windows by default too; when you pin a language in the manager's Settings, the manager writes
 `[DlssNr] Language` into every installed game's `OptiScaler.ini` so the panel follows suit, and the
 panel's own Appearance section has the same selector for a per-game choice. Chinese and Korean draw
 with the fonts Windows ships (Microsoft YaHei, Malgun Gothic); nothing extra is bundled. OptiScaler's
 own shared menu stays English.
 
-The same three games, seven ways. Mock-ups rendered from the real UI with stub data, like the AMD
+The same three games, seven ways (French has no mock-up yet). Mock-ups rendered from the real UI with stub data, like the AMD
 ones above.
 
 | | |

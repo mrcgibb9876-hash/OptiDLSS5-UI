@@ -38,7 +38,8 @@ window.I18N = (() => {
   // pt-BR: it is the only Portuguese here, and a pt-PT file can take precedence later. Same for
   // Chinese: only Simplified ships, so every zh-* gets it until a zh-TW file exists (Traditional
   // is different terminology, not a character conversion). Spanish covers Spain and Latin
-  // America with one file; Russian, Korean and German have no regional split worth making.
+  // America with one file, French covers France, Belgium, Switzerland and Canada the same way;
+  // Russian, Korean and German have no regional split worth making.
   function detect() {
     const lang = String(navigator.language || 'en').toLowerCase();
     if (lang.startsWith('pt')) return 'pt-BR';
@@ -47,6 +48,7 @@ window.I18N = (() => {
     if (lang.startsWith('zh')) return 'zh-CN';
     if (lang.startsWith('es')) return 'es';
     if (lang.startsWith('de')) return 'de';
+    if (lang.startsWith('fr')) return 'fr';
     return 'en';
   }
 
