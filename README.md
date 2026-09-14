@@ -364,15 +364,18 @@ the rest of Capcom's RE Engine catalogue) also need REFramework, which uses Inse
 overlay. On these games the app switches OptiScaler's own overlay key to **Alt+O** automatically,
 so both work side by side without a manual rebind.
 
-**Resident Evil 2, 3, 4, 7 and Village** have no DLSS of their own. Install fetches REFramework's
-pd-upscaler build and `nvngx_dlss.dll`; the one file it cannot fetch is PureDark's free **Upscaler
-Base Plugin** (`PDPerfPlugin.dll`), which is only on
-[Nexus Mods](https://www.nexusmods.com/site/mods/502) and is PureDark's to distribute. The card's
-**Get plugin** button (it also pops up after installing one of these games) opens that page, then
-finds the download in your Downloads folder -- `.zip`, `.7z`, `.rar` or the DLL itself -- or takes
-one you browse to. It is imported once and placed in every one of these games, including ones you
-install later; Remove takes it back only where it is still the copy the app placed. In-game:
-Insert opens REFramework -> TemporalUpscaler -> Enabled, Upscale Type DLSS.
+**Resident Evil 2, 3, 4, 7 and Village** have no DLSS of their own, and since engine v1.0.24 they
+need nothing extra either: DLSS 5 runs at the end of each frame, on top of the game's own
+anti-aliasing, and the engine finds the game's depth buffer by itself -- the approach of
+[DXL](https://github.com/LCPD15/DXL) by LCPD15, ported into the engine. Just Install, load a save
+(menus have no depth to work with) and open the DLSS 5 panel as usual. The earlier route through
+REFramework's pd-upscaler and PureDark's Upscaler Base Plugin is retired: the app no longer places
+the plugin or `nvngx_dlss.dll` for these games, takes out a plugin copy it placed before, and keeps
+REFramework's TemporalUpscaler switched off.
+
+A game that already works the way you want can be kept exactly as it is: put an empty file named
+`.dlss5ui-keep-as-is` beside its exe and the app's sync leaves it alone -- no engine, model or
+settings update.
 
 ### Experimental: emulators, 32-bit games, DirectX 8/9
 
@@ -430,6 +433,11 @@ adaptation for this app lives in `src/discover.js` instead.
 the [OptiScaler_DLSSNR](https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR) fork that adds the
 Neural Rendering pass and the in-game panel.
 
+[DXL (DLSS eXtended Loader)](https://github.com/LCPD15/DXL) by **LCPD15** (AGPL-3.0) showed how to
+run DLSS 5 on games that make no DLSS call at all: at the game's Present, with the scene depth found
+by watching the game's own depth buffers. The engine's Present route and depth tracker follow its
+design, with credit in the engine's `Licenses/DXL_ATTRIBUTION.txt`. Thank you, LCPD15.
+
 Everything the app fetches on your behalf comes from someone else's work, live from their own
 releases and never mirrored here:
 
@@ -447,7 +455,8 @@ releases and never mirrored here:
 | [Luma-Framework](https://github.com/Filoppi/Luma-Framework) (Filoppi) | DLAA in place of TAA for STAR WARS Jedi: Fallen Order; fetched live after per-action consent | Custom MIT variant |
 | [OptiScaler-DLSSNR-PreSR-Multipass](https://github.com/wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass) (wilsjo2) | Optional engine build: Neural Rendering before DLSS upscaling, 1-3 passes; fetched live from its releases | GPL-3.0 |
 | [REFramework](https://github.com/praydog/REFramework) (praydog) | Required on RE Engine games | MIT |
-| [Upscaler Base Plugin](https://www.nexusmods.com/site/mods/502) (PureDark) | The DLSS call on Resident Evil 2/3/4/7/Village; downloaded by the user from Nexus, then imported and placed by the app -- never downloaded or shipped by it | PureDark's; not redistributed |
+| [DXL](https://github.com/LCPD15/DXL) (LCPD15) | The design of the engine's Present route and depth tracker, which run DLSS 5 on Resident Evil 2/3/4/7/Village without a DLSS call; credited in the engine, nothing downloaded | AGPL-3.0 |
+| [Upscaler Base Plugin](https://www.nexusmods.com/site/mods/502) (PureDark) | Formerly the DLSS call on Resident Evil 2/3/4/7/Village; no longer placed since the Present route -- only recognised so a copy the app placed earlier can be taken out | PureDark's; not redistributed |
 | [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) (THS) | Frame Generation for games with no DLSS of their own; configured, never installed | Paid, Steam |
 | [DLSS5-Swapper](https://github.com/rakanki911/DLSS5-Swapper) (Rakan Alkhaldi) | `src/library.js`, as above; the emulator table, the 32-bit helper layout and the dgVoodoo2 pin and settings are ported from it | MIT |
 | [DLSS5-Autopilot](https://github.com/Kizzuwatnaa/DLSS5-Autopilot) (Kizzuwatnaa) | The emulator detection table DLSS5-Swapper's is based on | MIT |

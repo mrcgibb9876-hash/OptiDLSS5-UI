@@ -33,6 +33,10 @@ its releases. It is a separate program under the GPL-3.0; its complete source is
 https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR, built on
 [OptiScaler](https://github.com/optiscaler/OptiScaler).
 
+Its Present route and depth tracker (DLSS 5 on games with no DLSS call) follow the design of
+[DXL (DLSS eXtended Loader)](https://github.com/LCPD15/DXL) by LCPD15, AGPL-3.0; the engine carries
+the attribution in `Licenses/DXL_ATTRIBUTION.txt`.
+
 ### Fetched at runtime, never shipped
 
 Each is downloaded from its own official source when a game needs it, under its own terms, as
@@ -40,5 +44,5 @@ listed in the README's credits table: RHI's manifest and packages (Streamline, D
 model), REFramework (MIT), the DLSS5 Feeder (MIT), ReShade (BSD 3-Clause), motion-vector shaders,
 Luma-Framework, wilsjo2's OptiScaler-DLSSNR-PreSR-Multipass engine (GPL-3.0), and dgVoodoo2 (Dege's
 freeware, from its official GitHub release, only after the user agrees). PureDark's
-Upscaler Base Plugin is never downloaded or shipped by the app: the user downloads it from
-Nexus Mods, and the app only places the user's own copy into their games.
+Upscaler Base Plugin is never downloaded or shipped by the app, and since the engine's Present route
+it is no longer placed into games either.
