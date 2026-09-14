@@ -254,7 +254,21 @@ function cachedDgVoodoo(cacheDir) {
 // dgVoodoo.conf as the Feeder's README and DLSS5-Swapper set it. VRAM: dgVoodoo enforces its emulated
 // 256 MB, and a DirectX 9 game at a modern resolution runs out in seconds (DLSS5-Swapper measured SWTOR
 // failing at 1024 MB); the number is a ceiling, not an allocation.
-function configureDgVoodoo(text) {
+//
+// windowed (the 32-bit helper route): dgVoodoo2 presents the game as a borderless, screen-sized
+// window whatever the game asks for. In exclusive fullscreen the game loses focus the moment the
+// Feeder starts its 64-bit helper, minimises, and a game that pauses while inactive never comes back:
+// Castlevania: Lords of Shadow - Mirror of Fate HD (2026-09-14) sat in a Sleep loop inside its own
+// window procedure, "not responding", with one frame fed. Set to windowed -- by its own config or by
+// these three keys, with its config still saying fullscreen -- it ran at 170 fps with DLSS 5 on. The
+// Feeder's in-game panel needs windowed or borderless anyway.
+const DG_WINDOWED = [
+  ['General', 'FullScreenMode', 'false'],
+  ['DirectX', 'AppControlledScreenMode', 'false'],
+  ['GeneralExt', 'WindowedAttributes', 'borderless, fullscreensize'],
+];
+
+function configureDgVoodoo(text, { windowed = false } = {}) {
   let out = String(text || '');
   out = setIniKey(out, 'General', 'OutputAPI', 'd3d11_fl11_0');
   out = setIniKey(out, 'General', 'CaptureMouse', 'false');
@@ -262,7 +276,23 @@ function configureDgVoodoo(text) {
   out = setIniKey(out, 'DirectX', 'VideoCard', 'internal3D');
   out = setIniKey(out, 'DirectX', 'VRAM', '4096');
   out = setIniKey(out, 'DirectX', 'dgVoodooWatermark', 'false');
+  if (windowed) for (const [section, key, value] of DG_WINDOWED) out = setIniKey(out, section, key, value);
   return out;
+}
+
+// Brings an existing 32-bit route install's dgVoodoo.conf up to the windowed setting (installs made
+// before it existed). Returns true when the file changed.
+function ensureDgVoodooWindowed(dir) {
+  const marker = readMarker(dir);
+  if (!marker || !marker.host32 || !marker.dgVoodoo) return false;
+  const confPath = path.join(dir, 'dgVoodoo.conf');
+  let text;
+  try { text = fs.readFileSync(confPath, 'utf8'); } catch { return false; }
+  let next = text;
+  for (const [section, key, value] of DG_WINDOWED) next = setIniKey(next, section, key, value);
+  if (next === text) return false;
+  fs.writeFileSync(confPath, next, 'utf8');
+  return true;
 }
 
 // LEGACY_QUARANTINE_WAIT_MS lets tests skip the pause a real security scanner needs.
@@ -332,7 +362,7 @@ async function deployDgVoodoo(dir, plan, source) {
   await rec.write(path.join(dir, 'dgVoodooCpl.exe'), cpl, { ours: isDg });
   const confPath = path.join(dir, 'dgVoodoo.conf');
   const base = fs.existsSync(confPath) ? fs.readFileSync(confPath, 'utf8') : conf.toString('utf8');
-  await rec.write(confPath, Buffer.from(configureDgVoodoo(base), 'utf8'), { ours: () => true });
+  await rec.write(confPath, Buffer.from(configureDgVoodoo(base, { windowed: !!plan.host32 }), 'utf8'), { ours: () => true });
   marker.dgVoodoo = { arch: plan.dgVoodoo.arch, dll: plan.dgVoodoo.dll, source: path.basename(source) };
   marker.placedAt = new Date().toISOString();
   writeMarker(dir, marker);
@@ -506,5 +536,5 @@ async function removeLegacy(dir) {
 
 module.exports = {
   MARKER, HOST_DIR, DGVOODOO, planFor, status, readMarker, ensureDgVoodoo, importDgVoodooZip, cachedDgVoodoo,
-  isDgVoodooZip, configureDgVoodoo, deployDgVoodoo, deployHost32, removalPlan, removeLegacy,
+  isDgVoodooZip, configureDgVoodoo, ensureDgVoodooWindowed, deployDgVoodoo, deployHost32, removalPlan, removeLegacy,
 };

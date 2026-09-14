@@ -3491,7 +3491,11 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDl
         nrUpdated = true;
       }
       try { applyPanelLanguage(hostDir); } catch {}
-      return { ok: true, updated: updated || nrUpdated, nrUpdated, reason: 'legacy 32-bit route', autoConfigured: [] };
+      // Installs from before 32-bit DirectX 8/9 games were held in a borderless window (legacy.js
+      // DG_WINDOWED): an exclusive-fullscreen game can freeze the moment the helper starts.
+      let dgWindowed = false;
+      try { dgWindowed = legacy.ensureDgVoodooWindowed(dir); } catch {}
+      return { ok: true, updated: updated || nrUpdated, nrUpdated, dgWindowed, reason: 'legacy 32-bit route', autoConfigured: [] };
     }
     if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: true, updated: false, reason: 'not installed' };
 

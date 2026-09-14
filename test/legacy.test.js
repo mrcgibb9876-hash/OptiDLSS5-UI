@@ -236,6 +236,12 @@ test('the 32-bit route: dgVoodoo2, the game-side ReShade and add-on, the host64 
   assert.equal(dg.dll, 'D3D9.dll');
   assert.equal(fs.readFileSync(path.join(game, 'D3D9.dll'), 'utf8'), 'dgVoodoo x86 d3d9');
   assert.match(fs.readFileSync(path.join(game, 'dgVoodoo.conf'), 'utf8'), /dgVoodooWatermark\s*=\s*false/);
+  // Held in a borderless, screen-sized window: in exclusive fullscreen Mirror of Fate HD froze the
+  // moment the helper started (it lost focus, minimised and slept in its window procedure).
+  const conf32 = fs.readFileSync(path.join(game, 'dgVoodoo.conf'), 'utf8');
+  assert.match(conf32, /\[General\][^[]*FullScreenMode\s*=\s*false/);
+  assert.match(conf32, /\[DirectX\][^[]*AppControlledScreenMode\s*=\s*false/);
+  assert.match(conf32, /\[GeneralExt\][^[]*WindowedAttributes\s*=\s*borderless, fullscreensize/);
 
   const res = await legacy.deployHost32(game, plan, {
     ...comps,
@@ -332,6 +338,8 @@ test('a host64 folder this app did not make is refused; a 64-bit DirectX 9 game 
   const dgZip = await legacy.importDgVoodooZip(comps.dgZip, path.join(base, 'cache'));
   await legacy.deployDgVoodoo(g64, plan, dgZip);
   assert.equal(fs.readFileSync(path.join(g64, 'D3D9.dll'), 'utf8'), 'dgVoodoo x64 d3d9');
+  assert.doesNotMatch(fs.readFileSync(path.join(g64, 'dgVoodoo.conf'), 'utf8'), /FullScreenMode\s*=\s*false/, 'no helper, no forced window');
+  assert.equal(legacy.ensureDgVoodooWindowed(g64), false, 'the 64-bit route is left as the game wants it');
   const removed = await legacy.removeLegacy(g64);
   assert.ok(removed.removed.includes('D3D9.dll'));
   assert.ok(!fs.existsSync(path.join(g64, legacy.MARKER)));
@@ -357,4 +365,18 @@ test('the helper folder is ours: a 32-bit game is not mistaken for one that ship
   fakeExe(real, 'Game.exe');
   write(real, 'Engine/Plugins/DLSS/Binaries/ThirdParty/Win64/nvngx_dlss.dll', 'the game\'s own');
   assert.ok(nativeDlss.shippedDlssPath(real), 'a genuine plugin-tree DLSS is still detected');
+});
+
+test('an older 32-bit install is brought to the borderless window once, and left alone after', () => {
+  const game = scratchDir('legacy-windowed-upgrade');
+  write(game, legacy.MARKER, JSON.stringify({ version: 1, files: ['D3D9.dll', 'dgVoodoo.conf'], backups: [], dirs: ['host64'], dgVoodoo: { arch: 'x86', dll: 'D3D9.dll' }, host32: { api: 'dx9', reshadeName: 'dxgi.dll' } }));
+  // As installs before v1.63.6 wrote it: the game decides, and exclusive fullscreen wins.
+  write(game, 'dgVoodoo.conf', '[General]\nOutputAPI = d3d11_fl11_0\nFullScreenMode = true\n\n[GeneralExt]\nWindowedAttributes = \n\n[DirectX]\nAppControlledScreenMode = true\nVRAM = 4096\n');
+  assert.equal(legacy.ensureDgVoodooWindowed(game), true);
+  const conf = fs.readFileSync(path.join(game, 'dgVoodoo.conf'), 'utf8');
+  assert.match(conf, /FullScreenMode\s*=\s*false/);
+  assert.match(conf, /AppControlledScreenMode\s*=\s*false/);
+  assert.match(conf, /WindowedAttributes\s*=\s*borderless, fullscreensize/);
+  assert.match(conf, /VRAM\s*=\s*4096/, 'nothing else touched');
+  assert.equal(legacy.ensureDgVoodooWindowed(game), false, 'already windowed: no rewrite');
 });
