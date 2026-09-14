@@ -346,6 +346,15 @@ async function deployHost32(dir, plan, deps) {
     for (const [section, key, value] of [
       ['DlssNr', 'Enabled', 'true'],
       ['DlssNr', 'ScanExposure', 'false'],
+      // Neural Rendering before Super Resolution: off, for the same reason it is off on every
+      // other Feeder game (FEEDER_PRE_SR_OFF in main.js) -- Pre-SR runs the pass on the game's own
+      // pre-upscale colour, and a Feeder game has no such frame: the "upscaler input" is a
+      // synthetic contract the Feeder builds out of ReShade's capture, so the placement the
+      // setting asks for is not there to use. On Armored Core VI it faulted inside the model every
+      // run. That guard lives in autoConfigureGame, which writes the ini beside the exe -- and on
+      // this route OptiScaler reads host64\OptiScaler.ini instead, which nothing was writing it
+      // to. Found on a live Alien: Isolation install running with it on (2026-09-14).
+      ['DlssNr', 'RunBeforeSR', 'false'],
       ['Upscalers', 'Dx12Upscaler', 'dlss'],
       ['Plugins', 'LoadReshade', 'false'],
       ['Log', 'LogToFile', 'true'],

@@ -1332,6 +1332,8 @@ async function openGameModal(game, { focus = null } = {}) {
 // A user with a working 32-bit install had no way to change any of this without reaching a panel
 // that never appears over the game (2026-09-14). That is what this section is for.
 let dlssNrFields = [];
+// Keys this app holds to a value for this game, key -> why. Shown as held rather than offered.
+let dlssNrForced = {};
 
 function dlssNrValueOf(key) {
   const f = dlssNrFields.find((x) => x.key === key);
@@ -1367,6 +1369,7 @@ async function loadDlssNrSection(game) {
   section.classList.remove('hidden');
   helperNote.classList.toggle('hidden', !res.inHelper);
   dlssNrFields = res.fields;
+  dlssNrForced = res.forced || {};
   status.textContent = '';
   renderDlssNrFields(game);
 }
@@ -1384,13 +1387,14 @@ function renderDlssNrFields(game) {
     for (const field of dlssNrFields.filter((f) => f.group === groupName)) {
       const row = document.createElement('div');
       row.className = 'dlssnr-row';
-      const met = dlssNrDependencyMet(field);
+      const heldReason = dlssNrForced[field.key] || null;
+      const met = dlssNrDependencyMet(field) && !heldReason;
       row.classList.toggle('dlssnr-inactive', !met);
 
       const label = document.createElement('label');
       label.className = 'dlssnr-label has-tip';
       label.textContent = t(field.label);
-      label.setAttribute('data-tip', t(field.help));
+      label.setAttribute('data-tip', heldReason ? t(heldReason) : t(field.help));
       row.appendChild(label);
 
       const shown = field.value === null ? field.default : field.value;
@@ -1431,6 +1435,7 @@ function renderDlssNrFields(game) {
       const readout = document.createElement('span');
       readout.className = 'dlssnr-readout';
       const describe = () => {
+        if (heldReason) return t('held off');
         if (field.type === 'bool' || field.type === 'enum') return field.value === null ? t('default') : '';
         return field.value === null ? t('{n} (default)', { n: shown }) : String(shown);
       };

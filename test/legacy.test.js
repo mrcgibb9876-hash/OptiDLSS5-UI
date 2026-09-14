@@ -222,6 +222,13 @@ test('the 32-bit route: dgVoodoo2, the game-side ReShade and add-on, the host64 
   assert.ok(!fs.existsSync(path.join(host, 'OptiScaler.dll')) && !fs.existsSync(path.join(host, 'setup_windows.bat')));
   const ini = fs.readFileSync(path.join(host, 'OptiScaler.ini'), 'utf8');
   for (const re of [/\[DlssNr\][^[]*Enabled=true/, /ScanExposure=false/, /Dx12Upscaler=dlss/, /LoadReshade=false/]) assert.match(ini, re);
+  // Pre-SR off, the same as every other Feeder game. It is held off because a Feeder game has no
+  // pre-upscale frame for the pass to run on -- the "upscaler input" is a synthetic contract built
+  // from ReShade's capture -- and switching it on faulted the model on Armored Core VI every run.
+  // autoConfigureGame enforces that on the ini beside the exe; this route's OptiScaler reads
+  // host64\OptiScaler.ini instead, and nothing was writing it there. A live Alien: Isolation ran
+  // with it on (2026-09-14) because of exactly that gap.
+  assert.match(ini, /RunBeforeSR=false/, 'the Pre-SR guard reaches the helper ini too');
   assert.match(fs.readFileSync(path.join(host, 'ReShade.ini'), 'utf8'), /AddonPath=\.\\/);
   assert.ok(fs.existsSync(path.join(host, 'nvngx_dlssnr.dll')) && fs.existsSync(path.join(host, 'nvngx_dlss.dll')));
 

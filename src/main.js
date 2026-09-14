@@ -1423,7 +1423,13 @@ ipcMain.handle('dlssnr:get', (_evt, exePath) => {
     const optiDir = optiScalerDirFor(dir);
     const iniPath = path.join(optiDir, 'OptiScaler.ini');
     if (!fs.existsSync(iniPath)) return { ok: false, error: 'not-installed' };
-    return { ok: true, inHelper: path.resolve(optiDir) !== path.resolve(dir), iniPath, fields: dlssnr.readSettings(iniPath) };
+    // Settings this app holds to a value, with the reason. Offering a slider the next sync quietly
+    // puts back is worse than not offering it: the Feeder's synthetic frame has no pre-upscale
+    // colour for Pre-SR to run on, and on Armored Core VI turning it on faulted the model every run.
+    const forced = isFeederGame(dir)
+      ? { RunBeforeSR: 'Held off on a Feeder game: there is no real pre-upscale frame for the pass to run on, and on Armored Core VI switching it on faulted the model on every run.' }
+      : {};
+    return { ok: true, inHelper: path.resolve(optiDir) !== path.resolve(dir), iniPath, forced, fields: dlssnr.readSettings(iniPath) };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
