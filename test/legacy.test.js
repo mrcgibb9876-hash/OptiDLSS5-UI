@@ -8,13 +8,14 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { scratchDir, write, fakeReleaseFolder, fakeNrModel, loadMain, listing } = require('./helpers');
+const { scratchDir, write, fakeExe, fakeReleaseFolder, fakeNrModel, loadMain, listing } = require('./helpers');
 const legacy = require('../src/legacy');
 const emulators = require('../src/emulators');
 const detect = require('../src/detect');
 const route = require('../src/route');
 const { diagnose } = require('../src/gamehelp');
 
+const nativeDlss = require('../src/native-dlss');
 const onWindows = process.platform === 'win32';
 const SYS = process.env.SystemRoot || 'C:\\Windows';
 process.env.LEGACY_QUARANTINE_WAIT_MS = '0';
@@ -282,4 +283,26 @@ test('a host64 folder this app did not make is refused; a 64-bit DirectX 9 game 
   const removed = await legacy.removeLegacy(g64);
   assert.ok(removed.removed.includes('D3D9.dll'));
   assert.ok(!fs.existsSync(path.join(g64, legacy.MARKER)));
+});
+
+test('the helper folder is ours: a 32-bit game is not mistaken for one that ships DLSS', { skip: !onWindows }, () => {
+  // Reported as "Alien: Isolation is falsely reporting DLSS 5 unavailable" (2026-09-14), on an
+  // install that was running Neural Rendering at the time -- 3600 frames and a clean shutdown in
+  // its own log. The 32-bit route puts nvngx_dlss.dll inside host64\ for the helper to load, the
+  // game-tree walk in native-dlss.js descended into it, and our own DLL read as the game's. That
+  // made route.js call the Feeder mis-deployed and drop the game off feeder32, and Game Help --
+  // seeing a 32-bit game not on that route -- answered "it is a 32-bit game, DLSS 5 is not
+  // available". Every gate went the wrong way from one wrong answer.
+  const game = scratchDir('host64-ours');
+  const exe = fakeExe(game, 'AI.exe');
+  write(game, 'host64/nvngx_dlss.dll', 'the DLL this app puts there for the helper');
+
+  assert.equal(nativeDlss.shippedDlssPath(game), null, 'our own helper folder is not evidence the game ships DLSS');
+  assert.equal(nativeDlss.shipsNativeDlss(game), false);
+
+  // A game that really does ship DLSS is still found: the same file anywhere the game itself owns.
+  const real = scratchDir('host64-real');
+  fakeExe(real, 'Game.exe');
+  write(real, 'Engine/Plugins/DLSS/Binaries/ThirdParty/Win64/nvngx_dlss.dll', 'the game\'s own');
+  assert.ok(nativeDlss.shippedDlssPath(real), 'a genuine plugin-tree DLSS is still detected');
 });

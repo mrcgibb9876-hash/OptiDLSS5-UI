@@ -41,7 +41,16 @@ const GAME_TREE_FILES = ['nvngx_dlss.dll', 'sl.interposer.dll', 'sl.dlss.dll', '
 // runtime (sl.interposer.dll, sl.dlss.dll, nvngx_dlss.dll, nvngx_dlssg.dll) in
 // Engine\Binaries\Win64r\Streamline\, and this app's own deploy of that folder is journaled in
 // .optiscaler-manager-install.json (streamline.dir) -- so the journal decides, see ownStreamlineDir().
-const OWN_FOLDERS_BESIDE_EXE = new Set(['optiscaler', 'reshade-shaders', 'luma']);
+// host64 is this app's own too, and it is the one that was missed. The 32-bit route (legacy.js)
+// builds it beside the exe and puts nvngx_dlss.dll in it for the helper to load -- so the tree
+// walk below found our own DLL and reported that the GAME ships DLSS. Every gate that asks this
+// question then went the wrong way at once: route.js called the Feeder mis-deployed and dropped
+// the game off the feeder32 route, and Game Help, seeing a 32-bit game not on that route, answered
+// "DLSS 5 is not currently available: it is a 32-bit game" about an install that was running
+// Neural Rendering at the time (Alien: Isolation, 2026-09-14, 3600 frames and a clean shutdown in
+// its own log). The comment at the top of this file claimed nothing this app deploys could produce
+// this evidence; host64\ is exactly that, and had been since the 32-bit route shipped.
+const OWN_FOLDERS_BESIDE_EXE = new Set(['optiscaler', 'reshade-shaders', 'luma', 'host64']);
 
 function ownStreamlineDir(exeDir) {
   try {
