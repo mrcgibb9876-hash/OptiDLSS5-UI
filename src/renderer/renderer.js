@@ -586,7 +586,7 @@ function helpWords(diag) {
     case 'needs-run': return t('No run to judge yet. Launch the game, reach actual gameplay (not a menu), play a minute, then quit. Come back here and it is checked.');
     case 'needs-run-after-fix': return t('"{fix}" was applied. The old log still says what it said, so launch the game, reach gameplay, play a minute, quit, and this is checked again.', { fix: helpFixLabel(v.fix) });
     case 'ok': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}{api}.', { count: v.count, fps: v.fps ? t(' at {fps} fps', { fps: v.fps }) : '', api: v.api ? ' (' + v.api + ')' : '' });
-    case 'ok-panel-in-helper': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}. You will have seen nothing at all in the game -- no OptiScaler splash in the corner when it loads, and no menu on Insert or Alt+Home. That is expected on this route rather than a fault, and it is one fact rather than three: a 32-bit game cannot run DLSS in its own process, so the neural pass runs in the 64-bit helper beside it, and OptiScaler runs there too, in a process with no window of its own to draw any of that on. To reach OptiScaler: press Home in the game for ReShade\'s overlay, go to the Add-ons tab, open DLSS 5 Feed, press "Show the DLSS 5 panel in-game" -- that draws the helper over the game and passes your keys and clicks to it -- and then press Insert, which is OptiScaler\'s own menu key. The add-on\'s own Toggle key starts as "none", so nothing brings the panel back until you set one with "Set key" beside it. It needs windowed or borderless; in exclusive fullscreen use the Feeder\'s "Show as texture (fullscreen too)" option instead. If that does not work either, nothing is lost: everything in the panel can be set from Edit here, with the game closed, and Game Help can save a bundle that now includes the helper\'s own log.', { count: v.count, fps: v.fps ? t(' at {fps} fps', { fps: v.fps }) : '' });
+    case 'ok-panel-in-helper': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}. You will have seen nothing at all in the game -- no OptiScaler splash in the corner when it loads, and no menu on Insert or Alt+Home. That is expected on this route rather than a fault, and it is one fact rather than three: a 32-bit game cannot run DLSS in its own process, so the neural pass runs in the 64-bit helper beside it, and OptiScaler runs there too, in a process with no window of its own to draw any of that on. To reach OptiScaler: press Home in the game for ReShade\'s overlay, go to the Add-ons tab, open DLSS 5 Feed, press "Show the DLSS 5 panel in-game" -- that draws the helper over the game and passes your keys and clicks to it -- and then press Insert, which is OptiScaler\'s own menu key. The add-on\'s own Toggle key starts as "none", so nothing brings the panel back until you set one with "Set key" beside it. It needs windowed or borderless; in exclusive fullscreen use the Feeder\'s "Show as texture (fullscreen too)" option instead. If that does not work either, nothing is lost: Edit here now carries the same neural-rendering controls, written straight into the ini the helper loads, and Game Help saves a bundle that includes the helper\'s own log.', { count: v.count, fps: v.fps ? t(' at {fps} fps', { fps: v.fps }) : '' });
     case 'ok-exit-crash': return t('Neural Rendering ran ({count} passes). The game crashed only on the way out, inside NVIDIA\'s shutdown, which does not affect play.', v);
     case 'd3d11-native': return t('DLSS was created on the native D3D11 path, so the Neural Rendering pass never ran. Dx11Upscaler must be dlss_12. Reconfigure writes it.');
     case 'nr-disabled': return t('DLSS ran but Neural Rendering is switched off in OptiScaler.ini. Reconfigure turns it on.');
@@ -1231,10 +1231,172 @@ async function openGameModal(game) {
   await loadInjectorSection(game);
   await loadFeederSection(game);
   await loadOptiFgSection(game);
+  await loadDlssNrSection(game);
   await loadLosslessSection(game);
   await loadAmdNrSection(game);
   await loadLumaUeSection(game);
 }
+
+
+// ── DLSS 5 settings ───────────────────────────────────────────────────────────────────────────
+//
+// The in-game panel's controls, generated from the field table in dlssnr.js rather than written
+// out by hand, so the two cannot drift: a key added to the ini becomes a control here by being
+// described there once. Values live in the game's own OptiScaler.ini -- host64\OptiScaler.ini on
+// the 32-bit route -- and take effect on the next launch.
+//
+// A user with a working 32-bit install had no way to change any of this without reaching a panel
+// that never appears over the game (2026-09-14). That is what this section is for.
+let dlssNrFields = [];
+
+function dlssNrValueOf(key) {
+  const f = dlssNrFields.find((x) => x.key === key);
+  if (!f) return null;
+  return f.value === null ? f.default : f.value;
+}
+
+// A field whose dependsOn is not met is shown greyed rather than hidden: the setting still exists
+// and is still written, and hiding it would make it look as though the app had lost it.
+function dlssNrDependencyMet(field) {
+  const d = field.dependsOn;
+  if (!d) return true;
+  const v = dlssNrValueOf(d.key);
+  if (d.is !== undefined) return v === d.is;
+  if (d.atLeast !== undefined) return Number(v) >= d.atLeast;
+  if (d.above !== undefined) return Number(v) > d.above;
+  return true;
+}
+
+async function loadDlssNrSection(game) {
+  const section = $('#game-dlssnr-section');
+  const status = $('#game-dlssnr-status');
+  const helperNote = $('#game-dlssnr-helper-note');
+  const host = $('#game-dlssnr-fields');
+  if (!game || !game.exePath) { section.classList.add('hidden'); return; }
+
+  const res = await window.api.dlssNrGet(game.exePath);
+  if (!res || !res.ok) {
+    // Not installed yet is the ordinary case, not an error worth a red line.
+    section.classList.toggle('hidden', true);
+    return;
+  }
+  section.classList.remove('hidden');
+  helperNote.classList.toggle('hidden', !res.inHelper);
+  dlssNrFields = res.fields;
+  status.textContent = '';
+  renderDlssNrFields(game);
+}
+
+function renderDlssNrFields(game) {
+  const host = $('#game-dlssnr-fields');
+  host.innerHTML = '';
+  const groups = [...new Set(dlssNrFields.map((f) => f.group))];
+  for (const groupName of groups) {
+    const head = document.createElement('div');
+    head.className = 'field-label dlssnr-group';
+    head.textContent = t(groupName);
+    host.appendChild(head);
+
+    for (const field of dlssNrFields.filter((f) => f.group === groupName)) {
+      const row = document.createElement('div');
+      row.className = 'dlssnr-row';
+      const met = dlssNrDependencyMet(field);
+      row.classList.toggle('dlssnr-inactive', !met);
+
+      const label = document.createElement('label');
+      label.className = 'dlssnr-label has-tip';
+      label.textContent = t(field.label);
+      label.setAttribute('data-tip', t(field.help));
+      row.appendChild(label);
+
+      const shown = field.value === null ? field.default : field.value;
+      let input;
+      if (field.type === 'bool') {
+        input = document.createElement('select');
+        for (const [value, text] of [['auto', t('Default ({state})', { state: field.default ? t('on') : t('off') })], ['true', t('On')], ['false', t('Off')]]) {
+          const o = document.createElement('option');
+          o.value = value; o.textContent = text; input.appendChild(o);
+        }
+        input.value = field.value === null ? 'auto' : String(field.value);
+      } else if (field.type === 'enum') {
+        input = document.createElement('select');
+        const def = document.createElement('option');
+        def.value = 'auto';
+        const defOption = (field.options || []).find(([v]) => v === field.default);
+        def.textContent = field.default === null ? t('Default (follow pass 1)') : t('Default ({state})', { state: defOption ? t(defOption[1]) : String(field.default) });
+        input.appendChild(def);
+        for (const [value, text] of field.options || []) {
+          const o = document.createElement('option');
+          o.value = String(value); o.textContent = t(text); input.appendChild(o);
+        }
+        input.value = field.value === null ? 'auto' : String(field.value);
+      } else {
+        // Numbers get a slider and a readout, with "Default" as its own button rather than a
+        // magic position on the track -- auto is a state, not a value.
+        input = document.createElement('input');
+        input.type = 'range';
+        input.min = String(field.min);
+        input.max = String(field.max);
+        input.step = String(field.step || (field.type === 'int' ? 1 : 0.05));
+        input.value = String(shown);
+      }
+      input.className = 'dlssnr-input';
+      input.disabled = !met;
+      row.appendChild(input);
+
+      const readout = document.createElement('span');
+      readout.className = 'dlssnr-readout';
+      const describe = () => {
+        if (field.type === 'bool' || field.type === 'enum') return field.value === null ? t('default') : '';
+        return field.value === null ? t('{n} (default)', { n: shown }) : String(shown);
+      };
+      readout.textContent = describe();
+      row.appendChild(readout);
+
+      if (field.type === 'float' || field.type === 'int') {
+        const reset = document.createElement('button');
+        reset.className = 'btn btn-ghost btn-small';
+        reset.textContent = t('Default');
+        reset.disabled = !met;
+        reset.addEventListener('click', () => applyDlssNr(game, field.key, null));
+        row.appendChild(reset);
+        input.addEventListener('input', () => { readout.textContent = String(input.value); });
+        input.addEventListener('change', () => applyDlssNr(game, field.key, Number(input.value)));
+      } else {
+        input.addEventListener('change', () => applyDlssNr(game, field.key, input.value === 'auto' ? null : input.value));
+      }
+
+      host.appendChild(row);
+    }
+  }
+}
+
+async function applyDlssNr(game, key, value) {
+  const status = $('#game-dlssnr-status');
+  const res = await window.api.dlssNrSet(game.exePath, { [key]: value });
+  if (!res || !res.ok) {
+    status.textContent = t('Could not save: {error}', { error: (res && res.error) || t('unknown') });
+    return;
+  }
+  dlssNrFields = res.fields;
+  status.textContent = res.written.length
+    ? t('Saved. Applies the next time the game starts.')
+    : t('Nothing to change.');
+  renderDlssNrFields(game);
+}
+
+$('#btn-dlssnr-reset').addEventListener('click', async () => {
+  const game = games.find((g) => g.id === editingGameId);
+  if (!game) return;
+  const all = {};
+  for (const f of dlssNrFields) all[f.key] = null;
+  const res = await window.api.dlssNrSet(game.exePath, all);
+  const status = $('#game-dlssnr-status');
+  if (!res || !res.ok) { status.textContent = t('Could not save: {error}', { error: (res && res.error) || t('unknown') }); return; }
+  dlssNrFields = res.fields;
+  status.textContent = t('Everything back to default. Applies the next time the game starts.');
+  renderDlssNrFields(game);
+});
 
 // DLSS NR on AMD -- shown only on an AMD card (see amdnr.js for the whole picture and for why
 // this section never downloads the tool itself).
@@ -1378,6 +1540,7 @@ $('#game-api-select').addEventListener('change', async (e) => {
   await loadInjectorSection(game);
   await loadFeederSection(game);
   await loadOptiFgSection(game);
+  await loadDlssNrSection(game);
   await loadLosslessSection(game);
   await loadAmdNrSection(game);
   renderGrid();
@@ -1935,6 +2098,7 @@ $('#btn-feeder-remove').addEventListener('click', async () => {
   await loadRouteStatus(game);
   await loadFeederSection(game);
   await loadOptiFgSection(game);
+  await loadDlssNrSection(game);
   await loadLosslessSection(game);
   renderGrid();
 });

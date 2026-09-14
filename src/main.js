@@ -21,6 +21,7 @@ const gpu = require('./gpu');
 const amdnr = require('./amdnr');
 const { detectGameCached, invalidateDetection, peOriginalFilename, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, antiCheatPresent, peImports, peBitness, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
+const dlssnr = require('./dlssnr');
 const exeicon = require('./exeicon');
 const managerUpdate = require('./manager-update');
 const runlog = require('./runlog');
@@ -1411,6 +1412,35 @@ function detectInstalledBackends(dir) {
   } catch {}
   return { optiscaler, leftovers };
 }
+
+// The DLSS 5 settings for one game, read from and written to the ini OptiScaler really loads.
+// The in-game panel is the other way in; on the 32-bit route it is behind the Feeder's add-on and
+// a user with a working install had no way to change anything at all (2026-09-14).
+ipcMain.handle('dlssnr:get', (_evt, exePath) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) return { ok: false, error: 'Game .exe not found' };
+    const dir = gameDir(exePath);
+    const optiDir = optiScalerDirFor(dir);
+    const iniPath = path.join(optiDir, 'OptiScaler.ini');
+    if (!fs.existsSync(iniPath)) return { ok: false, error: 'not-installed' };
+    return { ok: true, inHelper: path.resolve(optiDir) !== path.resolve(dir), iniPath, fields: dlssnr.readSettings(iniPath) };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+ipcMain.handle('dlssnr:set', (_evt, { exePath, values } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) return { ok: false, error: 'Game .exe not found' };
+    const dir = gameDir(exePath);
+    const iniPath = path.join(optiScalerDirFor(dir), 'OptiScaler.ini');
+    const res = dlssnr.writeSettings(iniPath, values || {});
+    if (!res.ok) return res;
+    return { ok: true, written: res.written, fields: dlssnr.readSettings(iniPath) };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
 
 ipcMain.handle('game:status', (_evt, exePath) => {
   if (!exePath || !fs.existsSync(exePath)) return { exeMissing: true };

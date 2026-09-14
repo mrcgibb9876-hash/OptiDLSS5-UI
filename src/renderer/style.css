@@ -514,3 +514,14 @@ html[lang="ko"] { word-break: keep-all; }
 
 /* Emulators, 32-bit games, DirectX 8/9: routes not yet confirmed on a live game (route.experimental). */
 .engine-badge-experimental { background: rgba(245,166,35,0.16); color: #f5b041; border: 1px solid rgba(245,166,35,0.45); }
+
+/* The DLSS 5 settings form, generated from the field table in dlssnr.js. A row is label, control,
+   readout and -- for numbers -- a Default button, because auto is a state rather than a position
+   on the track. A row whose dependency is not met is dimmed rather than hidden, so a setting never
+   looks as though the app lost it. */
+.dlssnr-group { margin-top: 10px; }
+.dlssnr-row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+.dlssnr-label { flex: 0 0 45%; font-size: 12px; color: var(--text-dim); cursor: help; }
+.dlssnr-input { flex: 1; min-width: 0; }
+.dlssnr-readout { flex: 0 0 88px; font-size: 11px; color: var(--text-dim); text-align: right; }
+.dlssnr-inactive { opacity: 0.45; }

@@ -181,6 +181,17 @@
         <span id="game-optifg-status" class="status-line"></span>
       </div>
 
+      <div id="game-dlssnr-section" class="hidden">
+        <label class="field-label" data-i18n>DLSS 5 neural rendering settings</label>
+        <p class="field-hint" data-i18n>The same controls as the in-game DLSS 5 panel, written straight into this game's OptiScaler.ini. They apply the next time the game starts. The in-game panel saves the whole file whenever you change something in it, so if you have it open, close it before changing anything here.</p>
+        <p class="field-hint hidden" id="game-dlssnr-helper-note" data-i18n><strong>This game runs the 32-bit route</strong>, so these are read from and written to host64\OptiScaler.ini -- the copy the helper process actually loads. That is also why the panel never appears over the game.</p>
+        <div id="game-dlssnr-fields"></div>
+        <div class="field-row">
+          <button id="btn-dlssnr-reset" class="btn btn-ghost" data-i18n>Reset all to default</button>
+        </div>
+        <span id="game-dlssnr-status" class="status-line"></span>
+      </div>
+
       <div id="game-lossless-section" class="hidden">
         <label class="field-label" data-i18n>Frame Generation via Lossless Scaling</label>
         <p class="field-hint" data-i18n>Lossless Scaling generates extra frames from outside the game entirely -- it never touches the game's swapchain, so it works for games that have no DLSS of their own -- DX11 titles, DLSS5 Feeder and Luma UE games -- where neither the game nor OptiScaler's own Frame Generation can run. It is not offered for games with native DLSS: those have NVIDIA's own Frame Generation in their video settings (versioned above). Separate paid app; this only configures its per-game profile (Frame Generation on, Scaling off), it doesn't install it. <strong>Fixed</strong> multiplies every frame; <strong>Adaptive</strong> generates only as many frames as needed to hold the target FPS you set. <strong>One frame generator at a time:</strong> configuring this turns OptiScaler's own Frame Generation off for this game, and the game's own DLSS Frame Generation must be off in its video settings while Lossless Scaling runs -- two generators stack their frames. Once configured, the on/off toggle (and the amount, in Fixed mode) live in this game's own in-game panel (DLSS 5 Neural Rendering, Alt+Home) and are driven through Lossless Scaling's own hotkey, so its window never appears over your game. Configuring here also sets Lossless Scaling to start minimized to the tray and not as administrator -- that is what keeps it out of sight and lets the in-game controls reach it. <strong>Requires this game running Borderless or Windowed, not exclusive Fullscreen</strong> -- Lossless Scaling cannot capture an exclusive-fullscreen window at all; a DX12 game is usually fine regardless since DX12 has no true exclusive fullscreen.</p>
