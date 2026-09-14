@@ -80,15 +80,11 @@ function diagnose(ctx) {
   // Install does not deploy Luma UE (its licence is confirmed in Edit), so this is the user's step.
   if (route.route === 'lumaue' && !route.lumaDeployed) return out('step', 'luma-missing');
   if (ctx.reEngine && ctx.reframeworkPresent === false) return fix('reframework-missing', 'reconfigure');
-  // RE2/3/4/7/Village (reengine.js): the pd-upscaler REFramework build, nvngx_dlss.dll and
-  // PureDark's plugin have to be there before any run can be judged; then the run says whether
-  // DLSS was switched on in REFramework's menu.
+  // RE2/3/4/7/Village (reengine.js) take the engine's Present route: nothing to fetch and nothing to
+  // switch on in REFramework. The one thing that gets in its way is REFramework's TemporalUpscaler
+  // still on from the old pd route, which Reconfigure switches off.
   const pd = ctx.pdUpscaler;
-  if (pd && route.route === 'reframework-pd') {
-    if (pd.reframeworkBuild === 'standard' || !pd.dlssPresent) return fix('pd-build-missing', 'reconfigure');
-    if (!pd.pluginPresent) return out('step', 'pd-plugin-missing', { url: ctx.pdPluginPage || '' });
-    if (run.ran && (run.verdict === 'no-dlss' || run.verdict === 'init-no-feature')) return out('step', 'pd-enable-ingame');
-  }
+  if (pd && route.route === 'reframework-pd' && pd.temporalUpscalerOn) return fix('pd-temporal-on', 'reconfigure');
 
   // What the last run said.
   if (!run.ran || run.verdict === 'no-log') {

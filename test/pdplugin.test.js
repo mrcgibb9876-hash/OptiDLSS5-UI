@@ -131,7 +131,7 @@ test('placing it: into an empty slot, never over someone else\'s copy, refreshin
   assert.equal(sha(path.join(other, 'PDPerfPlugin.dll')), sha(DLL64));
 });
 
-test('import from the app places it in every installed Resident Evil, the rest get it on sync; Remove takes only ours', { skip: !onWindows }, async () => {
+test('Present route: import only caches the plugin; sync takes out the copy this app placed and switches TemporalUpscaler off, and leaves a copy that is not ours', { skip: !onWindows }, async () => {
   const { invoke, userData } = loadMain();
   const base = scratchDir('pd-ipc');
   const re2 = path.join(base, 'RE2');
@@ -166,35 +166,31 @@ test('import from the app places it in every installed Resident Evil, the rest g
     // "doesn't load the back-end properly", and this is the one file the user fetches by hand.
     assert.equal(st.pageUrl, 'https://www.nexusmods.com/site/mods/502?tab=files&file_id=2293');
 
+    // Import keeps the plugin in the app's cache and places it nowhere: these games no longer use it.
     const res = await invoke('pdplugin:import', { sourcePath: zip });
     assert.equal(res.ok, true, res.error);
-    assert.deepEqual(res.placed, ['Resident Evil 2']);
-    assert.deepEqual(res.waiting, ['Resident Evil Village']);
-    assert.ok(fs.existsSync(path.join(re2, 'PDPerfPlugin.dll')));
-    assert.ok(!fs.existsSync(path.join(other, 'PDPerfPlugin.dll')), 'never into a game that does not use it');
-    const journal = JSON.parse(fs.readFileSync(path.join(re2, '.optiscaler-manager-install.json'), 'utf8'));
-    assert.equal(journal.pdPlugin.sha256, sha(DLL64));
+    assert.deepEqual(res.placed, []);
+    for (const dir of [re2, re8, other]) assert.ok(!fs.existsSync(path.join(dir, 'PDPerfPlugin.dll')), `nothing placed in ${dir}`);
 
-    // Village installed later: the next sync places it without asking. (REFramework and
-    // nvngx_dlss.dll already there, so nothing is fetched.)
+    // RE2 set up the old way: the copy this app placed (journaled by hash) and TemporalUpscaler on.
+    fs.copyFileSync(DLL64, path.join(re2, 'PDPerfPlugin.dll'));
+    write(re2, '.optiscaler-manager-install.json', JSON.stringify({ reframework: true, pdPlugin: { sha256: sha(DLL64) } }));
+    write(re2, 'dinput8.dll', 'pd REFramework');
+    write(re2, 're2_fw_config.txt', 'TemporalUpscaler_Enabled=true\nTemporalUpscaler_UpscaleQuality=1\n');
+    const sync = await invoke('game:sync-if-stale', { exePath: re2Exe, releaseFolder: null, nrDllPath: null });
+    assert.equal(sync.ok, true, sync.error);
+    assert.ok(!fs.existsSync(path.join(re2, 'PDPerfPlugin.dll')), 'our copy taken out on sync');
+    assert.match(fs.readFileSync(path.join(re2, 're2_fw_config.txt'), 'utf8'), /^TemporalUpscaler_Enabled=false$/m);
+    assert.ok(!fs.existsSync(path.join(re2, 'nvngx_dlss.dll')), 'no DLSS DLL placed any more');
+    const journal = JSON.parse(fs.readFileSync(path.join(re2, '.optiscaler-manager-install.json'), 'utf8'));
+    assert.ok(!journal.pdPlugin, 'journal no longer claims a plugin');
+
+    // Village with a PDPerfPlugin.dll the user put there themselves: left alone.
     write(re8, 'OptiScaler.ini', '[DlssNr]\nEnabled=auto\n[Upscalers]\nDx12Upscaler=auto\n');
     write(re8, 'dinput8.dll', 'hand-placed REFramework');
-    write(re8, 'nvngx_dlss.dll', 'x');
-    const sync = await invoke('game:sync-if-stale', { exePath: re8Exe, releaseFolder: null, nrDllPath: null });
-    assert.equal(sync.ok, true, sync.error);
-    assert.ok(fs.existsSync(path.join(re8, 'PDPerfPlugin.dll')), 'placed on sync');
-
-    // Remove preview and Remove take our copy...
-    const plan = await invoke('game:uninstallPlan', re2Exe);
-    assert.ok(JSON.stringify(plan).includes('PDPerfPlugin.dll'), 'Remove preview lists it');
-    const un = await invoke('game:run-uninstall', re2Exe);
-    assert.equal(un.ok, true, un.error);
-    assert.ok(!fs.existsSync(path.join(re2, 'PDPerfPlugin.dll')), 'our copy removed');
-
-    // ...but not one the user swapped in afterwards.
     fs.copyFileSync(DLL64_OTHER, path.join(re8, 'PDPerfPlugin.dll'));
-    const un8 = await invoke('game:run-uninstall', re8Exe);
-    assert.equal(un8.ok, true, un8.error);
+    const sync8 = await invoke('game:sync-if-stale', { exePath: re8Exe, releaseFolder: null, nrDllPath: null });
+    assert.equal(sync8.ok, true, sync8.error);
     assert.ok(fs.existsSync(path.join(re8, 'PDPerfPlugin.dll')), 'a copy that is not ours stays');
   } finally {
     if (before) fs.writeFileSync(gamesJson, before);

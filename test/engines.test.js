@@ -123,6 +123,42 @@ test('a value set in the game after install survives every later sync, on either
   }
 });
 
+// Resident Evil Requiem (2026-09-14): working, and its owner wanted it kept on the engine it has when a
+// new engine shipped. A game marked keep-as-is gets nothing from sync: not the new OptiScaler.dll, not the
+// new NR model, not an ini edit.
+test('a game marked keep-as-is is not touched by sync: engine, model and ini all stay', { skip: !onWindows }, async () => {
+  const base = scratchDir('engine-keep');
+  const release = fakeReleaseFolder(base);
+  const nr = fakeNrModel(base);
+  const game = path.join(base, 'game');
+  const exe = fakeExe(game, 're9.exe');
+  const { invoke } = loadMain();
+  const inst = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: nr, proxyName: 'dxgi.dll' });
+  assert.equal(inst.ok, true, inst.error);
+
+  const dxgi = path.join(game, 'dxgi.dll');
+  const model = path.join(game, 'nvngx_dlssnr.dll');
+  const ini = path.join(game, 'OptiScaler.ini');
+  fs.writeFileSync(dxgi, 'the engine this game works on OptiScaler');
+  fs.writeFileSync(model, 'older model');
+  fs.writeFileSync(ini, fs.readFileSync(ini, 'utf8').replace(/^LogLevel\s*=.*$/m, 'LogLevel=0'));
+  const iniBefore = fs.readFileSync(ini, 'utf8');
+  write(game, '.dlss5ui-keep-as-is', '');
+
+  const sync = await invoke('game:sync-if-stale', { exePath: exe, releaseFolder: release, nrDllPath: nr });
+  assert.equal(sync.ok, true, sync.error);
+  assert.equal(sync.updated, false);
+  assert.equal(sync.reason, 'kept as is');
+  assert.equal(fs.readFileSync(dxgi, 'utf8'), 'the engine this game works on OptiScaler', 'engine not replaced');
+  assert.equal(fs.readFileSync(model, 'utf8'), 'older model', 'model not replaced');
+  assert.equal(fs.readFileSync(ini, 'utf8'), iniBefore, 'ini untouched');
+
+  // Remove still takes everything, the marker included.
+  const un = await invoke('game:run-uninstall', exe);
+  assert.equal(un.ok, true, un.error);
+  assert.ok(!fs.existsSync(path.join(game, '.dlss5ui-keep-as-is')));
+});
+
 test('a game installed before there was a choice is left alone (no marker, no key edits)', { skip: !onWindows }, async () => {
   const base = scratchDir('engine-legacy');
   const release = fakeReleaseFolder(base);

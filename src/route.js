@@ -268,16 +268,18 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
   // with `.original` backups from an earlier DLSS 5 tool; that read as "ships its own DLSS", sent
   // the game down the plain OptiScaler route ("just Install"), and hid the PDPerfPlugin.dll step
   // and its Game Help -- OptiScaler then waited for a DLSS call RE2 never makes.
+  //
+  // Since the engine's Present route (2026-09-14) none of those files is the route any more: DLSS 5 runs at
+  // Present over the game's own TAA and the engine finds the depth itself, so Install needs no plugin and
+  // no DLSS DLL -- one step. The route id stays 'reframework-pd' so a game's saved state still matches.
   const pd = reengine.pdStatus(dir, exePath);
   if (pd && !feederDeployed) {
-    return finish('reframework-pd', 'OptiScaler + REFramework upscaler',
-      'No DLSS of its own. REFramework\'s pd-upscaler build adds a DLSS call from the engine\'s real motion ' +
-      'vectors, which OptiScaler then hooks. Install fetches that build and nvngx_dlss.dll; the one file it ' +
-      'cannot fetch is PureDark\'s Upscaler Base Plugin (PDPerfPlugin.dll) from Nexus Mods -- put it beside ' +
-      'the exe. In-game: Insert opens REFramework, TemporalUpscaler -> Enabled, Upscale Type DLSS.',
+    return finish('reframework-pd', 'OptiScaler + REFramework',
+      'No DLSS of its own. DLSS 5 runs at the end of each frame on top of the game\'s own anti-aliasing, and ' +
+      'OptiScaler finds the game\'s depth itself -- nothing to download by hand. Install places OptiScaler and ' +
+      'REFramework and keeps REFramework\'s TemporalUpscaler off. Load a save: menus have no depth to work with.',
       [
-        { key: 'optiscaler', label: 'Install OptiScaler (fetches the pd-upscaler REFramework and nvngx_dlss.dll)', done: optiInstalled && pd.reframeworkBuild === 'pd-upscaler' && pd.dlssPresent },
-        { key: 'pd-plugin', label: 'Put PDPerfPlugin.dll (Upscaler Base Plugin, Nexus) beside the exe', done: pd.pluginPresent },
+        { key: 'optiscaler', label: 'Install OptiScaler (and REFramework)', done: optiInstalled && pd.reframeworkPresent && !pd.temporalUpscalerOn },
       ]);
   }
 

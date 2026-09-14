@@ -1,5 +1,16 @@
-// RE Engine games that ship no DLSS of their own -- Resident Evil 2, 3, 4, 7 and Village -- and
-// how OptiScaler gets a DLSS call there. The tool this app mirrors (RHI, manifest.json's
+// RE Engine games that ship no DLSS of their own -- Resident Evil 2, 3, 4, 7 and Village.
+//
+// CURRENT ROUTE (engine with the DLSS-NR Present route, 2026-09-14): no DLSS call is needed at all.
+// OptiScaler runs Neural Rendering at the game's Present, on top of the game's own TAA, and finds the
+// scene depth itself by watching the game's depth buffers -- the approach of LCPD15's DXL, ported into
+// the engine. Proven on Resident Evil 2: thousands of frames, no failures, the panel live. So this app
+// no longer places PureDark's plugin or nvngx_dlss.dll for these five, removes a plugin copy it placed
+// earlier, and switches REFramework's TemporalUpscaler off (presentRouteConfigure), because that mod
+// replaces the game's TAA with a DLSS call and, without the plugin, with nothing. REFramework itself
+// stays: the engine's RE Engine support expects it.
+//
+// What follows is the previous route, kept because the REFramework download below still serves it.
+// The tool this app mirrors (RHI, manifest.json's
 // pdUpscalerGames) swaps REFramework for praydog's "pd-upscaler" branch build on these five
 // whenever OptiScaler is installed. That build carries REFramework's TemporalUpscaler mod: it
 // hands the engine's own colour, depth, motion vectors and jitter to an upscaler plugin, which
@@ -80,7 +91,48 @@ function pdStatus(dir, exePath) {
     reframeworkRevision: marker && marker.revision ? marker.revision : null,
     pluginPresent: fs.existsSync(path.join(dir, PD_PLUGIN_NAME)),
     dlssPresent: fs.existsSync(path.join(dir, 'nvngx_dlss.dll')),
+    temporalUpscalerOn: temporalUpscalerOn(dir),
   };
+}
+
+// REFramework's settings file is named after the game (re2_fw_config.txt, re8_fw_config.txt), and it
+// only exists once the game has run with REFramework in place. Every one present is returned.
+function reframeworkConfigFiles(dir) {
+  try {
+    return fs.readdirSync(dir).filter((f) => /_fw_config\.txt$/i.test(f)).map((f) => path.join(dir, f));
+  } catch {
+    return [];
+  }
+}
+
+const TEMPORAL_UPSCALER_KEY = 'TemporalUpscaler_Enabled';
+
+// Whether any of the game's REFramework configs has TemporalUpscaler switched on.
+function temporalUpscalerOn(dir) {
+  return reframeworkConfigFiles(dir).some((file) => {
+    try {
+      return /^TemporalUpscaler_Enabled\s*=\s*true\s*$/im.test(fs.readFileSync(file, 'utf8'));
+    } catch {
+      return false;
+    }
+  });
+}
+
+// The Present route's REFramework setting: TemporalUpscaler off, so the game renders with its own TAA and
+// no DLSS call is attempted. Only an existing key is changed -- a config REFramework has not written yet
+// has the mod off by default. Returns the files changed.
+function presentRouteConfigure(dir) {
+  const changed = [];
+  for (const file of reframeworkConfigFiles(dir)) {
+    let text;
+    try { text = fs.readFileSync(file, 'utf8'); } catch { continue; }
+    const next = text.replace(/^(TemporalUpscaler_Enabled\s*=\s*)true(\s*)$/im, '$1false$2');
+    if (next !== text) {
+      fs.writeFileSync(file, next, 'utf8');
+      changed.push(path.basename(file));
+    }
+  }
+  return changed;
 }
 
 // The asset in that release for one game code: RE2 -> RE2.zip.
@@ -108,4 +160,5 @@ module.exports = {
   PD_UPSCALER_EXES, PD_UPSCALER_RELEASES_API, PD_UPSCALER_SOURCE_LABEL, pdUpscalerAssetName,
   PD_PLUGIN_NAME, PD_PLUGIN_PAGE_URL, PD_PLUGIN_PAGE_LABEL, PD_PLUGIN_WANTED_VERSION, REFRAMEWORK_BUILD_MARKER,
   pdUpscalerGame, pdStatus, readBuildMarker, writeBuildMarker, extractPdReframework,
+  TEMPORAL_UPSCALER_KEY, reframeworkConfigFiles, temporalUpscalerOn, presentRouteConfigure,
 };

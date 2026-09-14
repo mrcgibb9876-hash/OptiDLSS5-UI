@@ -658,6 +658,7 @@ function helpWords(diag) {
     case 'feeder-missing': return t('This game has no DLSS of its own, so OptiScaler alone has nothing to hook. Install deploys the DLSS5 Feeder first.');
     case 'luma-missing': return t('This game\'s route is Luma UE, which is not deployed yet. Open Edit and deploy Luma UE (its licence is confirmed there), then launch.');
     case 'reframework-missing': return t('This is an RE Engine game and REFramework is missing. OptiScaler does nothing there without it. Reconfigure fetches and places it.');
+    case 'pd-temporal-on': return t('REFramework\'s TemporalUpscaler is still switched on from the old setup. DLSS 5 now runs on top of the game\'s own anti-aliasing, so that mod has to be off. Reconfigure switches it off.');
     case 'pd-build-missing': return t('This Resident Evil has no DLSS of its own, so it needs REFramework\'s pd-upscaler build and nvngx_dlss.dll beside the exe. Reconfigure fetches and places both.');
     case 'pd-plugin-missing': return t('One file this app cannot fetch: PureDark\'s Upscaler Base Plugin (PDPerfPlugin.dll), free on Nexus Mods. Take version 1.1.2 specifically -- the link opens it -- because 1.2.0 does not load the back-end properly and the upscaler then does nothing. Download it once, then press "I downloaded it" -- the app finds it in Downloads and puts it in every Resident Evil that needs it. REFramework\'s upscaler loads it and makes the DLSS call OptiScaler hooks.');
     case 'pd-enable-ingame': return t('Everything is in place but the last run made no DLSS call. In-game, press Insert for REFramework\'s menu, open TemporalUpscaler, tick Enabled and set Upscale Type to DLSS. Then play a minute and quit.');
@@ -709,6 +710,7 @@ function helpShort(diag) {
     case 'dgvoodoo-missing': return t('dgVoodoo2 not in place yet');
     case 'luma-missing': return t('Luma UE not deployed yet');
     case 'reframework-missing': return t('REFramework missing');
+    case 'pd-temporal-on': return t('Switch REFramework\'s upscaler off');
     case 'pd-build-missing': return t('Needs the pd-upscaler REFramework');
     case 'pd-plugin-missing': return t('Get PDPerfPlugin.dll from Nexus');
     case 'pd-enable-ingame': return t('Enable DLSS in REFramework (Insert)');

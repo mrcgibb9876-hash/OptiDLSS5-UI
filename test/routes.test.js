@@ -97,9 +97,10 @@ test('Resident Evil 2 takes the REFramework pd-upscaler route, before and after 
 
   const before = route.recommendRoute(dir, exe, { api: 'dx12', apis: ['dx12'], engineId: 're' }, 'nvidia');
   assert.equal(before.route, 'reframework-pd');
-  assert.equal(before.steps.find((s) => s.key === 'pd-plugin').done, false);
+  // The Present route: one step, no plugin to fetch.
+  assert.deepEqual(before.steps.map((s) => s.key), ['optiscaler']);
 
-  // Install placed the pd build and nvngx_dlss.dll: still this route, not "ships its own DLSS".
+  // An old pd-route install (pd build + nvngx_dlss.dll) is still this route, not "ships its own DLSS".
   write(dir, 'dinput8.dll', 'pd');
   write(dir, 'nvngx_dlss.dll', 'x');
   reengine.writeBuildMarker(dir, { build: 'pd-upscaler', revision: 'abc' });
@@ -108,9 +109,15 @@ test('Resident Evil 2 takes the REFramework pd-upscaler route, before and after 
   const st = reengine.pdStatus(dir, exe);
   assert.equal(st.reframeworkBuild, 'pd-upscaler');
   assert.equal(st.dlssPresent, true);
-  assert.equal(st.pluginPresent, false);
-  write(dir, 'PDPerfPlugin.dll', 'x');
-  assert.equal(route.recommendRoute(dir, exe, { api: 'dx12', apis: ['dx12'], engineId: 're' }, 'nvidia').steps.every((s) => s.done || s.key === 'optiscaler'), true);
+  assert.equal(st.temporalUpscalerOn, false);
+
+  // TemporalUpscaler left on from that install: seen, and switched off by presentRouteConfigure.
+  write(dir, 're2_fw_config.txt', 'TemporalUpscaler_Enabled=true\r\nTemporalUpscaler_UpscaleQuality=1\r\n');
+  assert.equal(reengine.pdStatus(dir, exe).temporalUpscalerOn, true);
+  assert.deepEqual(reengine.presentRouteConfigure(dir), ['re2_fw_config.txt']);
+  assert.equal(fs.readFileSync(path.join(dir, 're2_fw_config.txt'), 'utf8'), 'TemporalUpscaler_Enabled=false\r\nTemporalUpscaler_UpscaleQuality=1\r\n');
+  assert.equal(reengine.pdStatus(dir, exe).temporalUpscalerOn, false);
+  assert.deepEqual(reengine.presentRouteConfigure(dir), [], 'nothing left to change');
 
   const feederDir = scratchDir('route-re2-feeder');
   const feederExe = fakeExe(feederDir, 're2.exe');
@@ -121,9 +128,9 @@ test('Resident Evil 2 takes the REFramework pd-upscaler route, before and after 
 
 // A user's RE2 folder (2026-09-12): another DLSS 5 tool had left a full Streamline set beside the
 // exe, with `.original` backups. That read as "this game ships its own DLSS", so the card said
-// "just Install" and Game Help never asked for PDPerfPlugin.dll -- OptiScaler waited for a DLSS
-// call RE2 never makes. The pd route must win over leftovers on these five games.
-test('Resident Evil 2 with another tool\'s Streamline/DLSS leftovers still takes the pd route and asks for the plugin', () => {
+// "just Install" -- the wrong route for a game with no DLSS call. The RE route must win over
+// leftovers on these five games; since the Present route it asks for nothing to be downloaded.
+test('Resident Evil 2 with another tool\'s Streamline/DLSS leftovers still takes the RE route, which needs no download', () => {
   const reengine = require(path.join(REPO, 'src', 'reengine'));
   const { diagnose } = require(path.join(REPO, 'src', 'gamehelp'));
   const nativeDlss = require(path.join(REPO, 'src', 'native-dlss'));
@@ -139,9 +146,9 @@ test('Resident Evil 2 with another tool\'s Streamline/DLSS leftovers still takes
   const detected = { api: 'dx12', apis: ['dx12', 'dx11'], engineId: 're' };
   const r = route.recommendRoute(dir, exe, detected, 'nvidia');
   assert.equal(r.route, 'reframework-pd');
-  assert.equal(r.steps.find((s) => s.key === 'pd-plugin').done, false);
+  assert.equal(r.steps.some((s) => s.key === 'pd-plugin'), false);
 
-  // After Install (pd REFramework + OptiScaler), Game Help asks for the one file it cannot fetch.
+  // After Install (REFramework + OptiScaler), Game Help asks for a run, not a download.
   write(dir, 'dinput8.dll', 'pd');
   reengine.writeBuildMarker(dir, { build: 'pd-upscaler', revision: 'abc' });
   const after = route.recommendRoute(dir, exe, detected, 'nvidia');
@@ -153,7 +160,7 @@ test('Resident Evil 2 with another tool\'s Streamline/DLSS leftovers still takes
     foreign: [], lumaKnownBad: null, reEngine: true, reframeworkPresent: true, nrEnabledInIni: true, fixesTried: [],
     pdUpscaler: reengine.pdStatus(dir, exe), pdPluginPage: 'https://example/plugin',
   });
-  assert.equal(help.code, 'pd-plugin-missing');
+  assert.equal(help.code, 'needs-run');
 });
 
 test('the pd-upscaler REFramework download (zip inside a zip) yields dinput8.dll and its revision', { skip: !fs.existsSync(path.join(process.env.TEMP || '', '..', 'claude')) }, () => {

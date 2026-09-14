@@ -280,15 +280,6 @@ const feederCacheDir = () => path.join(userDataDir(), 'feeder-cache');
 const lumaUeCacheDir = () => path.join(userDataDir(), 'lumaue-cache');
 const pdPluginCacheDir = () => path.join(userDataDir(), 'pd-plugin');
 
-// PureDark's PDPerfPlugin.dll (pdplugin.js): the user's own download, imported once and placed in
-// every Resident Evil pd-upscaler game. Journaled by hash so Remove takes only the copy placed here.
-function deployPdPlugin(dir) {
-  const journal = readInstallMarker(dir) || {};
-  const res = pdplugin.deployToGame(dir, pdPluginCacheDir(), journal.pdPlugin || null);
-  if (res.placed || res.updated) updateInstallJournal(dir, { pdPlugin: { sha256: res.sha256 } });
-  return res;
-}
-
 function pdPluginDownloadsDirs() {
   const dirs = [];
   try { dirs.push(app.getPath('downloads')); } catch {}
@@ -313,24 +304,13 @@ ipcMain.handle('pdplugin:pick', async () => {
   return res.filePaths[0];
 });
 
-// Import, then place it in every Resident Evil pd game on the grid that has OptiScaler installed.
-// The ones not installed yet get it from autoConfigureGame when they are.
+// Import only. The Resident Evil games no longer use the plugin (they take the engine's Present route,
+// reengine.js), so it is kept in the app's cache and placed nowhere -- placing it would only have the
+// next sync take it out again.
 ipcMain.handle('pdplugin:import', async (_evt, { sourcePath } = {}) => {
   try {
     const info = await pdplugin.importPlugin(sourcePath, pdPluginCacheDir());
-    const placed = [];
-    const skipped = [];
-    const waiting = [];
-    for (const game of readJson(gamesFile(), [])) {
-      if (!game || !game.exePath || !reengine.pdUpscalerGame(game.exePath) || !fs.existsSync(game.exePath)) continue;
-      const dir = gameDir(game.exePath);
-      if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) { waiting.push(game.name); continue; }
-      const res = deployPdPlugin(dir);
-      if (res.placed || res.updated) placed.push(game.name);
-      else if (res.reason && !/already the imported copy/.test(res.reason)) skipped.push({ name: game.name, reason: res.reason });
-      else placed.push(game.name);
-    }
-    return { ok: true, info, placed, skipped, waiting };
+    return { ok: true, info, placed: [], skipped: [], waiting: [] };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -1706,8 +1686,17 @@ async function removeSharedNrDllIfUnneeded(dir) {
 // as replaced (put back from its backup), and every marker. A folder installed before the
 // journal existed still gets the fixed payload list. Nothing here guesses at a file it did not
 // place -- unknown files stay, and the report says so where a decision was made.
-const RELEASE_LICENSE_FILES = ['DirectX_LICENSE.txt', 'FidelityFX_v2_LICENSE.md', 'RenoDX_ATTRIBUTION.txt', 'XeSS_LICENSE.txt'];
-const APP_MARKERS = ['.dlss5ui-lossless.json', '.dlss5ui-framegen.json', '.dlss5ui-api.json', '.dlss5ui-optifg-enabled', '.optiscaler-manager-install.json', reengine.REFRAMEWORK_BUILD_MARKER, engines.ENGINE_MARKER];
+const RELEASE_LICENSE_FILES = ['DirectX_LICENSE.txt', 'FidelityFX_v2_LICENSE.md', 'RenoDX_ATTRIBUTION.txt', 'DXL_ATTRIBUTION.txt', 'XeSS_LICENSE.txt'];
+
+// A game working the way its user wants, pinned so a new engine or model reaching every other game on
+// sync does not reach this one (asked for Resident Evil Requiem, 2026-09-14, when the engine gained the
+// Present route). Presence of the file is the whole setting.
+const KEEP_AS_IS_MARKER = '.dlss5ui-keep-as-is';
+function keptAsIs(dir) {
+  return fs.existsSync(path.join(dir, KEEP_AS_IS_MARKER));
+}
+
+const APP_MARKERS = ['.dlss5ui-lossless.json', '.dlss5ui-framegen.json', '.dlss5ui-api.json', '.dlss5ui-optifg-enabled', '.optiscaler-manager-install.json', reengine.REFRAMEWORK_BUILD_MARKER, engines.ENGINE_MARKER, KEEP_AS_IS_MARKER];
 const LEGACY_PAYLOAD = [
   'OptiScaler_DlssNr.addon64', 'OptiScaler_DlssNr.exp', 'OptiScaler_DlssNr.lib', 'OptiScaler_DlssNr.pdb', 'OptiScaler_DlssNr.dll',
   '.optdlss5-active-manifest.json', 'Verify-DLSS5Feeder.ps1', 'Run-DLSS5-Feeder-Install.bat', 'Remove_OptiScaler.bat',
@@ -3335,25 +3324,25 @@ async function autoConfigureGame(dir, exePath) {
     // there before anything else here matters.
     reframework = await ensureREFrameworkForGame(dir, exePath);
     reframeworkConfig = fixREFrameworkConfig(dir);
-    // The pd route's DLSS runtime: the plugin's DLSS path loads nvngx_dlss.dll from the game
-    // folder, the same file the Feeder deploy places. deployNvngxDlss never overwrites one that is
-    // already there. Not gated on shipsNativeDlss: these games ship no DLSS, and a leftover
-    // sl.interposer.dll from another tool used to skip this deploy (see route.js).
+    // RE2/3/4/7/Village take the engine's Present route now (reengine.js): DLSS 5 at Present over the
+    // game's own TAA, depth found by the engine. No DLSS call is involved, so nvngx_dlss.dll and
+    // PureDark's plugin are no longer placed. What this app placed for the old pd route goes -- the
+    // plugin copy only when the journal proves it is ours -- and REFramework's TemporalUpscaler is
+    // switched off, since that mod swaps the game's TAA for a DLSS call nothing answers any more.
+    // Runs on Install and on every sync, so a game set up the old way is moved over on its own.
     if (reengine.pdUpscalerGame(exePath)) {
+      const presentRoute = { temporalUpscalerOff: reengine.presentRouteConfigure(dir), pluginRemoved: false };
       try {
-        reframework = { ...(reframework || {}), dlss: await feeder.deployNvngxDlss(dir, getRhiManifest, compareStreamlineVersions, feederCacheDir(), GITHUB_HEADERS) };
+        const journal = readInstallMarker(dir) || {};
+        if (journal.pdPlugin && pdplugin.isOurCopy(dir, journal.pdPlugin)) {
+          await fsp.rm(path.join(dir, pdplugin.PLUGIN_NAME), { force: true });
+          updateInstallJournal(dir, { pdPlugin: null });
+          presentRoute.pluginRemoved = true;
+        }
       } catch (e) {
-        reframework = { ...(reframework || {}), dlssError: String(e && e.message ? e.message : e) };
+        presentRoute.pluginError = String(e && e.message ? e.message : e);
       }
-      // nvngx_dlss.dll just landed: this is a DLSS 5 only game from here on (Dx12Upscaler=dlss).
-      dlss5Only = hasNativeDlss(dir);
-      // PureDark's plugin, once the user has imported their download (pdplugin.js). Runs on Install
-      // and on every sync, so a game installed after the import gets it without asking again.
-      try {
-        reframework = { ...(reframework || {}), pdPlugin: deployPdPlugin(dir) };
-      } catch (e) {
-        reframework = { ...(reframework || {}), pdPluginError: String(e && e.message ? e.message : e) };
-      }
+      reframework = { ...(reframework || {}), presentRoute };
     }
   }
 
@@ -3472,6 +3461,9 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDl
   try {
     if (!exePath || !fs.existsSync(exePath)) return { ok: true, updated: false, reason: 'exe missing' };
     const dir = gameDir(exePath);
+    // The user asked for this game to be left exactly as it is: no engine update, no NR model update,
+    // no ini or REFramework changes on sync. Install, Edit and Remove still act when pressed.
+    if (keptAsIs(dir)) return { ok: true, updated: false, reason: 'kept as is' };
     // A 32-bit game on the helper route: its OptiScaler (winmm.dll) and NR model are in host64\ and
     // follow the engine and model in Settings the same way.
     const legacyMarker = legacy.readMarker(dir);
