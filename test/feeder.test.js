@@ -579,3 +579,54 @@ test('a run that dropped every frame, and a run that was not DLSS at all, stop r
   run = await runlog.analyzeRun(dir);
   assert.equal(run.verdict, 'nr-ran');
 });
+
+// --- pre-release opt-in ----------------------------------------------------------------
+// GitHub's /releases/latest hides pre-releases, so a beta the Feeder's author asks someone to
+// test used to be unreachable from this app. Opting in walks the release list instead; opting
+// out has to keep making the exact call it always did.
+const jsonResponse = (body) => ({ ok: true, status: 200, json: async () => body });
+const ghZip = (name) => ({ name, browser_download_url: `https://example.invalid/${name}` });
+
+test('stable stays on /releases/latest; the opt-in takes the newest non-draft release', async () => {
+  const seen = [];
+  const stable = async (url) => {
+    seen.push(url);
+    return jsonResponse({ tag_name: 'v1.15.3', prerelease: false, assets: [ghZip('DLSS5-Feeder-1.15.3.zip')] });
+  };
+  const off = await feeder.resolveFeederAsset({}, { fetchImpl: stable });
+  assert.equal(off.tag, 'v1.15.3');
+  assert.equal(off.prerelease, false);
+  assert.ok(seen[0].endsWith('/releases/latest'), 'the default path must not change endpoint');
+
+  seen.length = 0;
+  const listed = async (url) => {
+    seen.push(url);
+    return jsonResponse([
+      { tag_name: 'v1.17.0', draft: true, prerelease: true, assets: [ghZip('DLSS5-Feeder-1.17.0.zip')] },
+      { tag_name: 'v1.16.0-beta.2', draft: false, prerelease: true, assets: [ghZip('DLSS5-Feeder-1.16.0-beta.2.zip')] },
+      { tag_name: 'v1.15.3', draft: false, prerelease: false, assets: [ghZip('DLSS5-Feeder-1.15.3.zip')] },
+    ]);
+  };
+  const on = await feeder.resolveFeederAsset({}, { allowPrerelease: true, fetchImpl: listed });
+  assert.equal(on.tag, 'v1.16.0-beta.2', 'a draft is skipped, the newest real release wins');
+  assert.equal(on.prerelease, true);
+  assert.ok(seen[0].includes('per_page'), 'the opt-in has to ask for the list');
+});
+
+test('a release published without the zip is skipped, and nothing usable is an error', async () => {
+  const gappy = async () => jsonResponse([
+    { tag_name: 'v1.16.1-beta.1', draft: false, prerelease: true, assets: [] },
+    { tag_name: 'v1.16.0-beta.2', draft: false, prerelease: true, assets: [ghZip('DLSS5-Feeder-1.16.0-beta.2.zip')] },
+  ]);
+  const found = await feeder.resolveFeederAsset({}, { allowPrerelease: true, fetchImpl: gappy });
+  assert.equal(found.tag, 'v1.16.0-beta.2', 'one bad release must not break the deploy');
+
+  const allDrafts = async () => jsonResponse([{ tag_name: 'v9', draft: true, assets: [ghZip('DLSS5-Feeder-9.zip')] }]);
+  await assert.rejects(() => feeder.resolveFeederAsset({}, { allowPrerelease: true, fetchImpl: allDrafts }),
+    /pre-releases included/);
+
+  // A rate-limit body is an object, not an array: it must not be walked as one.
+  const limited = async () => jsonResponse({ message: 'API rate limit exceeded' });
+  await assert.rejects(() => feeder.resolveFeederAsset({}, { allowPrerelease: true, fetchImpl: limited }),
+    /Unexpected answer/);
+});

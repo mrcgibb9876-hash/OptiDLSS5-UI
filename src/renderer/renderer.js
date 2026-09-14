@@ -2524,6 +2524,7 @@ function openSettingsModal() {
       : gpu.vendor === 'intel' ? ' ' + t('-- no Neural Rendering route on Intel; OptiScaler still installs for its upscaler swap.')
       : gpu.vendor === 'unknown' ? ' ' + t('-- could not identify the GPU; assuming NVIDIA.') : '');
   $('#settings-language').value = settings.language || 'auto';
+  $('#settings-feeder-prerelease').checked = !!settings.feederPrerelease;
   $('#settings-ai-key').value = settings.anthropicApiKey || '';
   $('#settings-ai-model').value = settings.aiModel || 'claude-sonnet-5';
   $('#settings-engine').value = engineIdOrDefault(settings.engine);
@@ -2613,6 +2614,13 @@ $('#settings-engine').addEventListener('change', async (e) => {
   refreshEngineSettingStatus();
   $('#update-status').textContent = installedEnginesText();
   toast(t('New installs use {engine}. Games already installed keep their build until you change it in Edit.', { engine: engineLabel(id) }));
+});
+
+// Deploy and the update check both read this from settings.json at call time, so a change here
+// applies to the next deploy without a restart and without re-deploying anything now.
+$('#settings-feeder-prerelease').addEventListener('change', async (e) => {
+  settings.feederPrerelease = !!e.target.checked;
+  await window.api.saveSettings(settings);
 });
 
 $('#settings-language').addEventListener('change', async (e) => {
