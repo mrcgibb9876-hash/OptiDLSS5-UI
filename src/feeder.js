@@ -47,6 +47,11 @@ const { setIniKey, getIniKey } = require('./ini-merge');
 const nativeDlss = require('./native-dlss');
 
 const FEEDER_RELEASES_API = 'https://api.github.com/repos/jlrouzies-fr/DLSS5-Feeder/releases/latest';
+// GitHub's /releases/latest deliberately excludes pre-releases, so a beta the Feeder's author
+// asks someone to test is invisible to this app -- the reason 1.16.0-beta.2 had to be installed
+// by hand. This list endpoint sees them; it is only consulted when a user opted in, so the
+// default path still makes the same single call to the same endpoint it always did.
+const FEEDER_RELEASES_LIST_API = 'https://api.github.com/repos/jlrouzies-fr/DLSS5-Feeder/releases?per_page=20';
 const FEEDER_ASSET_PATTERN = /^DLSS5-Feeder-.*\.zip$/i;
 
 // The "_Addon" build specifically -- ReShade's plain build refuses third-party add-ons, and
@@ -432,13 +437,41 @@ async function downloadToCache(url, cacheDir, fileName, ghHeaders) {
   return dest;
 }
 
-async function resolveFeederAsset(ghHeaders) {
-  const res = await fetchWithRetry(FEEDER_RELEASES_API, { headers: ghHeaders });
-  if (!res.ok) throw new Error(`Could not check the DLSS5-Feeder release: HTTP ${res.status}`);
-  const release = await res.json();
-  const asset = (release.assets || []).find((a) => FEEDER_ASSET_PATTERN.test(a.name));
-  if (!asset) throw new Error('No matching asset in the latest DLSS5-Feeder release');
-  return { url: asset.browser_download_url, name: asset.name, tag: release.tag_name };
+function feederAssetFromRelease(release) {
+  const asset = ((release && release.assets) || []).find((a) => FEEDER_ASSET_PATTERN.test(a.name));
+  if (!asset) return null;
+  return {
+    url: asset.browser_download_url,
+    name: asset.name,
+    tag: release.tag_name,
+    prerelease: !!release.prerelease,
+  };
+}
+
+// The newest Feeder build this app should install. Stable by default; with allowPrerelease the
+// release list is walked newest-first instead, skipping drafts and any release published without
+// the zip, so one malformed release cannot break the deploy for everyone.
+async function resolveFeederAsset(ghHeaders, { allowPrerelease = false, fetchImpl = fetch } = {}) {
+  if (!allowPrerelease) {
+    const res = await fetchWithRetry(FEEDER_RELEASES_API, { headers: ghHeaders }, { fetchImpl });
+    if (!res.ok) throw new Error(`Could not check the DLSS5-Feeder release: HTTP ${res.status}`);
+    const found = feederAssetFromRelease(await res.json());
+    if (!found) throw new Error('No matching asset in the latest DLSS5-Feeder release');
+    return found;
+  }
+
+  const res = await fetchWithRetry(FEEDER_RELEASES_LIST_API, { headers: ghHeaders }, { fetchImpl });
+  if (!res.ok) throw new Error(`Could not list the DLSS5-Feeder releases: HTTP ${res.status}`);
+  const releases = await res.json();
+  if (!Array.isArray(releases)) throw new Error('Unexpected answer listing the DLSS5-Feeder releases');
+
+  for (const release of releases) {
+    if (!release || release.draft) continue;
+    const found = feederAssetFromRelease(release);
+    if (found) return found;
+  }
+
+  throw new Error('No DLSS5-Feeder release, pre-releases included, carries a matching asset');
 }
 
 // --- deploy steps ---------------------------------------------------------------------
@@ -616,14 +649,14 @@ async function deployReShadeCommonHeaders(dir, ghHeaders, { force = false, cache
 // on Alien: Isolation only extracted the addon and skipped the shader, which is why the
 // technique never registered ("unknown technique 'DLSS5_Feed@DLSS5_Feed.fx'" in ReShade.log).
 // This extracts both from the same zip on purpose.
-async function deployFeederAddon(dir, cacheDir, ghHeaders, { force = false } = {}) {
+async function deployFeederAddon(dir, cacheDir, ghHeaders, { force = false, allowPrerelease = false } = {}) {
   const addonDest = path.join(dir, 'dlss5-feed.addon64');
   const fxDest = path.join(dir, 'reshade-shaders', 'Shaders', 'DLSS5_Feed.fx');
   if (fs.existsSync(addonDest) && fs.existsSync(fxDest) && !force) {
     return { deployed: false, reason: 'already present' };
   }
 
-  const asset = await resolveFeederAsset(ghHeaders);
+  const asset = await resolveFeederAsset(ghHeaders, { allowPrerelease });
   const zipPath = await downloadToCache(asset.url, cacheDir, asset.name, ghHeaders);
   const zip = openZip(zipPath);
 
@@ -997,17 +1030,18 @@ function writeFeederDeployMarker(dir, data) {
 // means bumping RESHADE_SETUP_URL, not something a running app can detect on its own), and the
 // motion-vector shaders/nvngx_dlss.dll don't meaningfully go stale the same way a day-to-day
 // tool like the Feeder does.
-async function feederUpdateCheck(dir, ghHeaders) {
+async function feederUpdateCheck(dir, ghHeaders, { allowPrerelease = false } = {}) {
   const marker = readFeederDeployMarker(dir);
   if (!marker || !marker.feederVersion) {
     return { checked: false, reason: feederDeployed(dir) ? 'deployed before update-checking existed -- deploy again once to start tracking' : 'not deployed yet' };
   }
 
-  const latest = await resolveFeederAsset(ghHeaders);
+  const latest = await resolveFeederAsset(ghHeaders, { allowPrerelease });
   return {
     checked: true,
     currentVersion: marker.feederVersion,
     latestVersion: latest.tag,
+    latestIsPrerelease: !!latest.prerelease,
     upToDate: marker.feederVersion === latest.tag,
     mvProviderId: marker.mvProviderId,
   };
@@ -1027,12 +1061,12 @@ async function feederUpdateCheck(dir, ghHeaders) {
 // force: true re-fetches and overwrites everything (used by an update). licenseConfirmed: only
 // consulted when providerId names a non-auto-fetchable provider (currently just LumeniteFX) --
 // deployLumeniteFx() itself refuses without it, this just threads it through.
-async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifest, compareVersions, ghHeaders, force = false, licenseConfirmed = false, unity = false, depthProfile = null, execFileAsync = null }) {
+async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifest, compareVersions, ghHeaders, force = false, licenseConfirmed = false, unity = false, depthProfile = null, execFileAsync = null, allowPrerelease = false }) {
   const results = {};
   results.reshade = await deployReShade(dir, cacheDir, ghHeaders, { force, api, execFileAsync });
   results.reshadeMode = results.reshade.mode || reshadeModeForApi(api);
   results.commonHeaders = await deployReShadeCommonHeaders(dir, ghHeaders, { force, cacheDir });
-  results.addon = await deployFeederAddon(dir, cacheDir, ghHeaders, { force });
+  results.addon = await deployFeederAddon(dir, cacheDir, ghHeaders, { force, allowPrerelease });
 
   const provider = MV_PROVIDERS[providerId];
   if (!provider) throw new Error(`Unknown motion-vector provider: ${providerId}`);

@@ -404,11 +404,18 @@ ipcMain.handle('feeder:confirmProviderLicense', async (_evt, providerId) => {
 
 // Compares the deployed Feeder's recorded version against its actual latest release. Only
 // meaningful once something has been deployed -- feeder.js reports why not, otherwise.
+// Off by default, and read at call time so a change in Settings applies to the next deploy
+// without a restart. A pre-release is what the Feeder's author asks a particular person to test,
+// so it is offered rather than handed to everyone.
+function feederPrereleaseEnabled() {
+  return !!readJson(settingsFile(), {}).feederPrerelease;
+}
+
 ipcMain.handle('feeder:checkUpdate', async (_evt, exePath) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
-    return { ok: true, ...(await feeder.feederUpdateCheck(dir, GITHUB_HEADERS)) };
+    return { ok: true, ...(await feeder.feederUpdateCheck(dir, GITHUB_HEADERS, { allowPrerelease: feederPrereleaseEnabled() })) };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -624,6 +631,7 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
       ghHeaders: GITHUB_HEADERS,
       force: !!force,
       licenseConfirmed: !!licenseConfirmed,
+      allowPrerelease: feederPrereleaseEnabled(),
       // Unity clears its depth buffer before the UI pass and renders reversed-Z; ReShade's
       // Generic Depth needs telling both, or the Feeder gets a flat depth (feeder.js).
       unity: isUnityGame(dir, exePath),
@@ -2077,6 +2085,7 @@ async function applyHelpFix(exePath, fixId) {
         compareVersions: compareStreamlineVersions,
         ghHeaders: GITHUB_HEADERS,
         force: true,
+        allowPrerelease: feederPrereleaseEnabled(),
         unity: isUnityGame(dir, exePath),
         depthProfile: feeder.feederDepthProfile(dir),
         execFileAsync,
