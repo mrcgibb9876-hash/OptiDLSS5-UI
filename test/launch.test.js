@@ -6,6 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { scratchDir, write, fakeExe, loadMain } = require('./helpers');
+const onWindows = process.platform === 'win32';
 
 test('Launch targets the Unreal shipping exe when the card holds the launcher stub', async () => {
   const root = scratchDir('launch-ue');
@@ -74,4 +75,24 @@ test('a card is named and pictured from the Steam manifest, and a bare exe name 
   assert.equal(library.nameForExe(gog), 'Resident Evil 2');
   const plain = fakeExe(scratchDir('name-plain'), 'StarWarsJediFallenOrder.exe');
   assert.equal(library.nameForExe(plain), 'StarWarsJediFallenOrder');
+});
+
+test('games:running answers for a whole library from one process listing', { skip: !onWindows }, async () => {
+  // The grid asks this every few seconds for every card. Per-game it was a tasklist.exe spawn
+  // each -- measured at 84 ms x 20 games a tick on this library, which is the shape of background
+  // work v1.59.0 spent a release taking back out. One listing, matched in memory, instead.
+  const { invoke } = loadMain();
+
+  // node.exe is running: this test is inside it.
+  const mine = process.execPath;
+  const invented = path.join('C:', 'games', 'Some Game', 'definitely-not-a-real-process-xyz.exe');
+
+  const res = await invoke('games:running', [mine, invented]);
+  assert.equal(res.ok, true);
+  assert.equal(res.running[mine], true, 'the process running this test is found');
+  assert.equal(res.running[invented], false, 'and a game whose exe has gone is not running, not an error');
+
+  // Every path asked about gets an answer, so the caller never has to guess at a missing key.
+  assert.deepEqual(Object.keys(res.running).sort(), [mine, invented].sort());
+  assert.deepEqual((await invoke('games:running', [])).running, {}, 'an empty library asks nothing');
 });

@@ -99,6 +99,7 @@ contextBridge.exposeInMainWorld('api', {
 
   cacheSteamBanner: (appid, fallbackImageUrl) => ipcRenderer.invoke('banner:cache-steam', { appid, fallbackImageUrl }),
   exeIconBanner: (exePath) => ipcRenderer.invoke('banner:exe-icon', exePath),
+  gamesRunning: (exePaths) => ipcRenderer.invoke('games:running', exePaths),
   dlssNrGet: (exePath) => ipcRenderer.invoke('dlssnr:get', exePath),
   dlssNrSet: (exePath, values) => ipcRenderer.invoke('dlssnr:set', { exePath, values }),
   importLocalBanner: (sourcePath) => ipcRenderer.invoke('banner:import-local', sourcePath),

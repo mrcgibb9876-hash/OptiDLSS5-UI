@@ -2401,6 +2401,35 @@ ipcMain.handle('game:launch', async (_evt, { exePath, dryRun = false } = {}) => 
 // Whether the game's process is up, by image name -- the one signal that works for a direct
 // launch and a Steam one alike, so the help modal judges the log after the game stops, not
 // while it is still writing. null when tasklist cannot say.
+// Which of these games are running, from one process listing rather than one per game. The
+// single-game handler below spawns a tasklist.exe of its own, which is fine for the one game a
+// help modal is watching and is not fine for a grid that asks about every card every few seconds:
+// twenty games would be twenty process spawns a tick, which is the shape of the problem v1.59.0
+// spent its whole release removing.
+ipcMain.handle('games:running', async (_evt, exePaths) => {
+  try {
+    const { stdout } = await execFileAsync('tasklist.exe', ['/NH', '/FO', 'CSV'], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
+    const running = new Set();
+    for (const line of stdout.split(/\r?\n/)) {
+      const m = /^"([^"]+)"/.exec(line.trim());
+      if (m) running.add(m[1].toLowerCase());
+    }
+    const out = {};
+    for (const exePath of exePaths || []) {
+      if (!exePath) continue;
+      try {
+        out[exePath] = running.has(path.basename(launchTarget(exePath)).toLowerCase());
+      } catch {
+        // A game whose exe has gone is not running, and is not a reason to give up on the rest.
+        out[exePath] = false;
+      }
+    }
+    return { ok: true, running: out };
+  } catch (error) {
+    return { ok: false, running: {}, error: String(error && error.message ? error.message : error) };
+  }
+});
+
 ipcMain.handle('game:running', async (_evt, { exePath } = {}) => {
   try {
     const name = path.basename(launchTarget(exePath));

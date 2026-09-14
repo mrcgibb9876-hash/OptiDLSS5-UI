@@ -131,6 +131,63 @@ async function refreshBannerVisibility() {
   settingsBanner.classList.toggle('hidden', !!configured);
 }
 
+// ── Which games are actually running ──────────────────────────────────────────────────────────
+//
+// A game that is up can be tuned while it is up: the manager writes its OptiScaler.ini and the
+// engine re-reads it mid-frame, so a slider moves the picture without leaving the game. The card
+// says so, because otherwise nobody would think to try -- the whole reason this exists is a user
+// whose 32-bit game worked perfectly and offered him no way to change anything.
+//
+// One process listing for the whole library, every few seconds, and only while this window has
+// focus: nobody needs a card to light up while they are looking at something else, and the poll
+// is the sort of background work this app has already had to take back out once.
+const cardsByExe = new Map();
+let runningGames = new Set();
+let runningPollTimer = null;
+
+function applyRunningState(card, isRunning) {
+  const live = card.querySelector('.card-live');
+  const tune = card.querySelector('.btn-tune');
+  const lastRun = card.querySelector('.card-lastrun');
+  if (!live || !tune) return;
+  live.classList.toggle('hidden', !isRunning);
+  tune.classList.toggle('hidden', !isRunning);
+  // The last run is history the moment there is a current one.
+  if (lastRun) lastRun.classList.toggle('hidden', isRunning || !lastRun.textContent);
+  if (isRunning) {
+    card.querySelector('.card-live-text').textContent =
+      t('Running -- DLSS 5 tuning reaches this game as you change it');
+    live.title = t('This game is up, and OptiScaler re-reads its settings while it runs. Open Tune DLSS 5, move something, and the next frame in the game is already different -- no in-game menu needed, which is the only way to reach the settings at all on the 32-bit route.');
+  }
+}
+
+async function pollRunningGames() {
+  if (games.length === 0) return;
+  let res = null;
+  try { res = await window.api.gamesRunning(games.map((g) => g.exePath)); } catch {}
+  if (!res || !res.ok) return;
+  const next = new Set(Object.entries(res.running).filter(([, v]) => v).map(([k]) => k));
+  // Only touch the cards whose answer changed.
+  for (const [exePath, card] of cardsByExe) {
+    const was = runningGames.has(exePath);
+    const now = next.has(exePath);
+    if (was !== now) applyRunningState(card, now);
+  }
+  runningGames = next;
+}
+
+function startRunningPoll() {
+  if (runningPollTimer) return;
+  pollRunningGames();
+  runningPollTimer = setInterval(pollRunningGames, 5000);
+}
+function stopRunningPoll() {
+  clearInterval(runningPollTimer);
+  runningPollTimer = null;
+}
+window.addEventListener('focus', startRunningPoll);
+window.addEventListener('blur', stopRunningPoll);
+
 // renderGrid awaits per card, and is re-entered from window focus, settings close and
 // install/uninstall completions -- two overlapping runs would each append their own set of cards.
 // The newest run wins; older ones stop at their next await.
@@ -142,6 +199,7 @@ async function renderGrid() {
     bannerSearchVersionLoaded = true;
   }
   const generation = ++renderGeneration;
+  cardsByExe.clear();
   grid.innerHTML = '';
   emptyState.classList.toggle('hidden', games.length > 0);
   grid.classList.toggle('hidden', games.length === 0);
@@ -187,6 +245,7 @@ async function renderGrid() {
         <div class="card-path card-panel-note hidden"></div>
         <div class="card-warning card-detect-warning hidden"></div>
         <div class="card-path card-lastrun hidden"></div>
+        <div class="card-live hidden"><span class="card-live-dot"></span><span class="card-live-text"></span></div>
         <div class="card-help hidden"><span class="card-help-text"></span><button class="btn btn-small btn-primary btn-card-fix hidden"></button></div>
         ${(status.warnings || []).map((w) => `<div class="card-warning" title="${escapeHtml(t(w.message, w.vars))}">⚠ ${escapeHtml(t(w.message, w.vars))}</div>`).join('')}
         ${(status.foreign || []).length ? `<button class="btn btn-danger btn-small btn-remove-foreign" style="margin: 2px 0 6px;">${escapeHtml(t('Remove the other DLSS 5 toolchain…'))}</button>` : ''}
@@ -195,6 +254,7 @@ async function renderGrid() {
           <button class="btn btn-launch" title="${escapeHtml(t('Runs the game from its own folder -- for an Unreal game, the -Win64-Shipping.exe that OptiScaler is installed beside.'))}">&#9654; ${escapeHtml(t('Launch'))}</button>
         </div>
         <div class="card-actions-row2">
+          <button class="btn btn-primary btn-tune hidden">${escapeHtml(t('Tune DLSS 5'))}</button>
           <button class="btn btn-ghost btn-open">${escapeHtml(t('Open Folder'))}</button>
           <button class="btn btn-ghost btn-edit">${escapeHtml(t('Edit'))}</button>
           <button class="btn btn-ghost btn-help has-tip" data-tip="${escapeHtml(t('Checks this game\'s setup and its last run, applies the fix when the app has one, tells you plainly when DLSS 5 is not available here, and can save a bundle to share or ask an AI.'))}">${escapeHtml(t('Game Help'))}</button>
@@ -358,6 +418,9 @@ async function renderGrid() {
           ? t('Launched {name} without {antiCheat} ({exe}) -- online play will not work while it is modded.', { name: game.name, antiCheat: res.antiCheat || t('anti-cheat'), exe })
           : t('Launched {name} ({exe}).', { name: game.name, exe }));
     });
+    card.querySelector('.btn-tune').addEventListener('click', () => openGameModal(game, { focus: 'dlssnr' }));
+    cardsByExe.set(game.exePath, card);
+    applyRunningState(card, runningGames.has(game.exePath));
     card.querySelector('.btn-open').addEventListener('click', () => window.api.openFolder(game.exePath));
     card.querySelector('.btn-edit').addEventListener('click', () => openGameModal(game));
     card.querySelector('.btn-remove').addEventListener('click', () => removeGame(game));
@@ -1207,7 +1270,7 @@ async function removeGame(game) {
 let lastPickedExe = null;
 const gameModal = $('#game-modal');
 
-async function openGameModal(game) {
+async function openGameModal(game, { focus = null } = {}) {
   editingGameId = game ? game.id : null;
   $('#game-modal-title').textContent = game ? t('Edit Game') : t('Add Game');
   $('#game-exe').value = game ? game.exePath : '';
@@ -1235,6 +1298,12 @@ async function openGameModal(game) {
   await loadLosslessSection(game);
   await loadAmdNrSection(game);
   await loadLumaUeSection(game);
+  // Arrived from the card's Tune DLSS 5 button: put the settings in view rather than leaving
+  // someone to scroll a long dialog looking for them.
+  if (focus === 'dlssnr') {
+    const section = $('#game-dlssnr-section');
+    if (section && !section.classList.contains('hidden')) section.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
 }
 
 
