@@ -351,6 +351,14 @@ function nameForExe(exePath) {
 // Fallen Order" (the dash) and finds "Star Wars Jedi Fallen Order" at once, and folder names
 // also carry dots, underscores, trademark marks, edition suffixes and version numbers that the
 // store name does not. Each step strips more; duplicates are dropped.
+// The edition and packaging words a store title carries and a folder name does not, or the other
+// way round. Stripped from both sides before two titles are compared.
+const EDITION_WORDS = /\b(goty|game of the year|definitive|deluxe|ultimate|complete|gold|premium|enhanced|remastered|remaster|special|standard|anniversary|legendary|digital|director'?s cut|ultimate edition|edition|bundle|collection|pack)\b/gi;
+
+// A dotted acronym is written both ways in the wild and Steam only knows one of them:
+// "S.T.A.L.K.E.R." is what the folder says, "STALKER" is what the search finds.
+const collapseAcronyms = (t) => t.replace(/\b(?:[A-Za-z]\.){2,}/g, (m) => m.replace(/\./g, ''));
+
 function bannerSearchTerms(name) {
   const terms = [];
   const add = (t) => { t = (t || '').replace(/\s+/g, ' ').trim(); if (t.length >= 3 && !terms.includes(t)) terms.push(t); };
@@ -360,10 +368,72 @@ function bannerSearchTerms(name) {
   // Version numbers are matched before the dots become spaces, or v4.04 turns into a harmless
   // looking "v4 04" that nothing recognises.
   const noVersion = noMark.replace(/\b(v?\d+(\.\d+){1,3}|build \d+|update \d+)\b/gi, '');
+  // Before the punctuation pass, or "S.T.A.L.K.E.R." has already become "S T A L K E R".
+  add(collapseAcronyms(noMark));
   add(punct(noMark));
   add(punct(noVersion));
-  add(punct(noVersion).replace(/\b(goty|game of the year|definitive|deluxe|ultimate|complete|gold|premium|enhanced|remastered|remaster|special|standard|anniversary|legendary|digital)( edition)?\b/gi, ''));
+  const noEdition = punct(noVersion).replace(EDITION_WORDS, '');
+  add(noEdition);
+  add(collapseAcronyms(noEdition));
+  // A trailing "1" that someone added to tell the first game from its sequel. Steam almost never
+  // carries it -- "Castlevania Lords of shadow 1" finds nothing, "Castlevania Lords of Shadow"
+  // finds it. Tried only after the name as given, so a game genuinely called Battlefield 1 is
+  // still found by its own name first.
+  add(noEdition.replace(/\s+(1|i)\s*$/i, ''));
+  // Last resort: drop trailing words one at a time. "DOOM 3 BFG" finds nothing on the store;
+  // "DOOM 3" finds "DOOM 3: BFG Edition". Only ever reached when everything above missed, and
+  // whatever it turns up still has to pass pickBannerMatch before it becomes a card's art.
+  const words = noEdition.split(/\s+/).filter(Boolean);
+  for (let keep = words.length - 1; keep >= 2; keep--) add(words.slice(0, keep).join(' '));
   return terms;
 }
 
-module.exports = { discover, folder, dedupe, autoRoots, drives, isInside, filterExcluded, steam, linuxSteamRoots, steamAppIdFor, steamManifestFor, nameForExe, bannerSearchTerms };
+// ── Choosing between the store's answers ──────────────────────────────────────────────────────
+//
+// Taking the first result is how a card came to show the wrong game. Steam's search is a ranking,
+// not an identification: "Castlevania Lords of Shadow" returns "Castlevania: Lords of Shadow 2"
+// first, so the first game in the series wore the sequel's art (reported 2026-09-14), and "re2"
+// returned Red Dead Redemption 2 (2026-09-12). Wrong art is worse than none -- it is the one thing
+// on the card a user cannot help reading as "this app does not know what game this is".
+//
+// So a candidate has to earn it: every meaningful word of what was searched for must appear in the
+// title, and among the candidates that clear that bar the one carrying the fewest extra words
+// wins. "Lords of Shadow 2" carries an extra "2" and loses to the game itself; "Red Dead
+// Redemption 2" does not contain "re2" at all and is refused outright, leaving no art rather than
+// the wrong art.
+function titleTokens(title) {
+  return (title || '')
+    .replace(/[™®©]/g, '')
+    .replace(EDITION_WORDS, ' ')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(' ')
+    .filter(Boolean);
+}
+
+// Words too common to carry identity: their absence from a title proves nothing.
+const WEAK_TOKENS = new Set(['the', 'a', 'an', 'of', 'and', 'or', 'for', 'to', 'in', 'on', 'at', 'de', 'le', 'la']);
+
+function pickBannerMatch(query, items) {
+  const wanted = titleTokens(query);
+  const strong = wanted.filter((w) => !WEAK_TOKENS.has(w));
+  if (strong.length === 0) return null;
+  let best = null;
+  items.forEach((item, order) => {
+    const got = titleTokens(item && item.name);
+    if (got.length === 0) return;
+    // Every word that carries identity has to be there. This is what refuses a wrong game.
+    if (!strong.every((w) => got.includes(w))) return;
+    const extra = got.filter((w) => !wanted.includes(w) && !WEAK_TOKENS.has(w)).length;
+    const exact = extra === 0 && got.length === wanted.length;
+    const candidate = { item, extra, exact, order };
+    if (!best) { best = candidate; return; }
+    if (candidate.exact !== best.exact) { if (candidate.exact) best = candidate; return; }
+    if (candidate.extra !== best.extra) { if (candidate.extra < best.extra) best = candidate; return; }
+    // Steam's own ranking breaks a genuine tie.
+    if (candidate.order < best.order) best = candidate;
+  });
+  return best ? best.item : null;
+}
+
+module.exports = { discover, folder, dedupe, autoRoots, drives, isInside, filterExcluded, steam, linuxSteamRoots, steamAppIdFor, steamManifestFor, nameForExe, bannerSearchTerms, pickBannerMatch, titleTokens };

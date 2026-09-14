@@ -107,6 +107,8 @@ function initials(name) {
 function setBannerWithFallback(game, imgEl, fallbackEl) {
   if (game.bannerLocalPath) {
     imgEl.classList.remove('hidden');
+    // A game's own icon is square: shown whole and centred, not cropped to a 460x215 banner.
+    imgEl.classList.toggle('card-banner-icon', !!game.bannerIsIcon);
     if (fallbackEl) fallbackEl.classList.add('hidden');
     imgEl.onerror = () => {
       imgEl.classList.add('hidden');
@@ -182,6 +184,7 @@ async function renderGrid() {
         <div class="card-title">${escapeHtml(game.name)}</div>
         <div class="card-path card-recommend" title="${escapeHtml(t('Which install path suits this game'))}">${escapeHtml(t('Checking graphics API…'))}</div>
         <div class="card-warning card-route-next hidden"></div>
+        <div class="card-path card-panel-note hidden"></div>
         <div class="card-warning card-detect-warning hidden"></div>
         <div class="card-path card-lastrun hidden"></div>
         <div class="card-help hidden"><span class="card-help-text"></span><button class="btn btn-small btn-primary btn-card-fix hidden"></button></div>
@@ -216,20 +219,40 @@ async function renderGrid() {
       const localPath = await window.api.cacheSteamBanner(found.appid, found.tinyImage);
       game.bannerAppId = String(found.appid);
       game.bannerLocalPath = localPath || null;
+      game.bannerIsIcon = false;
       saveGamesSoon();
       setBannerWithFallback(game, ...bannerEls());
+    };
+    // Nothing on the store knows this game, so fall back to what the game knows about itself.
+    // Re-tried on a later render only if the icon file has gone: it costs one read of the exe's
+    // resource directory and no network, so there is nothing to ration.
+    const applyExeIcon = async (g, els) => {
+      const iconPath = await window.api.exeIconBanner(g.exePath);
+      if (!iconPath) return false;
+      g.bannerLocalPath = iconPath;
+      g.bannerIsIcon = true;
+      setBannerWithFallback(g, ...els());
+      return true;
     };
     const autoFound = !!game.bannerSearchAttempted;
     const staleSearch = (game.bannerSearchVersion || 1) < bannerSearchVersion;
     if (game.bannerAppId && autoFound && staleSearch) {
-      // Art an older search picked by name is checked once against the Steam manifest beside
-      // the exe, which is exact: "re2" had been given Red Dead Redemption 2. Art the user chose
-      // themselves was never auto-found, so it is never touched here.
+      // Art an older search picked by name is looked up again, once per search version, and
+      // replaced if the answer has changed. The Steam manifest beside the exe is exact and was
+      // always allowed to overrule ("re2" had been given Red Dead Redemption 2); a new search
+      // result now is too, because the search this app ran at the older version is precisely what
+      // the bump says it no longer trusts -- Castlevania: Lords of Shadow was wearing Lords of
+      // Shadow 2's art, and nothing but a fresh search can take it back off. Art the user chose
+      // themselves was never auto-found, so none of this ever touches it.
       game.bannerSearchVersion = bannerSearchVersion;
       window.api.resolveBanner(game.exePath, game.name).then(async (found) => {
-        if (found && found.source === 'steam-manifest' && String(found.appid) !== String(game.bannerAppId)) await applyResolved(found);
+        if (found && String(found.appid) !== String(game.bannerAppId)) await applyResolved(found);
         else saveGamesSoon();
       });
+    } else if (!game.bannerLocalPath && !game.bannerAppId && autoFound && !staleSearch) {
+      // Searched before and found nothing, and the search has not changed since: the store has
+      // no more to say, so the icon is the answer rather than a blank card.
+      applyExeIcon(game, bannerEls).then((ok) => { if (ok) saveGamesSoon(); });
     } else if (!game.bannerLocalPath && game.bannerAppId) {
       window.api.cacheSteamBanner(game.bannerAppId).then((localPath) => {
         if (localPath) {
@@ -246,6 +269,7 @@ async function renderGrid() {
       game.bannerSearchVersion = bannerSearchVersion;
       window.api.resolveBanner(game.exePath, game.name).then(async (found) => {
         if (!found) {
+          await applyExeIcon(game, bannerEls);
           saveGamesSoon();
           return;
         }
@@ -475,6 +499,19 @@ async function applyRecommendation(game, card, backends, generation = renderGene
     }
   }
 
+  // The 32-bit route's panel, said on the card itself once the route is complete. The full
+  // sequence is in Game Help and in this line's own tooltip; the card carries the short form,
+  // because "press Alt+Home" is what every other route says and here it is not enough.
+  const panelEl = card.querySelector('.card-panel-note');
+  if (panelEl) {
+    const showPanelNote = route.route === 'feeder32' && route.complete;
+    panelEl.classList.toggle('hidden', !showPanelNote);
+    if (showPanelNote) {
+      panelEl.textContent = t('Panel: Home \u2192 Add-ons \u2192 DLSS 5 Feed \u2192 show the panel, then Alt+Home');
+      panelEl.title = t('A 32-bit game cannot run DLSS in its own process, so the neural pass -- and the DLSS 5 panel with it -- runs in the 64-bit helper beside the game. Alt+Home on the game window reaches nothing until the Feeder\'s add-on is told to show that helper\'s window over the game. Needs windowed or borderless. Game Help spells it out.');
+    }
+  }
+
   const nextEl = card.querySelector('.card-route-next');
   if (nextEl) {
     const showNext = route.optiInstalled && !route.complete && route.nextStep;
@@ -549,6 +586,7 @@ function helpWords(diag) {
     case 'needs-run': return t('No run to judge yet. Launch the game, reach actual gameplay (not a menu), play a minute, then quit. Come back here and it is checked.');
     case 'needs-run-after-fix': return t('"{fix}" was applied. The old log still says what it said, so launch the game, reach gameplay, play a minute, quit, and this is checked again.', { fix: helpFixLabel(v.fix) });
     case 'ok': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}{api}.', { count: v.count, fps: v.fps ? t(' at {fps} fps', { fps: v.fps }) : '', api: v.api ? ' (' + v.api + ')' : '' });
+    case 'ok-panel-in-helper': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}. This is the 32-bit route, so the DLSS 5 panel is not in the game: a 32-bit game cannot run DLSS in its own process, so the neural pass happens in the 64-bit helper beside it, and that is where the panel lives. Alt+Home on the game window reaches nothing, and Insert is a different tool\'s menu entirely. To open it: press Home in the game for ReShade\'s overlay, go to the Add-ons tab, open DLSS 5 Feed, press "Show the DLSS 5 panel in-game", and then Alt+Home works -- the helper\'s window is drawn over the game with your keys and clicks passed through to it. It needs windowed or borderless; in exclusive fullscreen use the Feeder\'s "Show as texture" option instead. Everything in the panel can also be set from Edit here, without the game running.', { count: v.count, fps: v.fps ? t(' at {fps} fps', { fps: v.fps }) : '' });
     case 'ok-exit-crash': return t('Neural Rendering ran ({count} passes). The game crashed only on the way out, inside NVIDIA\'s shutdown, which does not affect play.', v);
     case 'd3d11-native': return t('DLSS was created on the native D3D11 path, so the Neural Rendering pass never ran. Dx11Upscaler must be dlss_12. Reconfigure writes it.');
     case 'nr-disabled': return t('DLSS ran but Neural Rendering is switched off in OptiScaler.ini. Reconfigure turns it on.');
@@ -610,6 +648,7 @@ function helpShort(diag) {
     case 'feed-agility-redist': case 'feed-agility-redist-elsewhere': return t('D3D12 refused every device (redist)');
     case 'upscale-skipped': return t('Black screen: every frame dropped');
     case 'sr-backend-fallback': return t('Not DLSS -- fell back to {backend}', v);
+    case 'ok-panel-in-helper': return t('Working -- the panel is in the 64-bit helper (Home, then Alt+Home)');
     case 'fix-failed': return t('Fix did not help -- no known fix');
     case 'dlss-no-nr': case 'init-no-feature': case 'no-hook': default: return t('Not working -- no known fix');
   }

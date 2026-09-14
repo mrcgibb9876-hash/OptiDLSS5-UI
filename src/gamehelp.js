@@ -120,6 +120,16 @@ function diagnose(ctx) {
         backend: run.detail || '', result: run.srCreateResult || '',
       });
     case 'nr-ran':
+      // The 32-bit route's one surprise, and it only bites once everything works: OptiScaler is
+      // not in the game's process at all -- NVIDIA ships no 32-bit NGX, so the Feeder's add-on
+      // hands each frame to a 64-bit helper beside the game and the neural pass happens there
+      // (legacy.js). Alt+Home on the game window therefore reaches nothing, and the sequence that
+      // does reach it was written only in the route chip's tooltip. A user with a working feed on
+      // Castlevania: Lords of Shadow tried Insert and Alt+Tab and concluded the menu was missing
+      // (2026-09-14) -- which is a fair reading of an app that never said otherwise.
+      if (route.route === 'feeder32') {
+        return out('ok', 'ok-panel-in-helper', { count: run.nrDispatch, fps: run.fps || 0, api: (run.runtimeApi || '').toUpperCase() });
+      }
       return out('ok', 'ok', { count: run.nrDispatch, fps: run.fps || 0, api: (run.runtimeApi || '').toUpperCase() });
     case 'shutdown-fault':
       // NR ran and only the exit faulted: that is a working game, whatever is deployed. A

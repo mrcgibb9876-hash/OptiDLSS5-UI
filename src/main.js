@@ -21,6 +21,7 @@ const gpu = require('./gpu');
 const amdnr = require('./amdnr');
 const { detectGameCached, invalidateDetection, peOriginalFilename, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, antiCheatPresent, peImports, peBitness, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
+const exeicon = require('./exeicon');
 const managerUpdate = require('./manager-update');
 const runlog = require('./runlog');
 const library = require('./library');
@@ -954,9 +955,12 @@ ipcMain.handle('pick:image', async () => {
 });
 
 // Bumped when the search gets smarter, so cards that missed under an older search try again.
+// 4: the store's first answer is no longer taken on trust -- library.pickBannerMatch has to
+// recognise it (Castlevania: Lords of Shadow wore Lords of Shadow 2's art) -- and the term ladder
+// handles dotted acronyms, a trailing "1", and dropping trailing words when nothing else hits.
 // 3: a Steam manifest beside the exe now decides the art, so cards whose auto-found art
 // disagrees with their manifest are corrected once.
-const BANNER_SEARCH_VERSION = 3;
+const BANNER_SEARCH_VERSION = 4;
 
 async function steamStoreSearch(term) {
   const url = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(term)}&l=english&cc=US`;
@@ -974,9 +978,14 @@ ipcMain.handle('steam:search', async (_evt, term) => {
   try {
     // The name as given first, then the spellings the store is more likely to know. The first
     // spelling with a hit wins; a term that fails is not the end of it.
+    // The picked match first, then the rest of that spelling's results: this is the Edit dialog's
+    // own search box, where the user makes the final call, so nothing is hidden -- only reordered
+    // so the app's own best guess is the one under the cursor.
     for (const t of library.bannerSearchTerms(term)) {
       const items = await steamStoreSearch(t);
-      if (items.length) return items;
+      if (!items.length) continue;
+      const best = library.pickBannerMatch(t, items);
+      return best ? [best, ...items.filter((i) => i !== best)] : items;
     }
     return [];
   } catch {
@@ -994,9 +1003,13 @@ ipcMain.handle('banner:resolve', async (_evt, { exePath, name } = {}) => {
   try {
     const manifest = library.steamManifestFor(exePath);
     if (manifest) return { appid: String(manifest.appid), name: manifest.name, tinyImage: null, source: 'steam-manifest' };
+    // Unlike the search box, this picks art on its own with nobody watching, so a title it cannot
+    // recognise is left without art rather than given somebody else's.
     for (const t of library.bannerSearchTerms(name)) {
       const items = await steamStoreSearch(t);
-      if (items.length) return { appid: String(items[0].appid), name: items[0].name, tinyImage: items[0].tinyImage, source: 'search' };
+      if (!items.length) continue;
+      const best = library.pickBannerMatch(t, items);
+      if (best) return { appid: String(best.appid), name: best.name, tinyImage: best.tinyImage, source: 'search' };
     }
     return null;
   } catch {
@@ -3627,6 +3640,20 @@ function bannersDir() {
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
+
+// The art of last resort: the game's own icon, out of its exe (exeicon.js). Only ever reached
+// when the Steam manifest and the store search have both come up empty -- a game bought anywhere
+// but Steam, or one whose folder name matches no store title. A square icon is not a banner, so
+// the renderer shows it centred rather than cropped to fill; it is still this game's own art, and
+// it needs no network at all.
+ipcMain.handle('banner:exe-icon', (_evt, exePath) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) return null;
+    return exeicon.cacheIcon(exePath, bannersDir());
+  } catch {
+    return null;
+  }
+});
 
 ipcMain.handle('banner:cache-steam', async (_evt, { appid, fallbackImageUrl }) => {
   const dest = path.join(bannersDir(), `steam-${appid}.jpg`);

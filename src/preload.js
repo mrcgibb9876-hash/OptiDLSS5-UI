@@ -98,6 +98,7 @@ contextBridge.exposeInMainWorld('api', {
   cleanFolder: (folder) => ipcRenderer.invoke('game:cleanFolder', { folder }),
 
   cacheSteamBanner: (appid, fallbackImageUrl) => ipcRenderer.invoke('banner:cache-steam', { appid, fallbackImageUrl }),
+  exeIconBanner: (exePath) => ipcRenderer.invoke('banner:exe-icon', exePath),
   importLocalBanner: (sourcePath) => ipcRenderer.invoke('banner:import-local', sourcePath),
 
   checkUpdate: (engine) => ipcRenderer.invoke('update:check', { engine }),

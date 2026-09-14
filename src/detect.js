@@ -216,15 +216,25 @@ async function peBitness(filePath) {
   }
 }
 
-// The RT_VERSION resource of a PE file, as bytes -- ported from DLSS5-Swapper's pe.js.
-// Synchronous and bounded (a few small reads, then at most 64 KB); used for one file.
-function versionResourceBlob(filePath) {
+// A reader over a PE file's resource directory -- ported from DLSS5-Swapper's pe.js and widened
+// from "the version resource" to any type, because the same walk answers two questions this app
+// asks: what a DLL was built as (RT_VERSION, 16) and what a game's own icon looks like
+// (RT_GROUP_ICON, 14, and the RT_ICON images it names, 3).
+//
+// Returns { ids(type), get(type, id, max), close() }, or null if the file has no resources. The
+// caller must close it. Synchronous and bounded: a few small reads per lookup.
+function openPeResources(filePath) {
   let fd;
+  // The descriptor the reads and close() use. Held separately from `fd`, which is only the flag
+  // for "still this function's to close": the returned reader keeps reading after the function
+  // has handed ownership over, so it cannot close over a variable this function then clears.
+  let descriptor;
   try {
-    fd = fs.openSync(filePath, 'r');
+    descriptor = fs.openSync(filePath, 'r');
+    fd = descriptor;
     const readAt = (offset, length) => {
       const b = Buffer.alloc(length);
-      const n = fs.readSync(fd, b, 0, length, offset);
+      const n = fs.readSync(descriptor, b, 0, length, offset);
       return b.subarray(0, n);
     };
     const dos = readAt(0, 64);
@@ -260,23 +270,54 @@ function versionResourceBlob(filePath) {
       for (let i = 0; i + 8 <= raw.length; i += 8) out.push({ id: raw.readUInt32LE(i), offset: raw.readUInt32LE(i + 4) });
       return out;
     };
-    const type = entriesOf(0).find((e) => (e.id & 0x7fffffff) === 16 && (e.offset & 0x80000000));
-    if (!type) return null;
-    const name = entriesOf(type.offset & 0x7fffffff)[0];
-    if (!name || !(name.offset & 0x80000000)) return null;
-    const lang = entriesOf(name.offset & 0x7fffffff)[0];
-    if (!lang) return null;
-    const data = readAt(base + lang.offset, 16);
-    if (data.length < 16) return null;
-    const dataOff = rvaToOffset(data.readUInt32LE(0));
-    const dataSize = data.readUInt32LE(4);
-    if (dataOff < 0 || !dataSize) return null;
-    return readAt(dataOff, Math.min(dataSize, 64 * 1024));
+    const typeEntry = (typeId) => entriesOf(0).find((e) => (e.id & 0x7fffffff) === typeId && (e.offset & 0x80000000));
+
+    // The resource ids present under a type, in directory order. Named (string) entries are
+    // skipped: everything read here is numbered.
+    const ids = (typeId) => {
+      const type = typeEntry(typeId);
+      if (!type) return [];
+      return entriesOf(type.offset & 0x7fffffff).filter((e) => !(e.id & 0x80000000)).map((e) => e.id);
+    };
+
+    // One resource's bytes. id null takes the first, which is what a version resource has.
+    const get = (typeId, id = null, max = 64 * 1024) => {
+      const type = typeEntry(typeId);
+      if (!type) return null;
+      const names = entriesOf(type.offset & 0x7fffffff);
+      const name = id === null ? names[0] : names.find((e) => e.id === id);
+      if (!name || !(name.offset & 0x80000000)) return null;
+      // The language sublevel: the first is the right one for every resource this app reads.
+      const lang = entriesOf(name.offset & 0x7fffffff)[0];
+      if (!lang) return null;
+      const data = readAt(base + lang.offset, 16);
+      if (data.length < 16) return null;
+      const dataOff = rvaToOffset(data.readUInt32LE(0));
+      const dataSize = data.readUInt32LE(4);
+      if (dataOff < 0 || !dataSize) return null;
+      return readAt(dataOff, Math.min(dataSize, max));
+    };
+
+    let open = true;
+    const handle = { ids, get, close: () => { if (open) { open = false; try { fs.closeSync(descriptor); } catch {} } } };
+    fd = undefined; // ownership passes to the caller's close(); the finally below leaves it alone
+    return handle;
   } catch {
     return null;
   } finally {
     if (fd !== undefined) try { fs.closeSync(fd); } catch {}
   }
+}
+
+const RT_ICON = 3;
+const RT_GROUP_ICON = 14;
+const RT_VERSION = 16;
+
+// The RT_VERSION resource of a PE file, as bytes.
+function versionResourceBlob(filePath) {
+  const res = openPeResources(filePath);
+  if (!res) return null;
+  try { return res.get(RT_VERSION); } finally { res.close(); }
 }
 
 // VS_FIXEDFILEINFO out of that resource, "6.3.9600.16384" style.
@@ -1346,4 +1387,4 @@ async function planForeignRemoval(dir, { ours = false } = {}) {
   return { found, del: [...del].sort(), restore, notes };
 }
 
-module.exports = { DETECT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, foreignToolchains, planForeignRemoval };
+module.exports = { DETECT_VERSION, openPeResources, RT_ICON, RT_GROUP_ICON, RT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, foreignToolchains, planForeignRemoval };

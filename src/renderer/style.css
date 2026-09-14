@@ -164,6 +164,14 @@ body {
   object-fit: cover;
   display: block;
 }
+/* A game's own icon standing in for a banner it has none of (exeicon.js). Square, so it is shown
+   whole and centred on the card's own gradient rather than cropped to fill a 460x215 frame. */
+.card-banner.card-banner-icon {
+  object-fit: contain;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
 .card-banner-fallback {
   position: absolute;
   inset: 0;
@@ -230,6 +238,10 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* The 32-bit route puts the DLSS 5 panel in the helper process, and the key sequence that
+   reaches it is the whole point of the line -- so it wraps rather than ellipsing away. */
+.card-panel-note { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.35; }
+
 .card-warning {
   font-size: 11px;
   color: #d9a441;

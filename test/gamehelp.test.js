@@ -31,6 +31,9 @@ const rows = [
   ['RE Engine without REFramework: reconfigure', base({ reEngine: true, reframeworkPresent: false }), { status: 'fix', fix: 'reconfigure' }],
   ['no log yet: run it', base({ run: { ran: false, verdict: 'no-log' } }), { status: 'needs-run', code: 'needs-run' }],
   ['NR ran: ok', base(), { status: 'ok', code: 'ok' }],
+  // The 32-bit route runs the neural pass in a helper process, so the panel is not in the game and
+  // Alt+Home alone reaches nothing. A working run has to say so -- it used to say only 'ok'.
+  ['NR ran on the 32-bit route: ok, and the panel is in the helper', base({ route: { route: 'feeder32', complete: true } }), { status: 'ok', code: 'ok-panel-in-helper' }],
   ['D3D11 native DLSS (Fallen Order before dlss_12): reconfigure', base({ run: { ran: true, verdict: 'dlss-no-nr', detail: 'd3d11-native' } }), { status: 'fix', fix: 'reconfigure' }],
   ['DLSS ran with NR off in the ini: reconfigure', base({ run: { ran: true, verdict: 'dlss-no-nr' }, nrEnabledInIni: false }), { status: 'fix', fix: 'reconfigure' }],
   ['DLSS ran, NR on, still no NR: unknown', base({ run: { ran: true, verdict: 'dlss-no-nr' } }), { status: 'unknown', code: 'dlss-no-nr' }],
