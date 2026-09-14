@@ -1600,6 +1600,7 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
     let proxyRefreshError = null;
     let foreignProxy = null;
     let proxyIsThisBuild = false;
+    try { await migrateProxyIfNeeded(dir, exePath); } catch {}
     try {
       const active = await findActiveOptiScalerFile(dir);
       if (active && active.renamed) {
@@ -3518,10 +3519,14 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDl
       };
     }
 
+    // A proxy placed under a name this game never loads (PROXY_OVERRIDES) is moved before anything else.
+    let proxyMigrated = null;
+    try { proxyMigrated = await migrateProxyIfNeeded(dir, exePath); } catch {}
+
     const active = await findActiveOptiScalerFile(dir);
     if (!active) {
       return {
-        ok: true, updated: autoConfigured.length > 0 || nrUpdated, nrUpdated,
+        ok: true, updated: autoConfigured.length > 0 || nrUpdated || !!(proxyMigrated && !proxyMigrated.skipped), nrUpdated,
         reason: 'could not identify the active OptiScaler file (ambiguous proxy candidates)', api, autoConfigured, streamline, reEngine, reframework
       };
     }
@@ -3542,7 +3547,7 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDl
     }
 
     if (sha256File(releaseDll) === sha256File(active.file)) {
-      return { ok: true, updated: autoConfigured.length > 0 || nrUpdated || companionsUpdated, nrUpdated, reason: 'up to date', api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
+      return { ok: true, updated: autoConfigured.length > 0 || nrUpdated || companionsUpdated || !!(proxyMigrated && !proxyMigrated.skipped), nrUpdated, proxyMigrated, reason: 'up to date', api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
     }
 
     await fsp.copyFile(releaseDll, active.file);
@@ -3580,7 +3585,56 @@ const DEFAULT_PROXY = 'dxgi.dll';
 // Feeder's README says winmm.dll or version.dll ("a name the process imports at start"); the
 // exe's own import table says which of the candidates it actually imports.
 const EARLY_PROXY_CANDIDATES = ['winmm.dll', 'version.dll', 'dbghelp.dll', 'wininet.dll', 'winhttp.dll'];
+// Games whose exe never loads a dxgi.dll from its own folder, measured one at a time. dxgi.dll works for
+// nearly every Direct3D game because the system's d3d11/d3d12 pull it in through the normal search order;
+// these load it some other way, so a dxgi.dll proxy sits there unused and OptiScaler never starts -- no
+// log, no panel, nothing to say why. Keyed by exe name, lower case.
+//
+// Monster Hunter: World (2026-09-14, a user report): installed as dxgi.dll, the game ran and wrote no
+// OptiScaler.log at all; its exe imports d3d11/d3d12 but not dxgi.dll. As winmm.dll, which it does import,
+// OptiScaler loaded, wrapped the DX12 swapchain and was handed the game's nvngx.
+const PROXY_OVERRIDES = {
+  'monsterhunterworld.exe': 'winmm.dll',
+};
+
+function proxyOverrideFor(exePath) {
+  return exePath ? PROXY_OVERRIDES[path.basename(exePath).toLowerCase()] || null : null;
+}
+
+// Moves a proxy this app placed under the wrong name to the game's override. Only when the journal proves
+// the proxy is ours and no original of the game's was backed up under that name (restoring someone's file
+// is not a rename). A folder where the right name already holds OptiScaler just has its journal corrected.
+async function migrateProxyIfNeeded(dir, exePath) {
+  const wanted = proxyOverrideFor(exePath);
+  const journal = readInstallMarker(dir);
+  if (!wanted || !journal || typeof journal.proxy !== 'string' || journal.proxy.toLowerCase() === wanted) return null;
+  if (journal.backedUp) return { from: journal.proxy, to: wanted, skipped: 'an original was backed up under the old name' };
+
+  const from = path.join(dir, journal.proxy);
+  const to = path.join(dir, wanted);
+  const isOptiScaler = (file) => {
+    try {
+      const orig = peOriginalFilename(file);
+      // No version resource: OptiScaler only if its bytes say so, as findActiveOptiScalerFile decides.
+      return orig ? orig.toLowerCase() === 'optiscaler.dll' : fs.readFileSync(file).includes(Buffer.from('OptiScaler', 'latin1'));
+    } catch { return false; }
+  };
+
+  if (fs.existsSync(to)) {
+    if (!isOptiScaler(to)) return { from: journal.proxy, to: wanted, skipped: `${wanted} is somebody else's file` };
+    if (fs.existsSync(from) && isOptiScaler(from)) await fsp.rm(from, { force: true });
+  } else {
+    if (!fs.existsSync(from) || !isOptiScaler(from)) return null;
+    await fsp.rename(from, to);
+  }
+
+  updateInstallJournal(dir, { proxy: wanted });
+  return { from: journal.proxy, to: wanted };
+}
+
 async function proxyNameForGame(dir, exePath, feederGame) {
+  const override = proxyOverrideFor(exePath);
+  if (override) return override;
   if (!feederGame) return DEFAULT_PROXY;
   const api = await resolveApi(dir, exePath);
   // dx9: a 64-bit DirectX 9 game behind dgVoodoo2 imports no DXGI at start either (legacy.js).

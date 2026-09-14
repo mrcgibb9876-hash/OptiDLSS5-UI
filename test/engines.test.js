@@ -187,6 +187,41 @@ test('the engine\'s optical-flow DLL reaches an already-installed game on sync a
   assert.ok(!fs.existsSync(companion), 'Remove takes it');
 });
 
+// Monster Hunter: World (2026-09-14): its exe never loads a dxgi.dll from its folder, so OptiScaler installed
+// as dxgi.dll never started. New installs take winmm.dll; an install of ours at dxgi.dll moves on sync.
+test('Monster Hunter: World installs its proxy as winmm.dll, and an earlier dxgi.dll install of ours is moved on sync', { skip: !onWindows }, async () => {
+  const base = scratchDir('engine-mhw-proxy');
+  const release = fakeReleaseFolder(base);
+  const nr = fakeNrModel(base);
+  const { invoke } = loadMain();
+
+  const fresh = path.join(base, 'fresh');
+  const freshExe = fakeExe(fresh, 'MonsterHunterWorld.exe');
+  const inst = await invoke('game:install', { exePath: freshExe, releaseFolder: release, nrDllPath: nr });
+  assert.equal(inst.ok, true, inst.error);
+  assert.ok(fs.existsSync(path.join(fresh, 'winmm.dll')), 'installed as winmm.dll');
+  assert.ok(!fs.existsSync(path.join(fresh, 'dxgi.dll')));
+
+  const old = path.join(base, 'old');
+  const oldExe = fakeExe(old, 'MonsterHunterWorld.exe');
+  const inst2 = await invoke('game:install', { exePath: oldExe, releaseFolder: release, nrDllPath: nr, proxyName: 'dxgi.dll' });
+  assert.equal(inst2.ok, true, inst2.error);
+  assert.ok(fs.existsSync(path.join(old, 'dxgi.dll')), 'the old install, as dxgi.dll');
+  const sync = await invoke('game:sync-if-stale', { exePath: oldExe, releaseFolder: release, nrDllPath: nr });
+  assert.equal(sync.ok, true, sync.error);
+  assert.ok(fs.existsSync(path.join(old, 'winmm.dll')), 'moved to winmm.dll');
+  assert.ok(!fs.existsSync(path.join(old, 'dxgi.dll')), 'dxgi.dll gone');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(old, '.optiscaler-manager-install.json'), 'utf8')).proxy, 'winmm.dll');
+
+  // A dxgi.dll install of any other game stays exactly where it is.
+  const other = path.join(base, 'other');
+  const otherExe = fakeExe(other, 'SomeGame.exe');
+  await invoke('game:install', { exePath: otherExe, releaseFolder: release, nrDllPath: nr });
+  await invoke('game:sync-if-stale', { exePath: otherExe, releaseFolder: release, nrDllPath: nr });
+  assert.ok(fs.existsSync(path.join(other, 'dxgi.dll')));
+  assert.ok(!fs.existsSync(path.join(other, 'winmm.dll')));
+});
+
 test('a game installed before there was a choice is left alone (no marker, no key edits)', { skip: !onWindows }, async () => {
   const base = scratchDir('engine-legacy');
   const release = fakeReleaseFolder(base);
