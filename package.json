@@ -72,7 +72,8 @@
           ]
         }
       ],
-      "signAndEditExecutable": false
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": true
     },
     "portable": {
       "artifactName": "${productName}-Portable-${version}.${ext}"

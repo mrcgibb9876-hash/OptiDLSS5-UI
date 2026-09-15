@@ -80,6 +80,8 @@ function createWindow() {
     minHeight: 600,
     backgroundColor: '#14161a',
     autoHideMenuBar: true,
+    // The packaged exe carries build/icon.ico; this covers the window and taskbar when run from source.
+    icon: path.join(__dirname, 'renderer', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

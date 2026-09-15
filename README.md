@@ -1,3 +1,5 @@
+<img src="build/icon.png" alt="" width="96" align="right">
+
 # OptiDLSS5-UI
 
 [![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://buymeacoffee.com/ripplingsnake)

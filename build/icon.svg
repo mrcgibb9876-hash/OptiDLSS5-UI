@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="70%">
+      <stop offset="0" stop-color="#232833"/>
+      <stop offset="1" stop-color="#0e1013"/>
+    </radialGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b6f25a"/>
+      <stop offset="0.55" stop-color="#76b900"/>
+      <stop offset="1" stop-color="#3f6b00"/>
+    </linearGradient>
+    <linearGradient id="five" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#cfd6de"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="18" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+
+  <!-- faint pixel grid: the upscaled picture -->
+  <g opacity="0.07" stroke="#9ed94f" stroke-width="2">
+    <path d="M192 512h640M512 192v640M272 352h480M272 672h480M352 272v480M672 272v480"/>
+  </g>
+
+  <!-- aperture ring, broken into four arcs -->
+  <g fill="none" stroke="url(#ring)" stroke-width="54" stroke-linecap="round" filter="url(#glow)">
+    <path d="M512 176 A336 336 0 0 1 822 382"/>
+    <path d="M848 512 A336 336 0 0 1 642 822"/>
+    <path d="M512 848 A336 336 0 0 1 202 642"/>
+    <path d="M176 512 A336 336 0 0 1 382 202"/>
+  </g>
+
+  <!-- the 5 -->
+  <text x="512" y="648" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-weight="900" font-size="440" fill="url(#five)">5</text>
+
+  <!-- spark: the neural pass -->
+  <g transform="translate(700 318)" filter="url(#glow)">
+    <path d="M0 -58 C8 -18 18 -8 58 0 C18 8 8 18 0 58 C-8 18 -18 8 -58 0 C-18 -8 -8 -18 0 -58z" fill="#b6f25a"/>
+  </g>
+</svg>

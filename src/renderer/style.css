@@ -55,13 +55,10 @@ body {
 
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand-mark {
-  background: var(--accent);
-  color: var(--on-accent);
-  font-weight: 800;
-  font-size: 13px;
-  padding: 4px 7px;
-  border-radius: 6px;
-  letter-spacing: 0.5px;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: block;
 }
 .brand-name { font-weight: 600; font-size: 16px; }
 
