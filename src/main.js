@@ -2708,6 +2708,26 @@ ipcMain.handle('shell:openExternal', (_evt, url) => {
   if (typeof url === 'string' && (url.startsWith('https://github.com/mrcgibb9876-hash/') || url === DISCORD_INVITE || url === reengine.PD_PLUGIN_PAGE_URL || url === rtxmfg.PROJECT_PAGE)) shell.openExternal(url);
 });
 
+// Puts a saved support bundle on the clipboard as a file (the same thing Explorer's Copy does), so
+// Ctrl+V in GitHub's comment box attaches it. A browser link can carry the issue's text but never a
+// file; without the GitHub App sign-in this paste is the one step left. Chromium delivers a pasted
+// CF_HDROP file to the page as a File (checked 2026-09-15), which is what GitHub uploads. Only .zip
+// files this app wrote into its own bundle folders qualify. The path travels in the environment,
+// not in the command text.
+ipcMain.handle('report:copy-zip', async (_evt, zipPath) => {
+  try {
+    if (process.platform !== 'win32') return { ok: false, error: 'Windows only' };
+    if (typeof zipPath !== 'string' || !/\.zip$/i.test(zipPath) || !fs.existsSync(zipPath)) return { ok: false, error: 'no such zip' };
+    await promisify(execFile)('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-Command',
+      'Add-Type -AssemblyName System.Windows.Forms; $c = New-Object System.Collections.Specialized.StringCollection; '
+      + '[void]$c.Add($env:OPTIDLSS5_ZIP); [System.Windows.Forms.Clipboard]::SetFileDropList($c)'],
+    { windowsHide: true, env: { ...process.env, OPTIDLSS5_ZIP: path.resolve(zipPath) }, timeout: 15000 });
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
 ipcMain.handle('shell:openPath', (_evt, p) => {
   if (p && fs.existsSync(p)) shell.showItemInFolder(p);
 });

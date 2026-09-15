@@ -715,6 +715,7 @@ window.I18N.register("zh-CN", {
   "Switch to Luma": "切换到 Luma",
   "Send game failure": "发送游戏故障",
   "GitHub opened with the report filled in. Drag the zip from the folder that opened onto it, then press Submit.": "已打开填好报告的 GitHub 页面。把打开的文件夹中的 zip 拖进去，然后点击 Submit。",
+  "GitHub opened with the report filled in, and the log zip is copied. Click at the end of the report on GitHub, press Ctrl+V to attach the zip, then press Submit.": "GitHub 已打开并填好报告，日志 zip 已复制。在 GitHub 上点击报告末尾，按 Ctrl+V 附加 zip，然后点 Submit。",
   "Sign in once: on the GitHub page that opened, enter this code (it is already copied):": "只需登录一次：在打开的 GitHub 页面中输入此代码（已复制）：",
   "GitHub sign-in failed: {error}": "GitHub 登录失败：{error}",
   "Sending…": "正在发送…",

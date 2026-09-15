@@ -715,6 +715,7 @@ window.I18N.register("ru", {
   "Switch to Luma": "Переключить на Luma",
   "Send game failure": "Отправить сбой игры",
   "GitHub opened with the report filled in. Drag the zip from the folder that opened onto it, then press Submit.": "GitHub открыт с заполненным отчётом. Перетащите zip из открывшейся папки и нажмите Submit.",
+  "GitHub opened with the report filled in, and the log zip is copied. Click at the end of the report on GitHub, press Ctrl+V to attach the zip, then press Submit.": "GitHub открыт с заполненным отчётом, а zip с логами скопирован. Щёлкните в конце отчёта на GitHub, нажмите Ctrl+V, чтобы прикрепить zip, затем Submit.",
   "Sign in once: on the GitHub page that opened, enter this code (it is already copied):": "Войдите один раз: на открывшейся странице GitHub введите этот код (он уже скопирован):",
   "GitHub sign-in failed: {error}": "Не удалось войти в GitHub: {error}",
   "Sending…": "Отправка…",

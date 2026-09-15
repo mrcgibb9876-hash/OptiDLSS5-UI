@@ -1045,7 +1045,7 @@ async function buildGameReport(game, diag, { manual = false } = {}) {
     `**GPU:** ${gpuLabel()}`,
     `**App:** ${appVersion ? 'v' + appVersion : '?'}`,
     `**Engine:** ${settings.installedVersion || '?'}`,
-    ...(manual ? ['', '_Attach the support bundle zip (Game Help > Save bundle to share) to this issue._'] : []),
+    ...(manual ? ['', '**Logs:** press Ctrl+V on the next line to attach the zip (the app copied it). If nothing appears, drag it in from the folder that opened.', ''] : []),
   ].join('\n');
   return { title, body };
 }
@@ -1083,10 +1083,15 @@ $('#help-send').addEventListener('click', async () => {
       // Not set up in this build: save the bundle and open the prefilled issue, together.
       const saved = await window.api.supportBundle(game.exePath, game.detectedPath || null);
       if (!saved.ok || saved.cancelled) { if (!saved.ok) toast(t('Could not save the support bundle: {error}', { error: saved.error })); return; }
+      // The zip goes on the clipboard as a file: one Ctrl+V in GitHub's box attaches it. The folder still
+      // opens with it selected, for a browser that does not take a pasted file.
+      const copied = await window.api.copyZipToClipboard(saved.zipPath);
       window.api.openPath(saved.zipPath);
       const { title, body } = await buildGameReport(game, diag, { manual: true });
       window.api.openExternal(`https://github.com/mrcgibb9876-hash/OptiDLSS5-UI/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`);
-      setSendStatus(escapeHtml(t('GitHub opened with the report filled in. Drag the zip from the folder that opened onto it, then press Submit.')));
+      setSendStatus(escapeHtml(copied && copied.ok
+        ? t('GitHub opened with the report filled in, and the log zip is copied. Click at the end of the report on GitHub, press Ctrl+V to attach the zip, then press Submit.')
+        : t('GitHub opened with the report filled in. Drag the zip from the folder that opened onto it, then press Submit.')));
       return;
     }
     if (!status.signedIn) {

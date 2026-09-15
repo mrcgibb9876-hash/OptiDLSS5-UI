@@ -95,6 +95,7 @@ contextBridge.exposeInMainWorld('api', {
   gameHelpAi: (exePath, detected, fixesTried) => ipcRenderer.invoke('game:help-ai', { exePath, detected, fixesTried }),
   onGameHelpAiText: (cb) => ipcRenderer.on('game:help-ai-text', (_evt, payload) => cb(payload)),
   openPath: (p) => ipcRenderer.invoke('shell:openPath', p),
+  copyZipToClipboard: (zipPath) => ipcRenderer.invoke('report:copy-zip', zipPath),
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   pdPluginStatus: () => ipcRenderer.invoke('pdplugin:status'),
   pdPluginPick: () => ipcRenderer.invoke('pdplugin:pick'),

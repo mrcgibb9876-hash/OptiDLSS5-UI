@@ -715,6 +715,7 @@ window.I18N.register("es", {
   "Switch to Luma": "Cambiar a Luma",
   "Send game failure": "Enviar fallo del juego",
   "GitHub opened with the report filled in. Drag the zip from the folder that opened onto it, then press Submit.": "GitHub se abrió con el informe rellenado. Arrastra el zip desde la carpeta que se abrió y pulsa Submit.",
+  "GitHub opened with the report filled in, and the log zip is copied. Click at the end of the report on GitHub, press Ctrl+V to attach the zip, then press Submit.": "GitHub se abrió con el informe rellenado y el zip de registros está copiado. Haz clic al final del informe en GitHub, pulsa Ctrl+V para adjuntar el zip y luego Submit.",
   "Sign in once: on the GitHub page that opened, enter this code (it is already copied):": "Inicia sesión una vez: en la página de GitHub que se abrió, escribe este código (ya está copiado):",
   "GitHub sign-in failed: {error}": "Error al iniciar sesión en GitHub: {error}",
   "Sending…": "Enviando…",

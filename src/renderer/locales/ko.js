@@ -715,6 +715,7 @@ window.I18N.register("ko", {
   "Switch to Luma": "Luma로 전환",
   "Send game failure": "게임 오류 보내기",
   "GitHub opened with the report filled in. Drag the zip from the folder that opened onto it, then press Submit.": "보고서가 채워진 GitHub가 열렸습니다. 열린 폴더의 zip 파일을 끌어다 놓고 Submit을 누르세요.",
+  "GitHub opened with the report filled in, and the log zip is copied. Click at the end of the report on GitHub, press Ctrl+V to attach the zip, then press Submit.": "보고서가 채워진 GitHub가 열렸고 로그 zip이 복사되었습니다. GitHub에서 보고서 끝을 클릭하고 Ctrl+V로 zip을 첨부한 뒤 Submit을 누르세요.",
   "Sign in once: on the GitHub page that opened, enter this code (it is already copied):": "한 번만 로그인: 열린 GitHub 페이지에 이 코드를 입력하세요 (이미 복사됨):",
   "GitHub sign-in failed: {error}": "GitHub 로그인 실패: {error}",
   "Sending…": "보내는 중…",
