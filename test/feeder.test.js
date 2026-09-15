@@ -407,6 +407,60 @@ test('the Feeder\'s own log lines become the verdict: no motion, flat depth, and
   assert.equal(elsewhere.code, 'feed-agility-redist-elsewhere');
 });
 
+// Dolphin on DX12 (support bundle, 2026-09-15): DLSS created, the model crashed in the Feeder's first
+// evaluate, the Feeder stopped. It used to read as dlss-no-nr, "not a known case".
+test('a model crash in the Feeder\'s evaluate is named, and an emulator is pointed at Direct3D 11', async () => {
+  const dir = scratchDir('feed-model-crash');
+  write(dir, 'OptiScaler.log', [
+    '[02:10:02.680701] [I] LogLevel: 2',
+    '[02:10:14.029176] [I] NVSDK_NGX_D3D12_Init_Ext calling NVNGXProxy::D3D12_Init_Ext result: 1',
+    '[02:10:15.097170] [I] TryCreateOptiFeature Creating OptiScaler feature, HandleId: 1000000',
+    '[02:10:15.652671] [I] DlssNr_Dx12::Dispatch DLSS-NR: white point meter up, 64x64 tiles',
+  ].join('\n'));
+  write(dir, 'dlss5-feed.log', [
+    '02:10:09.431  NVIDIA Smooth Motion is active in this process (NvPresent64.dll). It presents more than once per game frame from its own thread',
+    '02:10:11.486  [feed] NGX init: transport same-device D3D12, device created with none -- this is the game\'s own device',
+    '02:10:15.759  [feed] evaluate raised 0xC0000005 (reading address FFFFFFFFFFFFFFFF) (caught; nothing submitted)',
+    '02:10:15.759  [feed] evaluate fault stack, by module (innermost first): D3D12Core.dll <- nvngx_dlssnr.dll <- nvngx.dll_dlssnr.dll <- dxgi.dll <- dlss5-feed.addon64 <- ReShade64.dll <- Dolphin.exe',
+    '02:10:15.759  stopped: the DLSS evaluate crashed (the DLSS 5 add-on may be incompatible with this game/resolution). The game renders normally. See dlss5-feed.log for the detail.',
+  ].join('\n'));
+  const run = await runlog.analyzeRun(dir);
+  assert.equal(run.verdict, 'nr-model-crash');
+  assert.match(run.detail, /nvngx_dlssnr\.dll/);
+  assert.equal(run.feedSmoothMotion, true);
+  assert.equal(run.feedSameDevice, true);
+
+  const route = { route: 'feeder', optiInstalled: true, feederDeployed: true };
+  const emu = diagnose({ detected: { bitness: 64, emulator: { name: 'Dolphin' } }, route, run });
+  assert.equal(emu.status, 'step');
+  assert.equal(emu.code, 'nr-model-crash-emulator');
+  assert.equal(emu.vars.name, 'Dolphin');
+  assert.equal(emu.vars.smoothMotion, 1);
+  assert.equal(diagnose({ detected: { bitness: 64 }, route, run }).code, 'nr-model-crash');
+});
+
+// Grid 2 (support bundle, 2026-09-15): 1,800 neural frames read as "10 passes", because the count was
+// of log lines. The heartbeat and the Feeder's frame milestones carry the real number.
+test('the run\'s frame count comes from the heartbeat, not from how many lines the log has', async () => {
+  const dir = scratchDir('feed-frame-count');
+  write(dir, 'OptiScaler.log', [
+    'Log.LogLevel: 2', 'NVSDK_NGX_D3D12_Init',
+    '[02:43:09.094957] [I] DlssNr_Dx12::Dispatch DLSS-NR running after SR: target 3840x1949',
+    '[02:43:09.106372] [I] DlssNr_Dx12::Dispatch DLSS-NR composition: paper white 1.00x',
+    '[02:43:25.592502] [I] DlssNr_Dx12::Dispatch DLSS-NR heartbeat: 600 frames run (0 model failures), 36 fps',
+    '[02:44:01.131607] [I] DlssNr_Dx12::Dispatch DLSS-NR running after SR: target 1176x664',
+    '[02:44:11.866974] [I] DlssNr_Dx12::Dispatch DLSS-NR heartbeat: 1800 frames run (0 model failures), 39 fps',
+  ].join('\n'));
+  write(dir, 'dlss5-feed.log', '02:43:08.654  [feed32] frame 1 delivered (3840x1949, reset=0)\n02:43:08.660  [feed32] frame 2 delivered\n02:44:11.865  [feed32] frame 1800 delivered (3840x1949, reset=0)\n');
+  const run = await runlog.analyzeRun(dir);
+  assert.equal(run.verdict, 'nr-ran');
+  assert.equal(run.nrFrames, 1800);
+  assert.equal(run.feedFrames, 1800);
+  const ok = diagnose({ detected: { bitness: 64 }, route: { route: 'feeder', optiInstalled: true, feederDeployed: true }, run });
+  assert.equal(ok.code, 'ok');
+  assert.equal(ok.vars.count, 1800);
+});
+
 test('switching provider takes the old one\'s files out, but never a bring-your-own install', async () => {
   const dir = scratchDir('feeder-switch');
   const cacheDir = path.join(dir, 'cache');

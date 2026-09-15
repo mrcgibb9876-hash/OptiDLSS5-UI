@@ -215,27 +215,25 @@ in a console you confirm yourself.
 fork's latest release into `engine/` before packaging; it lands in `resources/engine/`), extracts
 it on first launch, and keeps it current from GitHub on every launch and "Check for Updates". The
 same zip is also attached to this app's own GitHub releases (as `OptiScaler_DLSSNR-<version>.zip`)
-for anyone setting the release folder by hand. **The DLSS NR model file** (`nvngx_dlssnr.dll`,
+for reference. **The DLSS NR model file** (`nvngx_dlssnr.dll`,
 the one piece NVIDIA only ships inside driver packages) is fetched automatically too, from the
 same RHI manifest the Feeder already uses -- a fresh install needs no manual downloads at all.
 
-**A second engine build: OptiScaler-DLSSNR-PreSR-Multipass.** Settings > "OptiScaler build" (and
-per game, Edit > "OptiScaler build for this game") can switch from this project's own
-OptiScaler_DLSSNR to [wilsjo2's PreSR-Multipass fork](https://github.com/wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass).
-Both builds can run Neural Rendering *before* DLSS upscaling (`[DlssNr] RunBeforeSR`), so the
-model works on the DLSS input (1920x1080 in 4K Performance) rather than the full output frame -- a
-large speed-up at the same output resolution -- and both stack one to three passes (`Passes`).
-The fork keeps more games on that path: a colour image padded inside a larger texture (2558x1439
-in 2560x1440, or a max-size allocation under dynamic resolution) stays pre-upscale there, where
-OptiScaler_DLSSNR falls back to after upscaling. It also carries experimental extras
-(finished-picture NR, a pre-SR edit carried across Ray Reconstruction). It has no Alt+Home DLSS 5
-panel; its controls live in OptiScaler's own Insert menu. It is fetched from its own GitHub
-releases the first time a game needs it (sha256 checked against the release's own checksum
-file), kept in its own managed folder beside the default build, and updated on the same schedule.
-The Pre-SR block in Edit writes `RunBeforeSR` and `Passes` for either build, on Apply and on
-Install; after that the in-game menu owns them. Installing the fork turns `RunBeforeSR` on unless
-you chose otherwise. Switching an installed game between builds is a re-Install from the card;
-Remove clears either.
+**One engine build, nothing to set.** Up to v1.63 the app also offered wilsjo2's
+OptiScaler-DLSSNR-PreSR-Multipass fork and a hand-set release folder. Both are gone: every game runs
+this project's own OptiScaler_DLSSNR from the app's managed folder, and a game or setting that still
+named the fork or a custom folder moves back onto it by itself. Neural Rendering before DLSS upscaling
+(RunBeforeSR) and one to three passes (Passes) are in Edit's DLSS 5 settings and the Alt+Home panel.
+**Check for Updates** sits in the top bar beside Scan for Games: one press checks and installs a newer
+engine, NR model and Manager.
+
+**RTXMFG: Multi Frame Generation on RTX 40 / 30.** For games with their own DLSS Frame Generation,
+Edit > Frame Generation offers [dashdogy's RTXMFG](https://github.com/dashdogy/RTX40MFG-Unlock) on an
+RTX 40 card (RTX 30 experimental; RTX 50 has MFG already, so it stays hidden there). It is fetched from
+the project's latest release, checked against its SHA256SUMS.txt, and placed beside the exe under the
+first DLL name the folder does not already hold (ersion.dll, then winhttp.dll, dsound.dll, ...);
+an occupied name is never overwritten. In the game: Frame Generation on, Backspace for its menu. Works
+with or without OptiScaler; Remove takes it only while it is still the copy the app placed.
 
 ## What OptiScaler covers, and what it doesn't
 
@@ -453,7 +451,7 @@ releases and never mirrored here:
 | [iMMERSE](https://github.com/martymcmodding/iMMERSE) (Pascal Gilcher / MartysMods) | Optional motion-vector provider (Launchpad): detected and configured if you already have it, never fetched or shipped -- its licence forbids propagating any part of it | All rights reserved |
 | [ReshadeMotionEstimation](https://github.com/JakobPCoder/ReshadeMotionEstimation) (JakobPCoder) | Former default motion-vector provider, recognised now only so an old deploy can be cleaned up: DRME does not compile on ReShade 6.8 | CC BY-NC 4.0 |
 | [Luma-Framework](https://github.com/Filoppi/Luma-Framework) (Filoppi) | DLAA in place of TAA for STAR WARS Jedi: Fallen Order; fetched live after per-action consent | Custom MIT variant |
-| [OptiScaler-DLSSNR-PreSR-Multipass](https://github.com/wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass) (wilsjo2) | Optional engine build: Neural Rendering before DLSS upscaling, 1-3 passes; fetched live from its releases | GPL-3.0 |
+| [RTXMFG / RTX40MFG-Unlock](https://github.com/dashdogy/RTX40MFG-Unlock) (dashdogy) | Optional Multi Frame Generation on RTX 40 / 30 in games with DLSS Frame Generation; fetched from its releases and checksum-verified when you press Install | MIT |
 | [REFramework](https://github.com/praydog/REFramework) (praydog) | Required on RE Engine games | MIT |
 | [DXL](https://github.com/LCPD15/DXL) (LCPD15) | The design of the engine's Present route and depth tracker, which run DLSS 5 on Resident Evil 2/3/4/7/Village without a DLSS call; credited in the engine, nothing downloaded | AGPL-3.0 |
 | [Upscaler Base Plugin](https://www.nexusmods.com/site/mods/502) (PureDark) | Formerly the DLSS call on Resident Evil 2/3/4/7/Village; no longer placed since the Present route -- only recognised so a copy the app placed earlier can be taken out | PureDark's; not redistributed |

@@ -1,7 +1,7 @@
 'use strict';
-// A second engine build: wilsjo2's OptiScaler-DLSSNR-PreSR-Multipass fork beside this project's
-// own OptiScaler_DLSSNR. Same zip layout, different GitHub source, its own managed folder, and
-// two [DlssNr] keys (RunBeforeSR, Passes) that a per-game marker drives through autoConfigureGame.
+// The engine build (this project's own OptiScaler_DLSSNR) and the two [DlssNr] keys (RunBeforeSR,
+// Passes) a per-game marker drives through autoConfigureGame. The second build (wilsjo2's Pre-SR
+// fork) was dropped in v1.64.0; anything still naming it must land on ours.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -32,15 +32,15 @@ test('release assets: the zip is the zip, its .sha256 file is the checksum, neve
 });
 
 test('engine ids fall back to the default; only explicit choices become ini edits', () => {
-  assert.equal(engines.normalizeEngine('presr'), 'presr');
+  assert.equal(engines.normalizeEngine('presr'), 'dlssnr', 'the dropped Pre-SR build lands on ours');
   assert.equal(engines.normalizeEngine('nonsense'), 'dlssnr');
   assert.equal(engines.normalizeEngine(undefined), 'dlssnr');
-  assert.match(engines.releasesApi('presr'), /wilsjo2\/OptiScaler-DLSSNR-PreSR-Multipass\/releases\/latest$/);
+  assert.deepEqual(Object.keys(engines.ENGINES), ['dlssnr']);
+  assert.match(engines.releasesApi('presr'), /mrcgibb9876-hash\/OptiScaler_DLSSNR\/releases\/latest$/);
   assert.match(engines.releasesApi('dlssnr'), /mrcgibb9876-hash\/OptiScaler_DLSSNR\/releases\/latest$/);
   // Only explicit choices produce ini edits; a bare marker asks for nothing (our build's panel owns them).
   assert.deepEqual(engines.iniEditsFor({ engine: 'dlssnr' }), []);
-  assert.deepEqual(engines.iniEditsFor({ engine: 'presr' }), []);
-  assert.deepEqual(engines.iniEditsFor({ engine: 'presr', runBeforeSR: false, passes: 7 }), [
+  assert.deepEqual(engines.iniEditsFor({ engine: 'dlssnr', runBeforeSR: false, passes: 7 }), [
     { section: 'DlssNr', key: 'RunBeforeSR', value: 'false' },
     { section: 'DlssNr', key: 'Passes', value: '1' },
   ]);
@@ -48,13 +48,12 @@ test('engine ids fall back to the default; only explicit choices become ini edit
     { section: 'DlssNr', key: 'RunBeforeSR', value: 'true' },
     { section: 'DlssNr', key: 'Passes', value: '3' },
   ]);
-  // Install: the Pre-SR fork turns RunBeforeSR on unless already chosen; ours adds nothing.
-  assert.deepEqual(engines.markerForInstall(null, 'presr'), { engine: 'presr', pendingApply: true, runBeforeSR: true });
-  assert.deepEqual(engines.markerForInstall({ runBeforeSR: false }, 'presr'), { engine: 'presr', pendingApply: true, runBeforeSR: false });
+  // Install adds nothing of its own; an old Pre-SR marker keeps the user's choice but names our build.
   assert.deepEqual(engines.markerForInstall(null, 'dlssnr'), { engine: 'dlssnr', pendingApply: true });
+  assert.deepEqual(engines.markerForInstall({ engine: 'presr', runBeforeSR: true }, 'presr'), { engine: 'dlssnr', pendingApply: true, runBeforeSR: true });
 });
 
-test('installing with the Pre-SR build turns RunBeforeSR on; Edit choices apply and survive a switch of build', { skip: !onWindows }, async () => {
+test('a game on the old Pre-SR build re-installs onto ours; Edit choices apply and survive a re-install', { skip: !onWindows }, async () => {
   const base = scratchDir('engine-install');
   const release = fakeReleaseFolder(base);
   const nr = fakeNrModel(base);
@@ -62,15 +61,16 @@ test('installing with the Pre-SR build turns RunBeforeSR on; Edit choices apply 
   const exe = fakeExe(game, 'FakeGame.exe');
   const { invoke } = loadMain();
 
+  write(game, engines.ENGINE_MARKER, JSON.stringify({ engine: 'presr', runBeforeSR: true }));
   const inst = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: nr, proxyName: 'dxgi.dll', engine: 'presr' });
   assert.equal(inst.ok, true, inst.error);
   const ini = path.join(game, 'OptiScaler.ini');
-  assert.equal(iniValue(ini, 'RunBeforeSR'), 'true');
+  assert.equal(iniValue(ini, 'RunBeforeSR'), 'true', 'the choice the old marker carried is kept');
   assert.equal(iniValue(ini, 'Passes'), null, 'nobody chose a pass count, so none is written');
-  assert.equal(JSON.parse(fs.readFileSync(path.join(game, engines.ENGINE_MARKER), 'utf8')).engine, 'presr');
-  assert.equal((await invoke('game:status', exe)).engine, 'presr', 'the card can name the build');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(game, engines.ENGINE_MARKER), 'utf8')).engine, 'dlssnr');
+  assert.equal((await invoke('game:status', exe)).engine, 'dlssnr', 'the card names our build');
 
-  const set = await invoke('engine:setForGame', { exePath: exe, engine: 'presr', runBeforeSR: false, passes: 3 });
+  const set = await invoke('engine:setForGame', { exePath: exe, engine: 'dlssnr', runBeforeSR: false, passes: 3 });
   assert.equal(set.ok, true, set.error);
   assert.equal(set.deferred, false);
   assert.equal(iniValue(ini, 'RunBeforeSR'), 'false');
@@ -79,8 +79,7 @@ test('installing with the Pre-SR build turns RunBeforeSR on; Edit choices apply 
   assert.equal(state.marker.passes, 3);
   assert.equal(state.ini.runBeforeSR, 'false');
 
-  // Re-installing (what the renderer does to switch builds) copies the release ini wholesale; the
-  // explicit choices ride along, because both builds read these keys.
+  // Re-installing copies the release ini wholesale; the explicit choices ride along.
   const back = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: nr, proxyName: 'dxgi.dll', engine: 'dlssnr' });
   assert.equal(back.ok, true, back.error);
   assert.equal(iniValue(ini, 'RunBeforeSR'), 'false');
@@ -95,32 +94,30 @@ test('installing with the Pre-SR build turns RunBeforeSR on; Edit choices apply 
 // The v1.54.0 draft reset these keys to auto on every sync, which silently undid the Alt+Home
 // panel's "Before Super Resolution" toggle and passes slider. The marker applies once, then the
 // in-game menu owns the keys.
-test('a value set in the game after install survives every later sync, on either build', { skip: !onWindows }, async () => {
+test('a value set in the game after install survives every later sync', { skip: !onWindows }, async () => {
   const base = scratchDir('engine-panel');
   const release = fakeReleaseFolder(base);
   const nr = fakeNrModel(base);
   const { invoke } = loadMain();
-  for (const id of ['dlssnr', 'presr']) {
-    const game = path.join(base, 'game-' + id);
-    const exe = fakeExe(game, 'FakeGame.exe');
-    const inst = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: nr, proxyName: 'dxgi.dll', engine: id });
-    assert.equal(inst.ok, true, inst.error);
-    const ini = path.join(game, 'OptiScaler.ini');
-    assert.equal(iniValue(ini, 'RunBeforeSR'), id === 'presr' ? 'true' : null, id + ': install default');
-    assert.equal(JSON.parse(fs.readFileSync(path.join(game, engines.ENGINE_MARKER), 'utf8')).pendingApply, false, id + ': applied once');
+  const game = path.join(base, 'game');
+  const exe = fakeExe(game, 'FakeGame.exe');
+  const inst = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: nr, proxyName: 'dxgi.dll', engine: 'dlssnr' });
+  assert.equal(inst.ok, true, inst.error);
+  const ini = path.join(game, 'OptiScaler.ini');
+  assert.equal(iniValue(ini, 'RunBeforeSR'), null, 'install default');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(game, engines.ENGINE_MARKER), 'utf8')).pendingApply, false, 'applied once');
 
-    // What the in-game menu does: RunBeforeSR on (ours) / off, saved back as auto (the fork), and 2 passes.
-    let text = fs.readFileSync(ini, 'utf8').replace(/^RunBeforeSR\s*=.*$/m, '').replace(/^Passes\s*=.*$/m, '');
-    text = text.replace('[DlssNr]', '[DlssNr]\nRunBeforeSR=' + (id === 'presr' ? 'auto' : 'true') + '\nPasses=2');
-    fs.writeFileSync(ini, text);
+  // What the in-game panel does: RunBeforeSR on and 2 passes.
+  let text = fs.readFileSync(ini, 'utf8').replace(/^RunBeforeSR\s*=.*$/m, '').replace(/^Passes\s*=.*$/m, '');
+  text = text.replace('[DlssNr]', '[DlssNr]\nRunBeforeSR=true\nPasses=2');
+  fs.writeFileSync(ini, text);
 
-    for (let i = 0; i < 2; i++) {
-      const sync = await invoke('game:sync-if-stale', { exePath: exe, releaseFolder: release, nrDllPath: nr });
-      assert.equal(sync.ok, true, sync.error);
-    }
-    assert.equal(iniValue(ini, 'RunBeforeSR'), id === 'presr' ? 'auto' : 'true', id + ': in-game RunBeforeSR kept');
-    assert.equal(iniValue(ini, 'Passes'), '2', id + ': in-game Passes kept');
+  for (let i = 0; i < 2; i++) {
+    const sync = await invoke('game:sync-if-stale', { exePath: exe, releaseFolder: release, nrDllPath: nr });
+    assert.equal(sync.ok, true, sync.error);
   }
+  assert.equal(iniValue(ini, 'RunBeforeSR'), 'true', 'in-game RunBeforeSR kept');
+  assert.equal(iniValue(ini, 'Passes'), '2', 'in-game Passes kept');
 });
 
 // Resident Evil Requiem (2026-09-14): working, and its owner wanted it kept on the engine it has when a
@@ -243,7 +240,7 @@ test('update:check and update:install per engine, with the sha256 asset checked'
   const base = scratchDir('engine-update');
   const { invoke, userData } = loadMain();
   const releaseDir = fakeReleaseFolder(base);
-  const zipPath = path.join(base, 'presr.zip');
+  const zipPath = path.join(base, 'engine.zip');
   execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
     'Compress-Archive -Path $env:SRC -DestinationPath $env:DEST -Force'],
     { env: { ...process.env, SRC: path.join(releaseDir, '*'), DEST: zipPath } });
@@ -266,26 +263,25 @@ test('update:check and update:install per engine, with the sha256 asset checked'
     throw new Error('unexpected fetch ' + url);
   };
   try {
-    const check = await invoke('update:check', { engine: 'presr' });
+    const check = await invoke('update:check', {});
     assert.equal(check.ok, true, check.error);
-    assert.equal(check.engine, 'presr');
-    assert.match(seen[0], /wilsjo2\/OptiScaler-DLSSNR-PreSR-Multipass/);
+    assert.equal(check.engine, 'dlssnr');
+    assert.match(seen[0], /mrcgibb9876-hash\/OptiScaler_DLSSNR/);
     assert.equal(check.downloadUrl, 'https://dl/zip');
     assert.equal(check.sha256Url, 'https://dl/zip.sha256');
 
     shaText = 'deadbeef'.repeat(8) + ' *OptiScaler-DLSSNR-v0.7.7.zip';
-    const bad = await invoke('update:install', { downloadUrl: check.downloadUrl, tag: check.tag, engine: 'presr', sha256Url: check.sha256Url });
+    const bad = await invoke('update:install', { downloadUrl: check.downloadUrl, tag: check.tag, sha256Url: check.sha256Url });
     assert.equal(bad.ok, false);
     assert.match(bad.error, /sha256/);
-    assert.ok(!fs.existsSync(path.join(userData, 'OptiScalerRelease-presr')), 'nothing extracted after a checksum failure');
+    assert.ok(!fs.existsSync(path.join(userData, 'OptiScalerRelease')), 'nothing extracted after a checksum failure');
 
     shaText = `${goodSha} *OptiScaler-DLSSNR-v0.7.7.zip`;
-    const good = await invoke('update:install', { downloadUrl: check.downloadUrl, tag: check.tag, engine: 'presr', sha256Url: check.sha256Url });
+    const good = await invoke('update:install', { downloadUrl: check.downloadUrl, tag: check.tag, sha256Url: check.sha256Url });
     assert.equal(good.ok, true, good.error);
-    assert.equal(good.engine, 'presr');
-    assert.equal(path.basename(good.folder), 'OptiScalerRelease-presr', 'its own managed folder, not the default build\'s');
+    assert.equal(good.engine, 'dlssnr');
+    assert.equal(path.basename(good.folder), 'OptiScalerRelease', 'the managed folder');
     assert.ok(fs.existsSync(path.join(good.folder, 'setup_windows.bat')));
-    assert.ok(!fs.existsSync(path.join(userData, 'OptiScalerRelease')), 'the default build\'s folder was not touched');
   } finally {
     global.fetch = realFetch;
   }

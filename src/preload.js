@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('api', {
   frameGenRestore: (exePath) => ipcRenderer.invoke('framegen:restore', exePath),
   frameGenMultiplier: (exePath) => ipcRenderer.invoke('framegen:multiplier', exePath),
   frameGenSetMultiplier: (payload) => ipcRenderer.invoke('framegen:setMultiplier', payload),
+  rtxmfgState: (exePath) => ipcRenderer.invoke('rtxmfg:state', exePath),
+  rtxmfgInstall: (payload) => ipcRenderer.invoke('rtxmfg:install', payload),
+  rtxmfgRemove: (exePath) => ipcRenderer.invoke('rtxmfg:remove', exePath),
 
   injectorReadiness: (releaseFolder) => ipcRenderer.invoke('injector:readiness', { releaseFolder }),
   injectorSteamOption: (releaseFolder) => ipcRenderer.invoke('injector:steamOption', { releaseFolder }),

@@ -7,6 +7,8 @@
 //   shutdown-fault     NVIDIA's own Shutdown1 faulted while the Feeder's private session was
 //                      live (same folders, on the way down)
 //   ue-crash           Unreal's crash reporter wrote a report within minutes of the run
+//   nr-model-crash     the neural model crashed inside the Feeder's evaluate, which then stopped
+//                      (Dolphin on DX12, same device; Armored Core VI before it)
 //   feed-stopped       the Feeder gave up ("The feed stops here") -- its own diagnosis follows
 //   nr-ran             the Neural Rendering pass dispatched; count and fps if the Feeder timed it
 //   dlss-no-nr         a DLSS feature was created but NR never dispatched (a D3D11 feature on
@@ -107,8 +109,8 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     let feedStat;
     try { feedStat = fs.statSync(feedPath); } catch { return { ran: false, verdict: 'no-log' }; }
     return {
-      ran: true, at: feedStat.mtime.toISOString(), runtimeApi: null, nrDispatch: 0, nrComposition: 0, dlssCreated: 0,
-      fps: null, feedFrames: 0, cleanExit: false, logLevel: null, crash: null, dlssRuntimeMissing: false,
+      ran: true, at: feedStat.mtime.toISOString(), runtimeApi: null, nrDispatch: 0, nrFrames: 0, nrComposition: 0, dlssCreated: 0,
+      fps: null, feedFrames: 0, feedEvaluateCrash: false, feedSameDevice: false, feedSmoothMotion: false, cleanExit: false, logLevel: null, crash: null, dlssRuntimeMissing: false,
       srBackendFallback: null, srCreateResult: null, upscaleSkipped: 0, feedInvalidRedist: false, feedMvProblem: null,
       feedNoMotion: false, feedDepthFlat: false, feedDepthFlatMoving: false, wrapperCrash,
       verdict: 'wrapper-crash', detail: wrapperCrash,
@@ -162,7 +164,12 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   // log at LogLevel 0 or 1 -- absence here is not evidence of absence.
   const upscaleSkipped = count(opti, /Skipping upscaling because can't restore root signature/g);
 
-  const feedFrames = count(feed, /frame \d+ delivered/g);
+  // How far the run got. Both logs print a line per build and a milestone every 600 frames, so
+  // counting lines measured log volume, not work: a Grid 2 run with 1,800 neural frames read as
+  // "10 passes" (2026-09-15). The highest milestone is the real figure.
+  const maxNumber = (text, re) => [...text.matchAll(re)].reduce((m, x) => Math.max(m, Number(x[1]) || 0), 0);
+  const nrFrames = maxNumber(opti, /DLSS-NR heartbeat: (\d+) frames run/g);
+  const feedFrames = maxNumber(feed, /frame (\d+) delivered/g);
   const feedCreateFault = /CreateFeature raised 0xC0000005/.test(feed);
   const feedTwoCopies = /two copies of the DLSS NGX module are loaded/.test(feed);
   const feedStopped = /The feed stops here/.test(feed);
@@ -196,6 +203,21 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   const feedNoMotion = /DLSS is getting \(almost\) no motion vectors/.test(feed);
   const feedDepthFlatMoving = /depth is FLAT while the scene moves/.test(feed);
   const feedDepthFlat = feedDepthFlatMoving || /sampled depth is flat/.test(feed);
+  // The neural model crashed inside the Feeder's evaluate and the Feeder stopped feeding:
+  //
+  //   [feed] evaluate raised 0xC0000005 (reading address FFFFFFFFFFFFFFFF) (caught; nothing submitted)
+  //   [feed] evaluate fault stack, by module (innermost first): D3D12Core.dll <- nvngx_dlssnr.dll <- ...
+  //   stopped: the DLSS evaluate crashed (...)
+  //
+  // OptiScaler.log stops at "white point meter up" with DLSS created and no neural pass, which read as
+  // the unexplained dlss-no-nr (Dolphin, DX12, RTX 5070 Ti, driver 616.64, 2026-09-15). The same
+  // signature on Armored Core VI was the driver refusing to launch the model's CUDA kernel
+  // (NvAPI_Status=-1) on the game's own D3D12 device.
+  const feedEvaluateCrash = /\[feed\] evaluate raised 0x[0-9A-F]{8}|stopped: the DLSS evaluate crashed/i.test(feed);
+  const feedFaultStack = (/evaluate fault stack, by module \(innermost first\): ([^\r\n]+)/.exec(feed) || [])[1] || null;
+  const feedSameDevice = /transport same-device D3D12/.test(feed);
+  // NVIDIA Smooth Motion in the game process: the Feeder warns about it itself.
+  const feedSmoothMotion = /NVIDIA Smooth Motion is active in this process/.test(feed);
 
   const crash = unrealCrashNear(dir, stat.mtimeMs);
 
@@ -212,6 +234,8 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   else if (feedInvalidRedist) verdict = 'feed-agility-redist';
   else if (feedMvProblem || feedNoMotion) { verdict = 'feed-no-motion'; detail = feedMvProblem; }
   else if (feedDepthFlatMoving) verdict = 'feed-depth-flat';
+  // Before feed-stopped: the Feeder gave up because the model crashed, and saying which is the point.
+  else if (feedEvaluateCrash) { verdict = 'nr-model-crash'; detail = feedFaultStack; }
   else if (feedStopped) verdict = 'feed-stopped';
   // Both of these outrank nr-ran deliberately. The neural pass dispatching says the plumbing is
   // intact; it does not say the frame reached the screen, or that DLSS did the upscaling. A run
@@ -229,10 +253,14 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     at: stat.mtime.toISOString(),
     runtimeApi: runtime ? runtime.api : null,
     nrDispatch,
+    nrFrames,
     nrComposition,
     dlssCreated,
     fps,
     feedFrames,
+    feedEvaluateCrash,
+    feedSameDevice,
+    feedSmoothMotion,
     cleanExit,
     logLevel: logLevel ? Number(logLevel) : null,
     crash,

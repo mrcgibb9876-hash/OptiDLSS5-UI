@@ -21,6 +21,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { findUnrealPluginFile } = require('./framegen');
 const emulators = require('./emulators');
+const rtxmfg = require('./rtxmfg');
 
 // 10: optiScalerProxy.matchesOurBuild reads the install journal instead of measuring an
 // OptiScaler.dll that a finished install has already renamed away -- v1.57.5 stored false for
@@ -429,7 +430,11 @@ async function inspectHookDlls(dir) {
   } catch {}
   let ourSize = 0;
   try { ourSize = fs.statSync(path.join(dir, 'OptiScaler.dll')).size; } catch {}
+  // RTXMFG, placed by this app under a proxy name, carries the string "ReShade"; it is not a hook
+  // anybody else put here (rtxmfg.js).
+  const rtxmfgFile = (rtxmfg.ourFile(dir) || '').toLowerCase();
   for (const name of HOOK_DLLS) {
+    if (name.toLowerCase() === rtxmfgFile) continue;
     const file = path.join(dir, name);
     if (!fs.existsSync(file)) continue;
     const hits = await scanFile(file, HOOK_NEEDLES, { maxBytes: SIBLING_SCAN_MAX_BYTES });

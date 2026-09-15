@@ -1,18 +1,10 @@
-// The OptiScaler engine builds this app can install. There used to be exactly one: this
-// project's own OptiScaler_DLSSNR fork (the DLSS 5 developer-controls panel on Alt+Home). A user
-// asked for wilsjo2's OptiScaler-DLSSNR-PreSR-Multipass fork as an option.
+// The OptiScaler engine build this app installs: this project's own OptiScaler_DLSSNR fork (the
+// DLSS 5 developer-controls panel on Alt+Home). It runs Neural Rendering before or after DLSS
+// upscaling ([DlssNr] RunBeforeSR) for 1-3 passes ([DlssNr] Passes), both editable in Edit Game.
 //
-// Both builds can run Neural Rendering BEFORE DLSS upscaling ([DlssNr] RunBeforeSR, where the
-// model works on the DLSS input, e.g. 1920x1080 in 4K Performance, instead of the full output
-// frame) and both run 1-3 passes ([DlssNr] Passes): our fork ported the first version of that
-// work on 2026-09-08. What the Pre-SR fork has on top, as of its v0.7.7: padded colour inputs
-// (2558x1439 inside a 2560x1440 texture, max-size allocations under dynamic resolution) stay on
-// the pre-SR path, where ours falls back to after-SR and so loses the speed-up; an experimental
-// carry of the pre-SR edit across Ray Reconstruction; finished-picture NR. It has no Alt+Home panel.
-//
-// Both zips share the layout game:install already understands (setup_windows.bat, OptiScaler.dll,
-// OptiScaler.ini with a [DlssNr] section, nvngx.dll_dlssnr.dll), so the install path is the same;
-// what differs is where the release comes from and which managed folder it lives in.
+// v1.54.0-1.63.x also offered wilsjo2's OptiScaler-DLSSNR-PreSR-Multipass as a second build. It was
+// dropped in v1.64.0 to keep the app simple: a marker or setting that still names it ('presr')
+// normalises to this build, so the next sync moves those games back onto ours.
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
@@ -25,20 +17,9 @@ const ENGINES = {
     label: 'OptiScaler_DLSSNR',
     repo: 'mrcgibb9876-hash/OptiScaler_DLSSNR',
     folderName: 'OptiScalerRelease',
-    // Ships inside this app's installer (release.yml bundles it); the other engine is fetched.
+    // Ships inside this app's installer (release.yml bundles it), then kept current from GitHub.
     bundled: true,
     panel: true,
-    preSr: false,
-  },
-  presr: {
-    id: 'presr',
-    label: 'OptiScaler-DLSSNR-PreSR-Multipass',
-    repo: 'wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass',
-    folderName: 'OptiScalerRelease-presr',
-    bundled: false,
-    // No Alt+Home developer panel in this build: NR is toggled from OptiScaler's own Insert menu.
-    panel: false,
-    preSr: true,
   },
 };
 
@@ -94,10 +75,8 @@ function clampPasses(value) {
 }
 
 // The [DlssNr] values a marker asks for, or [] when it asks for nothing. Only explicit choices
-// count: runBeforeSR/passes the user set in Edit Game, or the Pre-SR build's install default
-// (RunBeforeSR on, since that fork ships it off and choosing it is choosing the speed-up).
-// A marker naming our own build with no explicit values asks for nothing -- its Alt+Home panel
-// owns both keys, and an earlier version of this reset them to auto on every sync.
+// count. A marker with no explicit values asks for nothing -- the Alt+Home panel owns both keys,
+// and an earlier version of this reset them to auto on every sync.
 function iniEditsFor(marker) {
   if (!marker) return [];
   const edits = [];
@@ -106,15 +85,11 @@ function iniEditsFor(marker) {
   return edits;
 }
 
-// What Install records for a build: the Pre-SR fork gets RunBeforeSR on unless the user already
-// chose; ours keeps whatever the user chose (nothing, by default). pendingApply makes the next
-// autoConfigureGame write the values once -- Install copies the release ini over the game's, so
-// they have to go back in -- and then the in-game menu owns them again.
+// What Install records: the build, plus whatever the user already chose. pendingApply makes the
+// next autoConfigureGame write the values once -- Install copies the release ini over the game's,
+// so they have to go back in -- and then the in-game menu owns them again.
 function markerForInstall(prev, id) {
-  const engineId = normalizeEngine(id);
-  const next = { ...(prev || {}), engine: engineId, pendingApply: true };
-  if (engine(engineId).preSr && typeof next.runBeforeSR !== 'boolean') next.runBeforeSR = true;
-  return next;
+  return { ...(prev || {}), engine: normalizeEngine(id), pendingApply: true };
 }
 
 module.exports = {

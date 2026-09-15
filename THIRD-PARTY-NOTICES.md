@@ -42,7 +42,7 @@ the attribution in `Licenses/DXL_ATTRIBUTION.txt`.
 Each is downloaded from its own official source when a game needs it, under its own terms, as
 listed in the README's credits table: RHI's manifest and packages (Streamline, DLSS, the DLSS NR
 model), REFramework (MIT), the DLSS5 Feeder (MIT), ReShade (BSD 3-Clause), motion-vector shaders,
-Luma-Framework, wilsjo2's OptiScaler-DLSSNR-PreSR-Multipass engine (GPL-3.0), and dgVoodoo2 (Dege's
+Luma-Framework, dashdogy's RTXMFG (MIT, only when Install is pressed for a game), and dgVoodoo2 (Dege's
 freeware, from its official GitHub release, only after the user agrees). PureDark's
 Upscaler Base Plugin is never downloaded or shipped by the app, and since the engine's Present route
 it is no longer placed into games either.

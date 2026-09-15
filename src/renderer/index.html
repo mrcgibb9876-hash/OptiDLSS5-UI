@@ -13,6 +13,7 @@
     </div>
     <div class="topbar-actions">
       <button id="btn-settings" class="btn btn-ghost" data-i18n>Settings</button>
+      <button id="btn-check-updates" class="btn btn-ghost" data-i18n>Check for Updates</button>
       <button id="btn-scan-games" class="btn btn-ghost" data-i18n>Scan for Games</button>
       <button id="btn-add-game" class="btn btn-primary" data-i18n>+ Add Game</button>
     </div>
@@ -73,33 +74,6 @@
       <div id="game-route-status" class="status-line hidden"></div>
       <div id="game-engine-profile-status" class="status-line hidden"></div>
 
-      <div id="game-engine-section" class="hidden">
-        <label class="field-label" data-i18n>OptiScaler build for this game</label>
-        <p class="field-hint" data-i18n>Two builds of the DLSS Neural Rendering engine are available, and both can run Neural Rendering before DLSS upscaling. OptiScaler_DLSSNR is this project's own, with the Alt+Home DLSS 5 panel. The PreSR-Multipass fork (wilsjo2) keeps more games on that faster path -- games whose colour image is padded inside a larger texture, where OptiScaler_DLSSNR falls back to after upscaling -- and adds experimental options; it has no Alt+Home panel (use OptiScaler's Insert menu). Changing this on an installed game takes effect when you press Install on its card.</p>
-        <div class="field-row">
-          <select id="game-engine-select"></select>
-        </div>
-        <span id="game-engine-status" class="status-line"></span>
-
-        <div id="game-presr-block" class="field-subblock hidden">
-          <label class="field-label" data-i18n>Pre-SR Neural Rendering</label>
-          <p class="field-hint" data-i18n>Run NR before DLSS upscaling: the model works on the DLSS input (1920x1080 in 4K Performance) instead of the full output frame, which is where the speed-up comes from. Games using Ray Reconstruction still run it after upscaling. Passes run the model more than once with separate settings each; every extra pass costs more. Written to OptiScaler.ini on Apply and on Install; after that the in-game menu can change it too.</p>
-          <label class="field-label">
-            <input id="game-presr-before" type="checkbox" checked />
-            <span data-i18n>Run NR before DLSS upscaling (faster)</span>
-          </label>
-          <div class="field-row">
-            <select id="game-presr-passes">
-              <option value="1" data-i18n>1 pass</option>
-              <option value="2" data-i18n>2 passes</option>
-              <option value="3" data-i18n>3 passes</option>
-            </select>
-            <button id="btn-presr-apply" class="btn btn-ghost" data-i18n>Apply</button>
-          </div>
-          <span id="game-presr-status" class="status-line"></span>
-        </div>
-      </div>
-
       <div id="game-api-section" class="hidden">
         <label class="field-label" data-i18n>Graphics API this game runs with</label>
         <p class="field-hint" data-i18n>Some games ship more than one renderer -- Where Winds Meet links DX11 in its exe and carries a DX12 path beside it -- and detection can only name one. The upscaler key, the DLSS5 Feeder, OptiScaler's own Frame Generation and DLSS NR on AMD all follow this, so pick what the game's own video settings actually use. Applied to OptiScaler.ini straight away if it is installed.</p>
@@ -135,6 +109,17 @@
             <button id="btn-framegen-multiplier-apply" class="btn btn-ghost" data-i18n>Apply</button>
           </div>
           <span id="game-framegen-multiplier-status" class="status-line"></span>
+        </div>
+
+        <div id="game-rtxmfg-block" class="field-subblock hidden">
+          <label class="field-label" data-i18n>Multi Frame Generation on RTX 40 / 30 (RTXMFG)</label>
+          <p class="field-hint"><span data-i18n>RTXMFG by dashdogy unlocks 3x, 4x (up to 6x) and Dynamic Frame Generation on RTX 40 cards, and experimentally on RTX 30, in games that already have DLSS Frame Generation. It is a separate, experimental mod: fetched from its GitHub release and checked against its published checksums, then placed beside the game exe under a DLL name the game loads. It works with or without OptiScaler. In the game, turn Frame Generation on and press Backspace for its menu. Artifacts, freezes or black screens are possible -- Remove takes it out again.</span> <a id="rtxmfg-project-link" href="#" data-i18n>Project page</a></p>
+          <div class="field-row">
+            <select id="game-rtxmfg-name"></select>
+            <button id="btn-rtxmfg-install" class="btn btn-ghost" data-i18n>Install</button>
+            <button id="btn-rtxmfg-remove" class="btn btn-ghost hidden" data-i18n>Remove</button>
+          </div>
+          <span id="game-rtxmfg-status" class="status-line"></span>
         </div>
       </div>
 
@@ -379,32 +364,6 @@
           <option value="claude-opus-5">Claude Opus 5</option>
         </select>
       </div>
-
-      <label class="field-label" data-i18n>OptiScaler build (default for new installs)</label>
-      <p class="field-hint" data-i18n>Both builds can run Neural Rendering before DLSS upscaling. OptiScaler_DLSSNR is this project's own fork, with the Alt+Home DLSS 5 panel. OptiScaler-DLSSNR-PreSR-Multipass (wilsjo2) keeps games with a padded colour image on that faster path too, and adds experimental options, but has no Alt+Home panel. Fetched from its GitHub releases when first chosen and kept current the same way. Any game can override this in Edit.</p>
-      <div class="field-row">
-        <select id="settings-engine">
-          <option value="dlssnr">OptiScaler_DLSSNR (Alt+Home panel)</option>
-          <option value="presr">OptiScaler-DLSSNR-PreSR-Multipass (wider Pre-SR coverage)</option>
-        </select>
-      </div>
-      <div id="settings-engine-status" class="status-line"></div>
-
-      <label class="field-label" data-i18n>OptiScaler_DLSSNR release folder</label>
-      <p class="field-hint" data-i18n>Set up automatically: the engine ships inside this app's installer and is extracted on first launch, then kept current from GitHub. Only change this to use your own build (the folder containing setup_windows.bat).</p>
-      <div class="field-row">
-        <input id="settings-release-folder" type="text" data-i18n-placeholder placeholder="Not set — browse or paste a path" />
-        <button id="btn-browse-release" class="btn btn-ghost" data-i18n>Browse</button>
-      </div>
-      <div id="release-status" class="status-line"></div>
-
-      <div class="field-row" style="margin-top: 12px;">
-        <button id="btn-check-updates" class="btn btn-ghost" data-i18n>Check for Updates</button>
-        <span id="update-status" class="status-line" style="align-self: center;"></span>
-      </div>
-      <button id="btn-install-update" class="btn btn-primary btn-small hidden" style="margin-top: 8px;" data-i18n>Update Now</button>
-      <div id="manager-update-status" class="status-line" style="margin-top: 4px;"></div>
-      <div id="manager-update-mismatch" class="status-line status-bad hidden" style="margin-top: 4px;"></div>
 
       <label class="field-label" style="margin-top: 12px;" data-i18n>Clean a game folder</label>
       <p class="field-hint" data-i18n>For a game that is no longer on the grid: pick its exe folder and everything this app ever put there is removed, with the game's own files left alone. Asks before deleting anything.</p>

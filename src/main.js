@@ -30,6 +30,7 @@ const gamehelp = require('./gamehelp');
 const aihelp = require('./aihelp');
 const engines = require('./engines');
 const pdplugin = require('./pdplugin');
+const rtxmfg = require('./rtxmfg');
 const legacy = require('./legacy');
 let electronAutoUpdater = null;
 try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
@@ -1179,8 +1180,8 @@ function applyFrameGenMarker(dir) {
 }
 
 // The engine choice per game (engines.js). RunBeforeSR / Passes are written once when the marker
-// is pending (just installed, or just changed in Edit Game) and never again after that: both
-// builds' in-game menus save those keys too, and OptiScaler writes a default-valued key back as
+// is pending (just installed, or just changed in Edit Game) and never again after that: the
+// in-game panel saves those keys too, and OptiScaler writes a default-valued key back as
 // auto, so a sync that re-forced them would silently undo a choice made in the game. A folder
 // installed before this existed has no marker and is left exactly as is.
 function applyEngineMarker(dir) {
@@ -1209,10 +1210,8 @@ ipcMain.handle('engine:forGame', (_evt, exePath) => {
   };
 });
 
-// engine: which build this game should run on (the renderer resolves "follow Settings" to an id
-// before calling). runBeforeSR / passes only mean anything on the Pre-SR build. Writes the
-// marker and, when OptiScaler is already in the folder, the ini; swapping the DLL itself is the
-// renderer's job (a re-Install with the other engine's release folder).
+// runBeforeSR / passes as explicit choices for this game. Writes the marker and, when OptiScaler
+// is already in the folder, the ini.
 ipcMain.handle('engine:setForGame', (_evt, { exePath, engine, runBeforeSR, passes } = {}) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
@@ -1290,6 +1289,62 @@ ipcMain.handle('framegen:setMultiplier', async (_evt, { exePath, frames, dynamic
     });
     if (!fs.existsSync(iniPath)) return { ok: true, cleared: false, deferred: true, applied: [] };
     return { ok: true, cleared: false, deferred: false, applied: applyFrameGenMarker(dir) };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// ---- RTXMFG: Multi Frame Generation on RTX 40 / 30 (rtxmfg.js) ------------------------------
+//
+// Offered on the same games as the multiplier above -- the game's own DLSS Frame Generation is what it
+// unlocks -- and independent of OptiScaler: it works with or without it installed.
+const rtxmfgCacheDir = () => path.join(userDataDir(), 'rtxmfg-cache');
+
+ipcMain.handle('rtxmfg:state', async (_evt, exePath) => {
+  if (!exePath || !fs.existsSync(exePath)) return { hasFrameGen: false };
+  const dir = gameDir(exePath);
+  const hasFrameGen = framegen.frameGenSwapState(dir).hasFrameGen;
+  let gpuInfo = null;
+  try { gpuInfo = await getGpuInfo(); } catch {}
+  const marker = rtxmfg.readMarker(dir);
+  return {
+    hasFrameGen,
+    gpu: { name: gpuInfo && gpuInfo.name, ...rtxmfg.gpuSupport(gpuInfo) },
+    marker,
+    installed: !!rtxmfg.ourFile(dir),
+    intact: marker ? rtxmfg.isOurCopy(dir, marker) : false,
+    settingsPresent: fs.existsSync(path.join(dir, rtxmfg.SETTINGS_FILE)),
+    ...rtxmfg.proxyChoice(dir),
+    projectPage: rtxmfg.PROJECT_PAGE,
+  };
+});
+
+ipcMain.handle('rtxmfg:install', async (_evt, { exePath, proxyName } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    if (!framegen.frameGenSwapState(dir).hasFrameGen) {
+      throw new Error('This game has no DLSS Frame Generation of its own (no nvngx_dlssg.dll) -- RTXMFG has nothing to unlock');
+    }
+    const cache = await rtxmfg.ensureCache({ cacheRoot: rtxmfgCacheDir(), headers: GITHUB_HEADERS });
+    if (!cache.ok) throw new Error(cache.error);
+    const name = proxyName || rtxmfg.proxyChoice(dir).suggested;
+    if (!name) throw new Error('every name RTXMFG can load as is already taken in this folder');
+    const marker = rtxmfg.deploy(dir, { dllPath: cache.dllPath, sha256: cache.sha256, tag: cache.tag, proxyName: name });
+    invalidateDetection(dir);
+    return { ok: true, marker };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+ipcMain.handle('rtxmfg:remove', async (_evt, exePath) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const res = rtxmfg.remove(dir);
+    invalidateDetection(dir);
+    return { ok: true, ...res };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -1444,7 +1499,8 @@ ipcMain.handle('game:status', (_evt, exePath) => {
     message: 'Another DLSS 5 toolchain is installed here ({tool}: {files}) -- two stacks hooking the same DLSS call crash the game. Remove it with its own uninstaller before using this one.',
     vars: { tool: f.tool, files: f.files.join(', ') },
   }));
-  const engine = (engines.readEngineMarker(dir) || {}).engine || null;
+  const marker = engines.readEngineMarker(dir);
+  const engine = marker && marker.engine ? engines.normalizeEngine(marker.engine) : null;
   return { exeMissing: false, hasIni, hasNr, hasUninstaller, dir, backends, foreign, warnings, engine };
 });
 
@@ -1752,6 +1808,11 @@ async function uninstallEverything(dir) {
     if (pdplugin.isOurCopy(dir, journal.pdPlugin)) await rmRel(pdplugin.PLUGIN_NAME);
     else if (fs.existsSync(path.join(dir, pdplugin.PLUGIN_NAME))) kept.push(`${pdplugin.PLUGIN_NAME} (not the copy this app placed)`);
   }
+  // RTXMFG, the same way: only the copy this app placed (rtxmfg.js).
+  if (rtxmfg.readMarker(dir)) {
+    const r = rtxmfg.remove(dir);
+    removed.push(...r.removed); kept.push(...r.kept);
+  }
 
   const core = await uninstallOptiScaler(dir);
   removed.push(...core.removed); kept.push(...core.kept);
@@ -1860,6 +1921,7 @@ async function planUninstall(dir) {
   if (journal.streamline && journal.streamline.dir) for (const f of journal.streamline.files || []) add(path.join(journal.streamline.dir, f));
   if (journal.reframework) { add(REFRAMEWORK_DLL_NAME); add(REFRAMEWORK_CONFIG_NAME); add('reframework'); }
   if (journal.pdPlugin && pdplugin.isOurCopy(dir, journal.pdPlugin)) add(pdplugin.PLUGIN_NAME);
+  for (const rel of rtxmfg.removalPlan(dir)) add(rel);
   if (journal.proxy) add(journal.proxy);
   if (journal.backedUp && has(journal.backedUp)) restore.push(`${journal.proxy} (from ${journal.backedUp})`);
   for (const n of ['OptiScaler.dll', 'OptiScaler_OpticalFlow.dll', 'OptiScaler.ini', 'OptiScaler.log', 'nvngx.dll_dlssnr.dll', 'Remove_OptiScaler.bat', 'setup_windows.bat', 'setup_linux.sh', 'nvngx_dlssnr.dll', 'OptiScaler', '!! EXTRACT ALL FILES TO GAME FOLDER !!']) add(n);
@@ -2462,7 +2524,7 @@ ipcMain.handle('game:open-folder', (_evt, exePath) => {
 ipcMain.handle('shell:openExternal', (_evt, url) => {
   // Only the project's own GitHub (the report button) and the one third-party page a route
   // sends the user to (PureDark's Upscaler Base Plugin, reengine.js): not a general opener.
-  if (typeof url === 'string' && (url.startsWith('https://github.com/mrcgibb9876-hash/') || url === reengine.PD_PLUGIN_PAGE_URL)) shell.openExternal(url);
+  if (typeof url === 'string' && (url.startsWith('https://github.com/mrcgibb9876-hash/') || url === reengine.PD_PLUGIN_PAGE_URL || url === rtxmfg.PROJECT_PAGE)) shell.openExternal(url);
 });
 
 ipcMain.handle('shell:openPath', (_evt, p) => {
@@ -3441,7 +3503,8 @@ function sha256File(filePath) {
 }
 
 async function findActiveOptiScalerFile(dir) {
-  const present = PROXY_CANDIDATES.filter((name) => fs.existsSync(path.join(dir, name)));
+  const rtxmfgFile = (rtxmfg.ourFile(dir) || '').toLowerCase();
+  const present = PROXY_CANDIDATES.filter((name) => name.toLowerCase() !== rtxmfgFile && fs.existsSync(path.join(dir, name)));
   if (present.length === 0) {
     const plain = path.join(dir, 'OptiScaler.dll');
     return fs.existsSync(plain) ? { file: plain, renamed: false } : null;

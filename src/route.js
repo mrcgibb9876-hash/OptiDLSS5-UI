@@ -45,6 +45,7 @@ const nativeDlss = require('./native-dlss');
 const verified = require('./verified');
 const reengine = require('./reengine');
 const legacy = require('./legacy');
+const rtxmfg = require('./rtxmfg');
 
 // A user's per-game API choice laid over the detection result: the chosen API becomes the
 // primary, joins the list of APIs the game runs on (so keepGamesOwnDlss writes its upscaler key
@@ -131,7 +132,9 @@ const PROXY_SLOTS = ['dxgi.dll', 'winmm.dll', 'version.dll', 'dbghelp.dll', 'd3d
 
 function optiScalerInstalled(dir) {
   if (!fs.existsSync(path.join(dir, 'OptiScaler.ini')) || !fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'))) return false;
-  return PROXY_SLOTS.some((name) => fs.existsSync(path.join(dir, name)));
+  // RTXMFG (rtxmfg.js) can sit in one of these slots; it is not an OptiScaler proxy.
+  const rtxmfgFile = (rtxmfg.ourFile(dir) || '').toLowerCase();
+  return PROXY_SLOTS.some((name) => name.toLowerCase() !== rtxmfgFile && fs.existsSync(path.join(dir, name)));
 }
 
 function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {

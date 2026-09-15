@@ -125,14 +125,14 @@ function diagnose(ctx) {
       // Castlevania: Lords of Shadow tried Insert and Alt+Tab and concluded the menu was missing
       // (2026-09-14) -- which is a fair reading of an app that never said otherwise.
       if (route.route === 'feeder32') {
-        return out('ok', 'ok-panel-in-helper', { count: run.nrDispatch, fps: run.fps || 0, api: (run.runtimeApi || '').toUpperCase() });
+        return out('ok', 'ok-panel-in-helper', { count: run.nrFrames || run.nrDispatch, fps: run.fps || 0, api: (run.runtimeApi || '').toUpperCase() });
       }
-      return out('ok', 'ok', { count: run.nrDispatch, fps: run.fps || 0, api: (run.runtimeApi || '').toUpperCase() });
+      return out('ok', 'ok', { count: run.nrFrames || run.nrDispatch, fps: run.fps || 0, api: (run.runtimeApi || '').toUpperCase() });
     case 'shutdown-fault':
       // NR ran and only the exit faulted: that is a working game, whatever is deployed. A
       // Feeder reaching here is one the route accepts (feederMisdeployed was handled above), so
       // it is only removed when nothing ran at all.
-      if (run.nrDispatch > 0) return out('ok', 'ok-exit-crash', { count: run.nrDispatch });
+      if (run.nrDispatch > 0) return out('ok', 'ok-exit-crash', { count: run.nrFrames || run.nrDispatch });
       return route.feederDeployed ? fix('feeder-misdeployed', 'remove-feeder') : out('unknown', 'unknown', { verdict: run.verdict });
     case 'duplicate-dlss':
       return fix('feeder-misdeployed', 'remove-feeder');
@@ -177,6 +177,17 @@ function diagnose(ctx) {
       return ctx.agilityRedist && ctx.agilityRedist.folder
         ? fix('feed-agility-redist', 'disable-agility-redist')
         : out('step', 'feed-agility-redist-elsewhere');
+    // The neural model crashed in its first evaluate on the game's own D3D12 device and the Feeder
+    // stopped (runlog.js). Nothing in the ini brings it back: RunBeforeSR is already forced off on
+    // Feeder games and the model's preset was the default. What does work on the same GPU and driver
+    // is the model on a device the Feeder creates itself -- which is what it does for a D3D11 game --
+    // so an emulator, which lets you pick, is pointed at its Direct3D 11 backend. NVIDIA Smooth Motion
+    // in the process is named when the Feeder saw it, as the one other variable in play.
+    case 'nr-model-crash': {
+      const vars = { smoothMotion: run.feedSmoothMotion ? 1 : 0, stack: run.detail || '' };
+      if (d.emulator && run.feedSameDevice) return out('step', 'nr-model-crash-emulator', { ...vars, name: d.emulator.name || '' });
+      return out('step', 'nr-model-crash', vars);
+    }
     case 'feed-stopped':
       return fix('feed-stopped', 'reconfigure');
     // The game died inside a DirectX 8/9 wrapper in its own folder as it started. When that wrapper
