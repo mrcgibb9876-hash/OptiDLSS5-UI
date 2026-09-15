@@ -482,7 +482,9 @@ async function applyRecommendation(game, card, backends, generation = renderGene
     const chosenTitle = escapeHtml(t('Set to {api} in Edit (detection said {detected})', { api: API_LABEL[route.apiOverride], detected: detected.apiBadge || t('unknown') }));
     chips.push(`<span class="engine-badge api-badge engine-badge-known" title="${chosenTitle}">${API_LABEL[route.apiOverride]} \u2713</span>`);
   } else if (detected.apiBadge) {
-    chips.push(`<span class="engine-badge api-badge ${badgeClass}" title="${title}">${escapeHtml(detected.apiBadge)}</span>`);
+    // A game with both DX12 and DX11 is set up for DX12 (route.js preferDx12): the chip says what is used.
+    const shown = route.effectiveApi && API_LABEL[route.effectiveApi] ? API_LABEL[route.effectiveApi] : detected.apiBadge;
+    chips.push(`<span class="engine-badge api-badge ${badgeClass}" title="${title}">${escapeHtml(shown)}</span>`);
   }
 
   // Read back by applyRunningState, which runs from the poll and has no route of its own.
@@ -1737,6 +1739,12 @@ async function loadApiSection(game) {
     return;
   }
   const route = await window.api.gameRoute(game.exePath, game.detectedPath);
+  // Both DX12 and DX11: DX12 it is, nothing to choose (route.js preferDx12).
+  const apisSeen = route.detectedApis || [];
+  if (apisSeen.includes('dx12') && apisSeen.includes('dx11')) {
+    section.classList.add('hidden');
+    return;
+  }
   section.classList.remove('hidden');
 
   const detectedLabel = (game.detectedPath && game.detectedPath.apiBadge) || t('not detected');

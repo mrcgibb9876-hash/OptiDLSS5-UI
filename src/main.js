@@ -1399,7 +1399,7 @@ function detectFor(dir, exePath) {
 
 // The primary API every handler should act on: the user's choice if there is one, else detection.
 async function resolveApi(dir, exePath) {
-  return readApiOverride(dir) || (await detectFor(dir, exePath)).api;
+  return withApiOverride(await detectFor(dir, exePath), readApiOverride(dir)).api;
 }
 
 ipcMain.handle('game:setApiOverride', async (_evt, { exePath, api }) => {
@@ -1531,7 +1531,7 @@ ipcMain.handle('amdnr:status', async (_evt, { exePath, api }) => {
   const { vendor } = await getGpuInfo();
   const status = amdnr.amdNrStatus(dir);
   const nrDllVersion = status.nrDllPresent ? await framegen.readDllVersion(execFileAsync, path.join(dir, 'nvngx_dlssnr.dll')) : null;
-  return { ok: true, ...status, nrDllVersion, ...amdnr.amdNrEligibility(vendor, readApiOverride(dir) || api || null) };
+  return { ok: true, ...status, nrDllVersion, ...amdnr.amdNrEligibility(vendor, (await resolveApi(dir, exePath)) || api || null) };
 });
 
 ipcMain.handle('amdnr:latest', async () => {

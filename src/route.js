@@ -102,8 +102,22 @@ const ROUTE_TEXT = {
     'this route is not for it yet.',
 };
 
+// A game that offers both DX12 and DX11 is set up for DX12, with no choice offered (the user's call,
+// 2026-09-15: fewer decisions, and DX12 is where every DLSS 5 route works best). The one thing that
+// outranks it is proof: OptiScaler's own log saying the game really ran on DX11 last time
+// (runtimeApi) -- configuring DX12 for a game that is running DX11 would break its route, and it is
+// what an emulator switched to Direct3D 11 on Game Help's advice has to follow.
+function preferDx12(base) {
+  const apis = base.apis || [];
+  if (!apis.includes('dx12') || !apis.includes('dx11') || base.api === 'dx12' || base.runtimeApi === 'dx11') return base;
+  if (base.api !== 'dx11') return base;
+  return { ...base, api: 'dx12', apis: ['dx12', ...apis.filter((a) => a !== 'dx12')], detectedApi: base.api };
+}
+
 function withApiOverride(detected, override) {
-  const base = detected || {};
+  const base = preferDx12(detected || {});
+  // An old DX11 choice on a game that has DX12 no longer applies.
+  if (override === 'dx11' && (base.apis || []).includes('dx12') && base.runtimeApi !== 'dx11') override = null;
   if (!override || !API_OVERRIDE_VALUES.includes(override)) return { ...base, apiOverride: null };
   const apis = [override, ...(base.apis || []).filter((a) => a !== override)];
   return {

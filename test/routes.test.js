@@ -212,3 +212,16 @@ test('a game already on the grid is not re-proposed after its exe was changed by
   // leaves behind.
   assert.equal(scan([path.join(dir, 'SomeGame_Launcher.exe')]).length, 0, 'same folder, different exe: still known');
 });
+
+// 2026-09-15: a game with both DX12 and DX11 is set up for DX12, no choice -- unless OptiScaler's log proves it
+// actually ran DX11 last time.
+test('both DX12 and DX11: DX12 wins, an old DX11 choice is dropped, and only a real DX11 run keeps DX11', () => {
+  const { withApiOverride } = require('../src/route');
+  const both = { api: 'dx11', apis: ['dx11', 'dx12'], recommend: 'optiscaler' };
+  assert.equal(withApiOverride(both, null).api, 'dx12');
+  assert.equal(withApiOverride(both, 'dx11').api, 'dx12', 'a DX11 override no longer applies');
+  assert.equal(withApiOverride({ ...both, runtimeApi: 'dx11' }, null).api, 'dx11', 'the game really ran DX11');
+  assert.equal(withApiOverride({ api: 'dx11', apis: ['dx11'] }, null).api, 'dx11', 'DX11-only stays DX11');
+  assert.equal(withApiOverride({ api: 'vulkan', apis: ['vulkan', 'dx11', 'dx12'], runtimeApi: 'vulkan' }, null).api, 'vulkan');
+  assert.equal(withApiOverride(both, 'vulkan').api, 'vulkan', 'a non-DX11 choice still applies');
+});
