@@ -3645,6 +3645,8 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDl
       try { dgWindowed = legacy.ensureDgVoodooWindowed(dir); } catch {}
       return { ok: true, updated: updated || nrUpdated, nrUpdated, dgWindowed, reason: 'legacy 32-bit route', autoConfigured: [] };
     }
+    // A 64-bit DirectX 8/9 game behind dgVoodoo2 gets the same scaled-to-screen display (legacy.js DG_DISPLAY).
+    try { legacy.ensureDgVoodooWindowed(dir); } catch {}
     if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: true, updated: false, reason: 'not installed' };
 
     const { api, applied: autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix } = await autoConfigureGame(dir, exePath);

@@ -268,6 +268,19 @@ const DG_WINDOWED = [
   ['GeneralExt', 'WindowedAttributes', 'borderless, fullscreensize'],
 ];
 
+// Every dgVoodoo2 route, 32-bit or not: the game's image fills the screen, keeping its shape. A DirectX
+// 8/9 game starts at its own default resolution (often 640x480 or 800x600) until it is changed in its
+// menus, and with dgVoodoo2's ScalingMode left at "unspecified" that showed as a small picture -- inside
+// the screen-sized window "fullscreensize" makes, whose image scaling follows ScalingMode (dgVoodoo.conf's
+// own notes) -- too small to read the settings menu that fixes it (user report, 2026-09-15). The
+// rendering resolution itself is left to the game ([DirectX] Resolution stays unforced): forcing it
+// breaks the 2D layout of some games, while scaling only makes what is drawn bigger. "fullscreensize"
+// also covers a game that opens its own small window on the 64-bit route.
+const DG_DISPLAY = [
+  ['General', 'ScalingMode', 'stretched_ar'],
+  ['GeneralExt', 'WindowedAttributes', 'borderless, fullscreensize'],
+];
+
 function configureDgVoodoo(text, { windowed = false } = {}) {
   let out = String(text || '');
   out = setIniKey(out, 'General', 'OutputAPI', 'd3d11_fl11_0');
@@ -276,20 +289,23 @@ function configureDgVoodoo(text, { windowed = false } = {}) {
   out = setIniKey(out, 'DirectX', 'VideoCard', 'internal3D');
   out = setIniKey(out, 'DirectX', 'VRAM', '4096');
   out = setIniKey(out, 'DirectX', 'dgVoodooWatermark', 'false');
+  for (const [section, key, value] of DG_DISPLAY) out = setIniKey(out, section, key, value);
   if (windowed) for (const [section, key, value] of DG_WINDOWED) out = setIniKey(out, section, key, value);
   return out;
 }
 
-// Brings an existing 32-bit route install's dgVoodoo.conf up to the windowed setting (installs made
-// before it existed). Returns true when the file changed.
+// Brings an existing install's dgVoodoo.conf up to the current display settings: the scaled image on
+// every dgVoodoo2 route, and the borderless window on the 32-bit route (installs made before either
+// existed). Returns true when the file changed.
 function ensureDgVoodooWindowed(dir) {
   const marker = readMarker(dir);
-  if (!marker || !marker.host32 || !marker.dgVoodoo) return false;
+  if (!marker || !marker.dgVoodoo) return false;
   const confPath = path.join(dir, 'dgVoodoo.conf');
   let text;
   try { text = fs.readFileSync(confPath, 'utf8'); } catch { return false; }
   let next = text;
-  for (const [section, key, value] of DG_WINDOWED) next = setIniKey(next, section, key, value);
+  for (const [section, key, value] of DG_DISPLAY) next = setIniKey(next, section, key, value);
+  if (marker.host32) for (const [section, key, value] of DG_WINDOWED) next = setIniKey(next, section, key, value);
   if (next === text) return false;
   fs.writeFileSync(confPath, next, 'utf8');
   return true;

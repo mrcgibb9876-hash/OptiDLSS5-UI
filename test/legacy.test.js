@@ -265,6 +265,9 @@ test('the 32-bit route: dgVoodoo2, the game-side ReShade and add-on, the host64 
   assert.match(conf32, /\[General\][^[]*FullScreenMode\s*=\s*false/);
   assert.match(conf32, /\[DirectX\][^[]*AppControlledScreenMode\s*=\s*false/);
   assert.match(conf32, /\[GeneralExt\][^[]*WindowedAttributes\s*=\s*borderless, fullscreensize/);
+  // The game's own small default resolution fills the screen, keeping its shape (2026-09-15: DirectX 8/9
+  // games opened as a small picture until their resolution was changed in a menu too small to read).
+  assert.match(conf32, /\[General\][^[]*ScalingMode\s*=\s*stretched_ar/);
 
   const res = await legacy.deployHost32(game, plan, {
     ...comps,
@@ -361,8 +364,10 @@ test('a host64 folder this app did not make is refused; a 64-bit DirectX 9 game 
   const dgZip = await legacy.importDgVoodooZip(comps.dgZip, path.join(base, 'cache'));
   await legacy.deployDgVoodoo(g64, plan, dgZip);
   assert.equal(fs.readFileSync(path.join(g64, 'D3D9.dll'), 'utf8'), 'dgVoodoo x64 d3d9');
-  assert.doesNotMatch(fs.readFileSync(path.join(g64, 'dgVoodoo.conf'), 'utf8'), /FullScreenMode\s*=\s*false/, 'no helper, no forced window');
-  assert.equal(legacy.ensureDgVoodooWindowed(g64), false, 'the 64-bit route is left as the game wants it');
+  const conf64 = fs.readFileSync(path.join(g64, 'dgVoodoo.conf'), 'utf8');
+  assert.doesNotMatch(conf64, /FullScreenMode\s*=\s*false/, 'no helper, no forced window');
+  assert.match(conf64, /ScalingMode\s*=\s*stretched_ar/, 'but the image still fills the screen');
+  assert.equal(legacy.ensureDgVoodooWindowed(g64), false, 'already current: no rewrite');
   const removed = await legacy.removeLegacy(g64);
   assert.ok(removed.removed.includes('D3D9.dll'));
   assert.ok(!fs.existsSync(path.join(g64, legacy.MARKER)));
@@ -400,6 +405,7 @@ test('an older 32-bit install is brought to the borderless window once, and left
   assert.match(conf, /FullScreenMode\s*=\s*false/);
   assert.match(conf, /AppControlledScreenMode\s*=\s*false/);
   assert.match(conf, /WindowedAttributes\s*=\s*borderless, fullscreensize/);
+  assert.match(conf, /ScalingMode\s*=\s*stretched_ar/, 'an older install gets the scaled image too');
   assert.match(conf, /VRAM\s*=\s*4096/, 'nothing else touched');
   assert.equal(legacy.ensureDgVoodooWindowed(game), false, 'already windowed: no rewrite');
 });
