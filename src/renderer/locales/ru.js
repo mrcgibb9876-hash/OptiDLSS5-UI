@@ -711,4 +711,13 @@ window.I18N.register("ru", {
   "Press Fix it (switches to Luma)": "Нажмите «Исправить» (переключит на Luma)",
   "In the game's graphics settings: DirectX 11": "В графических настройках игры: DirectX 11",
   "Switch to Luma": "Переключить на Luma",
+  "Send game failure": "Отправить сбой игры",
+  "GitHub opened with the report filled in. Drag the zip from the folder that opened onto it, then press Submit.": "GitHub открыт с заполненным отчётом. Перетащите zip из открывшейся папки и нажмите Submit.",
+  "Sign in once: on the GitHub page that opened, enter this code (it is already copied):": "Войдите один раз: на открывшейся странице GitHub введите этот код (он уже скопирован):",
+  "GitHub sign-in failed: {error}": "Не удалось войти в GitHub: {error}",
+  "Sending…": "Отправка…",
+  "GitHub sign-in has expired -- press Send game failure again to sign in.": "Вход в GitHub истёк — снова нажмите «Отправить сбой игры», чтобы войти.",
+  "Could not send: {error}": "Не удалось отправить: {error}",
+  "Sent as issue #{number}. The maintainer will reply there.": "Отправлено как issue #{number}. Разработчик ответит там.",
+  "Open it": "Открыть",
 });

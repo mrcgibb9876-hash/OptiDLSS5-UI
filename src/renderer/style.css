@@ -454,6 +454,8 @@ body:not(.show-advanced) #game-modal .advanced-only { display: none !important; 
 /* Edit and Settings explanations: one line until clicked (users found the paragraphs a wall of text). */
 .field-hint { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
 .field-hint.open { display: block; overflow: visible; }
+.help-send-status { margin: 10px 0 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font-size: 13px; line-height: 1.5; }
+.help-send-code { display: inline-block; margin-left: 6px; font-size: 18px; letter-spacing: 0.12em; font-family: Consolas, monospace; user-select: all; }
 .help-ai-out { margin: 12px 0 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font: 12px/1.5 inherit; font-family: inherit; white-space: pre-wrap; max-height: 260px; overflow-y: auto; }
 
 .scan-checkbox-row {

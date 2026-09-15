@@ -711,4 +711,13 @@ window.I18N.register('pt-BR', {
   "Press Fix it (switches to Luma)": "Aperte Corrigir (troca para o Luma)",
   "In the game's graphics settings: DirectX 11": "Nas configurações gráficas do jogo: DirectX 11",
   "Switch to Luma": "Trocar para o Luma",
+  "Send game failure": "Enviar falha do jogo",
+  "GitHub opened with the report filled in. Drag the zip from the folder that opened onto it, then press Submit.": "O GitHub abriu com o relatório preenchido. Arraste o zip da pasta que abriu para ele e aperte Submit.",
+  "Sign in once: on the GitHub page that opened, enter this code (it is already copied):": "Entre uma vez: na página do GitHub que abriu, digite este código (já está copiado):",
+  "GitHub sign-in failed: {error}": "Falha ao entrar no GitHub: {error}",
+  "Sending…": "Enviando…",
+  "GitHub sign-in has expired -- press Send game failure again to sign in.": "O login do GitHub expirou -- aperte Enviar falha do jogo de novo para entrar.",
+  "Could not send: {error}": "Não foi possível enviar: {error}",
+  "Sent as issue #{number}. The maintainer will reply there.": "Enviado como issue #{number}. O desenvolvedor vai responder lá.",
+  "Open it": "Abrir",
 });

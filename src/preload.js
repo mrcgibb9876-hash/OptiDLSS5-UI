@@ -86,6 +86,10 @@ contextBridge.exposeInMainWorld('api', {
   gameRunning: (exePath) => ipcRenderer.invoke('game:running', { exePath }),
   lastRun: (exePath) => ipcRenderer.invoke('game:lastRun', exePath),
   supportBundle: (exePath, detected) => ipcRenderer.invoke('game:supportBundle', { exePath, detected }),
+  reportStatus: () => ipcRenderer.invoke('report:status'),
+  reportSignIn: () => ipcRenderer.invoke('report:signin'),
+  reportSignOut: () => ipcRenderer.invoke('report:signout'),
+  reportSend: (payload) => ipcRenderer.invoke('report:send', payload),
   gameHelp: (exePath, detected, fixesTried) => ipcRenderer.invoke('game:help', { exePath, detected, fixesTried }),
   gameHelpApply: (exePath, fixId) => ipcRenderer.invoke('game:help-apply', { exePath, fixId }),
   gameHelpAi: (exePath, detected, fixesTried) => ipcRenderer.invoke('game:help-ai', { exePath, detected, fixesTried }),
@@ -118,6 +122,7 @@ contextBridge.exposeInMainWorld('api', {
   managerUpdateCheck: () => ipcRenderer.invoke('update:managerCheck'),
   managerUpdateRestart: () => ipcRenderer.invoke('update:managerRestart'),
   onManagerUpdate: (cb) => { ipcRenderer.on('manager-update', (_evt, state) => cb(state)); },
+  onReportSignIn: (cb) => { ipcRenderer.on('report-signin', (_evt, result) => cb(result)); },
 
   engineHasKnownProfile: (exePath) => ipcRenderer.invoke('engine:hasKnownProfile', { exePath })
 });

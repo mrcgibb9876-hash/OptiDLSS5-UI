@@ -711,4 +711,13 @@ window.I18N.register("ko", {
   "Press Fix it (switches to Luma)": "해결하기 누르기 (Luma로 전환)",
   "In the game's graphics settings: DirectX 11": "게임 그래픽 설정에서: DirectX 11",
   "Switch to Luma": "Luma로 전환",
+  "Send game failure": "게임 오류 보내기",
+  "GitHub opened with the report filled in. Drag the zip from the folder that opened onto it, then press Submit.": "보고서가 채워진 GitHub가 열렸습니다. 열린 폴더의 zip 파일을 끌어다 놓고 Submit을 누르세요.",
+  "Sign in once: on the GitHub page that opened, enter this code (it is already copied):": "한 번만 로그인: 열린 GitHub 페이지에 이 코드를 입력하세요 (이미 복사됨):",
+  "GitHub sign-in failed: {error}": "GitHub 로그인 실패: {error}",
+  "Sending…": "보내는 중…",
+  "GitHub sign-in has expired -- press Send game failure again to sign in.": "GitHub 로그인이 만료되었습니다 -- 게임 오류 보내기를 다시 눌러 로그인하세요.",
+  "Could not send: {error}": "보낼 수 없음: {error}",
+  "Sent as issue #{number}. The maintainer will reply there.": "이슈 #{number}(으)로 보냈습니다. 개발자가 거기서 답변합니다.",
+  "Open it": "열기",
 });

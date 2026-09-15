@@ -320,15 +320,14 @@ function folderListing(dir) {
 // reported "no-log" while the helper's log was full of neural passes. Found while answering a user
 // whose DX9 game ran correctly and showed no in-game menu, 2026-09-14: the feature for "send me
 // your logs" was blind in exactly the case it was needed for.
-async function collectSupportBundle(dir, { zipPath, extra = {}, execFileAsync, optiDir = dir }) {
-  const staging = path.join(os.tmpdir(), `dlss5ui-support-${Date.now()}`);
-  await fsp.mkdir(staging, { recursive: true });
-  const copied = [];
+// The bundle's contents without writing anything: [{ name, source }] for files on disk and
+// [{ name, text }] for what the app composes (folder listing, its own view). Shared by the zip below and
+// by "Send game failure" (ghreport.js), which posts the same files as text.
+async function gatherSupportFiles(dir, { extra = {}, optiDir = dir } = {}) {
+  const files = [];
   for (const name of BUNDLE_FILES) {
     const src = path.join(dir, name);
-    if (!fs.existsSync(src)) continue;
-    await fsp.copyFile(src, path.join(staging, name));
-    copied.push(name);
+    if (fs.existsSync(src)) files.push({ name, source: src });
   }
   // The helper's own copies, named for where they came from so nobody has to guess which
   // OptiScaler.log they are reading.
@@ -336,26 +335,35 @@ async function collectSupportBundle(dir, { zipPath, extra = {}, execFileAsync, o
   if (path.resolve(optiDir) !== path.resolve(dir)) {
     for (const name of BUNDLE_FILES) {
       const src = path.join(optiDir, name);
-      if (!fs.existsSync(src)) continue;
-      const as = `${hostPrefix}-${name}`;
-      await fsp.copyFile(src, path.join(staging, as));
-      copied.push(as);
+      if (fs.existsSync(src)) files.push({ name: `${hostPrefix}-${name}`, source: src });
     }
   }
   const run = await analyzeRun(dir, { optiDir });
   if (run.crash && run.crash.path) {
     for (const name of ['CrashContext.runtime-xml', 'CrashReportClient.ini']) {
       const src = path.join(run.crash.path, name);
-      if (fs.existsSync(src)) { await fsp.copyFile(src, path.join(staging, 'UE-crash-' + name)); copied.push('UE-crash-' + name); }
+      if (fs.existsSync(src)) files.push({ name: 'UE-crash-' + name, source: src });
     }
   }
   let listingText = `${dir}\n\n${folderListing(dir).join('\n')}\n`;
   if (path.resolve(optiDir) !== path.resolve(dir)) {
     listingText += `\n${optiDir}\n\n${folderListing(optiDir).join('\n')}\n`;
   }
-  await fsp.writeFile(path.join(staging, 'folder-listing.txt'), listingText, 'utf8');
-  await fsp.writeFile(path.join(staging, 'app-view.json'), JSON.stringify({ generatedAt: new Date().toISOString(), dir, optiDir, run, ...extra }, null, 2), 'utf8');
-  copied.push('folder-listing.txt', 'app-view.json');
+  files.push({ name: 'folder-listing.txt', text: listingText });
+  files.push({ name: 'app-view.json', text: JSON.stringify({ generatedAt: new Date().toISOString(), dir, optiDir, run, ...extra }, null, 2) });
+  return { files, run };
+}
+
+async function collectSupportBundle(dir, { zipPath, extra = {}, execFileAsync, optiDir = dir }) {
+  const staging = path.join(os.tmpdir(), `dlss5ui-support-${Date.now()}`);
+  await fsp.mkdir(staging, { recursive: true });
+  const { files, run } = await gatherSupportFiles(dir, { extra, optiDir });
+  const copied = [];
+  for (const f of files) {
+    if (f.source) await fsp.copyFile(f.source, path.join(staging, f.name));
+    else await fsp.writeFile(path.join(staging, f.name), f.text, 'utf8');
+    copied.push(f.name);
+  }
 
   await fsp.rm(zipPath, { force: true }).catch(() => {});
   await execFileAsync('powershell.exe', [
@@ -366,4 +374,4 @@ async function collectSupportBundle(dir, { zipPath, extra = {}, execFileAsync, o
   return { zipPath, files: copied, run };
 }
 
-module.exports = { analyzeRun, collectSupportBundle, unrealCrashNear };
+module.exports = { analyzeRun, collectSupportBundle, gatherSupportFiles, unrealCrashNear };

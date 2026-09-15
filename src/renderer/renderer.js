@@ -886,6 +886,10 @@ function renderHelp(diag) {
   ai.classList.toggle('hidden', diag.status !== 'unknown');
   ai.textContent = settings.anthropicApiKey ? t('Ask AI') : t('Set up AI help…');
   ai.classList.toggle('btn-primary', diag.status === 'unknown');
+  // Anything short of "working" can be sent as it stands: the player should never have to judge
+  // whether their problem is a known one first.
+  $('#help-send').classList.toggle('hidden', diag.status === 'ok');
+  $('#help-send-status').classList.add('hidden');
   $('#help-more').classList.remove('hidden');
   $('#help-more-row').classList.add('hidden');
   $('#help-ai-out').classList.add('hidden');
@@ -1022,27 +1026,89 @@ $('#help-bundle').addEventListener('click', async () => {
   window.api.openPath(res.zipPath);
 });
 
-$('#help-report').addEventListener('click', async () => {
-  if (!helpGame || !helpDiag) return;
-  const run = helpDiag.run;
+// The issue's title and body, for both "Send game failure" and the manual "Report on GitHub".
+async function buildGameReport(game, diag, { manual = false } = {}) {
+  const run = diag.run;
   // The Manager's own version and the engine's, named apart: this line used to print the engine tag
   // under "App", so reports said "App: v1.0.30" from Manager 1.63.12.
   let appVersion = '';
   try { appVersion = ((await window.api.managerUpdateState()) || {}).currentVersion || ''; } catch {}
-  const title = `[Game Help] ${helpGame.name}: ${helpDiag.code}`;
+  const title = `[Game Help] ${game.name}: ${diag.code}`;
+  // English on purpose: the issue is read by the maintainer, whatever language the app runs in.
   const body = [
-    `**Game:** ${helpGame.name}`,
-    `**Exe:** ${helpGame.exePath.split(/[\\/]/).pop()}`,
-    `**Engine / API:** ${(helpGame.detectedPath && helpGame.detectedPath.badge) || '?'} / ${(helpGame.detectedPath && helpGame.detectedPath.api) || '?'}`,
-    `**Route:** ${helpDiag.route ? helpDiag.route.label : '?'}`,
-    `**Game Help said:** ${helpWords(helpDiag)}`,
-    `**Last run:** ${run && run.ran ? describeRun(run) : 'none'}`,
+    `**Game:** ${game.name}`,
+    `**Exe:** ${game.exePath.split(/[\\/]/).pop()}`,
+    `**Engine / API:** ${(game.detectedPath && game.detectedPath.badge) || '?'} / ${(game.detectedPath && game.detectedPath.api) || '?'}`,
+    `**Route:** ${diag.route ? diag.route.label : '?'}`,
+    `**Game Help finding:** ${diag.code} (${diag.status})`,
+    `**Last run verdict:** ${run && run.ran ? `${run.verdict}${run.detail ? ` (${run.detail})` : ''}` : 'none'}`,
+    `**GPU:** ${gpuLabel()}`,
     `**App:** ${appVersion ? 'v' + appVersion : '?'}`,
     `**Engine:** ${settings.installedVersion || '?'}`,
-    '',
-    '_Attach the support bundle zip (Game Help > Save bundle to share) to this issue._',
+    ...(manual ? ['', '_Attach the support bundle zip (Game Help > Save bundle to share) to this issue._'] : []),
   ].join('\n');
+  return { title, body };
+}
+
+$('#help-report').addEventListener('click', async () => {
+  if (!helpGame || !helpDiag) return;
+  const { title, body } = await buildGameReport(helpGame, helpDiag, { manual: true });
   window.api.openExternal(`https://github.com/mrcgibb9876-hash/OptiDLSS5-UI/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`);
+});
+
+// ── Send game failure ─────────────────────────────────────────────────────────
+// One button: signs in to GitHub the first time (a code to type on GitHub's own page), then posts the
+// issue with the logs attached (main.js report:send, ghreport.js). Before the GitHub app is registered
+// (no client ID in this build) it falls back to the two manual steps, done for the player in one go.
+function setSendStatus(html) {
+  const el = $('#help-send-status');
+  el.innerHTML = html;
+  el.classList.toggle('hidden', !html);
+}
+
+let reportSignInWaiter = null;
+window.api.onReportSignIn((result) => {
+  if (reportSignInWaiter) { reportSignInWaiter(result); reportSignInWaiter = null; }
+});
+
+$('#help-send').addEventListener('click', async () => {
+  if (!helpGame || !helpDiag) return;
+  const game = helpGame;
+  const diag = helpDiag;
+  const btn = $('#help-send');
+  btn.disabled = true;
+  try {
+    const status = await window.api.reportStatus();
+    if (!status.configured) {
+      // Not set up in this build: save the bundle and open the prefilled issue, together.
+      const saved = await window.api.supportBundle(game.exePath, game.detectedPath || null);
+      if (!saved.ok || saved.cancelled) { if (!saved.ok) toast(t('Could not save the support bundle: {error}', { error: saved.error })); return; }
+      window.api.openPath(saved.zipPath);
+      const { title, body } = await buildGameReport(game, diag, { manual: true });
+      window.api.openExternal(`https://github.com/mrcgibb9876-hash/OptiDLSS5-UI/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`);
+      setSendStatus(escapeHtml(t('GitHub opened with the report filled in. Drag the zip from the folder that opened onto it, then press Submit.')));
+      return;
+    }
+    if (!status.signedIn) {
+      const flow = await window.api.reportSignIn();
+      if (!flow.ok) { toast(t('GitHub sign-in failed: {error}', { error: flow.error })); return; }
+      try { await navigator.clipboard.writeText(flow.userCode); } catch {}
+      setSendStatus(`${escapeHtml(t('Sign in once: on the GitHub page that opened, enter this code (it is already copied):'))} <strong class="help-send-code">${escapeHtml(flow.userCode)}</strong>`);
+      const result = await new Promise((resolve) => { reportSignInWaiter = resolve; });
+      if (!result.ok) { setSendStatus(escapeHtml(t('GitHub sign-in failed: {error}', { error: result.error }))); return; }
+    }
+    setSendStatus(escapeHtml(t('Sending…')));
+    const { title, body } = await buildGameReport(game, diag);
+    const res = await window.api.reportSend({ exePath: game.exePath, detected: game.detectedPath || null, title, body });
+    if (res.signedOut) { setSendStatus(escapeHtml(t('GitHub sign-in has expired -- press Send game failure again to sign in.'))); return; }
+    if (!res.ok) { setSendStatus(escapeHtml(t('Could not send: {error}', { error: res.error }))); return; }
+    if (res.cancelled) { setSendStatus(''); return; }
+    setSendStatus(`${escapeHtml(t('Sent as issue #{number}. The maintainer will reply there.', { number: res.issueNumber }))} <a href="#" id="help-send-link">${escapeHtml(t('Open it'))}</a>`);
+    const link = $('#help-send-link');
+    if (link) link.addEventListener('click', (e) => { e.preventDefault(); window.api.openExternal(res.issueUrl); });
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 window.api.onGameHelpAiText(({ exePath, text }) => {

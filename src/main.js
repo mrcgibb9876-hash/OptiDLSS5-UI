@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
@@ -27,6 +27,7 @@ const managerUpdate = require('./manager-update');
 const runlog = require('./runlog');
 const library = require('./library');
 const lumacatalog = require('./lumacatalog');
+const ghreport = require('./ghreport');
 const gamehelp = require('./gamehelp');
 const aihelp = require('./aihelp');
 const engines = require('./engines');
@@ -2177,6 +2178,86 @@ ipcMain.handle('game:supportBundle', async (_evt, { exePath, detected }) => {
     const out = await runlog.collectSupportBundle(dir, { zipPath: res.filePath, extra, execFileAsync, optiDir: optiScalerDirFor(dir) });
     return { ok: true, cancelled: false, ...out };
   } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// ── Send game failure (ghreport.js) ────────────────────────────────────────────
+// The GitHub sign-in token, encrypted for this Windows user (safeStorage = DPAPI). Never in settings.json.
+const reportTokenFile = () => path.join(userDataDir(), 'github-report-token.bin');
+function readReportToken() {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return null;
+    return safeStorage.decryptString(fs.readFileSync(reportTokenFile()));
+  } catch {
+    return null;
+  }
+}
+function writeReportToken(token) {
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('Windows could not protect the sign-in on this PC');
+  fs.writeFileSync(reportTokenFile(), safeStorage.encryptString(token));
+}
+function clearReportToken() {
+  try { fs.rmSync(reportTokenFile(), { force: true }); } catch {}
+}
+const sendToWindows = (channel, payload) => {
+  for (const win of BrowserWindow.getAllWindows()) { try { win.webContents.send(channel, payload); } catch {} }
+};
+
+ipcMain.handle('report:status', () => ({ configured: ghreport.configured(), signedIn: !!readReportToken() }));
+
+ipcMain.handle('report:signout', () => { clearReportToken(); return { ok: true }; });
+
+// Starts GitHub's device flow: returns the code to show, opens the page to type it into, and finishes in
+// the background (the renderer hears 'report-signin' when the player has approved, declined or timed out).
+let reportSignIn = null;
+ipcMain.handle('report:signin', async () => {
+  try {
+    const flow = await ghreport.startDeviceFlow();
+    shell.openExternal(flow.verification_uri);
+    const attempt = {};
+    reportSignIn = attempt;
+    ghreport.pollForToken(flow.device_code, { interval: flow.interval, expiresIn: flow.expires_in })
+      .then((token) => { if (reportSignIn !== attempt) return; writeReportToken(token); sendToWindows('report-signin', { ok: true }); })
+      .catch((error) => { if (reportSignIn === attempt) sendToWindows('report-signin', { ok: false, error: String(error && error.message ? error.message : error) }); });
+    return { ok: true, userCode: flow.user_code, verificationUri: flow.verification_uri };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// Gathers the support bundle's files, shows the player exactly what will be posted, and on yes creates the
+// gist and the issue. title/body come from the renderer (the same text the old "Report on GitHub" filled in).
+ipcMain.handle('report:send', async (_evt, { exePath, detected, title, body } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const token = readReportToken();
+    if (!token) return { ok: false, signedOut: true };
+    const dir = gameDir(exePath);
+    const effective = effectiveDetection(dir, exePath, detected || {});
+    const extra = {
+      appVersion: app.getVersion(),
+      detection: effective,
+      route: recommendRoute(dir, exePath, effective, ((await getGpuInfo()) || {}).vendor || 'unknown', { lumaMod: lumaModFor(exePath, effective) }),
+      backends: detectInstalledBackends(dir),
+      foreign: foreignToolchains(dir),
+    };
+    const { files } = await runlog.gatherSupportFiles(dir, { extra, optiDir: optiScalerDirFor(dir) });
+    const confirm = await dialog.showMessageBox({
+      type: 'question',
+      buttons: ['Send', 'Cancel'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Send game failure',
+      message: 'Post this game\'s logs to GitHub as a public issue?',
+      detail: `Sent: ${files.map((f) => f.name).join(', ')}.\n\nYour Windows user name is hidden in paths. Game saves, other files and anything outside the game folder are not included. The issue and the logs are public on GitHub.`,
+    });
+    if (confirm.response !== 0) return { ok: true, cancelled: true };
+    const withText = files.map((f) => ({ name: f.name, text: f.text !== undefined ? f.text : fs.readFileSync(f.source, 'utf8') }));
+    const out = await ghreport.sendReport({ token, title, body, files: withText });
+    return { ok: true, ...out };
+  } catch (error) {
+    if (error && error.signedOut) { clearReportToken(); return { ok: false, signedOut: true }; }
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
 });

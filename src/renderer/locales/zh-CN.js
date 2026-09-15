@@ -711,4 +711,13 @@ window.I18N.register("zh-CN", {
   "Press Fix it (switches to Luma)": "点击“修复”（切换到 Luma）",
   "In the game's graphics settings: DirectX 11": "在游戏图形设置中：DirectX 11",
   "Switch to Luma": "切换到 Luma",
+  "Send game failure": "发送游戏故障",
+  "GitHub opened with the report filled in. Drag the zip from the folder that opened onto it, then press Submit.": "已打开填好报告的 GitHub 页面。把打开的文件夹中的 zip 拖进去，然后点击 Submit。",
+  "Sign in once: on the GitHub page that opened, enter this code (it is already copied):": "只需登录一次：在打开的 GitHub 页面中输入此代码（已复制）：",
+  "GitHub sign-in failed: {error}": "GitHub 登录失败：{error}",
+  "Sending…": "正在发送…",
+  "GitHub sign-in has expired -- press Send game failure again to sign in.": "GitHub 登录已过期——再次点击“发送游戏故障”以登录。",
+  "Could not send: {error}": "无法发送：{error}",
+  "Sent as issue #{number}. The maintainer will reply there.": "已作为 issue #{number} 发送。维护者会在那里回复。",
+  "Open it": "打开",
 });
