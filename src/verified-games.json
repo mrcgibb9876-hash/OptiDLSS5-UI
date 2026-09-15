@@ -100,6 +100,19 @@
       "route": "feeder32",
       "verified": "2026-09-14",
       "notes": "First game confirmed on the experimental 32-bit route. dgVoodoo2 presents its DirectX 9 as Direct3D 11, the Feeder's 32-bit add-on ships each frame to host64\\dlss5-feed-host64.exe, and OptiScaler DLSS-NR runs the neural pass there as host64\\winmm.dll; VORT supplies motion vectors. Expect nothing on screen in the game -- no OptiScaler splash, no menu on any key -- because OptiScaler is in the helper, which has no window. Home opens ReShade, Add-ons -> DLSS 5 Feed, \"Show the DLSS 5 panel in-game\", then Insert."
+    },
+    {
+      "id": "elden-ring",
+      "name": "ELDEN RING",
+      "match": {
+        "exe": [
+          "eldenring.exe"
+        ]
+      },
+      "engine": "FromSoftware (D3D12)",
+      "route": "present",
+      "verified": "2026-09-15",
+      "notes": "DLSS 5 on the engine Present route ([DlssNr] Placement=present), no Feeder: the Feeder crashed the model on its first frame. Depth tracked from the game, optical-flow motion vectors; 4800 frames, 0 model failures. Launch from the app (skips EasyAntiCheat), offline only. Load a save: menus have no depth."
     }
   ]
 }

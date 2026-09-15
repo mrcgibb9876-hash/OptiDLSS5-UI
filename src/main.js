@@ -14,6 +14,7 @@ const injector = require('./injector');
 const feeder = require('./feeder');
 const lossless = require('./lossless');
 const reengine = require('./reengine');
+const presentroute = require('./presentroute');
 const lumaue = require('./lumaue');
 const nativeDlss = require('./native-dlss');
 const { recommendRoute, withApiOverride, API_OVERRIDE_VALUES } = require('./route');
@@ -3635,6 +3636,21 @@ async function autoConfigureGame(dir, exePath) {
       }
       reframework = { ...(reframework || {}), presentRoute };
     }
+  }
+
+  // Elden Ring / Armored Core VI / Nightreign (presentroute.js): the Present route by ini, and no Feeder --
+  // the one this app deployed is the old route that crashed the model, and it would stop this one running.
+  // A Placement set by hand to "evaluate" is left alone. Install and every sync.
+  if (presentroute.iniPresentGame(exePath)) {
+    try {
+      if (feeder.feederDeployed(dir) && fs.existsSync(path.join(dir, '.dlss5ui-feeder-deploy.json'))) {
+        await feeder.removeFeederStack(dir, { keepReShade: lumaue.lumaUeDeployed(dir) });
+        if (!lumaue.lumaUeDeployed(dir)) patchIniValues(iniPath, [{ section: 'Plugins', key: 'LoadReshade', value: 'auto' }]);
+      }
+    } catch {}
+    // ensureIniKey, not a default: installs from before Placement existed have no such line to fill in.
+    const placement = (readIniKey(iniPath, 'DlssNr', 'Placement') || '').toLowerCase();
+    if (placement !== 'present' && placement !== 'evaluate') ensureIniKey(iniPath, 'DlssNr', 'Placement', 'present');
   }
 
   // Frame gen is the game's own job, not OptiScaler's -- OptiScaler's FG bridge and a

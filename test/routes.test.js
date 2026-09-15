@@ -255,6 +255,25 @@ test('Devil May Cry 5 and Street Fighter 6 take the Present route; a Feeder this
   }
 });
 
+test('Elden Ring, Armored Core VI and Nightreign take the Present route by ini; our old Feeder does not hold them', () => {
+  const presentroute = require(path.join(REPO, 'src', 'presentroute'));
+  const detected = { api: 'dx12', apis: ['dx12'] };
+  for (const exeName of ['eldenring.exe', 'armoredcore6.exe', 'nightreign.exe']) {
+    const dir = scratchDir('route-ini-present-' + exeName);
+    const exe = fakeExe(dir, exeName);
+    write(dir, 'start_protected_game.exe', 'x');
+    assert.ok(presentroute.iniPresentGame(exe));
+    assert.equal(route.recommendRoute(dir, exe, detected, 'nvidia').route, 'present');
+
+    write(dir, 'dlss5-feed.addon64', 'x');
+    assert.equal(route.recommendRoute(dir, exe, detected, 'nvidia').route, 'feeder', 'a hand-placed Feeder is a choice');
+    write(dir, '.dlss5ui-feeder-deploy.json', '{}');
+    assert.equal(route.recommendRoute(dir, exe, detected, 'nvidia').route, 'present', 'ours is the route that crashed the model');
+  }
+  const other = fakeExe(scratchDir('route-ini-present-other'), 'sekiro.exe');
+  assert.equal(presentroute.iniPresentGame(other), null);
+});
+
 // A user's RE2 folder (2026-09-12): another DLSS 5 tool had left a full Streamline set beside the
 // exe, with `.original` backups. That read as "this game ships its own DLSS", so the card said
 // "just Install" -- the wrong route for a game with no DLSS call. The RE route must win over

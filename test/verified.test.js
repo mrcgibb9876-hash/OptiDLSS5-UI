@@ -20,7 +20,7 @@ test('the registry matches by exe name or by Unreal project folder, and only dat
 test('every registry entry is well formed', () => {
   for (const g of verified.registry.games) {
     assert.ok(g.id && g.name && g.match && g.route, g.id);
-    assert.ok(['optiscaler', 'feeder', 'feeder32', 'lumaue'].includes(g.route), g.id + ' route');
+    assert.ok(['optiscaler', 'feeder', 'feeder32', 'lumaue', 'present'].includes(g.route), g.id + ' route');
     assert.ok(g.verified === null || /^\d{4}-\d{2}-\d{2}$/.test(g.verified), g.id + ' date');
     for (const exe of g.match.exe || []) assert.equal(exe, exe.toLowerCase(), g.id + ' exe names are lower-case');
   }

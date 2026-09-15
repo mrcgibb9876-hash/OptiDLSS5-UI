@@ -45,6 +45,7 @@ const amdnr = require('./amdnr');
 const nativeDlss = require('./native-dlss');
 const verified = require('./verified');
 const reengine = require('./reengine');
+const presentroute = require('./presentroute');
 const legacy = require('./legacy');
 const rtxmfg = require('./rtxmfg');
 
@@ -328,6 +329,17 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts
       [
         { key: 'optiscaler', label: 'Install OptiScaler (and REFramework)', done: optiInstalled && reframeworkPresent && !temporalUpscalerOn && !feederDeployed },
       ]);
+  }
+
+  // Elden Ring, Armored Core VI, Nightreign (presentroute.js): the same Present route, switched on in
+  // OptiScaler.ini rather than by REFramework. The Feeder crashed the model on this engine, so it is the old
+  // route here too -- one this app deployed goes on sync, one placed by hand keeps the game on the Feeder.
+  if (presentroute.iniPresentGame(exePath) && (!feederDeployed || feederIsOurs)) {
+    return finish('present', 'OptiScaler',
+      'No DLSS of its own. DLSS 5 runs at the end of each frame on top of the game\'s own anti-aliasing, and ' +
+      'OptiScaler finds the game\'s depth itself -- no Feeder, nothing to download by hand. Install places ' +
+      'OptiScaler. Load a save: menus have no depth to work with.',
+      [{ key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled && !feederDeployed }]);
   }
 
   // A Luma-Framework mod that adds DLSS to this game (lumacatalog.js, matched by name in main.js) beats both

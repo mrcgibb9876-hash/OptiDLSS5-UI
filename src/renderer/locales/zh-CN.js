@@ -478,6 +478,7 @@ window.I18N.register("zh-CN", {
   "When Game Help has no rule for a problem, \"Ask AI\" sends that game's logs and the app's own view to Claude on your Anthropic API key, and Claude may apply the same fixes the app has, each one confirmed with you first. You pay Anthropic directly for what you use; nothing is sent until you press Ask AI. Keys start with sk-ant-.": "当游戏帮助没有对应规则时，“询问 AI”会用你的 Anthropic API 密钥把该游戏的日志和应用信息发送给 Claude，Claude 可以应用与应用相同的修复，每项都先征求你的确认。你直接向 Anthropic 支付用量费用；在你按下询问 AI 之前不会发送任何内容。密钥以 sk-ant- 开头。",
   "Anthropic API key (sk-ant-…)": "Anthropic API 密钥（sk-ant-…）",
   "Report on GitHub": "在 GitHub 上报告",
+  "No DLSS of its own. DLSS 5 runs at the end of each frame on top of the game's own anti-aliasing, and OptiScaler finds the game's depth itself -- no Feeder, nothing to download by hand. Install places OptiScaler. Load a save: menus have no depth to work with.": "游戏本身没有 DLSS。DLSS 5 在每帧末尾运行于游戏自带抗锯齿之上，OptiScaler 会自行找到游戏的深度——无需 Feeder，也无需手动下载。“安装”会放置 OptiScaler。请载入存档：菜单中没有深度信息。",
   "Join the OptiDLSS5-UI Discord: help, game results and releases": "加入 OptiDLSS5-UI Discord：帮助、游戏结果和版本发布",
   "Ask on Discord": "在 Discord 上提问",
   "Opens the OptiDLSS5-UI Discord. Post in #help with the game, your GPU and what Game Help said.": "打开 OptiDLSS5-UI Discord。在 #help 中发布游戏、你的 GPU 以及游戏帮助的结论。",

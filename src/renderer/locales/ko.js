@@ -478,6 +478,7 @@ window.I18N.register("ko", {
   "When Game Help has no rule for a problem, \"Ask AI\" sends that game's logs and the app's own view to Claude on your Anthropic API key, and Claude may apply the same fixes the app has, each one confirmed with you first. You pay Anthropic directly for what you use; nothing is sent until you press Ask AI. Keys start with sk-ant-.": "게임 도움말에 해당 규칙이 없을 때 \"AI에게 묻기\"는 사용자의 Anthropic API 키로 그 게임의 로그와 앱 정보를 Claude에 보내며, Claude는 앱과 같은 해결책을 적용할 수 있고 각각 먼저 확인을 받습니다. 사용량은 Anthropic에 직접 지불하며, AI에게 묻기를 누르기 전에는 아무것도 전송되지 않습니다. 키는 sk-ant-로 시작합니다.",
   "Anthropic API key (sk-ant-…)": "Anthropic API 키 (sk-ant-…)",
   "Report on GitHub": "GitHub에 보고",
+  "No DLSS of its own. DLSS 5 runs at the end of each frame on top of the game's own anti-aliasing, and OptiScaler finds the game's depth itself -- no Feeder, nothing to download by hand. Install places OptiScaler. Load a save: menus have no depth to work with.": "자체 DLSS가 없습니다. DLSS 5는 게임 자체 안티앨리어싱 위에서 매 프레임 끝에 실행되고, OptiScaler가 게임의 깊이를 스스로 찾습니다. Feeder도, 직접 받을 파일도 없습니다. 설치가 OptiScaler를 배치합니다. 세이브를 불러오세요: 메뉴에는 깊이가 없습니다.",
   "Join the OptiDLSS5-UI Discord: help, game results and releases": "OptiDLSS5-UI 디스코드에 참여하세요: 도움말, 게임별 결과, 릴리스",
   "Ask on Discord": "디스코드에 질문하기",
   "Opens the OptiDLSS5-UI Discord. Post in #help with the game, your GPU and what Game Help said.": "OptiDLSS5-UI 디스코드를 엽니다. #help에 게임, GPU, 게임 도움말 결과를 올려 주세요.",
