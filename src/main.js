@@ -129,7 +129,7 @@ ipcMain.handle('data:save-settings', (_evt, settings) => {
   const before = readJson(settingsFile(), {});
   writeJson(settingsFile(), settings);
   // A changed Language reaches every installed game's in-game panel now, not on its next install.
-  if (panelLanguageValue(before) !== panelLanguageValue(settings)) {
+  if (process.env.OPTIDLSS5_NO_SYNC !== '1' && panelLanguageValue(before) !== panelLanguageValue(settings)) {
     for (const game of readJson(gamesFile(), [])) {
       try {
         if (game && game.exePath) applyPanelLanguage(gameDir(game.exePath), settings);
@@ -2546,7 +2546,22 @@ ipcMain.handle('game:detect-path', async (_evt, exePath) => {
 
 ipcMain.handle('game:detect-path-if-stale', async (_evt, { exePath, stored }) => {
   const dir = exePath && fs.existsSync(exePath) ? gameDir(exePath) : null;
-  if (!isDetectionStale(stored, dir, exePath)) return null;
+  if (!isDetectionStale(stored, dir, exePath)) {
+    // The exe half is current, but what sits beside the exe can change without any of that: an engine
+    // update copied over dxgi.dll, a ReShade added or removed. games.json kept the old reading forever,
+    // and Game Help trusts it -- Batman: Arkham Knight's card said "Another OptiScaler loads first" about
+    // a dxgi.dll byte-identical to this app's own build, because the saved size predated the update
+    // (2026-09-15). detectFor re-reads the folder evidence (cached per folder signature); hand the
+    // renderer the fresh answer whenever that evidence differs from what it saved.
+    try {
+      const fresh = await detectFor(dir, exePath);
+      const keys = ['vulkanWrapper', 'reshadeProxy', 'optiScalerProxy', 'antiCheat', 'protectedLauncher', 'oldShaderCompiler'];
+      const changed = fresh && keys.some((k) => JSON.stringify(fresh[k] ?? null) !== JSON.stringify(stored[k] ?? null));
+      return changed ? fresh : null;
+    } catch {
+      return null;
+    }
+  }
   try {
     if (!exePath || !fs.existsSync(exePath)) return { recommend: 'unknown', reason: 'executable not found' };
     return await detectGameCached(gameDir(exePath), exePath);
@@ -3535,6 +3550,9 @@ async function findActiveOptiScalerFile(dir) {
 
 ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDllPath }) => {
   try {
+    // OPTIDLSS5_NO_SYNC=1: a second copy of the app (screenshots, a demo, a source checkout pointed at a
+    // real library) that must not touch game folders the installed app already manages.
+    if (process.env.OPTIDLSS5_NO_SYNC === '1') return { ok: true, updated: false, reason: 'sync disabled' };
     if (!exePath || !fs.existsSync(exePath)) return { ok: true, updated: false, reason: 'exe missing' };
     const dir = gameDir(exePath);
     // The user asked for this game to be left exactly as it is: no engine update, no NR model update,
@@ -3628,6 +3646,9 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDl
     await fsp.copyFile(releaseDll, active.file);
     const plain = path.join(dir, 'OptiScaler.dll');
     if (active.file !== plain) await fsp.copyFile(releaseDll, plain).catch(() => {});
+    // Copying over an existing file leaves the folder's mtime alone, so detectSignature cannot see it:
+    // without this the cached folder evidence kept the old proxy's size (see game:detect-path-if-stale).
+    invalidateDetection(dir);
 
     return { ok: true, updated: true, nrUpdated, file: path.basename(active.file), api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
   } catch (err) {

@@ -2,463 +2,158 @@
 
 [![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://buymeacoffee.com/ripplingsnake)
 
-A Windows desktop app for getting NVIDIA's DLSS 5 Neural Rendering into your games via the
-[OptiScaler_DLSSNR](https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR) build of OptiScaler.
+A Windows app that puts NVIDIA's DLSS 5 Neural Rendering into your games through the
+[OptiScaler_DLSSNR](https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR) build of OptiScaler. Add your
+games, press **Install**, play. The app works out what each game needs and sets it up.
 
-Instead of copying files into every game folder by hand and running a setup script in each one, you
-point the app at your games once and click Install.
-
-> **Users:** [README-END-USER.txt](README-END-USER.txt) is the step-by-step setup guide, and it
-> ships inside the installer as `README.txt`. This file is about how the app works and why.
+> Step-by-step setup for players: [README-END-USER.txt](README-END-USER.txt) (ships in the installer as `README.txt`).
 
 ## Screenshots
 
-**The manager itself** — each card shows whether OptiScaler is active on that game (not a generic
-"Installed"), the Install button becomes Remove once it's there, and known trouble conditions
-surface right on the card (a badge for the engine or graphics API it detected, or a warning like
-the missing-NR-file one below):
+**Your library.** Each card shows the engine, the graphics API, the route the game gets, a ✓ when that route is
+verified, and what the last run did.
 
-![Game grid, showing per-game OptiScaler status, engine/API badges, and a live warning](docs/screenshots/manager-game-grid.png)
+![Game grid](docs/screenshots/manager-game-grid.png)
 
-**Editing a game** covers per-game Neural Rendering source, Frame Generation, and — for a game with
-no native DLSS of its own (checked beside the exe and, for an Unreal game, under the plugin tree where UE keeps it — a game that ships DLSS there is never offered the Feeder) — the DLSS5 Feeder deploy and its two Frame Generation options
-side by side (OptiScaler's own FSRFG where it can run, Lossless Scaling where it can't).
-For a game that ships NVIDIA's own DLSS Frame Generation (Cyberpunk, Stellar Blade, Witcher 3…)
-the same modal sets its **multiplier** — game setting, 2x, 3x, 4x, or Dynamic — without replacing
-the game's frame gen: OptiScaler rewrites what the game asks the driver for, the game's own menu
-still turns it on and off, and the Alt+Home panel shows the same control live:
+**Game Help** reads the game's logs and says what to do in a few steps. The long explanation is under Details.
 
-![Edit Game modal, Feeder and Frame Generation section for a game with no native DLSS](docs/screenshots/edit-game-lossless.png)
+![Game Help on a working game](docs/screenshots/game-help.png)
 
-**In-game tuning** is OptiScaler's own native panel (`Alt+Home`), the DLSS 5 Developer Controls
-overlay — global model controls, per-model style/intensity, Frame Generation (including the
-Lossless Scaling row, live over the running game), and the colour/HDR pipeline. It ships in light
-and dark themes:
+![Game Help with a finding (example data): the NVIDIA driver is too old](docs/screenshots/game-help-fix.png)
 
-![DLSS 5 Developer Controls panel, dark theme, with the Lossless Scaling row active](docs/screenshots/dlssnr-panel-dark.png)
+**Edit** is the game and its DLSS 5 settings. Everything else is behind Settings > *Show advanced options*.
 
-![DLSS 5 Developer Controls panel, light theme, with the Lossless Scaling row active](docs/screenshots/dlssnr-panel-light.png)
+![Edit Game, DLSS 5 settings](docs/screenshots/edit-game.png)
 
-**On an AMD card** the app detects the GPU, wears AMD red instead of NVIDIA green, and routes
-differently (see [DLSS NR on AMD](#dlss-nr-on-amd-rx-7000--9000) below). Each DX12 card gets a "DLSS NR on AMD" tag,
-a DX11 game says there is no Neural Rendering route on AMD yet, and Install warns that OptiScaler's
-own Neural Rendering will not run on this GPU before it does anything. These three are **mock-ups
-rendered from the real app code with stubbed data**, not captures from an AMD machine -- phase 1
-was built without one, and screenshots from a real RX 7000/9000 are welcome:
+**In game**, `Alt+Home` opens the DLSS 5 Developer Controls panel (dark and light themes):
 
-![Mock-up: game grid on an AMD card -- route tags, the install warning flipped open, and a game with the AMD tool fully set up](docs/screenshots/mockup-amd-game-grid.png)
+![DLSS 5 Developer Controls panel, dark theme](docs/screenshots/dlssnr-panel-dark.png)
 
-**The Edit Game dialog on an AMD card** adds a "DLSS 5 Neural Rendering on AMD" section: whether
-the tool's installer has run in this folder and which version its log names, whether the model file
-it asks for (`nvngx_dlssnr.dll` 310.8.0) is beside the exe, and whether a newer upstream release is
-out. The buttons open the official release page, fetch that model file, and run the installer once
-you have placed it:
+![DLSS 5 Developer Controls panel, light theme](docs/screenshots/dlssnr-panel-light.png)
 
-![Mock-up: Edit Game on an AMD card, DLSS NR on AMD section](docs/screenshots/mockup-amd-edit-game.png)
+## Requirements
 
-**Games that ship more than one renderer** (Where Winds Meet links DX11 in its exe and carries a
-DX12 path beside it) get a "Graphics API this game runs with" choice. Detection can only name one;
-you pick what the game's own video settings actually use, and the upscaler key, the Feeder,
-OptiScaler's Frame Generation and DLSS NR on AMD all follow it. The card's API chip shows the
-choice with a tick:
+- Windows 10/11, 64-bit.
+- An NVIDIA RTX card (20 to 50 series) and **driver 616.56 or newer**. Game Help says so when the driver is older.
+- AMD RX 7000/9000: see [AMD](#amd-rx-7000--9000). Intel has no Neural Rendering route.
 
-![Mock-up: Edit Game with the graphics API set to DX12 for Where Winds Meet](docs/screenshots/mockup-graphics-api-choice.png)
+## What it does for you
 
-See [README-END-USER.txt](README-END-USER.txt) for the full key list and setup steps.
+- **Finds games:** Steam (every library), Epic and GOG, and optionally every drive. It picks the exe that
+  actually renders, skipping launchers, crash reporters and anti-cheat wrappers.
+- **Installs everything a game needs in one click:** the engine, the NR model, and whatever the route needs.
+  All of it is recorded, so **Remove** puts the folder back exactly as it was.
+- **Keeps itself current:** the engine ships inside the installer, and the NR model is fetched on first launch.
+  Engine, model and app update on their own, and **Check for Updates** in the top bar forces a check.
+- **Checks the result:** after a run, the card and Game Help read OptiScaler's and the Feeder's logs and name
+  the problem: driver too old, model crash, no motion vectors, flat depth, another DLSS 5 tool in the folder,
+  and so on. Most findings come with a **Fix it** button.
 
-## DLSS NR on AMD (RX 7000 / 9000)
+## Routes
 
-OptiScaler_DLSSNR's Neural Rendering pass runs through NVIDIA's NGX runtime, which only exists with
-an NVIDIA driver. On an AMD or Intel card every route this app offers installs cleanly and then
-renders nothing new. Since v1.15.0 the app knows which GPU it is on (read from Electron's own GPU
-process, shown in Settings) and says so up front: OptiScaler still installs on any GPU -- its
-upscaler swap and FSR frame generation are vendor-neutral -- but the card flips to a warning first,
-and Intel gets a plain "no Neural Rendering route" tag.
+The card names the route. You don't choose it.
 
-For AMD there *is* a route: [DLSS-NR-on-AMD](https://github.com/danielblnc/DLSS-NR-on-AMD) by
-danielblnc, a from-scratch reimplementation of the Neural Rendering runtime for RDNA3/RDNA4 (HIP
-kernels, its own game integration) that hooks the game's own FSR 3/4 and runs NVIDIA's model file
-on top. It **replaces** this app's NVIDIA stack rather than joining it: the game runs FSR, the
-tool's proxy DLL sits beside the exe, and your own `nvngx_dlssnr.dll` goes next to it. It is alpha
-(daily releases, open crash reports on several games) and needs Windows 11, Adrenalin 26.1.1 or
-newer, a DX12 game with FSR turned on, and no anti-cheat. Vulkan is planned upstream.
-
-**What this app does for it today (phase 1):**
-
-- routes every DX12 game on an AMD card to it, with the reason on the card and in Edit;
-- detects an install in the game folder (its setup exe and its log, the only file names its README
-  documents) and reads the version from the log;
-- fetches the model file the tool asks for -- the **unmodified 310.8.0** build -- from RHI's
-  manifest by exact version, and offers a backed-up replace when a different version is there;
-- checks the tool's latest GitHub release and says when a newer one is out;
-- opens the official release page, and runs the installer in a console once it is in the folder;
-- pre-ticks Luma's AMD/Intel ini workaround.
-
-**What it deliberately does not do: download the tool.** Its licence forbids redistributing or
-bundling it with "another mod, tool, launcher, installer, package, or download" and says to link
-to the release page instead, and its installer is interactive with no documented silent switch.
-The author has been asked about both ([DLSS-NR-on-AMD #151](https://github.com/danielblnc/DLSS-NR-on-AMD/issues/151));
-until then you download `dlssnr_on_amd_setup.exe` yourself, put it beside the game exe, and the
-app does everything around that. Whether it runs alongside OptiScaler (as the FSR provider for a
-DLSS-only game) is unverified upstream.
-
-## Language
-
-The manager runs in English, Brazilian Portuguese, Russian, Korean, Simplified Chinese, Spanish,
-German or French. It follows Windows by default (any Portuguese locale gets pt-BR, any Chinese locale gets
-zh-CN, and so on) and Settings has a Language selector to pin one. Every string the manager draws
-goes through `src/renderer/i18n.js`; a language is one flat file under `src/renderer/locales/`
-mapping the English text to its translation. Anything a file does not cover falls back to English.
-
-The in-game DLSS 5 panel (Alt+Home) speaks the same languages from engine v1.0.11 (French from v1.0.30). It follows
-Windows by default too; when you pin a language in the manager's Settings, the manager writes
-`[DlssNr] Language` into every installed game's `OptiScaler.ini` so the panel follows suit, and the
-panel's own Appearance section has the same selector for a per-game choice. Chinese and Korean draw
-with the fonts Windows ships (Microsoft YaHei, Malgun Gothic); nothing extra is bundled. OptiScaler's
-own shared menu stays English.
-
-The same three games, seven ways (French has no mock-up yet). Mock-ups rendered from the real UI with stub data, like the AMD
-ones above.
-
-| | |
+| Game | Route |
 |---|---|
-| ![Mock-up: game grid in English](docs/screenshots/mockup-lang-en.png) English | ![Mock-up: game grid in Brazilian Portuguese](docs/screenshots/mockup-lang-pt-BR.png) Português (Brasil) |
-| ![Mock-up: game grid in Russian](docs/screenshots/mockup-lang-ru.png) Русский | ![Mock-up: game grid in Korean](docs/screenshots/mockup-lang-ko.png) 한국어 |
-| ![Mock-up: game grid in Simplified Chinese](docs/screenshots/mockup-lang-zh-CN.png) 简体中文 | ![Mock-up: game grid in Spanish](docs/screenshots/mockup-lang-es.png) Español |
-| ![Mock-up: game grid in German](docs/screenshots/mockup-lang-de.png) Deutsch | |
+| Ships its own DLSS (Cyberpunk, Witcher 3, Stellar Blade...) | **OptiScaler**: Neural Rendering on the game's own DLSS |
+| No DLSS of its own | **OptiScaler + DLSS5 Feeder**: the Feeder builds a DLSS call from ReShade depth and motion vectors ([VORT](https://github.com/vortigern11/vort_Shaders) by default) |
+| Resident Evil 2 / 3 / 4 / 7 / Village, Devil May Cry 5, SF6 | **Present route**: DLSS 5 at the end of each frame, depth found by the engine ([DXL](https://github.com/LCPD15/DXL)'s design). Nothing extra to download |
+| STAR WARS Jedi: Fallen Order | **Luma UE**: replaces the game's TAA with DLAA |
+| Emulators, 32-bit games, DirectX 8/9 | **Experimental**: Feeder route. 32-bit games run DLSS in a 64-bit helper beside the game; DX8/9 go through dgVoodoo2 (asked before download, because Defender flags its zip) |
 
-Translations welcome. The existing files were written by the maintainer's tooling, not by native
-speakers, so corrections to any of them are as useful as new languages. To add one, copy
-`src/renderer/locales/pt-BR.js`, translate the right-hand side of each line (keep the `{placeholders}`
-and HTML tags exactly as they are), register it under its own code, and add it to the selector and
-script list in `src/renderer/index.html` and to `detect()` in `i18n.js`.
+Games that offer both **DX12 and DX11 are set up for DX12**. The one exception is when OptiScaler's log shows
+the game really ran DX11.
 
-## Frame Generation for games with no DLSS of their own
+## Frame Generation
 
-OptiScaler's own Frame Generation (FSRFG) needs the game's swapchain to be D3D12, and can't run
-together with the DLSS5 Feeder at all — confirmed on a real crash, not a guess (the Feeder's own
-per-frame state isn't built to survive it). For a Feeder game, or any D3D11 game, the app instead
-offers [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) as the
-Frame Generation source: a separate app that generates extra frames from the game's own window
-from the outside, so it never touches the swapchain OptiScaler, ReShade, and the Feeder share.
+- **The game's own DLSS Frame Generation:** set the multiplier (2x/3x/4x/Dynamic) in Edit or live in the panel.
+- **RTX 40 / 30:** [RTXMFG](https://github.com/dashdogy/RTX40MFG-Unlock) unlocks 3x–6x and Dynamic. It shows
+  in Edit for every game with DLSS Frame Generation. The app fetches it and checks it against its checksums;
+  press Backspace in game for its menu.
+- **Games with no DLSS:** [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) (a
+  separate paid app) is configured per game and toggled from the panel. It needs borderless or windowed mode.
+  OptiScaler's own FSR frame generation is D3D12-only and can't run alongside the Feeder.
 
-It is offered for **every** game, not just Feeder or DX11 ones — sometimes it is simply the better
-choice. **Lossless Scaling is a separate paid app you need to own yourself** — Steam is its
-distribution — this app doesn't install it, only configures its per-game profile once you do. From
-the Edit Game modal: pick **Fixed** (2x/3x/4x every frame) or **Adaptive** (a target FPS it
-generates just enough frames to hold), **Configure for this game**, then **Launch Lossless
-Scaling**. After that, the on/off toggle (and the multiplier, in Fixed mode) lives in this game's
-own in-game panel (`Alt+Home`) — no need to alt-tab out during play; in Adaptive mode the panel
-shows the target it is holding.
+## In game
 
-**Requires the game running Borderless or Windowed, not exclusive Fullscreen** — Lossless Scaling
-cannot capture an exclusive-fullscreen window at all, a limitation on its own side. A DX12 game is
-usually fine either way, since DX12 has no true exclusive fullscreen.
+| Key | Opens |
+|---|---|
+| `Alt+Home` | DLSS 5 Developer Controls panel (drag to move, drag an edge to resize, **Reset layout** in its title) |
+| `Insert` | OptiScaler's own menu (`Alt+O` on RE Engine games, where REFramework uses Insert) |
+| `Home` | ReShade, on Feeder routes |
 
-## What the Feeder needs to actually feed: motion vectors and depth
+Both are rebindable. Settings changed in the app are written to the game's `OptiScaler.ini`. On the 32-bit route
+the game reads them live, because its panel sits in the helper: Home > Add-ons > DLSS 5 Feed > *Show the DLSS 5
+panel in-game* > Insert.
 
-For a game with no DLSS of its own, the DLSS5 Feeder synthesises the DLSS call OptiScaler's neural
-pass hooks. It does not estimate motion itself: it reads a motion-vector shader you install, chosen
-by the `DLSS5_MV_PROVIDER` definition, and reads the scene's depth through ReShade's Generic Depth
-add-on. Both can be wrong while every file is in place, the shaders compile, and the log says frames
-are being delivered — which is exactly what "installed, and DLSS 5 still isn't doing anything" looks
-like. The app now writes both halves itself, and names it when they are wrong.
+**Launch** starts a Steam game through Steam. A game behind an anti-cheat stub (EasyAntiCheat, BattlEye) is
+started from its own exe instead, after asking. That means single-player only: going online with these files
+can get an account banned, so use **Remove** first.
 
-**The motion-vector provider.** The default is [VORT](https://github.com/vortigern11/vort_Shaders)
-(MIT, `DLSS5_MV_PROVIDER=2`), fetched from a pinned commit with its includes and its blue-noise
-texture, and the ReShade search paths for both. LumeniteFX Kernel (provider 3, what the Feeder's
-README recommends) is one choice away in Edit and is fetched live from its author's repo after you
-confirm its licence; iMMERSE Launchpad (provider 1) is offered only if you already have it, since its
-licence forbids anyone else propagating it. The technique goes into the preset **above** `DLSS 5
-Feed`, and `DLSS5_MV_PROVIDER` is written at both levels ReShade reads, so a reload from the overlay
-cannot leave the shader compiled for one provider while another is enabled — the Feeder calls that
-its classic silent failure.
+To keep a working game exactly as it is, put an empty `.dlss5ui-keep-as-is` file beside its exe. Sync will then
+leave it alone.
 
-> Before v1.57.0 the default was ReshadeMotionEstimation (DRME), and the Feeder's README is explicit
-> that **DRME does not compile on ReShade 6.8**, the version this app installs. So every Feeder
-> deploy before that shipped a motion-vector shader that could not compile, on every game: DLSS ran
-> on zero vectors, which looks sharp standing still and smears the moment you move. Game Help now
-> says so without waiting for a run, and one button re-deploys the whole motion-vector half.
+## AMD (RX 7000 / 9000)
 
-**Depth.** An install writes what is true of the engine — for Unity, reversed-Z and a depth copy
-taken before clears. If depth still reads flat, Edit offers the one Unity depth profile a
-contributor has verified end to end (the Feeder's README carries it as its Subnautica profile: clear
-index, aspect-ratio heuristic, reversed and upside-down depth). Past that it is ReShade's own
-**Add-ons ▸ Generic Depth** page in gameplay, the only thing that can see the buffers the running
-game actually has.
+OptiScaler's Neural Rendering needs NVIDIA's NGX runtime. On AMD, Edit offers
+[DLSS-NR-on-AMD](https://github.com/danielblnc/DLSS-NR-on-AMD) (danielblnc, alpha) instead. It hooks the game's
+FSR 3/4 and needs Windows 11, Adrenalin 26.1.1+ and a DX12 game with FSR on. The app fetches the model it asks for
+(the unmodified 310.8.0), watches for new releases and runs its installer. Its licence forbids redistribution,
+so **you download `dlssnr_on_amd_setup.exe` yourself** and put it beside the game exe.
 
-**The Agility SDK trap, which Unity games walk into.** An exe that exports `D3D12SDKPath` /
-`D3D12SDKVersion` points Direct3D 12 at its own `D3D12\` folder for *every* device created in that
-process — the Feeder's private D3D12 device included. If that folder is empty or holds the wrong
-version, every create fails with `D3D12_ERROR_INVALID_REDIST` and no DLSS session ever opens, while
-the game itself never notices because on D3D11 it creates no D3D12 device of its own. The app reads
-that code out of `dlss5-feed.log`, says what it means, and offers to move the folder aside
-reversibly — the test the Feeder's README gives.
+## Languages
 
-## What it does
-
-**Finds your games.** Reads Steam's `libraryfolders.vdf` (so every Steam library on every drive),
-the Epic and GOG registry entries, and — on request — every fixed drive on the machine. You can add
-folders by hand and exclude ones you never want walked. For each game folder it picks the executable
-to install beside, scoring on name match, the directory a shipping binary tends to live in, and how
-deep it sits, and penalising launchers, crash reporters, updaters and anti-cheat wrappers. It
-proposes; you confirm before anything is written.
-
-The drive scan is off by default. On a 4 TB library it takes real time, so it belongs behind a
-checkbox you tick rather than on first run.
-
-**Installs OptiScaler per game.** Copies the release files and your NR model file into the game
-folder, tracks what's installed against what's current, and re-runs OptiScaler's own setup script
-in a console you confirm yourself.
-
-**Ships the OptiScaler_DLSSNR engine build inside the installer** (`release.yml` fetches the
-fork's latest release into `engine/` before packaging; it lands in `resources/engine/`), extracts
-it on first launch, and keeps it current from GitHub on every launch and "Check for Updates". The
-same zip is also attached to this app's own GitHub releases (as `OptiScaler_DLSSNR-<version>.zip`)
-for reference. **The DLSS NR model file** (`nvngx_dlssnr.dll`,
-the one piece NVIDIA only ships inside driver packages) is fetched automatically too, from the
-same RHI manifest the Feeder already uses -- a fresh install needs no manual downloads at all.
-
-**One engine build, nothing to set.** Up to v1.63 the app also offered wilsjo2's
-OptiScaler-DLSSNR-PreSR-Multipass fork and a hand-set release folder. Both are gone: every game runs
-this project's own OptiScaler_DLSSNR from the app's managed folder, and a game or setting that still
-named the fork or a custom folder moves back onto it by itself. Neural Rendering before DLSS upscaling
-(RunBeforeSR) and one to three passes (Passes) are in Edit's DLSS 5 settings and the Alt+Home panel.
-**Check for Updates** sits in the top bar beside Scan for Games: one press checks and installs a newer
-engine, NR model and Manager.
-
-**RTXMFG: Multi Frame Generation on RTX 40 / 30.** For games with their own DLSS Frame Generation,
-Edit > Frame Generation offers [dashdogy's RTXMFG](https://github.com/dashdogy/RTX40MFG-Unlock) on an
-RTX 40 card (RTX 30 experimental; RTX 50 has MFG already, so it stays hidden there). It is fetched from
-the project's latest release, checked against its SHA256SUMS.txt, and placed beside the exe under the
-first DLL name the folder does not already hold (ersion.dll, then winhttp.dll, dsound.dll, ...);
-an occupied name is never overwritten. In the game: Frame Generation on, Backspace for its menu. Works
-with or without OptiScaler; Remove takes it only while it is still the copy the app placed.
-
-## What OptiScaler covers, and what it doesn't
-
-OptiScaler intercepts the game's own upscaler — NVNGX, FSR or XeSS — and hands the neural model a
-properly labelled depth buffer, motion vectors, motion-vector scale, reset flag and pre-exposure
-straight from the parameter block. It covers **D3D12 natively, Vulkan (natively and through the
-VkOnDx12 bridge), and D3D11 through the Dx11wDx12 bridge**. There is no D3D9 or D3D10 code in
-OptiScaler and there isn't going to be — those APIs have nothing to intercept, so games on them are
-simply not supported by this app. The card says so plainly instead of recommending an install that
-can't work.
-
-## Dependencies: what the app fetches, and the one thing it won't
-
-**Streamline** — the `streamline` folder OptiScaler's DLSS-G Frame Gen needs — is downloaded per
-game when the game doesn't already ship one. The version list comes from RHI's published
-`dlss_manifest.json`, so a newer Streamline build reaches you the day RHI packages it, without
-waiting for a release of this app. "Latest" is the default; Settings has a dropdown if you want to
-hold a specific build, and a game with a known ceiling (The Witcher 3 hard-crashes on 2.12.0 and
-newer) is capped automatically. Only the Streamline DLLs are taken from RHI — the OptiScaler build and the DLSS-NR model
-stay pinned to our own `OptiScaler_DLSSNR` fork.
-
-**REFramework** is fetched from `praydog/REFramework-nightly` for RE Engine games, where OptiScaler
-does nothing without it. The install fails rather than half-succeeds if it can't be got.
-
-**The DLSS NR model file** (`nvngx_dlssnr.dll`) is NVIDIA's and only ships inside driver packages,
-which is why `package_release.ps1` leaves it out of the OptiScaler release. It is not bundled here
-either; the app fetches it on first launch from the same RHI manifest the Feeder uses, or you can
-point Settings at your own copy from a driver. Two builds exist in that manifest and the app uses
-both, on purpose:
-
-- **310.8.SF** (what the NVIDIA path deploys by default) is [ShortFuse](https://github.com/ShortFuse)'s
-  modified build that extends Neural Rendering to RTX 20, 30 and 40 Series cards; NVIDIA's own
-  build only runs on RTX 50. It reports itself as 310.8.1. Worth knowing: it is a third-party
-  modification of an NVIDIA DLL.
-- **310.8.0**, the unmodified build, is what DLSS-NR-on-AMD documents, so that is the one the AMD
-  section fetches, by exact version.
-
-**DLSS-NR-on-AMD itself is never downloaded** -- see the section above for why.
+English, Português (Brasil), Русский, 한국어, 简体中文, Español, Deutsch and Français. The app follows Windows,
+and Settings can pin a language, which the in-game panel then follows too. Translations are one flat file each
+in `src/renderer/locales/`, written by the maintainer's tooling. Corrections from native speakers are welcome.
 
 ## Verified games
 
-The card shows a "✓ Verified" tick when a game's route has been confirmed end to end on a real
-install -- Neural Rendering actually dispatching in gameplay -- and recorded in
-[`src/verified-games.json`](src/verified-games.json). That file is also where the app learns
-which route a game defaults to when a specific mod has been proven there (Luma UE on Fallen
-Order) and which routes are known to break a game (Luma UE on Spyro). It is data, not code:
-confirm a game yourself, then add an entry by pull request with the date, the route, and what
-a player should know.
-
-## Launching a game
-
-Every card has a **Launch** button. A game installed under a Steam library is launched through Steam (by the
-appid of its install folder), so its DRM, overlay and launch options behave as usual. Any other game runs from
-its own folder, and for an Unreal game that means the
-`<Project>-Win64-Shipping.exe` under `<Project>BinariesWin64` -- the process that actually renders and the one
-OptiScaler is installed beside -- even when the card was added from the launcher stub in the install root.
-
-**A game that starts through an anti-cheat stub is the exception**, and it is the one launch that cannot work
-any other way. Steam does not start such a game directly: it runs a small launcher -- EasyAntiCheat's
-`start_protected_game.exe` (FromSoftware's titles, and plenty of Unity and Unreal EAC games) or BattlEye's
-`<Game>_BE.exe` -- which starts the anti-cheat and then the game under it. The anti-cheat will not let the game
-run with OptiScaler's DLL in the folder, and the failure is silent: no OptiScaler.log, no ReShade.log, no
-dlss5-feed.log, nothing to read at all. So for a game this app has modified, **Launch starts the game's own exe
-instead**, passing the Steam appid in the environment so the game still initialises against Steam (which still
-has to be running, and still has to own the game -- nothing here touches DRM). It asks first, once per game, and
-says what it costs: single-player works, **online play and matchmaking do not, and playing online with these
-files in place can get the account banned**. Use **Remove** before going back online. Game Help says the same
-thing when it sees a modded stub game with nothing logged, instead of waiting for a run that can never happen.
-
-**Picking a different exe.** The app proposes one exe per game and is right for nearly all of them, but a game
-with several -- or one whose launcher looks more like the game than the game does -- needs correcting. Edit's
-**Game .exe** field lists the exes in that game's own folder, best guess first, and saving a new one re-detects
-the game for it rather than keeping the old exe's answers (which is what used to leave a card reading "unknown
-support"). Browsing to an Unreal launcher stub still resolves to the shipping exe it spawns, but it now says so
-and keeps your original one click away. A game whose exe you changed is also no longer re-proposed by the next
-library scan as a second card.
-
-## Game Help
-
-Every card has a **Game Help** button. It checks what the app already knows about the game -- the
-detection, the recommended route and what is deployed, the last run's verdict from the logs, other
-DLSS 5 toolchains in the folder, the verified-games registry -- against a rule table
-(`src/gamehelp.js`) and says one of six things:
-
-- **Working** -- Neural Rendering ran on the last run, with the pass count and fps.
-- **Fix available** -- the app can do it: remove another toolchain, remove a Feeder that is on a game
-  with its own DLSS, remove Luma UE from a game known to break with it, reconfigure the ini
-  (`dlss_12` for D3D11, NR on, REFramework for RE Engine, the Feeder's ReShade settings), deploy the
-  Feeder's motion-vector half again when DLSS is being fed no vectors, switch a flat-depth game to
-  the verified Unity depth profile, move a game's broken `D3D12\` Agility redist aside, or Install.
-  One button applies it.
-- **Your move** -- something only you can do: selecting DLSS in Luma's overlay in-game, or launching a
-  stub-protected game from this app rather than through Steam (see above).
-- **Needs a run** -- no log yet. **Launch and check** starts the game and reads the new log by itself
-  once you have reached gameplay and quit.
-- **Not available** -- DLSS 5 cannot work here with what this app deploys: a 32-bit game, anti-cheat,
-  a Vulkan-only game with no DLSS, or a fix that was applied and changed nothing. It says why.
-- **No rule fits** -- the escalation: **Save bundle to share** zips the logs, settings and the app's
-  own view to your Desktop (nothing is sent anywhere), or **Ask AI**.
-
-**Ask AI** is optional and paid by you: in Settings, paste an Anthropic API key (you pay Anthropic
-directly for what you use). It sends that game's log tails and the app's view to Claude, which may
-apply only the same fixes the app has, and only after you confirm each one in a dialog. It ends with
-a plain verdict: fixed, or "DLSS 5 is not currently available for this game" and why. Nothing is sent
-until you press Ask AI, and the key never leaves your machine except to api.anthropic.com.
-## In-game keys
-
-| | |
-|---|---|
-| **Insert** | OptiScaler's own overlay |
-| **Alt+Home** | the DLSS 5 Developer Controls panel |
-
-Both are rebindable, and both panels can be open at once. The panel moved off bare `Home` in
-v1.0.1 because `Home` collided with too many games; v1.0.0 still uses it.
-
-**Moving and resizing the DLSS 5 panel** (engine v1.0.14; resizing from v1.0.18): hold the left
-mouse button on its background, away from any slider or checkbox, and drag it anywhere. It can hang
-partly off the screen, but a strip always stays visible to grab it back. Drag any edge or the
-bottom-right corner to resize it; a panel smaller than its content scrolls. Position and size are
-remembered for that game, as fractions of the screen, so they come back at any resolution. A
-**Reset layout** button in its title row puts it back on the left edge at its natural size, and the
-bright red **X** at the far right of the title row closes it (its key opens it again).
-
-**RE Engine games** (Dragon's Dogma 2, the Resident Evil titles, Monster Hunter Rise/Wilds, and
-the rest of Capcom's RE Engine catalogue) also need REFramework, which uses Insert for its own
-overlay. On these games the app switches OptiScaler's own overlay key to **Alt+O** automatically,
-so both work side by side without a manual rebind.
-
-**Resident Evil 2, 3, 4, 7 and Village** have no DLSS of their own, and since engine v1.0.24 they
-need nothing extra either: DLSS 5 runs at the end of each frame, on top of the game's own
-anti-aliasing, and the engine finds the game's depth buffer by itself -- the approach of
-[DXL](https://github.com/LCPD15/DXL) by LCPD15, ported into the engine. Just Install, load a save
-(menus have no depth to work with) and open the DLSS 5 panel as usual. The earlier route through
-REFramework's pd-upscaler and PureDark's Upscaler Base Plugin is retired: the app no longer places
-the plugin or `nvngx_dlss.dll` for these games, takes out a plugin copy it placed before, and keeps
-REFramework's TemporalUpscaler switched off.
-
-A game that already works the way you want can be kept exactly as it is: put an empty file named
-`.dlss5ui-keep-as-is` beside its exe and the app's sync leaves it alone -- no engine, model or
-settings update.
-
-### Experimental: emulators, 32-bit games, DirectX 8/9
-
-These routes follow the DLSS5 Feeder's own documented paths and carry an **Experimental** tag on the
-card: they are covered by tests against the real components' layouts, but have not yet been run on a
-live game. None of these games make a DLSS call, so all of them go through the Feeder.
-
-- **Emulators** (PCSX2, RPCS3, Dolphin, DuckStation, Ryujinx, yuzu/Eden/Citron, shadPS4, Xenia, Cemu,
-  PPSSPP, RetroArch and more): recognised by exe name. Install puts the Feeder and OptiScaler in the
-  emulator, which covers every game it runs. Its renderer is a setting inside it, so the card names
-  where that setting is; choose the same API in Edit. Depth is the weak point -- ReShade often cannot
-  see a console game's depth buffer inside an emulator. On Direct3D and Vulkan the DLSS 5 panel
-  (Alt+Home) opens over the emulator as usual; OptiScaler cannot draw over OpenGL, so pick a Direct3D
-  or Vulkan renderer where there is one.
-- **32-bit games** (DirectX 10/11, OpenGL, and DirectX 8/9 below): NVIDIA ships no 32-bit DLSS, so the
-  Feeder's 32-bit add-on hands each frame to its 64-bit helper in a `host64` folder beside the game,
-  and OptiScaler runs there. The DLSS 5 panel lives in that helper: in the game, Home opens ReShade ->
-  Add-ons -> DLSS 5 Feed -> **Show the DLSS 5 panel in-game**, then Alt+Home (windowed or borderless;
-  "Show as texture" for exclusive fullscreen). Engine and NR-model updates reach the helper like any
-  other install. 32-bit Vulkan (DXVK) is not supported yet.
-- **DirectX 8/9**: dgVoodoo2 turns them into DirectX 11 first -- its 32-bit D3D8/D3D9 for a 32-bit
-  game, its x64 D3D9 for a 64-bit one -- configured to engage, output D3D11, have enough VRAM and show
-  no watermark. **Install asks before downloading dgVoodoo2**: Windows Defender currently reports the
-  official zip as `Trojan:Win32/Kepavll!rfn`, a reputation-based detection, and may delete it. The app
-  never adds antivirus exclusions; you can instead point it at a dgVoodoo2 zip you already have.
-
-Remove takes all of it back -- dgVoodoo2, the helper folder, the 32-bit ReShade -- and restores any
-file it had to set aside.
+A ✓ on a card means the route was confirmed end to end on a real install and recorded in
+[`src/verified-games.json`](src/verified-games.json). That file also sets per-game default routes and known-bad
+routes. Add a game you've confirmed by pull request.
 
 ## Building
 
 ```
 npm install
-npm start          # run it
-npm run dist       # NSIS installer + portable .exe, into dist/
+npm start          # run
+npm test           # node:test suite
+npm run dist       # NSIS installer + portable exe in dist/
 ```
 
-Electron 33, Windows x64. No native modules.
+Electron 33, Windows x64, no native modules. Setting `OPTIDLSS5_NO_SYNC=1` runs a copy that never touches game
+folders, which is useful for screenshots or a second instance.
 
 ## Credits and licensing
 
-**OptiDLSS5-UI is proprietary: all rights reserved.** You may download and run the official
-releases and propose changes here, but not copy, modify, redistribute or reuse the app or its code
-elsewhere without written permission -- see [LICENSE](LICENSE). This applies from v1.55.0. The
-OptiScaler_DLSSNR engine it installs is a separate program and stays GPL-3.0. Third-party parts keep
-their own licences: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+**OptiDLSS5-UI is proprietary, all rights reserved** ([LICENSE](LICENSE), from v1.55.0). You may run the official
+releases and propose changes here, but not copy, modify or redistribute the app. The OptiScaler_DLSSNR engine is a
+separate program and stays GPL-3.0. Third-party notices: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+`src/library.js` is from [DLSS5-Swapper](https://github.com/rakanki911/DLSS5-Swapper) (MIT, Rakan Alkhaldi;
+licence in `third_party/`).
 
-`src/library.js` is taken verbatim from [DLSS5-Swapper](https://github.com/rakanki911/DLSS5-Swapper)
-— MIT, Copyright (c) 2026 Rakan Alkhaldi. The licence text is kept in
-[third_party/DLSS5-Swapper-LICENSE.txt](third_party/DLSS5-Swapper-LICENSE.txt) and ships inside the
-installer; keeping that notice is the whole of what MIT asks. It is held byte-identical to its upstream so it can be refreshed without a merge — the
-adaptation for this app lives in `src/discover.js` instead.
-
-[OptiScaler](https://github.com/optiscaler/OptiScaler) is the upstream this all rests on, through
-the [OptiScaler_DLSSNR](https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR) fork that adds the
-Neural Rendering pass and the in-game panel.
-
-[DXL (DLSS eXtended Loader)](https://github.com/LCPD15/DXL) by **LCPD15** (AGPL-3.0) showed how to
-run DLSS 5 on games that make no DLSS call at all: at the game's Present, with the scene depth found
-by watching the game's own depth buffers. The engine's Present route and depth tracker follow its
-design, with credit in the engine's `Licenses/DXL_ATTRIBUTION.txt`. Thank you, LCPD15.
-
-Everything the app fetches on your behalf comes from someone else's work, live from their own
-releases and never mirrored here:
+[OptiScaler](https://github.com/optiscaler/OptiScaler) is the upstream this rests on. Thanks to LCPD15 for
+[DXL](https://github.com/LCPD15/DXL), whose design the engine's Present route follows. Everything below is
+fetched live from its own releases, never mirrored here:
 
 | Project | Used for | Licence |
 |---|---|---|
-| [DLSS-NR-on-AMD](https://github.com/danielblnc/DLSS-NR-on-AMD) (Daniel Blanco) | Neural Rendering on RX 7000/9000 -- detected, linked and configured around; not downloaded | Custom, personal non-commercial; no redistribution or bundling |
-| [RHI](https://github.com/RankFTW/RHI) (RankFTW) | `dlss_manifest.json`: Streamline, DLSS, DLSS-G and NR model packages (read, not linked against) | GPL-3.0 |
-| ShortFuse's `nvngx_dlssnr.dll` 310.8.SF (via RHI) | Neural Rendering on RTX 20/30/40 | Modified NVIDIA DLL, as published by RHI |
-| [DLSS5-Feeder](https://github.com/jlrouzies-fr/DLSS5-Feeder) (jlrouzies-fr) | A synthesised DLSS call for games with no DLSS of their own | MIT |
-| [ReShade](https://reshade.me) (crosire) and [reshade-shaders](https://github.com/crosire/reshade-shaders) | Host for the Feeder and Luma add-ons; `ReShade.fxh`/`ReShadeUI.fxh` | BSD 3-Clause |
-| [vort_Shaders](https://github.com/vortigern11/vort_Shaders) (vortigern11) | Default motion-vector provider for the Feeder (`vort_Motion`, `DLSS5_MV_PROVIDER=2`); fetched from a pinned commit of the author's own repo | MIT |
-| [LumeniteFX](https://github.com/umar-afzaal/LumeniteFX) (umar-afzaal) | Optional motion-vector provider, the one the Feeder's README recommends; fetched live from the official repo only after per-action consent | AGNYA (all rights reserved) |
-| [iMMERSE](https://github.com/martymcmodding/iMMERSE) (Pascal Gilcher / MartysMods) | Optional motion-vector provider (Launchpad): detected and configured if you already have it, never fetched or shipped -- its licence forbids propagating any part of it | All rights reserved |
-| [ReshadeMotionEstimation](https://github.com/JakobPCoder/ReshadeMotionEstimation) (JakobPCoder) | Former default motion-vector provider, recognised now only so an old deploy can be cleaned up: DRME does not compile on ReShade 6.8 | CC BY-NC 4.0 |
-| [Luma-Framework](https://github.com/Filoppi/Luma-Framework) (Filoppi) | DLAA in place of TAA for STAR WARS Jedi: Fallen Order; fetched live after per-action consent | Custom MIT variant |
-| [RTXMFG / RTX40MFG-Unlock](https://github.com/dashdogy/RTX40MFG-Unlock) (dashdogy) | Optional Multi Frame Generation on RTX 40 / 30 in games with DLSS Frame Generation; fetched from its releases and checksum-verified when you press Install | MIT |
+| [DLSS5-Feeder](https://github.com/jlrouzies-fr/DLSS5-Feeder) (jlrouzies-fr) | DLSS call for games without DLSS | MIT |
+| [ReShade](https://reshade.me) (crosire), [reshade-shaders](https://github.com/crosire/reshade-shaders) | Host for the Feeder and Luma add-ons | BSD 3-Clause |
+| [vort_Shaders](https://github.com/vortigern11/vort_Shaders) (vortigern11) | Default motion vectors for the Feeder (pinned commit) | MIT |
+| [LumeniteFX](https://github.com/umar-afzaal/LumeniteFX) (umar-afzaal) | Optional motion vectors, after licence consent | AGNYA |
+| [iMMERSE](https://github.com/martymcmodding/iMMERSE) (MartysMods) | Optional motion vectors if you already have it; never fetched | All rights reserved |
+| [RHI](https://github.com/RankFTW/RHI) (RankFTW) | Manifest for Streamline, DLSS, DLSS-G and the NR model | GPL-3.0 |
+| ShortFuse's `nvngx_dlssnr.dll` 310.8.SF (via RHI) | Neural Rendering on RTX 20/30/40 | Modified NVIDIA DLL |
+| [RTXMFG](https://github.com/dashdogy/RTX40MFG-Unlock) (dashdogy) | Multi Frame Generation on RTX 40/30, checksum-verified | MIT |
+| [Luma-Framework](https://github.com/Filoppi/Luma-Framework) (Filoppi) | DLAA for Fallen Order, after licence consent | Custom MIT variant |
 | [REFramework](https://github.com/praydog/REFramework) (praydog) | Required on RE Engine games | MIT |
-| [DXL](https://github.com/LCPD15/DXL) (LCPD15) | The design of the engine's Present route and depth tracker, which run DLSS 5 on Resident Evil 2/3/4/7/Village without a DLSS call; credited in the engine, nothing downloaded | AGPL-3.0 |
-| [Upscaler Base Plugin](https://www.nexusmods.com/site/mods/502) (PureDark) | Formerly the DLSS call on Resident Evil 2/3/4/7/Village; no longer placed since the Present route -- only recognised so a copy the app placed earlier can be taken out | PureDark's; not redistributed |
-| [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) (THS) | Frame Generation for games with no DLSS of their own; configured, never installed | Paid, Steam |
-| [DLSS5-Swapper](https://github.com/rakanki911/DLSS5-Swapper) (Rakan Alkhaldi) | `src/library.js`, as above; the emulator table, the 32-bit helper layout and the dgVoodoo2 pin and settings are ported from it | MIT |
-| [DLSS5-Autopilot](https://github.com/Kizzuwatnaa/DLSS5-Autopilot) (Kizzuwatnaa) | The emulator detection table DLSS5-Swapper's is based on | MIT |
-| [dgVoodoo2](https://github.com/dege-diosg/dgVoodoo2) (Dege) | DirectX 8/9 to DirectX 11 on the experimental legacy route; fetched from its official release only after asking | Freeware |
+| [DXL](https://github.com/LCPD15/DXL) (LCPD15) | Design of the engine's Present route; nothing downloaded | AGPL-3.0 |
+| [DLSS-NR-on-AMD](https://github.com/danielblnc/DLSS-NR-on-AMD) (danielblnc) | AMD route; linked, never downloaded | Custom, no redistribution |
+| [dgVoodoo2](https://github.com/dege-diosg/dgVoodoo2) (Dege) | DirectX 8/9 to 11 on the experimental route, after asking | Freeware |
+| [Lossless Scaling](https://store.steampowered.com/app/993090/Lossless_Scaling/) (THS) | Frame Generation for games without DLSS; configured, never installed | Paid (Steam) |
+| [DLSS5-Swapper](https://github.com/rakanki911/DLSS5-Swapper), [DLSS5-Autopilot](https://github.com/Kizzuwatnaa/DLSS5-Autopilot) | `src/library.js`, emulator table, 32-bit helper layout | MIT |
+| [Upscaler Base Plugin](https://www.nexusmods.com/site/mods/502) (PureDark) | Retired RE route; only recognised so an old copy can be removed | Not redistributed |
 
-NVIDIA's DLSS is NVIDIA's; this project is not affiliated with or endorsed by NVIDIA, AMD, or any of
-the projects above.
+NVIDIA's DLSS is NVIDIA's. This project is not affiliated with NVIDIA, AMD or any project above.

@@ -116,3 +116,26 @@ test('a game patched by its store expires its stored detection', async () => {
   const reused = await detect.detectGameCached(dir, exe, { stored: beforeThisExisted });
   assert.ok(reused.exeStamp, 'the reused answer carries a current stamp');
 });
+
+// Batman: Arkham Knight (2026-09-15): games.json held an optiScalerProxy reading from before an engine update
+// (another size, matchesOurBuild false), the exe half was still current so nothing refreshed it, and Game Help
+// said "Another OptiScaler loads first" about a dxgi.dll byte-identical to this app's own build.
+test('a saved reading of the folder is refreshed even when the exe half is current', async () => {
+  const { loadMain } = require('./helpers');
+  const { invoke } = loadMain();
+  const dir = scratchDir('stale-folder-evidence');
+  const exe = fakeExe(dir);
+  write(dir, 'OptiScaler.dll', 'OptiScaler build v1.0.30');
+  write(dir, 'dxgi.dll', 'OptiScaler build v1.0.30');
+  const current = await detect.detectGameCached(dir, exe);
+  assert.equal(current.optiScalerProxy.matchesOurBuild, true);
+
+  // What games.json kept: the same detection, with the proxy as it was before the update.
+  const stored = { ...current, optiScalerProxy: { file: 'dxgi.dll', size: 26447360, matchesOurBuild: false } };
+  const fresh = await invoke('game:detect-path-if-stale', { exePath: exe, stored });
+  assert.ok(fresh, 'a changed folder reading is handed back');
+  assert.equal(fresh.optiScalerProxy.matchesOurBuild, true);
+
+  // Nothing changed: nothing to hand back, so the renderer does not rewrite games.json every render.
+  assert.equal(await invoke('game:detect-path-if-stale', { exePath: exe, stored: current }), null);
+});
