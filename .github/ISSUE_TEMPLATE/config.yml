@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 Ask on Discord
+    url: https://discord.gg/HFZTDdSNmJ
+    about: Questions, setup help and game results. The fastest place to get an answer.
+  - name: 🐞 Send game failure (in the app)
+    url: https://github.com/mrcgibb9876-hash/OptiDLSS5-UI#community-and-support
+    about: Game Help > Send game failure files an issue with your logs attached.

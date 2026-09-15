@@ -157,6 +157,10 @@ jobs:
         tag_name: ${{ inputs.tag }}
         name: ${{ inputs.title }}
         prerelease: ${{ inputs.prerelease }}
+        body: |
+          [![Join the Discord](https://img.shields.io/badge/Join%20the%20Discord-Help%20·%20Results%20·%20Releases-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/HFZTDdSNmJ)
+
+          **Download:** `OptiDLSS5-UI-Setup-*.exe` (installer) or `OptiDLSS5-UI-Portable-*.exe`. The app updates itself after that.
         # latest.yml + the blockmap are what the Manager's own updater (electron-updater, GitHub
         # provider) reads to find and delta-download the next build -- see src/manager-update.js.
         files: |

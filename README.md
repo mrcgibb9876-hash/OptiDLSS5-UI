@@ -1,10 +1,24 @@
-<img src="build/icon.png" alt="" width="96" align="right">
+<p align="center">
+  <img src="build/icon.png" alt="" width="128">
+</p>
 
-# OptiDLSS5-UI
+<h1 align="center">OptiDLSS5-UI</h1>
 
-[![Discord](https://img.shields.io/badge/Discord-Join%20the%20server-5865F2?logo=discord&logoColor=white)](https://discord.gg/HFZTDdSNmJ)
+<p align="center"><b>DLSS 5 Neural Rendering, set up per game.</b></p>
 
-[![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://buymeacoffee.com/ripplingsnake)
+<p align="center">
+  <a href="https://discord.gg/HFZTDdSNmJ"><img src="https://img.shields.io/badge/Join%20the%20Discord-Help%20·%20Results%20·%20Releases-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join the Discord" height="42"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/mrcgibb9876-hash/OptiDLSS5-UI/releases/latest"><img src="https://img.shields.io/github/v/release/mrcgibb9876-hash/OptiDLSS5-UI?style=for-the-badge&label=Download&color=76B900&logo=github" alt="Download"></a>
+  <a href="https://discord.gg/HFZTDdSNmJ"><img src="https://img.shields.io/discord/1549486108859957308?style=for-the-badge&label=Online&logo=discord&logoColor=white&color=5865F2" alt="Discord members online"></a>
+  <a href="https://buymeacoffee.com/ripplingsnake"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy Me a Coffee"></a>
+</p>
+
+> [!TIP]
+> **Need help, or want to show off a game?** Join the **[OptiDLSS5-UI Discord](https://discord.gg/HFZTDdSNmJ)**: a help forum,
+> per-game results, before/after screenshots, and every release announced as it lands.
 
 A Windows app that puts NVIDIA's DLSS 5 Neural Rendering into your games through the
 [OptiScaler_DLSSNR](https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR) build of OptiScaler. Add your
@@ -34,6 +48,17 @@ verified, and what the last run did.
 ![DLSS 5 Developer Controls panel, dark theme](docs/screenshots/dlssnr-panel-dark.png)
 
 ![DLSS 5 Developer Controls panel, light theme](docs/screenshots/dlssnr-panel-light.png)
+
+## Community and support
+
+[![Join the Discord](https://img.shields.io/badge/Discord-Join%20the%20server-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/HFZTDdSNmJ)
+
+- **[#help](https://discord.gg/HFZTDdSNmJ)**: post the game, your GPU and what Game Help said.
+- **#game-results**: what works, on which route, with which settings.
+- **#screenshots**: before/after shots with DLSS 5.
+- **#announcements**: every release as it ships.
+
+Found a bug? Press **Send game failure** in Game Help. It files a GitHub issue with your logs attached.
 
 ## Requirements
 
@@ -161,3 +186,7 @@ fetched live from its own releases, never mirrored here:
 | [Upscaler Base Plugin](https://www.nexusmods.com/site/mods/502) (PureDark) | Retired RE route; only recognised so an old copy can be removed | Not redistributed |
 
 NVIDIA's DLSS is NVIDIA's. This project is not affiliated with NVIDIA, AMD or any project above.
+
+---
+
+<p align="center"><a href="https://discord.gg/HFZTDdSNmJ"><b>💬 Join the OptiDLSS5-UI Discord</b></a></p>
