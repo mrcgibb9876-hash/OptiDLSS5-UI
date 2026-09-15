@@ -2,6 +2,8 @@
 
 # OptiDLSS5-UI
 
+[![Discord](https://img.shields.io/badge/Discord-Join%20the%20server-5865F2?logo=discord&logoColor=white)](https://discord.gg/HFZTDdSNmJ)
+
 [![Buy Me a Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://buymeacoffee.com/ripplingsnake)
 
 A Windows app that puts NVIDIA's DLSS 5 Neural Rendering into your games through the
