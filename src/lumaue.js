@@ -46,6 +46,11 @@ const { openZip, findEntry, findEntries, extractEntryTo } = require('./zip');
 const { setIniKey } = require('./ini-merge');
 const feeder = require('./feeder');
 const verified = require('./verified');
+const { readFileVersion } = require('./detect');
+
+// The app's backup suffix for a game file it replaced (main.js ORIG_BACKUP_SUFFIX, which the full uninstall
+// restores by name).
+const ORIG_BACKUP_SUFFIX = '.dlss5ui-orig';
 
 const LUMA_RELEASES_API = 'https://api.github.com/repos/Filoppi/Luma-Framework/releases/latest';
 
@@ -65,7 +70,20 @@ const LUMA_PROFILES = {
   ue: { id: 'ue', name: 'Luma UE', asset: /^Luma-Unreal_Engine\.zip$/i, assetName: 'Luma-Unreal_Engine.zip', addon: 'Luma-Unreal Engine.addon' },
   prey: { id: 'prey', name: 'Luma (Prey)', asset: /^Luma-Prey\.zip$/i, assetName: 'Luma-Prey.zip', addon: 'Luma-Prey.addon' },
 };
-const LUMA_ADDON_NAMES = Object.values(LUMA_PROFILES).map((p) => p.addon);
+
+// Every other game's Luma mod comes from Luma-Framework itself (lumacatalog.js): the per-game zips in its
+// release that carry DLSS, matched to the game by name. `mod` is a catalog entry.
+function profileFromMod(mod) {
+  if (!mod || !mod.addon) return null;
+  const esc = mod.asset.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return { id: mod.key, name: 'Luma', asset: new RegExp(`^${esc}$`, 'i'), assetName: mod.asset, addon: mod.addon, status: mod.status || null, catalog: true };
+}
+
+// Every Luma add-on in a folder: Luma names each one after its game ("Luma-Monster Hunter World.addon").
+const LUMA_ADDON_PATTERN = /^Luma-.+\.addon(32|64)?$/i;
+function lumaAddonsIn(dir) {
+  try { return fs.readdirSync(dir).filter((n) => LUMA_ADDON_PATTERN.test(n)); } catch { return []; }
+}
 
 // Prey (2017) and Mooncrash: Prey.exe under Binaries\Danielle\x64\Release, CryEngine DLLs beside it.
 // The path or CrySystem.dll tells it apart from Prey (2006), a 32-bit idTech 4 game with the same exe name.
@@ -75,16 +93,28 @@ function isPrey2017(exePath) {
   return /[\\/]danielle[\\/]/i.test(dir) || fs.existsSync(path.join(dir, 'CrySystem.dll'));
 }
 
-// The Luma mod for this game, or null. `detected` as for isLumaUeGame.
-function lumaProfileFor(exePath, detected) {
+// The Luma mod for this game, or null. `detected` as for isLumaUeGame; `lumaMod` is the catalog match the
+// caller found for the game's names (main.js lumaModFor), which wins over the built-in profiles.
+function lumaProfileFor(exePath, detected, lumaMod = null) {
+  const fromCatalog = profileFromMod(lumaMod);
+  if (fromCatalog) return fromCatalog;
   if (isPrey2017(exePath)) return LUMA_PROFILES.prey;
   if (isLumaUeGame(exePath, detected)) return LUMA_PROFILES.ue;
   return null;
 }
 
-// The profile whose add-on is on disk here, if any.
+// The profile of the Luma mod on disk here, if any: from the deploy marker when it names one, else from
+// the add-on's own file name.
 function deployedProfile(dir) {
-  return Object.values(LUMA_PROFILES).find((p) => fs.existsSync(path.join(dir, p.addon))) || null;
+  const addons = lumaAddonsIn(dir);
+  if (!addons.length) return null;
+  let marker = null;
+  try { marker = JSON.parse(fs.readFileSync(path.join(dir, LUMA_DEPLOY_MARKER), 'utf8')); } catch {}
+  if (marker && marker.asset && marker.addon && addons.includes(marker.addon)) {
+    return profileFromMod({ key: marker.profile || marker.asset, asset: marker.asset, addon: marker.addon }) || null;
+  }
+  const known = Object.values(LUMA_PROFILES).find((p) => addons.includes(p.addon));
+  return known || { id: 'unknown', name: 'Luma', addon: addons[0] };
 }
 
 // Real names inside the release zip, confirmed by downloading and listing it directly
@@ -166,19 +196,23 @@ function lumaUeKnownBad(exePath) {
 // The default route only where Luma UE has been verified end to end (Fallen Order). Every other
 // eligible UE4 D3D11 game defaults to the Feeder and gets Luma as an experimental option in Edit
 // -- the wider gate shipped in 1.25.0 on the strength of one game and broke Spyro within a day.
-function isLumaUeDefault(exePath) {
-  return isFallenOrder(exePath) || isPrey2017(exePath) || verified.defaultRoute(exePath) === 'lumaue';
+function isLumaUeDefault(exePath, lumaMod = null) {
+  return !!(lumaMod && lumaMod.addon) || isFallenOrder(exePath) || isPrey2017(exePath) || verified.defaultRoute(exePath) === 'lumaue';
 }
 
 function lumaUeDeployed(dir) {
   return !!deployedProfile(dir);
 }
 
+const LUMA_CATALOG_NOTE = 'Luma-Framework has a mod for this game that adds real DLSS with the game\'s own motion vectors. ' +
+  'Luma runs on DirectX 11: pick DirectX 11 in the game\'s settings if it offers DX12, and turn the game\'s own ' +
+  'DLSS off. Then press Home in the game and pick DLSS in Luma\'s settings.';
+
 const LUMA_PREY_NOTE = 'Luma\'s Prey mod adds real DLSS with the game\'s own motion vectors, the reason it beats the Feeder ' +
   'here. Not yet run with this app. After deploying, press Home in the game and pick DLSS in Luma\'s settings.';
 
 // Same "explain, don't just disable" shape as feeder.js's feederReadiness().
-function lumaUeReadiness(dir, exePath, detected = null) {
+function lumaUeReadiness(dir, exePath, detected = null, lumaMod = null) {
   const knownBad = lumaUeKnownBad(exePath);
   if (knownBad && !lumaUeDeployed(dir)) {
     return {
@@ -187,7 +221,7 @@ function lumaUeReadiness(dir, exePath, detected = null) {
       reasonVars: { why: knownBad },
     };
   }
-  const profile = deployedProfile(dir) || lumaProfileFor(exePath, detected);
+  const profile = deployedProfile(dir) || lumaProfileFor(exePath, detected, lumaMod);
   if (!profile) {
     return {
       supported: false,
@@ -215,9 +249,10 @@ function lumaUeReadiness(dir, exePath, detected = null) {
     reason: blockedByFeeder
       ? 'The DLSS5 Feeder is deployed here. Luma UE and the Feeder are both ReShade add-ons supplying the DLSS call, and only one can run -- Deploy removes the Feeder first, then puts Luma UE in.'
       : null,
-    experimental: !isFallenOrder(exePath) && profile.id !== 'prey',
+    // A catalog mod is experimental unless Luma's own wiki calls it working.
+    experimental: profile.catalog ? profile.status !== 'working' : !isFallenOrder(exePath) && profile.id !== 'prey',
     knownBad,
-    knownIssue: profile.id === 'prey' ? LUMA_PREY_NOTE : isFallenOrder(exePath) ? LUMA_KNOWN_ISSUE : LUMA_GENERIC_NOTE,
+    knownIssue: profile.catalog ? LUMA_CATALOG_NOTE : profile.id === 'prey' ? LUMA_PREY_NOTE : isFallenOrder(exePath) ? LUMA_KNOWN_ISSUE : LUMA_GENERIC_NOTE,
     licenseSummary: LUMA_LICENSE_SUMMARY,
     reshadeInstalled,
     addonInstalled,
@@ -292,6 +327,21 @@ async function deployLumaUeStack(dir, { cacheDir, getRhiManifest, compareVersion
   if (!addonEntry) throw new Error(`"${profile.addon}" not found in ${profile.assetName}`);
   extractEntryTo(zip, addonEntry, path.join(dir, profile.addon));
 
+  // A game whose own nvngx_dlss.dll predates DLSS 2 (Monster Hunter: World ships 1.1.13) would hand
+  // Luma's DLSS call to that runtime, which cannot serve it. Set aside under the app's backup suffix --
+  // Remove (and the full uninstall) put it back -- so a current one is placed.
+  const gameDlss = path.join(dir, 'nvngx_dlss.dll');
+  let setAsideOldDlss = null;
+  if (fs.existsSync(gameDlss)) {
+    const version = readFileVersion(gameDlss);
+    const major = version ? parseInt(version.split('.')[0], 10) : NaN;
+    if (Number.isFinite(major) && major < 2) {
+      const backup = gameDlss + ORIG_BACKUP_SUFFIX;
+      if (!fs.existsSync(backup)) fs.renameSync(gameDlss, backup);
+      else fs.rmSync(gameDlss, { force: true });
+      setAsideOldDlss = version;
+    }
+  }
   const dlss = await feeder.deployNvngxDlss(dir, getRhiManifest, compareVersions, cacheDir, ghHeaders);
   // Luma ships no .fx effects (its shaders live under Luma\); pointing ReShade at the Feeder's
   // reshade-shaders folder only logs "Failed to resolve search path" every launch.
@@ -299,7 +349,10 @@ async function deployLumaUeStack(dir, { cacheDir, getRhiManifest, compareVersion
 
   fs.writeFileSync(
     path.join(dir, LUMA_DEPLOY_MARKER),
-    JSON.stringify({ lumaVersion: asset.tag, profile: profile.id, addon: profile.addon, placedNvngxDlss: !!(dlss && dlss.deployed), deployedAt: new Date().toISOString() }, null, 2),
+    JSON.stringify({
+      lumaVersion: asset.tag, profile: profile.id, asset: profile.assetName, addon: profile.addon,
+      placedNvngxDlss: !!(dlss && dlss.deployed), setAsideOldDlss, deployedAt: new Date().toISOString(),
+    }, null, 2),
     'utf8',
   );
 
@@ -321,17 +374,26 @@ async function removeLumaStack(dir) {
     removed.push(rel);
   };
   await rm('Luma');
-  for (const addon of LUMA_ADDON_NAMES) await rm(addon);
+  for (const addon of lumaAddonsIn(dir)) await rm(addon);
   for (const name of [RESHADE_DLL_NAME, 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log']) await rm(name);
   if (!(marker && marker.placedNvngxDlss === false)) await rm('nvngx_dlss.dll');
   else kept.push('nvngx_dlss.dll (was already here before Luma)');
+  // The game's own old DLSS runtime, set aside at deploy, goes back.
+  const backup = path.join(dir, 'nvngx_dlss.dll' + ORIG_BACKUP_SUFFIX);
+  const restored = [];
+  if (fs.existsSync(backup) && !fs.existsSync(path.join(dir, 'nvngx_dlss.dll'))) {
+    await fsp.rename(backup, path.join(dir, 'nvngx_dlss.dll'));
+    restored.push('nvngx_dlss.dll');
+  }
   await rm(LUMA_DEPLOY_MARKER);
-  return { removed, kept };
+  return { removed, kept, restored };
 }
 
 module.exports = {
   LUMA_PROFILES,
-  LUMA_ADDON_NAMES,
+  LUMA_ADDON_PATTERN,
+  lumaAddonsIn,
+  profileFromMod,
   isPrey2017,
   lumaProfileFor,
   deployedProfile,

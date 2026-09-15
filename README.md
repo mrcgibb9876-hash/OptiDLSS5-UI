@@ -58,7 +58,7 @@ The card names the route. You don't choose it.
 | Ships its own DLSS (Cyberpunk, Witcher 3, Stellar Blade...) | **OptiScaler**: Neural Rendering on the game's own DLSS |
 | No DLSS of its own | **OptiScaler + DLSS5 Feeder**: the Feeder builds a DLSS call from ReShade depth and motion vectors ([VORT](https://github.com/vortigern11/vort_Shaders) by default) |
 | Resident Evil 2 / 3 / 4 / 7 / Village, Devil May Cry 5, SF6 | **Present route**: DLSS 5 at the end of each frame, depth found by the engine ([DXL](https://github.com/LCPD15/DXL)'s design). Nothing extra to download |
-| STAR WARS Jedi: Fallen Order, Prey (2017) | **Luma**: [Luma-Framework](https://github.com/Filoppi/Luma-Framework)'s mod adds a real DLSS call (UE4's TAA replaced with DLAA; Prey's own DLSS mod with engine motion vectors). Install offers it, after you confirm its licence |
+| Any game [Luma-Framework](https://github.com/Filoppi/Luma-Framework) has a DLSS mod for (Monster Hunter: World, Prey, Just Cause 3, Final Fantasy XV, Mafia III...), plus Fallen Order | **Luma**: the mod adds a real DLSS call with the game's own motion vectors, set up on DirectX 11. The list is read from Luma-Framework's GitHub release every day, so new mods are picked up automatically. A game whose own DLSS predates 2.0 (MHW ships 1.1.13) gets Luma too. Install offers it, after you confirm its licence |
 | Emulators, 32-bit games, DirectX 8/9 | **Experimental**: Feeder route. 32-bit games run DLSS in a 64-bit helper beside the game; DX8/9 go through dgVoodoo2 (asked before download, because Defender flags its zip) |
 
 Games that offer both **DX12 and DX11 are set up for DX12**. The one exception is when OptiScaler's log shows

@@ -26,6 +26,7 @@ const exeicon = require('./exeicon');
 const managerUpdate = require('./manager-update');
 const runlog = require('./runlog');
 const library = require('./library');
+const lumacatalog = require('./lumacatalog');
 const gamehelp = require('./gamehelp');
 const aihelp = require('./aihelp');
 const engines = require('./engines');
@@ -88,6 +89,10 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Luma-Framework's per-game mods: the cached list now, a fresh one from GitHub in the background and daily.
+  lumacatalog.load(lumaCatalogFile());
+  refreshLumaCatalog();
+  setInterval(refreshLumaCatalog, 24 * 60 * 60 * 1000);
   createWindow();
   // The Manager's own updater: checks its GitHub releases after launch and every few hours,
   // downloads in the background, installs on quit; the renderer shows "Restart to update".
@@ -345,8 +350,8 @@ ipcMain.handle('feeder:readiness', async (_evt, exePath) => {
   // Fallen Order gets its DLSS call from Luma UE (lumaue.js), not the Feeder. Both deploy a plain
   // ReShade64.dll into the same folder, so offering both here let a user deploy one over the
   // other. Only a Feeder already on disk keeps this section open for that game.
-  const detected = withApiOverride(await detectFor(dir, exePath), readApiOverride(dir));
-  if ((lumaue.isLumaUeDefault(exePath) || lumaue.lumaUeDeployed(dir)) && !feeder.feederDeployed(dir)) {
+  const detected = effectiveDetection(dir, exePath, await detectFor(dir, exePath));
+  if ((lumaue.isLumaUeDefault(exePath, lumaModFor(exePath, detected)) || lumaue.lumaUeDeployed(dir)) && !feeder.feederDeployed(dir)) {
     return { ready: false, needed: false, reason: 'This game uses Luma UE for its DLSS call, not the Feeder -- see the Luma UE section.' };
   }
   return { needed: true, ...(await feeder.feederReadiness(dir, detected.api, { execFileAsync })) };
@@ -656,7 +661,7 @@ function optiScalerDirFor(dir) {
 }
 
 function legacyPlanFor(dir, exePath, detected) {
-  return legacy.planFor(withApiOverride(detected || {}, readApiOverride(dir)));
+  return legacy.planFor(effectiveDetection(dir, exePath, detected || {}));
 }
 
 // dgVoodoo2 in front of a DirectX 8/9 game. Fetched like every other component, with no prompt:
@@ -780,8 +785,8 @@ ipcMain.handle('lumaue:readiness', async (_evt, { exePath }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) return { ok: false, error: 'Game .exe not found' };
     const dir = gameDir(exePath);
-    const detected = withApiOverride(await detectFor(dir, exePath), readApiOverride(dir));
-    return { ok: true, ...lumaue.lumaUeReadiness(dir, exePath, detected) };
+    const detected = effectiveDetection(dir, exePath, await detectFor(dir, exePath));
+    return { ok: true, ...lumaue.lumaUeReadiness(dir, exePath, detected, lumaModFor(exePath, detected)) };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -794,8 +799,8 @@ ipcMain.handle('lumaue:deploy', async (_evt, { exePath, force, licenseConfirmed 
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
-    const detected = withApiOverride(await detectFor(dir, exePath), readApiOverride(dir));
-    const profile = lumaue.deployedProfile(dir) || lumaue.lumaProfileFor(exePath, detected);
+    const detected = effectiveDetection(dir, exePath, await detectFor(dir, exePath));
+    const profile = lumaue.deployedProfile(dir) || lumaue.lumaProfileFor(exePath, detected, lumaModFor(exePath, detected));
     if (!profile) throw new Error('Luma UE is for Unreal Engine 4 games rendering with DirectX 11 and no DLSS of their own');
     if (lumaue.lumaUeKnownBad(exePath)) throw new Error('Luma UE is known not to work with this game: ' + lumaue.lumaUeKnownBad(exePath));
     // Hand-over from the Feeder: the two are both ReShade add-ons supplying the DLSS call and
@@ -1381,17 +1386,23 @@ function writeApiOverride(dir, api) {
 // on every sync -- so a start-up spent about a minute of the main process inside detection, with
 // every IPC call the grid made queued behind it. Measured on that library: 70 s for one sync pass
 // before, 2 s for the first pass now, and 10 ms for every pass after it.
-const storedDetections = { mtimeMs: null, byExe: new Map() };
-function storedDetectionFor(exePath) {
+const storedDetections = { mtimeMs: null, byExe: new Map(), names: new Map() };
+function refreshStoredGames() {
   let mtimeMs = null;
   try { mtimeMs = fs.statSync(gamesFile()).mtimeMs; } catch {}
   if (mtimeMs !== storedDetections.mtimeMs) {
     storedDetections.mtimeMs = mtimeMs;
     storedDetections.byExe = new Map();
+    storedDetections.names = new Map();
     for (const game of readJson(gamesFile(), [])) {
-      if (game && game.exePath && game.detectedPath) storedDetections.byExe.set(game.exePath.toLowerCase(), game.detectedPath);
+      if (!game || !game.exePath) continue;
+      if (game.detectedPath) storedDetections.byExe.set(game.exePath.toLowerCase(), game.detectedPath);
+      if (game.name) storedDetections.names.set(game.exePath.toLowerCase(), game.name);
     }
   }
+}
+function storedDetectionFor(exePath) {
+  refreshStoredGames();
   return storedDetections.byExe.get(String(exePath || '').toLowerCase()) || null;
 }
 
@@ -1399,9 +1410,55 @@ function detectFor(dir, exePath) {
   return detectGameCached(dir, exePath, { stored: storedDetectionFor(exePath) });
 }
 
+// ---- Luma-Framework per-game mods (lumacatalog.js) ------------------------------------------------
+//
+// Every game on the grid is checked against Luma-Framework's own list of DLSS-adding mods, by the names it
+// goes by: its card name, its Steam manifest name, and the folders it sits in. A match puts the game on the
+// Luma route (route.js) and on DirectX 11. The catalog loads from userData (else the bundled snapshot) and
+// refreshes from GitHub at start-up and once a day, so a mod Luma publishes later is picked up by itself.
+const lumaCatalogFile = () => path.join(userDataDir(), 'luma-catalog.json');
+const lumaModCache = new Map();
+function lumaNamesFor(exePath) {
+  refreshStoredGames();
+  const names = [];
+  const cardName = storedDetections.names.get(String(exePath || '').toLowerCase());
+  if (cardName) names.push(cardName);
+  try {
+    const manifest = library.steamManifestFor(exePath);
+    if (manifest && manifest.name) names.push(manifest.name);
+  } catch {}
+  const parts = path.dirname(String(exePath || '')).split(/[\\/]/).filter(Boolean);
+  // The install folder under steamapps\common (or whatever library root), and the exe's own name.
+  const common = parts.findIndex((p) => /^common$/i.test(p));
+  if (common >= 0 && parts[common + 1]) names.push(parts[common + 1]);
+  names.push(path.basename(String(exePath || ''), path.extname(String(exePath || ''))));
+  return [...new Set(names)];
+}
+function lumaModFor(exePath, detected) {
+  const catalog = lumacatalog.get();
+  const key = `${exePath}|${catalog.tag || ''}|${catalog.mods ? catalog.mods.length : 0}|${storedDetections.mtimeMs}`;
+  if (!lumaModCache.has(key)) {
+    if (lumaModCache.size > 512) lumaModCache.clear();
+    lumaModCache.set(key, lumacatalog.matchGame(lumaNamesFor(exePath), { bitness: (detected && detected.bitness) || 64, catalog }));
+  }
+  return lumaModCache.get(key);
+}
+// Luma games are DirectX 11 games as far as everything here is concerned (route.js withApiOverride).
+function effectiveDetection(dir, exePath, detected) {
+  const lumaMod = lumaModFor(exePath, detected);
+  const luma = lumaue.lumaUeDeployed(dir) || (!!lumaMod && lumaue.isLumaUeDefault(exePath, lumaMod));
+  return withApiOverride(detected || {}, readApiOverride(dir), { luma });
+}
+async function refreshLumaCatalog() {
+  try {
+    await lumacatalog.refresh({ cachePath: lumaCatalogFile(), headers: GITHUB_HEADERS });
+    lumaModCache.clear();
+  } catch {}
+}
+
 // The primary API every handler should act on: the user's choice if there is one, else detection.
 async function resolveApi(dir, exePath) {
-  return withApiOverride(await detectFor(dir, exePath), readApiOverride(dir)).api;
+  return effectiveDetection(dir, exePath, await detectFor(dir, exePath)).api;
 }
 
 ipcMain.handle('game:setApiOverride', async (_evt, { exePath, api }) => {
@@ -1435,7 +1492,7 @@ function detectInstalledBackends(dir) {
   // clears them via APP_MARKERS.
   const leftovers = [
     'OptiScaler.ini', 'OptiScaler.dll', 'OptiScaler_OpticalFlow.dll', 'nvngx_dlssnr.dll', 'nvngx.dll_dlssnr.dll', 'OptiScaler',
-    'dlss5-feed.addon64', ...lumaue.LUMA_ADDON_NAMES, 'Luma',
+    'dlss5-feed.addon64', ...lumaue.lumaAddonsIn(dir), 'Luma',
     '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.optiscaler-manager-install.json',
     legacy.MARKER, 'dlss5-feed.addon32',
   ].filter(has);
@@ -1514,9 +1571,9 @@ ipcMain.handle('game:route', async (_evt, { exePath, detected }) => {
   }
   const { vendor } = await getGpuInfo();
   const dir = gameDir(exePath);
-  const effective = withApiOverride(detected || {}, readApiOverride(dir));
+  const effective = effectiveDetection(dir, exePath, detected || {});
   return {
-    ...recommendRoute(dir, exePath, effective, vendor),
+    ...recommendRoute(dir, exePath, effective, vendor, { lumaMod: lumaModFor(exePath, effective) }),
     apiOverride: effective.apiOverride,
     effectiveApi: effective.api || null,
     detectedApi: (detected && detected.api) || null,
@@ -1913,7 +1970,7 @@ async function planUninstall(dir) {
     if (nativeDlss.shippedDlssPath(dir) || !(feederMarker && feederMarker.placedNvngxDlss === false)) add('nvngx_dlss.dll');
   }
   if (lumaue.lumaUeDeployed(dir)) {
-    for (const n of ['Luma', ...lumaue.LUMA_ADDON_NAMES, 'ReShade64.dll', 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log', '.dlss5ui-lumaue-deploy.json']) add(n);
+    for (const n of ['Luma', ...lumaue.lumaAddonsIn(dir), 'ReShade64.dll', 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log', '.dlss5ui-lumaue-deploy.json']) add(n);
     if (!(lumaMarker && lumaMarker.placedNvngxDlss === false)) add('nvngx_dlss.dll');
   }
   try {
@@ -2109,11 +2166,11 @@ ipcMain.handle('game:supportBundle', async (_evt, { exePath, detected }) => {
       filters: [{ name: 'Zip', extensions: ['zip'] }],
     });
     if (res.canceled || !res.filePath) return { ok: true, cancelled: true };
-    const effective = withApiOverride(detected || {}, readApiOverride(dir));
+    const effective = effectiveDetection(dir, exePath, detected || {});
     const extra = {
       appVersion: app.getVersion(),
       detection: effective,
-      route: recommendRoute(dir, exePath, effective, ((await getGpuInfo()) || {}).vendor || 'unknown'),
+      route: recommendRoute(dir, exePath, effective, ((await getGpuInfo()) || {}).vendor || 'unknown', { lumaMod: lumaModFor(exePath, effective) }),
       backends: detectInstalledBackends(dir),
       foreign: foreignToolchains(dir),
     };
@@ -2130,9 +2187,9 @@ ipcMain.handle('game:supportBundle', async (_evt, { exePath, detected }) => {
 // toolchains, the registry's known-bad note, REFramework, and whether NR is on in the ini.
 async function helpContext(exePath, detected, fixesTried = []) {
   const dir = gameDir(exePath);
-  const effective = withApiOverride(detected || {}, readApiOverride(dir));
+  const effective = effectiveDetection(dir, exePath, detected || {});
   const { vendor } = await getGpuInfo();
-  const route = recommendRoute(dir, exePath, effective, vendor || 'unknown');
+  const route = recommendRoute(dir, exePath, effective, vendor || 'unknown', { lumaMod: lumaModFor(exePath, effective) });
   const run = await runlog.analyzeRun(dir, { optiDir: optiScalerDirFor(dir) });
   let nrEnabledInIni = null;
   try {
@@ -2193,6 +2250,9 @@ async function applyHelpFix(exePath, fixId) {
       if (fs.existsSync(path.join(dir, 'OptiScaler.ini'))) await autoConfigureGame(dir, exePath);
       return { done: true, text: `removed the Feeder (${r.removed.length} files)` };
     }
+    // Needs Luma's licence confirmed by the user, which only the renderer's own dialog does.
+    case 'switch-to-luma':
+      return { done: false, text: 'switching to Luma needs its licence confirmed -- use Fix it in Game Help' };
     case 'remove-luma': {
       if (!lumaue.lumaUeDeployed(dir)) return { done: false, text: 'no Luma UE deployed here' };
       const r = await lumaue.removeLumaStack(dir);
@@ -3368,7 +3428,7 @@ async function autoConfigureGame(dir, exePath) {
   const iniPath = path.join(dir, 'OptiScaler.ini');
   if (!fs.existsSync(iniPath)) return { api: null, applied: [] };
 
-  const { api, apis } = withApiOverride(await detectFor(dir, exePath), readApiOverride(dir));
+  const { api, apis } = effectiveDetection(dir, exePath, await detectFor(dir, exePath));
   let dlss5Only = hasNativeDlss(dir);
   // hasNativeDlss() just checks for nvngx_dlss.dll on disk -- for a Feeder game that file was
   // placed by the Feeder deploy itself, not the game, so this alone can't tell native DLSS

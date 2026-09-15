@@ -82,8 +82,12 @@ function diagnose(ctx) {
   // The experimental legacy routes: dgVoodoo2 or the 32-bit helper still to place. Install does both.
   if (route.route === 'feeder32' && !route.complete) return fix('not-installed', 'install');
   if (route.legacy && route.legacy.dgVoodoo && !route.dgVoodooDeployed) return fix('dgvoodoo-missing', 'install');
-  // Install does not deploy Luma UE (its licence is confirmed in Edit), so this is the user's step.
-  if (route.route === 'lumaue' && !route.lumaDeployed) return out('step', 'luma-missing');
+  // Install offers Luma itself (with its licence in the question), so a missing Luma is a one-button fix.
+  if (route.route === 'lumaue' && !route.lumaDeployed) return fix('luma-missing', 'install');
+  // A Feeder doing a job Luma-Framework's own mod for this game does better (lumacatalog.js).
+  if (route.lumaAvailable && route.feederDeployed) return fix('luma-available', 'switch-to-luma');
+  // Luma is DirectX 11 only; a game that ran on DX12 last time never loaded it.
+  if (route.lumaDeployed && run.ran && run.runtimeApi === 'dx12') return out('step', 'luma-needs-dx11');
   if (ctx.reEngine && ctx.reframeworkPresent === false) return fix('reframework-missing', 'reconfigure');
   // RE2/3/4/7/Village (reengine.js) take the engine's Present route: nothing to fetch and nothing to
   // switch on in REFramework. The one thing that gets in its way is REFramework's TemporalUpscaler
@@ -212,6 +216,7 @@ function diagnose(ctx) {
 }
 
 // The fixes in the order Game Help would try them, for the AI tier's tool list and the tests.
-const FIX_IDS = ['remove-foreign', 'remove-feeder', 'remove-luma', 'redeploy-feeder', 'feeder-depth-profile', 'disable-agility-redist', 'reconfigure', 'remove-all', 'install'];
+// 'switch-to-luma' is applied by the renderer, which asks for Luma's licence first; main.js declines it.
+const FIX_IDS = ['remove-foreign', 'remove-feeder', 'remove-luma', 'redeploy-feeder', 'feeder-depth-profile', 'disable-agility-redist', 'reconfigure', 'remove-all', 'install', 'switch-to-luma'];
 
 module.exports = { diagnose, FIX_IDS };

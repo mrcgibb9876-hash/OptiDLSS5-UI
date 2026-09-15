@@ -50,7 +50,10 @@ const rows = [
   ['a fix applied against this same run: needs a run, not failed', base({ run: { ran: true, at: 'T1', verdict: 'dlss-no-nr', detail: 'd3d11-native' }, fixesTried: [{ id: 'reconfigure', runAt: 'T1' }] }), { status: 'needs-run', code: 'needs-run-after-fix' }],
   ['the same fix after a newer run says the same thing: failed', base({ run: { ran: true, at: 'T2', verdict: 'dlss-no-nr', detail: 'd3d11-native' }, fixesTried: [{ id: 'reconfigure', runAt: 'T1' }] }), { status: 'unknown', code: 'fix-failed' }],
   ['a fix applied before any log, still no log: needs a run', base({ run: { ran: false, verdict: 'no-log' }, route: { optiInstalled: false }, fixesTried: [{ id: 'install', runAt: null }] }), { status: 'needs-run', code: 'needs-run-after-fix' }],
-  ['Luma route with no Luma yet: deploy it in Edit, not a reinstall', base({ route: { route: 'lumaue', lumaDeployed: false }, run: { ran: false, verdict: 'no-log' } }), { status: 'step', code: 'luma-missing' }],
+  // Install offers Luma itself now (2026-09-15, "as little friction as possible"), so this is Install, one button.
+  ['Luma route with no Luma yet: Install sets it up', base({ route: { route: 'lumaue', lumaDeployed: false }, run: { ran: false, verdict: 'no-log' } }), { status: 'fix', code: 'luma-missing', fix: 'install' }],
+  ['a Feeder where Luma-Framework has a DLSS mod: switch to Luma', base({ route: { route: 'feeder', feederDeployed: true, lumaAvailable: true }, run: { ran: true, verdict: 'nr-ran', nrDispatch: 10 } }), { status: 'fix', code: 'luma-available', fix: 'switch-to-luma' }],
+  ['Luma deployed but the game ran DX12: switch the game to DX11', base({ route: { route: 'lumaue', lumaDeployed: true }, run: { ran: true, verdict: 'no-dlss', runtimeApi: 'dx12' } }), { status: 'step', code: 'luma-needs-dx11' }],
 ];
 
 for (const [name, ctx, want] of rows) {

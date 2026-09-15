@@ -40,6 +40,7 @@ const fs = require('node:fs');
 
 const feeder = require('./feeder');
 const lumaue = require('./lumaue');
+const { readFileVersion } = require('./detect');
 const amdnr = require('./amdnr');
 const nativeDlss = require('./native-dlss');
 const verified = require('./verified');
@@ -114,8 +115,16 @@ function preferDx12(base) {
   return { ...base, api: 'dx12', apis: ['dx12', ...apis.filter((a) => a !== 'dx12')], detectedApi: base.api };
 }
 
-function withApiOverride(detected, override) {
-  const base = preferDx12(detected || {});
+// `opts.luma`: the game has a Luma route (a DLSS-adding Luma mod matched or deployed, lumaue.js). Luma is a
+// DirectX 11 framework, so for those games the most compatible API wins instead of DX12: DX11 whenever the
+// game offers it (the user's call, 2026-09-15).
+function withApiOverride(detected, override, opts = {}) {
+  const raw = detected || {};
+  if (opts.luma && (raw.apis || []).includes('dx11')) {
+    const apis = ['dx11', ...(raw.apis || []).filter((a) => a !== 'dx11')];
+    return { ...raw, api: 'dx11', apis, apiOverride: null, detectedApi: raw.api || null, lumaApi: true };
+  }
+  const base = preferDx12(raw);
   // An old DX11 choice on a game that has DX12 no longer applies.
   if (override === 'dx11' && (base.apis || []).includes('dx12') && base.runtimeApi !== 'dx11') override = null;
   if (!override || !API_OVERRIDE_VALUES.includes(override)) return { ...base, apiOverride: null };
@@ -151,7 +160,20 @@ function optiScalerInstalled(dir) {
   return PROXY_SLOTS.some((name) => name.toLowerCase() !== rtxmfgFile && fs.existsSync(path.join(dir, name)));
 }
 
-function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
+// The route runs for every card on every render; a DLL's version only changes with the file.
+const dllVersionCache = new Map();
+function dllVersionCached(file) {
+  let key = file;
+  try { const st = fs.statSync(file); key = `${file}|${st.size}|${st.mtimeMs}`; } catch { return null; }
+  if (!dllVersionCache.has(key)) {
+    if (dllVersionCache.size > 256) dllVersionCache.clear();
+    dllVersionCache.set(key, readFileVersion(file));
+  }
+  return dllVersionCache.get(key);
+}
+
+// opts.lumaMod: the Luma-Framework catalog entry matched for this game's names (main.js lumaModFor), or null.
+function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {}) {
   const api = detected.api || null;
   const feederDeployed = feeder.feederDeployed(dir);
   const lumaDeployed = lumaue.lumaUeDeployed(dir);
@@ -308,14 +330,51 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
       ]);
   }
 
-  if (shippedDlss) {
+  // A Luma-Framework mod that adds DLSS to this game (lumacatalog.js, matched by name in main.js) beats both
+  // the Feeder's estimated call and a native DLSS too old for Neural Rendering -- Monster Hunter: World
+  // ships DLSS 1.1.13. A game with DLSS 2 or newer of its own keeps it.
+  const lumaMod = opts.lumaMod || null;
+  const nativeDlssPath = shipsDlss ? nativeDlss.shippedDlssPath(dir) : null;
+  const nativeVersion = nativeDlssPath ? dllVersionCached(nativeDlssPath) : null;
+  const nativeMajor = nativeVersion ? parseInt(nativeVersion.split('.')[0], 10) : null;
+  const nativeTooOld = shipsDlss && nativeMajor !== null && nativeMajor < 2 && !lumaDeployed;
+  const lumaWanted = lumaDeployed || (lumaue.isLumaUeDefault(exePath, lumaMod) && (!shipsDlss || nativeTooOld));
+
+  if (shippedDlss && !lumaWanted) {
     return finish('optiscaler', 'OptiScaler',
       'This game ships its own DLSS, so OptiScaler only adds Neural Rendering on top of it (the DLSS 5 only ' +
       'profile) -- just Install. Frame Generation: the game\'s own DLSS Frame Generation in its video settings.',
       [{ key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled }]);
   }
 
-  if (lumaue.isLumaUeDefault(exePath) || lumaDeployed) {
+  if (lumaWanted) {
+    const profile = lumaue.deployedProfile(dir) || lumaue.lumaProfileFor(exePath, detected, lumaMod);
+    if (profile && profile.catalog) {
+      if (feederDeployed && !lumaDeployed) {
+        return finish('feeder', 'OptiScaler + Feeder',
+          'The DLSS5 Feeder deployed here is doing the job, but Luma-Framework has a mod for this game that adds real ' +
+          'DLSS with the game\'s own motion vectors -- better than the Feeder\'s estimate. Game Help switches it over.',
+          [
+            { key: 'feeder', label: 'Deploy the DLSS5 Feeder', done: true },
+            { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
+          ], null, { lumaAvailable: true });
+      }
+      return finish('lumaue', 'OptiScaler + Luma',
+        (nativeTooOld
+          ? 'This game\'s own DLSS ({version}) is too old for Neural Rendering. '
+          : 'No DLSS of its own. ') +
+        'Luma-Framework\'s mod for it adds real DLSS with the game\'s own motion vectors, which gives OptiScaler a ' +
+        'DLSS call to hook. Install sets up OptiScaler and Luma (after you confirm Luma\'s licence). Luma needs ' +
+        'DirectX 11: pick it in the game\'s settings, turn the game\'s own DLSS off, then press Home in the game and ' +
+        'pick DLSS in Luma\'s settings.',
+        [
+          { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
+          { key: 'lumaue', label: 'Deploy Luma', done: lumaDeployed },
+        ], { version: nativeVersion || '' }, { experimental: profile.status !== 'working', lumaMod: lumaMod ? lumaMod.key : (profile.id || null) });
+    }
+  }
+
+  if (lumaWanted) {
     // Luma UE is this game's preferred DLSS source, but a Feeder already deployed here is a
     // working one (confirmed on a real install: frames fed, NR running) -- the card says what is
     // actually in place and names the better option, rather than reporting a done setup as a

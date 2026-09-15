@@ -660,7 +660,7 @@ function helpWords(diag) {
     case 'luma-known-bad': return t('Luma UE is deployed here, and this game is known not to work with it ({reason}). Remove Luma UE.', v);
     case 'not-installed': return t('OptiScaler is not installed on this game yet. Install it and the route\'s other steps follow.');
     case 'feeder-missing': return t('This game has no DLSS of its own, so OptiScaler alone has nothing to hook. Install deploys the DLSS5 Feeder first.');
-    case 'luma-missing': return t('This game\'s route is Luma UE, which is not deployed yet. Open Edit and deploy Luma UE (its licence is confirmed there), then launch.');
+    case 'luma-missing': return t('This game gets its DLSS call from Luma, which is not set up yet. Fix it sets up OptiScaler and Luma together (after you confirm Luma\'s licence). Luma runs on DirectX 11.');
     case 'reframework-missing': return t('This is an RE Engine game and REFramework is missing. OptiScaler does nothing there without it. Reconfigure fetches and places it.');
     case 'pd-temporal-on': return t('REFramework\'s TemporalUpscaler is still switched on from the old setup. DLSS 5 now runs on top of the game\'s own anti-aliasing, so that mod has to be off. Reconfigure switches it off.');
     case 'pd-build-missing': return t('This Resident Evil has no DLSS of its own, so it needs REFramework\'s pd-upscaler build and nvngx_dlss.dll beside the exe. Reconfigure fetches and places both.');
@@ -683,6 +683,8 @@ function helpWords(diag) {
     case 'ue-crash-luma': return t('The game crashed (Unreal crash report: {message}) with Luma UE deployed, and Luma is not verified on this game. Remove Luma UE and try the Feeder route.', { message: (v.message || '').slice(0, 120) });
     case 'ue-crash-feeder': return t('The game crashed (Unreal crash report: {message}) with the Feeder deployed. Remove the Feeder and check whether it runs clean.', { message: (v.message || '').slice(0, 120) });
     case 'ue-crash': return t('The game crashed (Unreal crash report: {message}). No rule covers this. Save the bundle to share, or ask the AI.', { message: (v.message || '').slice(0, 120) });
+    case 'luma-available': return t('The DLSS5 Feeder is running this game, but Luma-Framework has a mod for it that adds real DLSS with the game\'s own motion vectors -- sharper in motion than the Feeder\'s estimate. Switching removes the Feeder and sets up Luma (after you confirm its licence). Luma runs on DirectX 11.');
+    case 'luma-needs-dx11': return t('Luma is set up here, but the game last ran on DirectX 12, where Luma does not load. Switch the game to DirectX 11 in its own graphics settings, then launch again.');
     case 'driver-outdated': return (v.min
       ? t('Your NVIDIA driver is too old for DLSS 5: it reported Neural Rendering as out of date, and it needs {min} or newer.', v)
       : t('Your NVIDIA driver is too old for DLSS 5: it reported Neural Rendering as out of date.')) +
@@ -741,7 +743,9 @@ function helpSteps(diag) {
     case 'feeder-misdeployed': case 'ue-crash-feeder': return fixIt(t('Press Fix it (removes the Feeder)'));
     case 'luma-known-bad': case 'ue-crash-luma': return fixIt(t('Press Fix it (removes Luma UE)'));
     case 'not-installed': case 'feeder-missing': case 'dgvoodoo-missing': case 'feeder-technique': return [t('Press Install'), launch];
-    case 'luma-missing': return [t('Open Edit and deploy Luma UE'), launch];
+    case 'luma-missing': return [t('Press Fix it (sets up Luma)'), t('In the game: DirectX 11, then Home > pick DLSS in Luma'), launch];
+    case 'luma-available': return [t('Press Fix it (switches to Luma)'), t('In the game: DirectX 11, then Home > pick DLSS in Luma'), launch];
+    case 'luma-needs-dx11': return [t('In the game\'s graphics settings: DirectX 11'), launch];
     case 'reframework-missing': case 'pd-temporal-on': case 'pd-build-missing': case 'd3d11-native':
     case 'nr-disabled': case 'dlss-runtime-missing': case 'feed-stopped':
       return fixIt(t('Press Fix it'));
@@ -778,7 +782,7 @@ function helpShort(diag) {
     case 'not-installed': return t('Not installed yet');
     case 'feeder-missing': return t('Feeder not deployed yet');
     case 'dgvoodoo-missing': return t('dgVoodoo2 not in place yet');
-    case 'luma-missing': return t('Luma UE not deployed yet');
+    case 'luma-missing': return t('Luma not set up yet');
     case 'reframework-missing': return t('REFramework missing');
     case 'pd-temporal-on': return t('Switch REFramework\'s upscaler off');
     case 'pd-build-missing': return t('Needs the pd-upscaler REFramework');
@@ -794,6 +798,8 @@ function helpShort(diag) {
     case 'ue-crash-feeder': return t('Crashed with the Feeder');
     case 'ue-crash': return t('Crashed -- no known fix');
     case 'driver-outdated': return v.min ? t('Update the NVIDIA driver ({min} or newer)', v) : t('Update the NVIDIA driver');
+    case 'luma-available': return t('Luma has a better mod for this game');
+    case 'luma-needs-dx11': return t('Switch the game to DirectX 11 for Luma');
     case 'nr-model-crash-emulator': return t('DLSS 5 crashed on D3D12 -- switch to Direct3D 11');
     case 'nr-model-crash': return t('The DLSS 5 model crashed');
     case 'feed-stopped': return t('The Feeder gave up');
@@ -822,6 +828,7 @@ function helpFixLabel(id) {
     case 'reconfigure': return t('Reconfigure');
     case 'remove-all': return t('Remove everything this app placed');
     case 'install': return t('Install OptiScaler');
+    case 'switch-to-luma': return t('Switch to Luma');
     default: return id;
   }
 }
@@ -937,6 +944,20 @@ $('#help-apply').addEventListener('click', async () => {
     markTried();
     await renderGrid();
     openHelp(game);
+    return;
+  }
+  // Luma replaces the Feeder: the deploy removes the Feeder itself, after the licence is confirmed here.
+  if (id === 'switch-to-luma') {
+    const readiness = await window.api.lumaUeReadiness(game.exePath);
+    if (!(readiness.ok && readiness.supported)) { toast(t('Could not deploy Luma UE: {error}', { error: readiness.reason || readiness.error || '?' })); return; }
+    if (!window.confirm(t('This game gets its DLSS call from Luma. Download and set up Luma now?') + '\n\n' + (readiness.licenseSummary || ''))) return;
+    $('#help-apply').disabled = true;
+    const res = await window.api.lumaUeDeploy(game.exePath, { licenseConfirmed: true });
+    $('#help-apply').disabled = false;
+    toast(res.ok ? t('Luma is set up: press Home in the game and pick DLSS in its settings.') : t('Could not deploy Luma UE: {error}', { error: res.error }));
+    if (res.ok) markTried();
+    renderGrid();
+    await refreshHelp();
     return;
   }
   $('#help-apply').disabled = true;
