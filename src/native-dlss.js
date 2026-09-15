@@ -129,11 +129,17 @@ function findInGameTree(exeDir, names) {
   return walk(root, 0);
 }
 
+// Reaching the drive root means no launcher's games folder was found on the way, which is the "no such
+// parent" case: the exe folder is the root. It used to return the drive root itself, and a library
+// the list does not know ("D:\GAMES 2TB\Tomb Raider 1-3 Remastered", two players' bundles 2026-09-15)
+// then had the whole drive walked, some other game's nvngx_dlss.dll found, and an OpenGL game with no
+// DLSS routed as "ships its own DLSS" -- OptiScaler as dxgi.dll, never loaded, Game Help stuck on
+// "needs a run".
 function installRoot(exeDir) {
   let cur = path.resolve(exeDir);
   for (let up = 0; up <= ROOT_ASCEND_MAX; up++) {
     const parent = path.dirname(cur);
-    if (parent === cur) return cur; // drive root: go no higher
+    if (parent === cur) return path.resolve(exeDir); // drive root: no games folder above this game
     if (INSTALL_PARENTS.has(path.basename(parent).toLowerCase())) return cur;
     cur = parent;
   }

@@ -160,6 +160,14 @@ function diagnose(ctx) {
       // reads as a mystery -- into one missing file that Reconfigure puts back.
       if (run.dlssRuntimeMissing) return fix('dlss-runtime-missing', 'reconfigure');
       if (route.lumaDeployed) return out('step', 'luma-select-dlss');
+      // Vulkan (Ryujinx, a player's bundle 2026-09-15): the Feeder is a ReShade add-on, and on Vulkan ReShade
+      // is only ever the machine-wide Vulkan layer. No dlss5-feed.log at all means the add-on never loaded,
+      // so nothing could call DLSS; which of the two layer faults it is decides the step.
+      if (route.route === 'feeder' && route.feederDeployed && ctx.vulkanFeeder && !ctx.vulkanFeeder.feederLogPresent) {
+        if (!ctx.vulkanFeeder.layerRegistered) return out('step', 'vulkan-layer-missing');
+        if (!ctx.vulkanFeeder.layerAddon) return out('step', 'vulkan-layer-no-addon');
+        return out('step', 'vulkan-layer-not-loaded');
+      }
       if (route.route === 'feeder' && route.feederDeployed) return out('unknown', 'no-hook');
       if (route.route === 'lumaue') return out('step', 'luma-missing');
       return out('unknown', 'no-hook');

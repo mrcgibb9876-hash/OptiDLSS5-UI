@@ -581,6 +581,10 @@ function applyLosslessMarker(dir) {
   // to turn Frame Gen on/off without ever showing its window. Default Ctrl+Alt+S = mods 3, vk 0x53.
   if (Number.isInteger(marker.hotkeyMods)) set('LosslessScalingHotkeyMods', String(marker.hotkeyMods));
   if (Number.isInteger(marker.hotkeyVk)) set('LosslessScalingHotkeyVk', String(marker.hotkeyVk));
+  // Lossless Scaling cannot capture a game in exclusive fullscreen, and players rarely know to change the
+  // game's own display mode. The engine (v1.0.33+) keeps the swapchain windowed and turns a switch to
+  // fullscreen into a borderless window over the monitor, so this works whatever the game's setting.
+  set('ForceBorderless', 'true');
   return applied;
 }
 
@@ -2284,8 +2288,17 @@ async function helpContext(exePath, detected, fixesTried = []) {
     if (m) nrEnabledInIni = !/^(false|0)$/i.test(m[1]);
   } catch {}
   const reEngine = isReEngineGame(dir);
+  // A Vulkan Feeder game: ReShade is the machine-wide Vulkan layer, not a file this app placed, so whether
+  // it is there (with add-on support) and whether the Feeder ever wrote its log is all there is to go on.
+  let vulkanFeeder = null;
+  if (effective.api === 'vulkan' && feeder.feederDeployed(dir)) {
+    try {
+      const layer = await feeder.vulkanLayerStatus({ execFileAsync });
+      vulkanFeeder = { layerRegistered: !!layer.registered, layerAddon: !!layer.addon, feederLogPresent: fs.existsSync(path.join(dir, 'dlss5-feed.log')) };
+    } catch {}
+  }
   return {
-    dir, exePath, detected: effective, route, run, fixesTried,
+    dir, exePath, detected: effective, route, run, fixesTried, vulkanFeeder,
     foreign: foreignToolchains(dir),
     backends: detectInstalledBackends(dir),
     lumaKnownBad: route.lumaDeployed ? lumaue.lumaUeKnownBad(exePath) : null,

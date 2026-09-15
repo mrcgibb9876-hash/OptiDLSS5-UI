@@ -86,6 +86,16 @@ test('a Streamline folder beside the exe counts as the game\'s DLSS unless the j
   assert.equal(nativeDlss.shippedDlssPath(journaled), null, 'our own deploy is not the game\'s DLSS');
 });
 
+// Two players' bundles (2026-09-15): games under "D:\GAMES 2TB\" had the whole D: drive searched, another
+// game's nvngx_dlss.dll found, and a DLSS-less OpenGL game routed as "ships its own DLSS".
+test('a library folder the app does not know never makes the drive root the install root', { skip: process.platform !== 'win32' }, () => {
+  const exeDir = 'D:\\GAMES 2TB\\Tomb Raider 1-3 Remastered';
+  assert.equal(nativeDlss.installRoot(exeDir), path.resolve(exeDir));
+  assert.equal(nativeDlss.installRoot('D:\\Game'), path.resolve('D:\\Game'));
+  assert.equal(nativeDlss.installRoot('C:\\Program Files (x86)\\Steam\\steamapps\\common\\ELDEN RING\\Game'),
+    path.resolve('C:\\Program Files (x86)\\Steam\\steamapps\\common\\ELDEN RING'), 'a known games folder still sets the root');
+});
+
 test('peBitness tells 32-bit from 64-bit on Windows', { skip: process.platform !== 'win32' }, async () => {
   const sys = process.env.SystemRoot || 'C:\\Windows';
   assert.equal(await detect.peBitness(path.join(sys, 'System32', 'notepad.exe')), 64);

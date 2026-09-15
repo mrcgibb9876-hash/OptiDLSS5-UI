@@ -17,6 +17,19 @@ const base = (over = {}) => ({
   reframeworkPresent: over.reframeworkPresent === undefined ? null : over.reframeworkPresent,
   nrEnabledInIni: over.nrEnabledInIni === undefined ? true : over.nrEnabledInIni,
   fixesTried: over.fixesTried || [],
+  vulkanFeeder: over.vulkanFeeder || null,
+});
+
+// Ryujinx on Vulkan (a player's bundle, 2026-09-15): the Feeder never loaded, and Game Help said "no known fix".
+test('a Vulkan Feeder game whose Feeder never loaded names the ReShade layer fault', () => {
+  const vk = (vulkanFeeder) => base({
+    detected: { api: 'vulkan' }, route: { route: 'feeder', feederDeployed: true },
+    run: { ran: true, verdict: 'no-dlss' }, vulkanFeeder,
+  });
+  assert.equal(diagnose(vk({ layerRegistered: false, layerAddon: false, feederLogPresent: false })).code, 'vulkan-layer-missing');
+  assert.equal(diagnose(vk({ layerRegistered: true, layerAddon: false, feederLogPresent: false })).code, 'vulkan-layer-no-addon');
+  assert.equal(diagnose(vk({ layerRegistered: true, layerAddon: true, feederLogPresent: false })).code, 'vulkan-layer-not-loaded');
+  assert.equal(diagnose(vk({ layerRegistered: true, layerAddon: true, feederLogPresent: true })).code, 'no-hook', 'the Feeder loaded: another fault');
 });
 
 const rows = [

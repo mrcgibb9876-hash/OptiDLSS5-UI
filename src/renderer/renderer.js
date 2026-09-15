@@ -679,6 +679,9 @@ function helpWords(diag) {
     case 'feeder-technique': return t('DLSS initialised but the Feeder\'s shader technique was missing. Install again to redeploy the Feeder.');
     case 'luma-select-dlss': return t('Luma UE is deployed but no DLSS call happened. In-game, press Home for Luma\'s overlay and select DLSS as the upscaler, in gameplay. Then check again.');
     case 'init-no-feature': return t('DLSS initialised but no feature was ever created. This is not a known case. Save the bundle to share, or ask the AI.');
+    case 'vulkan-layer-missing': return t('On Vulkan, the DLSS5 Feeder runs inside ReShade, and ReShade only reaches a Vulkan game as a layer installed for the whole PC. None is installed, so the Feeder never loaded and nothing called DLSS. Run ReShade\'s own installer (the version with add-on support), pick this exe, choose Vulkan, then Install here again. Or switch the emulator to OpenGL, or to Direct3D if it has it, and pick the same API in Edit: those need no layer.');
+    case 'vulkan-layer-no-addon': return t('ReShade is installed as a Vulkan layer on this PC, but a build without add-on support, so the DLSS5 Feeder (an add-on) cannot load and nothing called DLSS. Reinstall ReShade with add-on support (its installer: "Enable loading of add-ons"), then Install here again.');
+    case 'vulkan-layer-not-loaded': return t('ReShade\'s Vulkan layer with add-on support is installed, but it did not load in this program: the DLSS5 Feeder wrote no log at all. Run ReShade\'s installer once more for this exact exe and choose Vulkan (the layer only runs for programs it was set up for), check NVIDIA Smooth Motion is off for it, then launch again.');
     case 'no-hook': return t('Nothing called DLSS on the last run, so nothing was hooked. Check the game\'s own graphics settings have DLSS or DLAA selected. If they do, this is not a known case: save the bundle or ask the AI.');
     case 'ue-crash-luma': return t('The game crashed (Unreal crash report: {message}) with Luma UE deployed, and Luma is not verified on this game. Remove Luma UE and try the Feeder route.', { message: (v.message || '').slice(0, 120) });
     case 'ue-crash-feeder': return t('The game crashed (Unreal crash report: {message}) with the Feeder deployed. Remove the Feeder and check whether it runs clean.', { message: (v.message || '').slice(0, 120) });
@@ -756,9 +759,14 @@ function helpSteps(diag) {
     case 'pd-plugin-missing': return [t('Download PDPerfPlugin 1.1.2 from Nexus'), t('Press "I downloaded it"')];
     case 'pd-enable-ingame': return [t('In the game: Insert > TemporalUpscaler'), t('Tick Enabled, set Upscale Type to DLSS')];
     case 'anticheat-launch-direct': return [t("Start the game with this app's Launch button"), t('Single-player only -- stay offline')];
-    case 'luma-select-dlss': return [t("In the game: Home > Luma > select DLSS"), launch];
+    // The app presets DLSS in Luma (v1.69.2), so a run with no DLSS is nearly always one that never reached
+    // gameplay (Prey, a player's bundle 2026-09-15: 35 seconds, menus only). The overlay check comes second.
+    case 'luma-select-dlss': return [t('Play a minute of actual gameplay, then quit'), t("In the game: Home > Luma > select DLSS"), launch];
     case 'needs-run': case 'needs-run-after-fix': return [t('Launch the game'), t('Play a minute of actual gameplay, then quit'), t('Come back here')];
     case 'ok-panel-in-helper': return [t('In the game: Home > Add-ons > DLSS 5 Feed'), t('Press "Show the DLSS 5 panel in-game"'), t('Press Insert')];
+    case 'vulkan-layer-missing': return [t('Install ReShade with add-on support for this exe, choosing Vulkan'), t('Or switch the emulator to OpenGL and pick OpenGL in Edit'), t('Press Install here again')];
+    case 'vulkan-layer-no-addon': return [t('Reinstall ReShade with "Enable loading of add-ons"'), t('Press Install here again')];
+    case 'vulkan-layer-not-loaded': return [t('Run ReShade\'s installer for this exe, choosing Vulkan'), t('Turn NVIDIA Smooth Motion off for it'), t('Launch again')];
     case 'ok': return [t('Tune it in Edit, or with Alt+Home in the game')];
     case 'ok-exit-crash': return [t('Nothing to do -- it only crashes when quitting')];
     case 'dgvoodoo-crash': return [t('Press Fix it (puts the game back as it was)')];
@@ -812,6 +820,9 @@ function helpShort(diag) {
     case 'upscale-skipped': return t('Black screen: every frame dropped');
     case 'sr-backend-fallback': return t('Not DLSS -- fell back to {backend}', v);
     case 'ok-panel-in-helper': return t('Working -- the panel is in the 64-bit helper (Home, then Insert)');
+    case 'vulkan-layer-missing': return t('ReShade\'s Vulkan layer is not installed');
+    case 'vulkan-layer-no-addon': return t('ReShade\'s Vulkan layer has no add-on support');
+    case 'vulkan-layer-not-loaded': return t('ReShade\'s Vulkan layer did not load here');
     case 'fix-failed': return t('Fix did not help -- no known fix');
     case 'dlss-no-nr': case 'init-no-feature': case 'no-hook': default: return t('Not working -- no known fix');
   }
@@ -849,6 +860,29 @@ function renderHelp(diag) {
   const steps = helpSteps(diag);
   stepsEl.innerHTML = steps.map((s) => `<li>${escapeHtml(s)}</li>`).join('');
   stepsEl.classList.toggle('hidden', steps.length === 0);
+  // A working game that Lossless Scaling applies to, and nobody has set it up: say so where players look.
+  // Players never found it in Edit (v1.66.0 put it behind advanced options).
+  let lsBtn = $('#help-lossless');
+  if (!lsBtn) {
+    lsBtn = document.createElement('button');
+    lsBtn.id = 'help-lossless';
+    lsBtn.className = 'btn btn-small hidden';
+    lsBtn.textContent = t('Set up Lossless Scaling frame generation');
+    lsBtn.addEventListener('click', () => { const g = helpGame; if (!g) return; closeHelp(); openGameModal(g); });
+    stepsEl.insertAdjacentElement('afterend', lsBtn);
+  }
+  lsBtn.classList.add('hidden');
+  if (diag.status === 'ok' && helpGame && helpGame.exePath) {
+    const game = helpGame;
+    window.api.losslessEligibility(game.exePath).then(async (gate) => {
+      if (!gate || !gate.eligible || helpGame !== game) return;
+      const configured = await window.api.losslessReadSettings().then((xml) => String(xml || '').toLowerCase().includes(game.exePath.trim().toLowerCase())).catch(() => false);
+      if (configured || helpGame !== game) return;
+      stepsEl.insertAdjacentHTML('beforeend', `<li>${escapeHtml(t('Want more FPS? Add frame generation with Lossless Scaling (the game must run Borderless or Windowed)'))}</li>`);
+      stepsEl.classList.remove('hidden');
+      lsBtn.classList.remove('hidden');
+    }).catch(() => {});
+  }
   body.textContent = helpWords(diag);
   // A finding that sends the user to one page (the pd route's Nexus plugin) gets the link.
   let linkBtn = $('#help-link');
@@ -2699,6 +2733,9 @@ async function loadLosslessSection(game) {
     return;
   }
   section.classList.remove('hidden');
+  // Shown without advanced options: players never found it behind the switch (v1.66.0-v1.72.0), so the
+  // Frame Generation group opens for any game it applies to.
+  if (!settings.showAdvanced) $('#edit-group-fg').open = true;
   // Back to defaults before this game's profile (if any) is read, so the last game's choices
   // never leak into an unconfigured one.
   $('#game-lossless-mode').value = 'FIXED';
