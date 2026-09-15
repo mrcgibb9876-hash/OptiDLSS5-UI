@@ -43,7 +43,7 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 
 const { openZip, findEntry, findEntries, extractEntryTo } = require('./zip');
-const { setIniKey } = require('./ini-merge');
+const { setIniKey, getIniKey } = require('./ini-merge');
 const feeder = require('./feeder');
 const verified = require('./verified');
 const { readFileVersion } = require('./detect');
@@ -204,12 +204,29 @@ function lumaUeDeployed(dir) {
   return !!deployedProfile(dir);
 }
 
+// Luma reads its Super Resolution choice from ReShade.ini [Luma] SRUserType (Luma-Framework
+// super_resolution.h: 0 None, 1 Auto, 2 DLSS, 3 FSR 3). Picking DLSS in the overlay is the only step
+// Luma asks of the player, and opening ReShade's menu for it broke the menu in Monster Hunter: World,
+// so DLSS is set here. Missing or Auto becomes DLSS; None and FSR 3 are someone's own choice and stay.
+const LUMA_SR_DLSS = '2';
+
+function ensureLumaDlss(dir) {
+  if (!lumaUeDeployed(dir)) return false;
+  const iniPath = path.join(dir, 'ReShade.ini');
+  let text = '';
+  try { text = fs.readFileSync(iniPath, 'utf8'); } catch {}
+  const current = (getIniKey(text, 'Luma', 'SRUserType') || '').trim();
+  if (current && current !== '1') return false;
+  fs.writeFileSync(iniPath, setIniKey(text, 'Luma', 'SRUserType', LUMA_SR_DLSS), 'utf8');
+  return true;
+}
+
 const LUMA_CATALOG_NOTE = 'Luma-Framework has a mod for this game that adds real DLSS with the game\'s own motion vectors. ' +
   'Luma runs on DirectX 11: pick DirectX 11 in the game\'s settings if it offers DX12, and turn the game\'s own ' +
-  'DLSS off. Then press Home in the game and pick DLSS in Luma\'s settings.';
+  'DLSS off. The app switches DLSS on in Luma for you.';
 
 const LUMA_PREY_NOTE = 'Luma\'s Prey mod adds real DLSS with the game\'s own motion vectors, the reason it beats the Feeder ' +
-  'here. Not yet run with this app. After deploying, press Home in the game and pick DLSS in Luma\'s settings.';
+  'here. Not yet run with this app. The app switches DLSS on in Luma for you.';
 
 // Same "explain, don't just disable" shape as feeder.js's feederReadiness().
 function lumaUeReadiness(dir, exePath, detected = null, lumaMod = null) {
@@ -355,6 +372,7 @@ async function deployLumaUeStack(dir, { cacheDir, getRhiManifest, compareVersion
     }, null, 2),
     'utf8',
   );
+  ensureLumaDlss(dir);
 
   return { deployed: true, version: asset.tag, shaderFiles: shaderEntries.length, dlss, ini };
 }
@@ -403,6 +421,7 @@ module.exports = {
   isLumaUeDefault,
   lumaUeKnownBad,
   lumaUeDeployed,
+  ensureLumaDlss,
   lumaUeReadiness,
   deployLumaUeStack,
   LUMA_LICENSE_SUMMARY,

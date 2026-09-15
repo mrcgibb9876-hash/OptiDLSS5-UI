@@ -743,8 +743,8 @@ function helpSteps(diag) {
     case 'feeder-misdeployed': case 'ue-crash-feeder': return fixIt(t('Press Fix it (removes the Feeder)'));
     case 'luma-known-bad': case 'ue-crash-luma': return fixIt(t('Press Fix it (removes Luma UE)'));
     case 'not-installed': case 'feeder-missing': case 'dgvoodoo-missing': case 'feeder-technique': return [t('Press Install'), launch];
-    case 'luma-missing': return [t('Press Fix it (sets up Luma)'), t('In the game: DirectX 11, then Home > pick DLSS in Luma'), launch];
-    case 'luma-available': return [t('Press Fix it (switches to Luma)'), t('In the game: DirectX 11, then Home > pick DLSS in Luma'), launch];
+    case 'luma-missing': return [t('Press Fix it (sets up Luma)'), t('In the game: pick DirectX 11'), launch];
+    case 'luma-available': return [t('Press Fix it (switches to Luma)'), t('In the game: pick DirectX 11'), launch];
     case 'luma-needs-dx11': return [t('In the game\'s graphics settings: DirectX 11'), launch];
     case 'reframework-missing': case 'pd-temporal-on': case 'pd-build-missing': case 'd3d11-native':
     case 'nr-disabled': case 'dlss-runtime-missing': case 'feed-stopped':
@@ -958,7 +958,7 @@ $('#help-apply').addEventListener('click', async () => {
     $('#help-apply').disabled = true;
     const res = await window.api.lumaUeDeploy(game.exePath, { licenseConfirmed: true });
     $('#help-apply').disabled = false;
-    toast(res.ok ? t('Luma is set up: press Home in the game and pick DLSS in its settings.') : t('Could not deploy Luma UE: {error}', { error: res.error }));
+    toast(res.ok ? t('Luma is set up with DLSS switched on.') : t('Could not deploy Luma UE: {error}', { error: res.error }));
     if (res.ok) markTried();
     renderGrid();
     await refreshHelp();
@@ -1309,7 +1309,7 @@ async function installGame(game) {
       if (agreed) {
         const deployed = await window.api.lumaUeDeploy(game.exePath, { licenseConfirmed: true });
         lumaNote = deployed.ok
-          ? ' ' + t('Luma is set up: press Home in the game and pick DLSS in its settings.')
+          ? ' ' + t('Luma is set up with DLSS switched on.')
           : ' ' + t('Could not deploy Luma UE: {error}', { error: deployed.error });
       } else {
         lumaNote = ' ' + t('Next: open Edit and deploy Luma UE -- OptiScaler has no DLSS call to hook in this game until Luma supplies one.');
@@ -2864,7 +2864,7 @@ async function loadLumaUeSection(game) {
 
   const yn = (v) => (v ? t('yes') : t('no'));
   status.textContent = readiness.complete
-    ? t("Deployed -- select DLSS in Luma's own overlay (Home key) in-game.")
+    ? t('Luma is set up with DLSS switched on.')
     : readiness.blockedByFeeder
       ? t(readiness.reason)
       : t('Not yet deployed (ReShade64.dll: {reshade}, addon: {addon}, shaders: {shaders}, nvngx_dlss.dll: {dlss}).', {

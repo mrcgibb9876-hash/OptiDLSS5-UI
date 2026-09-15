@@ -365,8 +365,8 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts
           : 'No DLSS of its own. ') +
         'Luma-Framework\'s mod for it adds real DLSS with the game\'s own motion vectors, which gives OptiScaler a ' +
         'DLSS call to hook. Install sets up OptiScaler and Luma (after you confirm Luma\'s licence). Luma needs ' +
-        'DirectX 11: pick it in the game\'s settings, turn the game\'s own DLSS off, then press Home in the game and ' +
-        'pick DLSS in Luma\'s settings.',
+        'DirectX 11: pick it in the game\'s settings and turn the game\'s own DLSS off. The app switches DLSS on in Luma ' +
+        'for you.',
         [
           { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
           { key: 'lumaue', label: 'Deploy Luma', done: lumaDeployed },
@@ -394,8 +394,8 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts
     if (lumaue.isPrey2017(exePath)) {
       return finish('lumaue', 'OptiScaler + Luma',
         'No DLSS of its own. Luma\'s Prey mod adds real DLSS with the game\'s own motion vectors and depth, which ' +
-        'gives OptiScaler a DLSS call to hook. Install sets up OptiScaler and Luma (after you confirm Luma\'s licence); ' +
-        'then press Home in the game and pick DLSS in Luma\'s settings.',
+        'gives OptiScaler a DLSS call to hook. Install sets up OptiScaler and Luma (after you confirm Luma\'s licence) ' +
+        'and switches DLSS on in Luma for you.',
         [
           { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
           { key: 'lumaue', label: 'Deploy Luma', done: lumaDeployed },

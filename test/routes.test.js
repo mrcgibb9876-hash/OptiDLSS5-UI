@@ -116,6 +116,16 @@ test('Luma deploy picks the game\'s mod from the release and Remove takes it bac
     assert.equal(fs.readFileSync(path.join(dir, 'ReShade64.dll'), 'utf8'), 'MZ reshade', "Luma's ReShade goes in as ReShade64.dll");
     assert.ok(!fs.existsSync(path.join(dir, 'dxgi.dll')), 'the dxgi.dll slot stays free for OptiScaler');
     assert.ok(fs.existsSync(path.join(dir, 'Luma', 'Global', 'Luma_Copy_PS.hlsl')));
+    const { getIniKey } = require(path.join(REPO, 'src', 'ini-merge'));
+    const reshadeIni = () => fs.readFileSync(path.join(dir, 'ReShade.ini'), 'utf8');
+    assert.equal(getIniKey(reshadeIni(), 'Luma', 'SRUserType'), '2', 'Luma starts with DLSS, no overlay trip');
+    // A player's own None or FSR 3 stays; Auto is brought to DLSS on the next sync.
+    fs.writeFileSync(path.join(dir, 'ReShade.ini'), reshadeIni().replace('SRUserType=2', 'SRUserType=3'));
+    assert.equal(lumaue.ensureLumaDlss(dir), false);
+    assert.equal(getIniKey(reshadeIni(), 'Luma', 'SRUserType'), '3');
+    fs.writeFileSync(path.join(dir, 'ReShade.ini'), reshadeIni().replace('SRUserType=3', 'SRUserType=1'));
+    assert.equal(lumaue.ensureLumaDlss(dir), true);
+    assert.equal(getIniKey(reshadeIni(), 'Luma', 'SRUserType'), '2');
 
     const r = await lumaue.removeLumaStack(dir);
     assert.ok(r.removed.includes('Luma-Prey.addon'));

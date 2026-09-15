@@ -3728,6 +3728,8 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDl
     }
     // A 64-bit DirectX 8/9 game behind dgVoodoo2 gets the same scaled-to-screen display (legacy.js DG_DISPLAY).
     try { legacy.ensureDgVoodooWindowed(dir); } catch {}
+    // Luma installs from before DLSS was preset for them (lumaue.js ensureLumaDlss).
+    try { lumaue.ensureLumaDlss(dir); } catch {}
     if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: true, updated: false, reason: 'not installed' };
 
     const { api, applied: autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix } = await autoConfigureGame(dir, exePath);
