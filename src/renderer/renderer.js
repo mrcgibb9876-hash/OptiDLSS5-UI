@@ -1861,14 +1861,18 @@ let frameGenVersionsLoaded = false;
 // (including the "Add Game" case, where there's no game folder to check yet).
 async function loadFrameGenSection(game) {
   const section = $('#game-framegen-section');
+  // RTXMFG sits beside this section (not inside it) so it shows without advanced options; it has to
+  // be hidden here too, or it would keep the previous game's state.
   if (!game || !game.exePath) {
     section.classList.add('hidden');
+    $('#game-rtxmfg-block').classList.add('hidden');
     return;
   }
 
   const state = await window.api.frameGenState(game.exePath);
   if (!state.hasFrameGen) {
     section.classList.add('hidden');
+    $('#game-rtxmfg-block').classList.add('hidden');
     return;
   }
   section.classList.remove('hidden');
@@ -1911,6 +1915,9 @@ async function loadRtxMfg(game) {
     return;
   }
   block.classList.remove('hidden');
+  // Always offered on RTX 40 / 30 (the user's call): with advanced options off it is the only thing in
+  // the Frame Generation group, so the group opens rather than hiding it behind a closed heading.
+  if (!settings.showAdvanced) $('#edit-group-fg').open = true;
   block.dataset.projectPage = res.projectPage || '';
   const select = $('#game-rtxmfg-name');
   select.innerHTML = '';
