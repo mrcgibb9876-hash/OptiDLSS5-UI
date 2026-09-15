@@ -2524,13 +2524,24 @@ function stackInstalledHere(dir) {
 
 // Launching past an anti-cheat stub: asked once per game, remembered on a yes, and never assumed.
 // The consequence is real (an account, if someone then goes online), so the wording says it.
-async function confirmLaunchWithoutAntiCheat(exePath, { stub, antiCheat, appId }) {
+async function confirmLaunchWithoutAntiCheat(exePath, { stub, antiCheat, appId, switchArgs = null }) {
   const settings = readJson(settingsFile(), {});
   const remembered = settings.launchWithoutAntiCheat || {};
   const key = String(exePath).toLowerCase();
   if (remembered[key]) return true;
 
   const name = path.basename(exePath);
+  // The publisher's own offline switch keeps the normal launch, so the story is shorter.
+  const detail = switchArgs
+    ? `Anti-cheat will not let the game start with OptiScaler's DLL in the folder. This launch uses the game's own `
+      + `${switchArgs.join(' ')} switch, which starts it through its normal launcher with ${antiCheat || 'the anti-cheat'} off.`
+      + '\n\nStory Mode works. Online play does not, and playing online with these files in place can get the account '
+      + 'banned -- so keep this game offline while it is modded, and use Remove before going back online.'
+    : `Steam does not start the game directly: it runs ${stub}, which starts ${antiCheat || 'the anti-cheat service'} `
+      + 'and then the game under it. Anti-cheat will not let the game start with OptiScaler\'s DLL in the folder, so that '
+      + `launch fails with nothing written to any log at all.\n\nStarting ${name} directly skips the stub. `
+      + 'Single-player works. Online play and matchmaking do not, and playing online with these files in place can get '
+      + 'the account banned -- so keep this game offline while it is modded, and use Remove before going back online.';
   const res = await dialog.showMessageBox({
     type: 'question',
     buttons: ['Launch without anti-cheat', 'Cancel'],
@@ -2538,11 +2549,7 @@ async function confirmLaunchWithoutAntiCheat(exePath, { stub, antiCheat, appId }
     cancelId: 1,
     title: 'This game starts through its anti-cheat',
     message: `${name} runs under ${antiCheat || 'anti-cheat'}.`,
-    detail: `Steam does not start the game directly: it runs ${stub}, which starts ${antiCheat || 'the anti-cheat service'} `
-      + 'and then the game under it. Anti-cheat will not let the game start with OptiScaler\'s DLL in the folder, so that '
-      + `launch fails with nothing written to any log at all.\n\nStarting ${name} directly skips the stub. `
-      + 'Single-player works. Online play and matchmaking do not, and playing online with these files in place can get '
-      + 'the account banned -- so keep this game offline while it is modded, and use Remove before going back online.',
+    detail,
     checkboxLabel: 'Do not ask again for this game',
     checkboxChecked: false,
     noLink: true,
@@ -2575,6 +2582,31 @@ ipcMain.handle('game:launch', async (_evt, { exePath, dryRun = false } = {}) => 
         : target;
       const stub = stubInfo.stub;
       const antiCheat = stubInfo.antiCheat || antiCheatPresent(dir, real);
+      // The publisher's own switch (detect.js ANTI_CHEAT_SWITCHES): the normal launch, launcher and
+      // sign-in included, with the anti-cheat left out. Skipping the stub is what breaks these games.
+      if (stubInfo.launch) {
+        const { args } = stubInfo.launch;
+        const launcher = path.join(dir, stubInfo.launch.exe);
+        const via = steamAppId ? 'steam-no-anticheat' : 'launcher-no-anticheat';
+        if (dryRun) return { ok: true, target: launcher, via, args, steamAppId, stub, antiCheat };
+        if (!(await confirmLaunchWithoutAntiCheat(real, { stub, antiCheat, appId: steamAppId, switchArgs: args }))) {
+          return { ok: true, cancelled: true, target: launcher, via, args, stub, antiCheat };
+        }
+        const steamExe = steamAppId ? library.steamExe() : null;
+        if (steamAppId && !steamExe) {
+          await shell.openExternal(`steam://run/${steamAppId}//${args.join(' ')}/`);
+        } else {
+          const file = steamExe || launcher;
+          const argv = steamExe ? ['-applaunch', String(steamAppId), ...args] : args;
+          const child = spawn(file, argv, { cwd: steamExe ? path.dirname(steamExe) : dir, detached: true, stdio: 'ignore', windowsHide: false });
+          await new Promise((resolve, reject) => {
+            child.once('spawn', resolve);
+            child.once('error', (e) => reject(new Error(`could not start ${path.basename(file)}: ${e && e.message ? e.message : e}`)));
+          });
+          child.unref();
+        }
+        return { ok: true, target: launcher, via, args, steamAppId, stub, antiCheat };
+      }
       if (dryRun) return { ok: true, target: real, via: 'exe-no-anticheat', steamAppId, stub, antiCheat };
       if (!(await confirmLaunchWithoutAntiCheat(real, { stub, antiCheat, appId: steamAppId }))) {
         return { ok: true, cancelled: true, target: real, via: 'exe-no-anticheat', stub, antiCheat };
@@ -2585,13 +2617,14 @@ ipcMain.handle('game:launch', async (_evt, { exePath, dryRun = false } = {}) => 
       // Steam still has to be running and still has to own the game -- this is not a DRM bypass.
       const env = { ...process.env };
       if (steamAppId) { env.SteamAppId = String(steamAppId); env.SteamGameId = String(steamAppId); }
-      const child = spawn(target, [], { cwd: dir, detached: true, stdio: 'ignore', windowsHide: false, env });
+      // `real`, not `target`: when the card holds the stub itself, target is the stub.
+      const child = spawn(real, [], { cwd: dir, detached: true, stdio: 'ignore', windowsHide: false, env });
       await new Promise((resolve, reject) => {
         child.once('spawn', resolve);
-        child.once('error', (e) => reject(new Error(`could not start ${path.basename(target)}: ${e && e.message ? e.message : e}`)));
+        child.once('error', (e) => reject(new Error(`could not start ${path.basename(real)}: ${e && e.message ? e.message : e}`)));
       });
       child.unref();
-      return { ok: true, target, via: 'exe-no-anticheat', steamAppId, stub, antiCheat };
+      return { ok: true, target: real, via: 'exe-no-anticheat', steamAppId, stub, antiCheat };
     }
     // A Steam-installed game goes through Steam: its DRM, overlay, cloud saves and launch
     // options all expect that, and some games refuse to start any other way. Steam then runs the

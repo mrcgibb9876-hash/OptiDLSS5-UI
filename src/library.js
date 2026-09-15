@@ -319,6 +319,15 @@ function steamManifestFor(exePath) {
   return null;
 }
 
+// steam.exe, for a launch that has to carry arguments: `steam -applaunch <appid> <args>` passes them
+// without the confirmation Steam shows for arguments in a steam:// link. Windows only.
+function steamExe() {
+  if (process.platform !== 'win32') return null;
+  const root = reg('HKCU\\Software\\Valve\\Steam', 'SteamPath');
+  const exe = root ? path.join(root.replace(/\//g, '\\'), 'steam.exe') : null;
+  return exe && fs.existsSync(exe) ? exe : null;
+}
+
 function steamAppIdFor(exePath) {
   const m = steamManifestFor(exePath);
   return m ? m.appid : null;
@@ -442,4 +451,4 @@ function pickBannerMatch(query, items) {
   return best ? best.item : null;
 }
 
-module.exports = { discover, folder, dedupe, autoRoots, drives, isInside, filterExcluded, steam, linuxSteamRoots, steamAppIdFor, steamManifestFor, nameForExe, bannerSearchTerms, pickBannerMatch, titleTokens };
+module.exports = { discover, folder, dedupe, autoRoots, drives, isInside, filterExcluded, steam, linuxSteamRoots, steamAppIdFor, steamExe, steamManifestFor, nameForExe, bannerSearchTerms, pickBannerMatch, titleTokens };

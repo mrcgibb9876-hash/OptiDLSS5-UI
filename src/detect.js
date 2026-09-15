@@ -540,9 +540,19 @@ const ANTI_CHEAT_STUBS = [
   { match: /^(.+)_EAC\.exe$/i, antiCheat: 'EasyAntiCheat' },
 ];
 
+// Publishers that ship their own way past the anti-cheat for offline play, where skipping the stub
+// breaks something else. GTA V Legacy: GTA5.exe started on its own needs Rockstar's launcher to
+// have signed it in -- it ran once and then asked to be run through the Rockstar Games Launcher (a
+// player's support bundle, 2026-09-15). Rockstar's switch for Story Mode is -nobattleye on the normal
+// launch (Steam launch options, or PlayGTAV.exe), which keeps the launcher and drops BattlEye.
+const ANTI_CHEAT_SWITCHES = [
+  { stub: /^GTA5_BE\.exe$/i, launcher: 'PlayGTAV.exe', args: ['-nobattleye'] },
+];
+
 // { stub, antiCheat, gameExe } for the stub in this folder, or null. gameExe is set only when the
 // stub's own name names the exe it fronts and that exe is really there: for EAC's generic launcher
-// the name says nothing, and the game's own exe is the one the app already has on record.
+// the name says nothing, and the game's own exe is the one the app already has on record. `launch`
+// ({ exe, args }) is added when the publisher's own switch exists, and is the launch to use.
 function antiCheatStub(dir) {
   let entries = [];
   try { entries = fs.readdirSync(dir); } catch { return null; }
@@ -557,7 +567,12 @@ function antiCheatStub(dir) {
       // Paired, or not a stub this app can route around: <Game>_BE.exe with no <Game>.exe beside
       // it would send the launch at a file that is not there.
       const paired = entries.find((e) => e.toLowerCase() === `${hit[1].toLowerCase()}.exe`);
-      if (paired) return { stub: entry, antiCheat: rule.antiCheat, gameExe: paired };
+      if (!paired) continue;
+      const info = { stub: entry, antiCheat: rule.antiCheat, gameExe: paired };
+      const sw = ANTI_CHEAT_SWITCHES.find((s) => s.stub.test(entry));
+      const launcher = sw && entries.find((e) => e.toLowerCase() === sw.launcher.toLowerCase());
+      if (launcher) info.launch = { exe: launcher, args: [...sw.args] };
+      return info;
     }
   }
   return null;

@@ -154,6 +154,14 @@ test('an anti-cheat stub is told apart from anti-cheat with no way past it', () 
   write(be, 'RainbowSix.exe');
   assert.deepEqual(detect.antiCheatStub(be), { stub: 'RainbowSix_BE.exe', antiCheat: 'BattlEye', gameExe: 'RainbowSix.exe' });
 
+  // GTA V: skipping the stub skips Rockstar's launcher sign-in too, so its own -nobattleye switch on
+  // the normal launch is the door.
+  const gta = game('Grand Theft Auto V');
+  for (const f of ['GTA5_BE.exe', 'GTA5.exe', 'PlayGTAV.exe']) write(gta, f);
+  assert.deepEqual(detect.antiCheatStub(gta), {
+    stub: 'GTA5_BE.exe', antiCheat: 'BattlEye', gameExe: 'GTA5.exe', launch: { exe: 'PlayGTAV.exe', args: ['-nobattleye'] },
+  });
+
   // A _BE.exe with nothing to front is not a door this app can use: guessing would launch a file
   // that is not there.
   const orphan = game('OrphanStub');

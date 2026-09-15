@@ -47,6 +47,22 @@ test('a game under a Steam library launches through Steam, by the appid of its i
   assert.equal(loose.via, 'exe');
 });
 
+test('GTA V launches through Steam with -nobattleye, not by starting GTA5.exe past the launcher', async () => {
+  const lib = scratchDir('launch-gta');
+  write(path.join(lib, 'steamapps'), 'appmanifest_271590.acf', '"AppState"\n{\n\t"appid"\t\t"271590"\n\t"installdir"\t\t"Grand Theft Auto V"\n}\n');
+  const root = path.join(lib, 'steamapps', 'common', 'Grand Theft Auto V');
+  const exe = fakeExe(root, 'GTA5.exe');
+  for (const f of ['GTA5_BE.exe', 'PlayGTAV.exe']) fakeExe(root, f);
+  write(root, '.optiscaler-manager-install.json', '{}');
+  const { invoke } = loadMain();
+  const res = await invoke('game:launch', { exePath: exe, dryRun: true });
+  assert.equal(res.ok, true, res.error);
+  assert.equal(res.via, 'steam-no-anticheat');
+  assert.equal(res.steamAppId, '271590');
+  assert.deepEqual(res.args, ['-nobattleye']);
+  assert.equal(path.basename(res.target), 'PlayGTAV.exe');
+});
+
 test('the store lookup tries the spellings Steam actually finds', () => {
   const { bannerSearchTerms } = require(path.join(__dirname, '..', 'src', 'library'));
   const t = bannerSearchTerms('Star Wars Jedi - Fallen Order');
