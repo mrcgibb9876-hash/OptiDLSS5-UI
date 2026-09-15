@@ -253,7 +253,7 @@ async function renderGrid() {
         <div class="card-path card-lastrun hidden"></div>
         <div class="card-live hidden"><span class="card-live-dot"></span><span class="card-live-text"></span></div>
         <div class="card-help hidden"><span class="card-help-text"></span><button class="btn btn-small btn-primary btn-card-fix hidden"></button></div>
-        ${(status.warnings || []).map((w) => `<div class="card-warning" title="${escapeHtml(t(w.message, w.vars))}">⚠ ${escapeHtml(t(w.message, w.vars))}</div>`).join('')}
+        ${(status.warnings || []).map((w) => `<div class="card-warning" title="${escapeHtml(t(w.message, w.vars))}">⚠ ${escapeHtml(t('Another DLSS 5 tool is in the folder'))}</div>`).join('')}
         ${(status.foreign || []).length ? `<button class="btn btn-danger btn-small btn-remove-foreign" style="margin: 2px 0 6px;">${escapeHtml(t('Remove the other DLSS 5 toolchain…'))}</button>` : ''}
         <div class="card-actions">
           <button class="btn ${backends.optiscaler || (backends.leftovers || []).length ? 'btn-danger' : 'btn-primary'} btn-install">${escapeHtml(backends.optiscaler ? t('Remove OptiScaler') : (backends.leftovers || []).length ? t('Remove leftovers') : t('Install OptiScaler'))}</button>
@@ -514,10 +514,15 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   // On the 32-bit route the ReShade beside the game is this app's own (legacy.js), not a conflict.
   if (detected.reshadeProxy && route.route !== 'feeder32') detectWarnings.push(t('ReShade is already installed here as {file}. Install replaces it with OptiScaler -- pick Launch mode: Injector in Edit to keep both.', { file: detected.reshadeProxy }));
   if (detected.oldShaderCompiler) detectWarnings.push(t('{file} v{version} beside the exe predates Shader Model 5.1, so OptiScaler\'s shaders can silently fail to compile -- rename it and Windows\' own copy loads instead.', { file: detected.oldShaderCompiler.file, version: detected.oldShaderCompiler.version }));
+  // The card shows a few words each; the full sentence is the hover text.
+  const detectShort = [];
+  if (detected.antiCheat) detectShort.push(t('Anti-cheat: single-player only'));
+  if (detected.reshadeProxy && route.route !== 'feeder32') detectShort.push(t('ReShade already here ({file})', { file: detected.reshadeProxy }));
+  if (detected.oldShaderCompiler) detectShort.push(t('Old shader compiler ({file})', { file: detected.oldShaderCompiler.file }));
   const warnEl = card.querySelector('.card-detect-warning');
   if (warnEl) {
     warnEl.classList.toggle('hidden', detectWarnings.length === 0);
-    warnEl.textContent = detectWarnings.map((w) => `\u26a0 ${w}`).join('  ');
+    warnEl.textContent = detectShort.map((w) => `\u26a0 ${w}`).join('  ');
     warnEl.title = detectWarnings.join('\n');
   }
 
@@ -700,6 +705,63 @@ function helpWords(diag) {
   }
 }
 
+// Game Help's headline: the card's line, plus the states the card never shows.
+function helpHeadline(diag) {
+  switch (diag.code) {
+    case 'ok': case 'ok-panel-in-helper': case 'ok-exit-crash': return t('DLSS 5 is working');
+    case 'needs-run': case 'needs-run-after-fix': return t('Play the game once, then check again');
+    case 'driver-outdated': return t('NVIDIA driver too old for DLSS 5');
+    default: return helpShort(diag);
+  }
+}
+
+// What to do, as a few short numbered steps. The explanation behind each is helpWords, under Details.
+// Users complained of walls of text (2026-09-15): these are what they actually read.
+function helpSteps(diag) {
+  const v = diag.vars || {};
+  const launch = t('Launch the game and check again');
+  const fixIt = (what) => [what, launch];
+  const report = [t('Save the bundle (More…)'), t('Report it on GitHub (More…)')];
+  switch (diag.code) {
+    case 'driver-outdated': return [v.min ? t('Update the NVIDIA driver ({min} or newer)', v) : t('Update the NVIDIA driver'), t('Restart the PC'), launch];
+    case 'nr-model-crash-emulator': return [
+      t('In {name}: Graphics > Backend > Direct3D 11', v),
+      ...(v.smoothMotion ? [t('Turn off NVIDIA Smooth Motion for {name}', v)] : []),
+      launch,
+    ];
+    case 'nr-model-crash': return [
+      t("Switch the game to Direct3D 11 if it has that option"),
+      ...(v.smoothMotion ? [t('Turn off NVIDIA Smooth Motion for this game')] : []),
+      t('Still crashing? Save the bundle and report it'),
+    ];
+    case 'foreign': return fixIt(t('Press Fix it to remove {tool}', v));
+    case 'foreign-optiscaler': return [t('Delete {file} from the game folder', v), t('Press Install')];
+    case 'feeder-misdeployed': case 'ue-crash-feeder': return fixIt(t('Press Fix it (removes the Feeder)'));
+    case 'luma-known-bad': case 'ue-crash-luma': return fixIt(t('Press Fix it (removes Luma UE)'));
+    case 'not-installed': case 'feeder-missing': case 'dgvoodoo-missing': case 'feeder-technique': return [t('Press Install'), launch];
+    case 'luma-missing': return [t('Open Edit and deploy Luma UE'), launch];
+    case 'reframework-missing': case 'pd-temporal-on': case 'pd-build-missing': case 'd3d11-native':
+    case 'nr-disabled': case 'dlss-runtime-missing': case 'feed-stopped':
+      return fixIt(t('Press Fix it'));
+    case 'feeder-mv-broken': case 'feed-no-motion': return fixIt(t('Press Fix it (redeploys the Feeder)'));
+    case 'feed-depth-flat': return fixIt(t('Press Fix it (switches the depth profile)'));
+    case 'feed-agility-redist': return fixIt(t('Press Fix it (moves the D3D12 folder aside)'));
+    case 'feed-agility-redist-elsewhere': return [t("Verify the game's files in its launcher"), launch];
+    case 'pd-plugin-missing': return [t('Download PDPerfPlugin 1.1.2 from Nexus'), t('Press "I downloaded it"')];
+    case 'pd-enable-ingame': return [t('In the game: Insert > TemporalUpscaler'), t('Tick Enabled, set Upscale Type to DLSS')];
+    case 'anticheat-launch-direct': return [t("Start the game with this app's Launch button"), t('Single-player only -- stay offline')];
+    case 'luma-select-dlss': return [t("In the game: Home > Luma > select DLSS"), launch];
+    case 'needs-run': case 'needs-run-after-fix': return [t('Launch the game'), t('Play a minute of actual gameplay, then quit'), t('Come back here')];
+    case 'ok-panel-in-helper': return [t('In the game: Home > Add-ons > DLSS 5 Feed'), t('Press "Show the DLSS 5 panel in-game"'), t('Press Insert')];
+    case 'ok': return [t('Tune it in Edit, or with Alt+Home in the game')];
+    case 'ok-exit-crash': return [t('Nothing to do -- it only crashes when quitting')];
+    case 'dgvoodoo-crash': return [t('Press Fix it (puts the game back as it was)')];
+    case 'sr-backend-fallback': return [t("Check the game's own settings ask for DLSS"), ...report];
+    case 'bit32': case 'anticheat': case 'unsupported': case 'upscale-skipped': return [];
+    default: return report;
+  }
+}
+
 // The card's one line: what is wrong, in a few words. The modal has the full sentence.
 function helpShort(diag) {
   const v = diag.vars || {};
@@ -772,6 +834,12 @@ function renderHelp(diag) {
     ok: t('Working'), fix: t('Fix available'), step: t('Your move'), 'needs-run': t('Needs a run'),
     unavailable: t('Not available'), unknown: t('No rule fits'),
   }[diag.status] || '';
+  // A headline and a few numbered steps up front; the full explanation sits under Details.
+  $('#help-headline').textContent = helpHeadline(diag);
+  const stepsEl = $('#help-steps');
+  const steps = helpSteps(diag);
+  stepsEl.innerHTML = steps.map((s) => `<li>${escapeHtml(s)}</li>`).join('');
+  stepsEl.classList.toggle('hidden', steps.length === 0);
   body.textContent = helpWords(diag);
   // A finding that sends the user to one page (the pd route's Nexus plugin) gets the link.
   let linkBtn = $('#help-link');
@@ -780,7 +848,7 @@ function renderHelp(diag) {
     linkBtn.id = 'help-link';
     linkBtn.className = 'btn btn-small';
     linkBtn.addEventListener('click', () => { if (helpDiag && helpDiag.vars && helpDiag.vars.url) window.api.openExternal(helpDiag.vars.url); });
-    body.insertAdjacentElement('afterend', linkBtn);
+    stepsEl.insertAdjacentElement('afterend', linkBtn);
   }
   const url = diag.vars && diag.vars.url;
   linkBtn.classList.toggle('hidden', !url);
@@ -829,7 +897,10 @@ async function openHelp(game, { autoFix = false } = {}) {
   helpTriedByGame.set(game.exePath, helpFixesTried);
   helpAutoFix = autoFix;
   $('#help-title').textContent = t('Game Help -- {name}', { name: game.name });
-  $('#help-body').textContent = t('Checking…');
+  $('#help-headline').textContent = t('Checking…');
+  $('#help-steps').classList.add('hidden');
+  $('#help-details').open = false;
+  $('#help-body').textContent = '';
   $('#help-status').textContent = '';
   $('#help-ai-out').classList.add('hidden');
   $('#help-ai-out').textContent = '';
@@ -1048,7 +1119,7 @@ async function installGame(game) {
       mvProviderId: provider ? provider.id : null,
     });
     toast(res32.ok
-      ? t('Installed the experimental 32-bit route. Expect no OptiScaler splash in the corner and no menu on any key -- on this route OptiScaler runs in the 64-bit helper beside the game, not in the game, so it has no window there to draw on. It is still working; the card says so after a run. To reach it: Home opens ReShade -> Add-ons -> DLSS 5 Feed -> "Show the DLSS 5 panel in-game", then Insert.')
+      ? t('Installed. No splash or menu appears in the game on this route -- Game Help shows how to reach it.')
       : t('Install failed: {error}', { error: res32.error }));
     renderGrid();
     return;
@@ -1142,7 +1213,14 @@ async function installGame(game) {
     const lumaNote = route.route === 'lumaue' && !route.lumaDeployed
       ? ' ' + t('Next: open Edit and deploy Luma UE -- OptiScaler has no DLSS call to hook in this game until Luma supplies one.')
       : '';
-    toast(`${t('Installed.')}${feederNote} ${t('Copied nvngx_dlssnr.dll ({mb} MB) to {dir}', { mb, dir: res.dir })}${proxyNote}${proxyCreatedNote}${foreignProxyNote}${proxyRefreshNote}${configNote}${streamlineNote}${reEngineNote}${profileNote}${hotfixNote}${reframeworkNote}${reframeworkConfigNote}${lumaNote}`);
+    // Users read a wall of text here as something having gone wrong (2026-09-15). The toast says
+    // "Installed" plus only what needs doing; everything informational goes to the console.
+    const actionNotes = [
+      res.proxyError ? proxyCreatedNote : '', foreignProxyNote, proxyRefreshNote,
+      res.reframework && res.reframework.error ? reframeworkNote : '', lumaNote,
+    ].join('');
+    console.info('[install]', game.name, `${feederNote} ${t('Copied nvngx_dlssnr.dll ({mb} MB) to {dir}', { mb, dir: res.dir })}${proxyNote}${proxyCreatedNote}${configNote}${streamlineNote}${reEngineNote}${profileNote}${hotfixNote}${reframeworkNote}${reframeworkConfigNote}`);
+    toast(`${t('Installed.')}${actionNotes}`);
     // A Resident Evil on the pd route still missing PureDark's plugin: say so now, not on a card
     // line someone may not read. Once imported it is placed automatically, so this pops only once.
     const after = await window.api.gameRoute(game.exePath, game.detectedPath);
@@ -3489,6 +3567,14 @@ $('#btn-add-scanned').addEventListener('click', async () => {
   }
 
   closeScanModal();
+});
+
+// Field hints show one line (style.css); a click opens the rest. Delegated, because Edit builds
+// many of its hints on the fly. A click on a link inside a hint is the link, not the toggle.
+document.addEventListener('click', (e) => {
+  const hint = e.target.closest && e.target.closest('.field-hint');
+  if (!hint || e.target.closest('a')) return;
+  hint.classList.toggle('open');
 });
 
 // Focus arrives for every native dialog the app opens and closes as well as for the user coming
