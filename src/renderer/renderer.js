@@ -3558,6 +3558,10 @@ $('#btn-clean-folder').addEventListener('click', async () => {
 // Top bar: one button checks and updates everything the app keeps current by itself -- the engine,
 // the NR model and the Manager. Nothing to choose: whatever is newer is installed (the Manager
 // downloads in the background and asks for a restart through its banner).
+const DISCORD_INVITE = 'https://discord.gg/HFZTDdSNmJ';
+$('#btn-discord').addEventListener('click', () => window.api.openExternal(DISCORD_INVITE));
+$('#help-discord').addEventListener('click', () => window.api.openExternal(DISCORD_INVITE));
+
 $('#btn-check-updates').addEventListener('click', async () => {
   const btn = $('#btn-check-updates');
   const label = btn.textContent;

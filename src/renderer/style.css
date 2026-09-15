@@ -83,6 +83,10 @@ body {
 }
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-ghost { background: transparent; }
+/* Discord's own blurple on every theme: it is their mark, and it reads as "community", not an action on a game. */
+.btn-discord { display: inline-flex; align-items: center; gap: 7px; background: #5865f2; border-color: #5865f2; color: #fff; font-weight: 600; }
+.btn-discord:hover { background: #4752c4; border-color: #4752c4; }
+.btn-discord .discord-logo { flex: none; }
 /* Launch is green on every theme, NVIDIA or AMD accent alike: it is the one button that starts the
    game rather than changing it, and green says go. */
 .btn-launch { background: #1f9d4d; border-color: #1f9d4d; color: #fff; font-weight: 600; }

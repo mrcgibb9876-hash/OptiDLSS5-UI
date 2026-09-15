@@ -170,3 +170,39 @@ jobs:
           dist/OptiScaler_DLSSNR-*.zip
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # A card in the Discord server's #announcements once the release is live. The webhook URL lives
+    # in the DISCORD_RELEASE_WEBHOOK secret; without it (a fork) this step does nothing. Pre-releases
+    # stay quiet. A failed post never fails the release.
+    - name: Announce on Discord
+      if: ${{ !inputs.prerelease }}
+      shell: pwsh
+      continue-on-error: true
+      env:
+        DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+        TAG: ${{ inputs.tag }}
+        TITLE: ${{ inputs.title }}
+      run: |
+        if (-not $env:DISCORD_RELEASE_WEBHOOK) { Write-Output "No DISCORD_RELEASE_WEBHOOK secret; skipping."; exit 0 }
+        $repo = "${{ github.repository }}"
+        $page = "https://github.com/$repo/releases/tag/$env:TAG"
+        $engine = if (Test-Path engine\VERSION) { (Get-Content engine\VERSION -Raw).Trim() } else { $null }
+        $lines = @(
+          "A new version is out. The app updates itself: if it hasn't yet, press **Check for Updates** at the top.",
+          "",
+          "**Download:** [GitHub release $env:TAG]($page)"
+        )
+        if ($engine) { $lines += "**Engine:** OptiScaler_DLSSNR $engine" }
+        $payload = @{
+          username = "OptiDLSS5-UI Releases"
+          embeds = @(@{
+            title = "🚀 $env:TITLE"
+            url = $page
+            description = ($lines -join "`n")
+            color = 0x76B900
+            thumbnail = @{ url = "https://raw.githubusercontent.com/$repo/master/build/icon.png" }
+            timestamp = (Get-Date).ToUniversalTime().ToString("o")
+          })
+        } | ConvertTo-Json -Depth 6
+        Invoke-RestMethod -Method Post -Uri $env:DISCORD_RELEASE_WEBHOOK -ContentType "application/json; charset=utf-8" -Body ([System.Text.Encoding]::UTF8.GetBytes($payload))
+        Write-Output "Posted to Discord."

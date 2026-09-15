@@ -2699,10 +2699,13 @@ ipcMain.handle('game:open-folder', (_evt, exePath) => {
   shell.openPath(gameDir(exePath));
 });
 
+// The project's Discord server (top bar and Game Help). A permanent invite.
+const DISCORD_INVITE = 'https://discord.gg/HFZTDdSNmJ';
+
 ipcMain.handle('shell:openExternal', (_evt, url) => {
-  // Only the project's own GitHub (the report button) and the one third-party page a route
-  // sends the user to (PureDark's Upscaler Base Plugin, reengine.js): not a general opener.
-  if (typeof url === 'string' && (url.startsWith('https://github.com/mrcgibb9876-hash/') || url === reengine.PD_PLUGIN_PAGE_URL || url === rtxmfg.PROJECT_PAGE)) shell.openExternal(url);
+  // Only the project's own GitHub (the report button), its Discord invite, and the third-party pages a
+  // route sends the user to (PureDark's Upscaler Base Plugin, reengine.js; RTXMFG): not a general opener.
+  if (typeof url === 'string' && (url.startsWith('https://github.com/mrcgibb9876-hash/') || url === DISCORD_INVITE || url === reengine.PD_PLUGIN_PAGE_URL || url === rtxmfg.PROJECT_PAGE)) shell.openExternal(url);
 });
 
 ipcMain.handle('shell:openPath', (_evt, p) => {
