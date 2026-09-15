@@ -668,8 +668,8 @@ function helpWords(diag) {
     case 'pd-enable-ingame': return t('Everything is in place but the last run made no DLSS call. In-game, press Insert for REFramework\'s menu, open TemporalUpscaler, tick Enabled and set Upscale Type to DLSS. Then play a minute and quit.');
     case 'needs-run': return t('No run to judge yet. Launch the game, reach actual gameplay (not a menu), play a minute, then quit. Come back here and it is checked.');
     case 'needs-run-after-fix': return t('"{fix}" was applied. The old log still says what it said, so launch the game, reach gameplay, play a minute, quit, and this is checked again.', { fix: helpFixLabel(v.fix) });
-    case 'ok': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}{api}.', { count: v.count, fps: v.fps ? t(' at {fps} fps', { fps: v.fps }) : '', api: v.api ? ' (' + v.api + ')' : '' });
-    case 'ok-panel-in-helper': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}. You will have seen nothing at all in the game -- no OptiScaler splash in the corner when it loads, and no menu on Insert or Alt+Home. That is expected on this route rather than a fault, and it is one fact rather than three: a 32-bit game cannot run DLSS in its own process, so the neural pass runs in the 64-bit helper beside it, and OptiScaler runs there too, in a process with no window of its own to draw any of that on. To reach OptiScaler: press Home in the game for ReShade\'s overlay, go to the Add-ons tab, open DLSS 5 Feed, press "Show the DLSS 5 panel in-game" -- that draws the helper over the game and passes your keys and clicks to it -- and then press Insert, which is OptiScaler\'s own menu key. The add-on\'s own Toggle key starts as "none", so nothing brings the panel back until you set one with "Set key" beside it. It needs windowed or borderless; in exclusive fullscreen use the Feeder\'s "Show as texture (fullscreen too)" option instead. If that does not work either, nothing is lost: Edit here now carries the same neural-rendering controls, written straight into the ini the helper loads, and Game Help saves a bundle that includes the helper\'s own log.', { count: v.count, fps: v.fps ? t(' at {fps} fps', { fps: v.fps }) : '' });
+    case 'ok': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}{api}.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '', api: v.api ? ' (' + v.api + ')' : '' });
+    case 'ok-panel-in-helper': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}. You will have seen nothing at all in the game -- no OptiScaler splash in the corner when it loads, and no menu on Insert or Alt+Home. That is expected on this route rather than a fault, and it is one fact rather than three: a 32-bit game cannot run DLSS in its own process, so the neural pass runs in the 64-bit helper beside it, and OptiScaler runs there too, in a process with no window of its own to draw any of that on. To reach OptiScaler: press Home in the game for ReShade\'s overlay, go to the Add-ons tab, open DLSS 5 Feed, press "Show the DLSS 5 panel in-game" -- that draws the helper over the game and passes your keys and clicks to it -- and then press Insert, which is OptiScaler\'s own menu key. The add-on\'s own Toggle key starts as "none", so nothing brings the panel back until you set one with "Set key" beside it. It needs windowed or borderless; in exclusive fullscreen use the Feeder\'s "Show as texture (fullscreen too)" option instead. If that does not work either, nothing is lost: Edit here now carries the same neural-rendering controls, written straight into the ini the helper loads, and Game Help saves a bundle that includes the helper\'s own log.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '' });
     case 'ok-exit-crash': return t('Neural Rendering ran ({count} passes). The game crashed only on the way out, inside NVIDIA\'s shutdown, which does not affect play.', v);
     case 'd3d11-native': return t('DLSS was created on the native D3D11 path, so the Neural Rendering pass never ran. Dx11Upscaler must be dlss_12. Reconfigure writes it.');
     case 'nr-disabled': return t('DLSS ran but Neural Rendering is switched off in OptiScaler.ini. Reconfigure turns it on.');
@@ -1418,11 +1418,25 @@ async function openGameModal(game, { focus = null } = {}) {
   await loadLumaUeSection(game);
   // Arrived from the card's Tune DLSS 5 button: put the settings in view rather than leaving
   // someone to scroll a long dialog looking for them.
+  refreshEditGroups();
   if (focus === 'dlssnr') {
     const section = $('#game-dlssnr-section');
+    $('#edit-group-dlss5').open = true;
     if (section && !section.classList.contains('hidden')) section.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
 }
+
+// The Edit dialog's groups (Game / DLSS 5 / Frame Generation / Advanced) hide themselves when none of
+// their sections applies to this game, so a game with no Frame Generation shows no empty heading.
+// Sections toggle their own `hidden` class as they load and after every action, so this follows them.
+function refreshEditGroups() {
+  for (const group of document.querySelectorAll('#game-modal details.edit-group')) {
+    if (group.id === 'edit-group-game') continue;
+    const blocks = [...group.children].filter((el) => el.tagName !== 'SUMMARY');
+    group.classList.toggle('hidden', !blocks.some((el) => !el.classList.contains('hidden')));
+  }
+}
+new MutationObserver(() => refreshEditGroups()).observe(document.querySelector('#game-modal'), { attributes: true, attributeFilter: ['class'], subtree: true });
 
 
 // ── DLSS 5 settings ───────────────────────────────────────────────────────────────────────────
@@ -1806,7 +1820,9 @@ async function loadRouteStatus(game) {
   el.classList.remove('hidden');
   el.className = `status-line ${route.route === 'unsupported' ? 'status-bad' : route.complete ? 'status-ok' : ''}`.trim();
   const progress = route.complete ? t('All set.') : route.nextStep ? t('Next: {step}.', { step: t(route.nextStep) }) : '';
-  el.textContent = `${t('Recommended: {label}.', { label: t(route.label) })} ${t(route.reason, route.reasonVars)} ${progress}`.trim();
+  // One line; the route's full reasoning is the hover text.
+  el.textContent = `${t('Recommended: {label}.', { label: t(route.label) })} ${progress}`.trim();
+  el.title = t(route.reason, route.reasonVars);
 }
 
 // Turns a "blind install" into an informed one: says whether OptiScaler_DLSSNR's own engine has

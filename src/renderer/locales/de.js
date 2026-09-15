@@ -684,4 +684,8 @@ window.I18N.register("de", {
   "Anti-cheat: single-player only": "Anti-Cheat: nur Einzelspieler",
   "ReShade already here ({file})": "ReShade ist schon da ({file})",
   "Old shader compiler ({file})": "Alter Shader-Compiler ({file})",
+  "Game": "Spiel",
+  "DLSS 5": "DLSS 5",
+  "Frame Generation": "Frame Generation",
+  "Advanced": "Erweitert",
 });

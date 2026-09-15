@@ -684,4 +684,8 @@ window.I18N.register("ru", {
   "Anti-cheat: single-player only": "Античит: только одиночная игра",
   "ReShade already here ({file})": "ReShade уже здесь ({file})",
   "Old shader compiler ({file})": "Старый компилятор шейдеров ({file})",
+  "Game": "Игра",
+  "DLSS 5": "DLSS 5",
+  "Frame Generation": "Frame Generation",
+  "Advanced": "Дополнительно",
 });

@@ -684,4 +684,8 @@ window.I18N.register("ko", {
   "Anti-cheat: single-player only": "안티치트: 싱글 플레이 전용",
   "ReShade already here ({file})": "ReShade가 이미 있음 ({file})",
   "Old shader compiler ({file})": "오래된 셰이더 컴파일러 ({file})",
+  "Game": "게임",
+  "DLSS 5": "DLSS 5",
+  "Frame Generation": "프레임 생성",
+  "Advanced": "고급",
 });

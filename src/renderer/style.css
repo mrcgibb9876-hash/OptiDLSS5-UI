@@ -423,6 +423,18 @@ select:focus { outline: 1px solid var(--accent); }
 
 .modal-wide { width: 620px; }
 
+/* Edit dialog groups: Game / DLSS 5 / Frame Generation / Advanced, each collapsible. */
+.edit-group { border-top: 1px solid var(--border); margin-top: 10px; }
+.edit-group > summary {
+  cursor: pointer; list-style: none; user-select: none;
+  font-size: 13px; font-weight: 600; letter-spacing: 0.02em; padding: 10px 0 4px;
+}
+.edit-group > summary::-webkit-details-marker { display: none; }
+.edit-group > summary::before { content: '\25B8'; display: inline-block; width: 16px; color: var(--text-dim); }
+.edit-group[open] > summary::before { content: '\25BE'; }
+.edit-group > div > .field-label:first-child { margin-top: 8px; }
+#game-route-status { margin: -8px 0 4px; }
+
 .card-help { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 2px 0 6px; }
 .card-help-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-help .btn-card-fix { flex: none; }

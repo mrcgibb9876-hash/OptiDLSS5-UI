@@ -684,4 +684,8 @@ window.I18N.register("zh-CN", {
   "Anti-cheat: single-player only": "反作弊：仅限单人",
   "ReShade already here ({file})": "ReShade 已存在（{file}）",
   "Old shader compiler ({file})": "旧版着色器编译器（{file}）",
+  "Game": "游戏",
+  "DLSS 5": "DLSS 5",
+  "Frame Generation": "帧生成",
+  "Advanced": "高级",
 });

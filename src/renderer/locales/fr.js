@@ -773,4 +773,8 @@ window.I18N.register("fr", {
   "Anti-cheat: single-player only": "Anti-triche : solo uniquement",
   "ReShade already here ({file})": "ReShade déjà présent ({file})",
   "Old shader compiler ({file})": "Ancien compilateur de shaders ({file})",
+  "Game": "Jeu",
+  "DLSS 5": "DLSS 5",
+  "Frame Generation": "Frame Generation",
+  "Advanced": "Avancé",
 });
