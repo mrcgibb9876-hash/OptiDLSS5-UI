@@ -1033,7 +1033,7 @@ window.api.onGameHelpAiText(({ exePath, text }) => {
 
 $('#help-ai').addEventListener('click', async () => {
   if (!helpGame) return;
-  if (!settings.anthropicApiKey) { openSettingsModal(); $('#settings-ai-key').focus(); return; }
+  if (!settings.anthropicApiKey) { openSettingsModal(); $('#settings-advanced').classList.remove('hidden'); $('#settings-ai-key').focus(); return; }
   const game = helpGame;
   const btn = $('#help-ai');
   btn.disabled = true;
@@ -1429,11 +1429,17 @@ async function openGameModal(game, { focus = null } = {}) {
 // The Edit dialog's groups (Game / DLSS 5 / Frame Generation / Advanced) hide themselves when none of
 // their sections applies to this game, so a game with no Frame Generation shows no empty heading.
 // Sections toggle their own `hidden` class as they load and after every action, so this follows them.
+// Sections marked advanced-only (API, Feeder, launch mode, Frame Generation, Lossless...) only count --
+// and only show (style.css, body.show-advanced) -- with Settings > Show advanced options on. Install
+// already picks the right setup, so by default Edit is just the game and its DLSS 5 settings.
 function refreshEditGroups() {
+  const advanced = !!settings.showAdvanced;
+  document.body.classList.toggle('show-advanced', advanced);
   for (const group of document.querySelectorAll('#game-modal details.edit-group')) {
     if (group.id === 'edit-group-game') continue;
     const blocks = [...group.children].filter((el) => el.tagName !== 'SUMMARY');
-    group.classList.toggle('hidden', !blocks.some((el) => !el.classList.contains('hidden')));
+    const visible = blocks.some((el) => !el.classList.contains('hidden') && (advanced || !el.classList.contains('advanced-only')));
+    group.classList.toggle('hidden', !visible);
   }
 }
 new MutationObserver(() => refreshEditGroups()).observe(document.querySelector('#game-modal'), { attributes: true, attributeFilter: ['class'], subtree: true });
@@ -1838,11 +1844,12 @@ async function loadEngineProfileStatus(game) {
   }
   const res = await window.api.engineHasKnownProfile(game.exePath);
   el.classList.remove('hidden');
+  // classList, not className: the element also carries advanced-only.
   if (res.known) {
-    el.className = 'status-line status-ok';
+    el.classList.add('status-ok');
     el.textContent = t('OptiScaler has a known compatibility profile built in for this exe.');
   } else {
-    el.className = 'status-line';
+    el.classList.remove('status-ok');
     el.textContent = t('No compiled-in compatibility profile for this exe -- default OptiScaler configuration.');
   }
 }
@@ -2999,6 +3006,8 @@ function openSettingsModal() {
       : gpu.vendor === 'intel' ? ' ' + t('-- no Neural Rendering route on Intel; OptiScaler still installs for its upscaler swap.')
       : gpu.vendor === 'unknown' ? ' ' + t('-- could not identify the GPU; assuming NVIDIA.') : '');
   $('#settings-language').value = settings.language || 'auto';
+  $('#settings-show-advanced').checked = !!settings.showAdvanced;
+  $('#settings-advanced').classList.toggle('hidden', !settings.showAdvanced);
   $('#settings-feeder-prerelease').checked = !!settings.feederPrerelease;
   $('#settings-ai-key').value = settings.anthropicApiKey || '';
   $('#settings-ai-model').value = settings.aiModel || 'claude-sonnet-5';
@@ -3063,6 +3072,15 @@ $('#settings-ai-key').addEventListener('change', async (e) => {
 $('#settings-ai-model').addEventListener('change', async (e) => {
   settings.aiModel = e.target.value || 'claude-sonnet-5';
   await window.api.saveSettings(settings);
+});
+
+// One switch for everything most people never need: Settings' expert fields, and Edit's Frame
+// Generation / Advanced sections (refreshEditGroups).
+$('#settings-show-advanced').addEventListener('change', async (e) => {
+  settings.showAdvanced = !!e.target.checked;
+  await window.api.saveSettings(settings);
+  $('#settings-advanced').classList.toggle('hidden', !settings.showAdvanced);
+  refreshEditGroups();
 });
 
 // Deploy and the update check both read this from settings.json at call time, so a change here
@@ -3617,6 +3635,7 @@ window.addEventListener('focus', () => {
   games = data.games || [];
   settings = data.settings || { releaseFolder: '', nrDllPath: '', installedVersion: '' };
   applyLanguage();
+  document.body.classList.toggle('show-advanced', !!settings.showAdvanced);
   try { gpu = (await window.api.gpuInfo()) || gpu; } catch {}
   // Vendor colours: the default green is NVIDIA's; an AMD card gets AMD red (style.css, body.vendor-amd).
   document.body.classList.toggle('vendor-amd', gpu.vendor === 'amd');

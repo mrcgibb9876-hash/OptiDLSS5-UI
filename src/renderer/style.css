@@ -434,6 +434,8 @@ select:focus { outline: 1px solid var(--accent); }
 .edit-group[open] > summary::before { content: '\25BE'; }
 .edit-group > div > .field-label:first-child { margin-top: 8px; }
 #game-route-status { margin: -8px 0 4px; }
+/* Settings > Show advanced options: off by default, Install already picks the right setup. */
+body:not(.show-advanced) #game-modal .advanced-only { display: none !important; }
 
 .card-help { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 2px 0 6px; }
 .card-help-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

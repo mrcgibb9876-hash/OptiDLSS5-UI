@@ -95,11 +95,30 @@
           </div>
           <span id="game-dlssnr-status" class="status-line"></span>
         </div>
+        <div id="game-lumaue-section" class="hidden">
+          <label class="field-label" data-i18n>Luma UE (adds DLSS to this game)</label>
+          <p class="field-hint" data-i18n>This game has no DLSS of its own -- <a href="https://github.com/Filoppi/Luma-Framework" target="_blank" rel="noopener">Luma Framework's</a> Unreal Engine mod replaces its stock TAA with DLAA, which is what gives OptiScaler's Neural Rendering pass a real DLSS call to hook. Untested by this app against a real install -- built from Luma's actual release files and the OptiScaler wiki's setup page for this game, not guessed, but never run against the game.</p>
+          <p id="game-lumaue-known-issue" class="field-hint status-bad"></p>
+          <label class="scan-checkbox-row">
+            <input id="game-lumaue-license-confirm" type="checkbox" />
+            <span id="game-lumaue-license-text"></span>
+          </label>
+          <div class="field-row">
+            <button id="btn-lumaue-deploy" class="btn btn-ghost" data-i18n>Deploy Luma UE</button>
+            <button id="btn-lumaue-howto" class="btn btn-ghost" data-i18n>How to install</button>
+            <button id="btn-lumaue-remove" class="btn btn-ghost hidden" data-i18n>Remove Luma UE</button>
+          </div>
+          <label class="scan-checkbox-row">
+            <input id="game-lumaue-amd-intel" type="checkbox" />
+            <span data-i18n>On AMD or Intel graphics, also apply the wiki's workaround (Spoofing.Dxgi=false, Dx11withDx12.DontUseNTShared=true)</span>
+          </label>
+          <span id="game-lumaue-status" class="status-line"></span>
+        </div>
       </details>
 
       <details id="edit-group-fg" class="edit-group">
         <summary data-i18n>Frame Generation</summary>
-        <div id="game-framegen-section" class="hidden">
+        <div id="game-framegen-section" class="advanced-only hidden">
           <label class="field-label" data-i18n>DLSS Frame Generation version</label>
           <p class="field-hint" data-i18n>The game's own frame gen, not OptiScaler's -- this only versions the DLL it already loads (nvngx_dlssg.dll).</p>
           <div class="field-row">
@@ -139,7 +158,7 @@
           </div>
         </div>
 
-        <div id="game-optifg-section" class="hidden">
+        <div id="game-optifg-section" class="advanced-only hidden">
           <label class="field-label">
             <input type="checkbox" id="game-optifg-toggle" />
             <span data-i18n>OptiScaler Frame Generation (FSRFG)</span>
@@ -148,7 +167,7 @@
           <span id="game-optifg-status" class="status-line"></span>
         </div>
 
-        <div id="game-lossless-section" class="hidden">
+        <div id="game-lossless-section" class="advanced-only hidden">
           <label class="field-label" data-i18n>Frame Generation via Lossless Scaling</label>
           <p class="field-hint" data-i18n>Lossless Scaling generates extra frames from outside the game entirely -- it never touches the game's swapchain, so it works for games that have no DLSS of their own -- DX11 titles, DLSS5 Feeder and Luma UE games -- where neither the game nor OptiScaler's own Frame Generation can run. It is not offered for games with native DLSS: those have NVIDIA's own Frame Generation in their video settings (versioned above). Separate paid app; this only configures its per-game profile (Frame Generation on, Scaling off), it doesn't install it. <strong>Fixed</strong> multiplies every frame; <strong>Adaptive</strong> generates only as many frames as needed to hold the target FPS you set. <strong>One frame generator at a time:</strong> configuring this turns OptiScaler's own Frame Generation off for this game, and the game's own DLSS Frame Generation must be off in its video settings while Lossless Scaling runs -- two generators stack their frames. Once configured, the on/off toggle (and the amount, in Fixed mode) live in this game's own in-game panel (DLSS 5 Neural Rendering, Alt+Home) and are driven through Lossless Scaling's own hotkey, so its window never appears over your game. Configuring here also sets Lossless Scaling to start minimized to the tray and not as administrator -- that is what keeps it out of sight and lets the in-game controls reach it. <strong>Requires this game running Borderless or Windowed, not exclusive Fullscreen</strong> -- Lossless Scaling cannot capture an exclusive-fullscreen window at all; a DX12 game is usually fine regardless since DX12 has no true exclusive fullscreen.</p>
           <div class="field-row">
@@ -171,7 +190,7 @@
 
       <details id="edit-group-advanced" class="edit-group">
         <summary data-i18n>Advanced</summary>
-        <div id="game-api-section" class="hidden">
+        <div id="game-api-section" class="advanced-only hidden">
           <label class="field-label" data-i18n>Graphics API this game runs with</label>
           <p class="field-hint" data-i18n>Some games ship more than one renderer -- Where Winds Meet links DX11 in its exe and carries a DX12 path beside it -- and detection can only name one. The upscaler key, the DLSS5 Feeder, OptiScaler's own Frame Generation and DLSS NR on AMD all follow this, so pick what the game's own video settings actually use. Applied to OptiScaler.ini straight away if it is installed.</p>
           <div class="field-row">
@@ -180,7 +199,7 @@
           <span id="game-api-status" class="status-line"></span>
         </div>
 
-        <div id="game-feeder-section" class="hidden">
+        <div id="game-feeder-section" class="advanced-only hidden">
           <label class="field-label" data-i18n>Neural Rendering source: DLSS5 Feeder</label>
           <p class="field-hint" data-i18n>This game has no native DLSS, so there's no DLSS call for OptiScaler to add Neural Rendering to. The Feeder synthesises one from ReShade's own depth and motion vectors -- estimated, so it ghosts more in fast motion than a native-DLSS-fed game. Deploys ReShade (as a plain ReShade64.dll, not a proxy), the Feeder add-on, and a motion-vector shader here; install OptiScaler normally afterward (Install button) -- it loads ReShade itself once installed, not the other way round.</p>
           <div class="field-row">
@@ -192,27 +211,7 @@
           <span id="game-feeder-status" class="status-line"></span>
         </div>
 
-        <div id="game-lumaue-section" class="hidden">
-          <label class="field-label" data-i18n>Luma UE (adds DLSS to this game)</label>
-          <p class="field-hint" data-i18n>This game has no DLSS of its own -- <a href="https://github.com/Filoppi/Luma-Framework" target="_blank" rel="noopener">Luma Framework's</a> Unreal Engine mod replaces its stock TAA with DLAA, which is what gives OptiScaler's Neural Rendering pass a real DLSS call to hook. Untested by this app against a real install -- built from Luma's actual release files and the OptiScaler wiki's setup page for this game, not guessed, but never run against the game.</p>
-          <p id="game-lumaue-known-issue" class="field-hint status-bad"></p>
-          <label class="scan-checkbox-row">
-            <input id="game-lumaue-license-confirm" type="checkbox" />
-            <span id="game-lumaue-license-text"></span>
-          </label>
-          <div class="field-row">
-            <button id="btn-lumaue-deploy" class="btn btn-ghost" data-i18n>Deploy Luma UE</button>
-            <button id="btn-lumaue-howto" class="btn btn-ghost" data-i18n>How to install</button>
-            <button id="btn-lumaue-remove" class="btn btn-ghost hidden" data-i18n>Remove Luma UE</button>
-          </div>
-          <label class="scan-checkbox-row">
-            <input id="game-lumaue-amd-intel" type="checkbox" />
-            <span data-i18n>On AMD or Intel graphics, also apply the wiki's workaround (Spoofing.Dxgi=false, Dx11withDx12.DontUseNTShared=true)</span>
-          </label>
-          <span id="game-lumaue-status" class="status-line"></span>
-        </div>
-
-        <div id="game-injector-section" class="hidden">
+        <div id="game-injector-section" class="advanced-only hidden">
           <label class="field-label" data-i18n>Launch mode</label>
           <p class="field-hint" data-i18n>Injector loads OptiScaler without renaming a file on disk, so ReShade keeps its own dxgi.dll -- both run. Single-player only; refuses a game shipping a known anti-cheat.</p>
           <div class="field-row">
@@ -246,7 +245,7 @@
           <span id="game-amdnr-latest" class="status-line"></span>
         </div>
 
-        <div id="game-engine-profile-status" class="status-line hidden"></div>
+        <div id="game-engine-profile-status" class="advanced-only status-line hidden"></div>
       </details>
 
       <div class="modal-actions">
@@ -369,48 +368,55 @@
         </select>
       </div>
 
-      <div id="settings-gpu-status" class="status-line" style="margin-bottom: 8px;"></div>
-
-      <label class="field-label" data-i18n>AI help (optional, paid by you)</label>
-      <p class="field-hint" data-i18n>When Game Help has no rule for a problem, "Ask AI" sends that game's logs and the app's own view to Claude on your Anthropic API key, and Claude may apply the same fixes the app has, each one confirmed with you first. You pay Anthropic directly for what you use; nothing is sent until you press Ask AI. Keys start with sk-ant-.</p>
-      <div class="field-row">
-        <input id="settings-ai-key" type="password" data-i18n-placeholder placeholder="Anthropic API key (sk-ant-…)" autocomplete="off" />
-        <select id="settings-ai-model">
-          <option value="claude-sonnet-5">Claude Sonnet 5</option>
-          <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (cheapest)</option>
-          <option value="claude-opus-5">Claude Opus 5</option>
-        </select>
-      </div>
-
-      <label class="field-label" style="margin-top: 12px;" data-i18n>Clean a game folder</label>
-      <p class="field-hint" data-i18n>For a game that is no longer on the grid: pick its exe folder and everything this app ever put there is removed, with the game's own files left alone. Asks before deleting anything.</p>
-      <button id="btn-clean-folder" class="btn btn-ghost" data-i18n>Clean a game folder…</button>
-      <div id="clean-folder-status" class="status-line" style="margin-top: 4px;"></div>
-
-      <label class="field-label" data-i18n>Nvidia DLSS NR model file (nvngx_dlssnr.dll)</label>
-      <p class="field-hint" data-i18n>Fetched automatically on first launch (from RHI's published package). One copy gets placed in each game's folder. Browse only if you want to supply your own copy from an NVIDIA driver.</p>
-      <div class="field-row">
-        <input id="settings-nr-dll" type="text" data-i18n-placeholder placeholder="Not set — fetch, browse or paste a path" />
-        <button id="btn-fetch-nr-dll" class="btn btn-ghost" data-i18n>Fetch automatically</button>
-        <button id="btn-browse-nr-dll" class="btn btn-ghost" data-i18n>Browse</button>
-      </div>
-      <div id="nr-dll-status" class="status-line"></div>
-
-      <label class="field-label" data-i18n>Streamline version</label>
-      <p class="field-hint" data-i18n>The streamline folder OptiScaler's DLSS-G Frame Gen needs is downloaded for you, so nvngx_dlssnr.dll above is the only file you have to supply yourself. "Latest" tracks the newest build RHI publishes; pick a specific one if a game misbehaves on the newest.</p>
-      <div class="field-row">
-        <select id="settings-streamline-version">
-          <option value="latest" data-i18n>Latest (recommended)</option>
-        </select>
-      </div>
-      <div id="streamline-version-status" class="status-line"></div>
-
-      <label class="field-label" data-i18n>DLSS5 Feeder updates</label>
-      <p class="field-hint" data-i18n>The Feeder is deployed per game, from its author's newest stable release. Tick this to take pre-releases as well, which is what you want when the author asks you to test a beta against a bug you reported. Untick it and deploy again to go back to stable.</p>
-      <label class="scan-checkbox-row">
-        <input id="settings-feeder-prerelease" type="checkbox" />
-        <span data-i18n>Include DLSS5 Feeder pre-releases</span>
+      <label class="scan-checkbox-row" style="margin-top: 14px;">
+        <input id="settings-show-advanced" type="checkbox" />
+        <span data-i18n>Show advanced options</span>
       </label>
+
+      <div id="settings-advanced" class="hidden">
+        <div id="settings-gpu-status" class="status-line" style="margin-bottom: 8px;"></div>
+
+        <label class="field-label" data-i18n>AI help (optional, paid by you)</label>
+        <p class="field-hint" data-i18n>When Game Help has no rule for a problem, "Ask AI" sends that game's logs and the app's own view to Claude on your Anthropic API key, and Claude may apply the same fixes the app has, each one confirmed with you first. You pay Anthropic directly for what you use; nothing is sent until you press Ask AI. Keys start with sk-ant-.</p>
+        <div class="field-row">
+          <input id="settings-ai-key" type="password" data-i18n-placeholder placeholder="Anthropic API key (sk-ant-…)" autocomplete="off" />
+          <select id="settings-ai-model">
+            <option value="claude-sonnet-5">Claude Sonnet 5</option>
+            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (cheapest)</option>
+            <option value="claude-opus-5">Claude Opus 5</option>
+          </select>
+        </div>
+
+        <label class="field-label" style="margin-top: 12px;" data-i18n>Clean a game folder</label>
+        <p class="field-hint" data-i18n>For a game that is no longer on the grid: pick its exe folder and everything this app ever put there is removed, with the game's own files left alone. Asks before deleting anything.</p>
+        <button id="btn-clean-folder" class="btn btn-ghost" data-i18n>Clean a game folder…</button>
+        <div id="clean-folder-status" class="status-line" style="margin-top: 4px;"></div>
+
+        <label class="field-label" data-i18n>Nvidia DLSS NR model file (nvngx_dlssnr.dll)</label>
+        <p class="field-hint" data-i18n>Fetched automatically on first launch (from RHI's published package). One copy gets placed in each game's folder. Browse only if you want to supply your own copy from an NVIDIA driver.</p>
+        <div class="field-row">
+          <input id="settings-nr-dll" type="text" data-i18n-placeholder placeholder="Not set — fetch, browse or paste a path" />
+          <button id="btn-fetch-nr-dll" class="btn btn-ghost" data-i18n>Fetch automatically</button>
+          <button id="btn-browse-nr-dll" class="btn btn-ghost" data-i18n>Browse</button>
+        </div>
+        <div id="nr-dll-status" class="status-line"></div>
+
+        <label class="field-label" data-i18n>Streamline version</label>
+        <p class="field-hint" data-i18n>The streamline folder OptiScaler's DLSS-G Frame Gen needs is downloaded for you, so nvngx_dlssnr.dll above is the only file you have to supply yourself. "Latest" tracks the newest build RHI publishes; pick a specific one if a game misbehaves on the newest.</p>
+        <div class="field-row">
+          <select id="settings-streamline-version">
+            <option value="latest" data-i18n>Latest (recommended)</option>
+          </select>
+        </div>
+        <div id="streamline-version-status" class="status-line"></div>
+
+        <label class="field-label" data-i18n>DLSS5 Feeder updates</label>
+        <p class="field-hint" data-i18n>The Feeder is deployed per game, from its author's newest stable release. Tick this to take pre-releases as well, which is what you want when the author asks you to test a beta against a bug you reported. Untick it and deploy again to go back to stable.</p>
+        <label class="scan-checkbox-row">
+          <input id="settings-feeder-prerelease" type="checkbox" />
+          <span data-i18n>Include DLSS5 Feeder pre-releases</span>
+        </label>
+      </div>
 
       <div class="modal-actions">
         <button id="btn-close-settings" class="btn btn-primary" data-i18n>Done</button>

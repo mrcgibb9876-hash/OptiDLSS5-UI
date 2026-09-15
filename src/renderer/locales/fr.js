@@ -777,4 +777,5 @@ window.I18N.register("fr", {
   "DLSS 5": "DLSS 5",
   "Frame Generation": "Frame Generation",
   "Advanced": "Avancé",
+  "Show advanced options": "Afficher les options avancées",
 });

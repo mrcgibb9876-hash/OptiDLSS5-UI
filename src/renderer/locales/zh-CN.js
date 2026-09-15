@@ -688,4 +688,5 @@ window.I18N.register("zh-CN", {
   "DLSS 5": "DLSS 5",
   "Frame Generation": "帧生成",
   "Advanced": "高级",
+  "Show advanced options": "显示高级选项",
 });

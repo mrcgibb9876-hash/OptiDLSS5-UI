@@ -688,4 +688,5 @@ window.I18N.register("ko", {
   "DLSS 5": "DLSS 5",
   "Frame Generation": "프레임 생성",
   "Advanced": "고급",
+  "Show advanced options": "고급 옵션 표시",
 });

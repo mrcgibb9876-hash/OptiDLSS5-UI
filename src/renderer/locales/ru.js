@@ -688,4 +688,5 @@ window.I18N.register("ru", {
   "DLSS 5": "DLSS 5",
   "Frame Generation": "Frame Generation",
   "Advanced": "Дополнительно",
+  "Show advanced options": "Показать дополнительные параметры",
 });
