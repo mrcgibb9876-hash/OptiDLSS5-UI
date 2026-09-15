@@ -689,4 +689,11 @@ window.I18N.register("zh-CN", {
   "Frame Generation": "帧生成",
   "Advanced": "高级",
   "Show advanced options": "显示高级选项",
+  "OptiScaler + Luma": "OptiScaler + Luma",
+  "No DLSS of its own. Luma's Prey mod adds real DLSS with the game's own motion vectors and depth, which gives OptiScaler a DLSS call to hook. Install sets up OptiScaler and Luma (after you confirm Luma's licence); then press Home in the game and pick DLSS in Luma's settings.": "游戏本身没有 DLSS。Luma 的 Prey 模组利用游戏自身的运动矢量和深度加入真正的 DLSS，从而为 OptiScaler 提供可挂钩的 DLSS 调用。“安装”会配置 OptiScaler 和 Luma（在你确认 Luma 许可证之后）；然后在游戏中按 Home，在 Luma 设置里选择 DLSS。",
+  "Deploy Luma": "部署 Luma",
+  "Luma (adds DLSS to this game)": "Luma（为此游戏加入 DLSS）",
+  "This game gets its DLSS call from Luma. Download and set up Luma now?": "此游戏的 DLSS 调用来自 Luma。现在下载并设置 Luma 吗？",
+  "Luma is set up: press Home in the game and pick DLSS in its settings.": "Luma 已设置：在游戏中按 Home，在其设置里选择 DLSS。",
+  "Luma's Prey mod adds real DLSS with the game's own motion vectors, the reason it beats the Feeder here. Not yet run with this app. After deploying, press Home in the game and pick DLSS in Luma's settings.": "Luma 的 Prey 模组利用游戏自身的运动矢量加入真正的 DLSS，因此在这里优于 Feeder。尚未在本应用中实际运行过。部署后在游戏中按 Home，在 Luma 设置里选择 DLSS。",
 });

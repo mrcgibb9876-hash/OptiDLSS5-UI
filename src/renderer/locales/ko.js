@@ -689,4 +689,11 @@ window.I18N.register("ko", {
   "Frame Generation": "프레임 생성",
   "Advanced": "고급",
   "Show advanced options": "고급 옵션 표시",
+  "OptiScaler + Luma": "OptiScaler + Luma",
+  "No DLSS of its own. Luma's Prey mod adds real DLSS with the game's own motion vectors and depth, which gives OptiScaler a DLSS call to hook. Install sets up OptiScaler and Luma (after you confirm Luma's licence); then press Home in the game and pick DLSS in Luma's settings.": "자체 DLSS가 없습니다. Luma의 Prey 모드는 게임 자체의 모션 벡터와 깊이로 실제 DLSS를 추가해 OptiScaler가 가로챌 DLSS 호출을 만듭니다. 설치 버튼이 OptiScaler와 Luma를 설정합니다(Luma 라이선스 확인 후). 그다음 게임에서 Home을 눌러 Luma 설정에서 DLSS를 선택하세요.",
+  "Deploy Luma": "Luma 배포",
+  "Luma (adds DLSS to this game)": "Luma (이 게임에 DLSS 추가)",
+  "This game gets its DLSS call from Luma. Download and set up Luma now?": "이 게임은 Luma에서 DLSS 호출을 받습니다. 지금 Luma를 내려받아 설정할까요?",
+  "Luma is set up: press Home in the game and pick DLSS in its settings.": "Luma 설정 완료: 게임에서 Home을 눌러 설정에서 DLSS를 선택하세요.",
+  "Luma's Prey mod adds real DLSS with the game's own motion vectors, the reason it beats the Feeder here. Not yet run with this app. After deploying, press Home in the game and pick DLSS in Luma's settings.": "Luma의 Prey 모드는 게임 자체의 모션 벡터로 실제 DLSS를 추가하므로 여기서는 Feeder보다 낫습니다. 이 앱으로는 아직 실행해 보지 않았습니다. 배포 후 게임에서 Home을 눌러 Luma 설정에서 DLSS를 선택하세요.",
 });

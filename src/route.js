@@ -330,6 +330,18 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown') {
           { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
         ]);
     }
+    // Prey (2017) gets Luma's own Prey mod (lumaue.js LUMA_PROFILES.prey): real DLSS with the engine's
+    // motion vectors, better than anything the Feeder can estimate.
+    if (lumaue.isPrey2017(exePath)) {
+      return finish('lumaue', 'OptiScaler + Luma',
+        'No DLSS of its own. Luma\'s Prey mod adds real DLSS with the game\'s own motion vectors and depth, which ' +
+        'gives OptiScaler a DLSS call to hook. Install sets up OptiScaler and Luma (after you confirm Luma\'s licence); ' +
+        'then press Home in the game and pick DLSS in Luma\'s settings.',
+        [
+          { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
+          { key: 'lumaue', label: 'Deploy Luma', done: lumaDeployed },
+        ]);
+    }
     return finish('lumaue', 'OptiScaler + Luma UE',
       'No DLSS of its own. Luma UE replaces its stock TAA with DLAA, which gives OptiScaler a real DLSS call to ' +
       'hook. Install OptiScaler here, then deploy Luma UE from Edit (it needs your licence confirmation). ' +

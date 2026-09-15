@@ -689,4 +689,11 @@ window.I18N.register("ru", {
   "Frame Generation": "Frame Generation",
   "Advanced": "Дополнительно",
   "Show advanced options": "Показать дополнительные параметры",
+  "OptiScaler + Luma": "OptiScaler + Luma",
+  "No DLSS of its own. Luma's Prey mod adds real DLSS with the game's own motion vectors and depth, which gives OptiScaler a DLSS call to hook. Install sets up OptiScaler and Luma (after you confirm Luma's licence); then press Home in the game and pick DLSS in Luma's settings.": "Своего DLSS нет. Мод Luma для Prey добавляет настоящий DLSS с векторами движения и глубиной самой игры, и у OptiScaler появляется вызов DLSS для перехвата. «Установить» настроит OptiScaler и Luma (после подтверждения лицензии Luma); затем нажмите Home в игре и выберите DLSS в настройках Luma.",
+  "Deploy Luma": "Развернуть Luma",
+  "Luma (adds DLSS to this game)": "Luma (добавляет DLSS в эту игру)",
+  "This game gets its DLSS call from Luma. Download and set up Luma now?": "Эта игра получает вызов DLSS от Luma. Скачать и настроить Luma сейчас?",
+  "Luma is set up: press Home in the game and pick DLSS in its settings.": "Luma настроена: нажмите Home в игре и выберите DLSS в её настройках.",
+  "Luma's Prey mod adds real DLSS with the game's own motion vectors, the reason it beats the Feeder here. Not yet run with this app. After deploying, press Home in the game and pick DLSS in Luma's settings.": "Мод Luma для Prey добавляет настоящий DLSS с векторами движения игры — поэтому здесь он лучше Feeder. С этим приложением ещё не проверялся. После развёртывания нажмите Home в игре и выберите DLSS в настройках Luma.",
 });

@@ -795,7 +795,8 @@ ipcMain.handle('lumaue:deploy', async (_evt, { exePath, force, licenseConfirmed 
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
     const detected = withApiOverride(await detectFor(dir, exePath), readApiOverride(dir));
-    if (!lumaue.isLumaUeGame(exePath, detected)) throw new Error('Luma UE is for Unreal Engine 4 games rendering with DirectX 11 and no DLSS of their own');
+    const profile = lumaue.deployedProfile(dir) || lumaue.lumaProfileFor(exePath, detected);
+    if (!profile) throw new Error('Luma UE is for Unreal Engine 4 games rendering with DirectX 11 and no DLSS of their own');
     if (lumaue.lumaUeKnownBad(exePath)) throw new Error('Luma UE is known not to work with this game: ' + lumaue.lumaUeKnownBad(exePath));
     // Hand-over from the Feeder: the two are both ReShade add-ons supplying the DLSS call and
     // cannot share one ReShade. Its ReShade64.dll goes too -- Luma's deploy places its own.
@@ -809,6 +810,7 @@ ipcMain.handle('lumaue:deploy', async (_evt, { exePath, force, licenseConfirmed 
       ghHeaders: GITHUB_HEADERS,
       force: !!force,
       licenseConfirmed: !!licenseConfirmed,
+      profile,
     });
     // The deploy places Luma's ReShade as a plain ReShade64.dll; nothing loads it until
     // OptiScaler.ini says [Plugins] LoadReshade=true. autoConfigureGame forces that once Luma is
@@ -1433,7 +1435,7 @@ function detectInstalledBackends(dir) {
   // clears them via APP_MARKERS.
   const leftovers = [
     'OptiScaler.ini', 'OptiScaler.dll', 'OptiScaler_OpticalFlow.dll', 'nvngx_dlssnr.dll', 'nvngx.dll_dlssnr.dll', 'OptiScaler',
-    'dlss5-feed.addon64', 'Luma-Unreal Engine.addon', 'Luma',
+    'dlss5-feed.addon64', ...lumaue.LUMA_ADDON_NAMES, 'Luma',
     '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.optiscaler-manager-install.json',
     legacy.MARKER, 'dlss5-feed.addon32',
   ].filter(has);
@@ -1786,7 +1788,7 @@ async function uninstallEverything(dir) {
     const r = await legacy.removeLegacy(dir);
     removed.push(...r.removed); restored.push(...r.restored);
   }
-  if (lumaue.lumaUeDeployed(dir) || fs.existsSync(path.join(dir, 'Luma-Unreal Engine.addon'))) {
+  if (lumaue.lumaUeDeployed(dir)) {
     const r = await lumaue.removeLumaStack(dir);
     removed.push(...r.removed); kept.push(...r.kept);
   }
@@ -1910,8 +1912,8 @@ async function planUninstall(dir) {
     for (const f of mvFiles) add('reshade-shaders/' + f);
     if (nativeDlss.shippedDlssPath(dir) || !(feederMarker && feederMarker.placedNvngxDlss === false)) add('nvngx_dlss.dll');
   }
-  if (lumaue.lumaUeDeployed(dir) || has('Luma-Unreal Engine.addon')) {
-    for (const n of ['Luma', 'Luma-Unreal Engine.addon', 'ReShade64.dll', 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log', '.dlss5ui-lumaue-deploy.json']) add(n);
+  if (lumaue.lumaUeDeployed(dir)) {
+    for (const n of ['Luma', ...lumaue.LUMA_ADDON_NAMES, 'ReShade64.dll', 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log', '.dlss5ui-lumaue-deploy.json']) add(n);
     if (!(lumaMarker && lumaMarker.placedNvngxDlss === false)) add('nvngx_dlss.dll');
   }
   try {

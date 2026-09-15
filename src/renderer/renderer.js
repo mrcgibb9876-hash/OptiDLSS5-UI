@@ -1212,9 +1212,22 @@ async function installGame(game) {
     const proxyRefreshNote = res.proxyRefreshError
       ? ' ' + t('NOTE: the proxy DLL could not be refreshed ({error}) -- the game is still running the previous build.', { error: res.proxyRefreshError })
       : '';
-    const lumaNote = route.route === 'lumaue' && !route.lumaDeployed
-      ? ' ' + t('Next: open Edit and deploy Luma UE -- OptiScaler has no DLSS call to hook in this game until Luma supplies one.')
-      : '';
+    // A Luma game: offer Luma right here, with its licence in the question, instead of sending the user
+    // to Edit for the one step Install cannot do without asking (lumaue.js LUMA_LICENSE_SUMMARY).
+    let lumaNote = '';
+    if (route.route === 'lumaue' && !route.lumaDeployed) {
+      const readiness = await window.api.lumaUeReadiness(game.exePath);
+      const agreed = readiness.ok && readiness.supported && !readiness.knownBad &&
+        window.confirm(t('This game gets its DLSS call from Luma. Download and set up Luma now?') + '\n\n' + (readiness.licenseSummary || ''));
+      if (agreed) {
+        const deployed = await window.api.lumaUeDeploy(game.exePath, { licenseConfirmed: true });
+        lumaNote = deployed.ok
+          ? ' ' + t('Luma is set up: press Home in the game and pick DLSS in its settings.')
+          : ' ' + t('Could not deploy Luma UE: {error}', { error: deployed.error });
+      } else {
+        lumaNote = ' ' + t('Next: open Edit and deploy Luma UE -- OptiScaler has no DLSS call to hook in this game until Luma supplies one.');
+      }
+    }
     // Users read a wall of text here as something having gone wrong (2026-09-15). The toast says
     // "Installed" plus only what needs doing; everything informational goes to the console.
     const actionNotes = [
@@ -2745,7 +2758,17 @@ async function loadLumaUeSection(game) {
   knownIssue.textContent = t(readiness.knownIssue || '');
   licenseText.textContent = readiness.licenseSummary || '';
   deployBtn.disabled = !licenseCheckbox.checked;
+  const prey = readiness.profile === 'prey';
+  // The section's heading and first hint are written for the Unreal mod; Prey's mod is its own thing.
+  const heading = section.querySelector('.field-label');
+  if (heading) heading.textContent = prey ? t('Luma (adds DLSS to this game)') : t('Luma UE (adds DLSS to this game)');
+  const ueHint = section.querySelector('p.field-hint:not(#game-lumaue-known-issue)');
+  if (ueHint) ueHint.classList.toggle('hidden', prey);
+  // Prey's note is a how-to, not Fallen Order's open bug: not in red.
+  knownIssue.classList.toggle('status-bad', !prey);
+  $('#btn-lumaue-howto').classList.toggle('hidden', prey);
   deployBtn.textContent = readiness.blockedByFeeder ? t('Deploy Luma UE (removes the Feeder first)')
+    : prey ? t('Deploy Luma')
     : readiness.experimental ? t('Deploy Luma UE (experimental)') : t('Deploy Luma UE');
   $('#btn-lumaue-remove').classList.toggle('hidden', !readiness.addonInstalled);
   // The workaround used to be a blind question; now the GPU is known it is pre-answered, and
@@ -2767,7 +2790,8 @@ async function loadLumaUeSection(game) {
   // the full instructions automatically the first time this section is seen for a game that
   // still needs them is meant to catch that before it happens again, not just be available for
   // someone who already knows to go looking for a "how to" button.
-  if (!readiness.complete) {
+  // (Those instructions are Fallen Order's; Prey's steps are in the route text and Game Help.)
+  if (!readiness.complete && !prey) {
     const seenKey = `lumaue-instructions-seen-${game.id}`;
     let alreadySeen = false;
     try { alreadySeen = localStorage.getItem(seenKey) === '1'; } catch {}

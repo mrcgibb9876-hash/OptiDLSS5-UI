@@ -26,6 +26,106 @@ test('Luma UE is the default route only where verified; other UE4 D3D11 games de
   assert.equal(lumaue.lumaUeReadiness(path.dirname(exe), exe, UE4_DX11).experimental, true);
 });
 
+// Prey (2017), 2026-09-15: Luma's own Prey mod (a real DLSS call with engine motion vectors) instead of the
+// Feeder. Prey (2006) shares the exe name and is not it.
+test('Prey (2017) takes the Luma route with the Prey mod; Prey (2006) does not', () => {
+  const root = scratchDir('prey2017');
+  const exe = fakeExe(path.join(root, 'Binaries', 'Danielle', 'x64', 'Release'), 'Prey.exe');
+  const dir = path.dirname(exe);
+  const cry = { engineId: 'cryengine', engine: 'CryEngine', api: 'dx11', apis: ['dx11'] };
+  assert.equal(lumaue.isPrey2017(exe), true);
+  assert.equal(lumaue.isLumaUeDefault(exe), true);
+  assert.equal(lumaue.lumaProfileFor(exe, cry).id, 'prey');
+  const r = route.recommendRoute(dir, exe, cry, 'nvidia');
+  assert.equal(r.route, 'lumaue');
+  assert.equal(r.label, 'OptiScaler + Luma');
+  const ready = lumaue.lumaUeReadiness(dir, exe, cry);
+  assert.equal(ready.supported, true);
+  assert.equal(ready.profile, 'prey');
+  assert.equal(ready.experimental, false);
+
+  // Deployed: the add-on on disk is what counts, whichever mod it is.
+  write(dir, 'Luma-Prey.addon', 'x');
+  assert.equal(lumaue.lumaUeDeployed(dir), true);
+  assert.equal(lumaue.deployedProfile(dir).id, 'prey');
+
+  const old = scratchDir('prey2006');
+  const oldExe = fakeExe(path.join(old, 'System'), 'prey.exe');
+  assert.equal(lumaue.isPrey2017(oldExe), false);
+  assert.equal(lumaue.lumaProfileFor(oldExe, { engineId: null, api: 'opengl' }), null);
+});
+
+test('Luma deploy picks the game\'s mod from the release and Remove takes it back out', async () => {
+  const zlib = require('node:zlib');
+  const makeZip = (files) => {
+    const locals = [];
+    const centrals = [];
+    let offset = 0;
+    for (const [name, text] of Object.entries(files)) {
+      const data = Buffer.from(text);
+      const comp = zlib.deflateRawSync(data);
+      const nameBuf = Buffer.from(name);
+      const local = Buffer.alloc(30);
+      local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(8, 8);
+      local.writeUInt32LE(comp.length, 18); local.writeUInt32LE(data.length, 22); local.writeUInt16LE(nameBuf.length, 26);
+      const cd = Buffer.alloc(46);
+      cd.writeUInt32LE(0x02014b50, 0); cd.writeUInt16LE(8, 10); cd.writeUInt32LE(comp.length, 20); cd.writeUInt32LE(data.length, 24);
+      cd.writeUInt16LE(nameBuf.length, 28); cd.writeUInt32LE(offset, 42);
+      locals.push(local, nameBuf, comp);
+      centrals.push(cd, nameBuf);
+      offset += local.length + nameBuf.length + comp.length;
+    }
+    const cdBuf = Buffer.concat(centrals);
+    const eocd = Buffer.alloc(22);
+    eocd.writeUInt32LE(0x06054b50, 0); eocd.writeUInt16LE(Object.keys(files).length, 8); eocd.writeUInt16LE(Object.keys(files).length, 10);
+    eocd.writeUInt32LE(cdBuf.length, 12); eocd.writeUInt32LE(offset, 16);
+    return Buffer.concat([...locals, cdBuf, eocd]);
+  };
+  const preyZip = makeZip({ 'Luma/Global/Luma_Copy_PS.hlsl': 'shader', 'dxgi.dll': 'MZ reshade', 'Luma-Prey.addon': 'MZ prey addon', 'nvngx_dlss.dll': 'MZ dlss' });
+  const realFetch = global.fetch;
+  const seen = [];
+  global.fetch = async (url) => {
+    seen.push(String(url));
+    if (/releases\/latest$/.test(url)) {
+      return { ok: true, status: 200, json: async () => ({ tag_name: 'latest-676', assets: [
+        { name: 'Luma-Unreal_Engine.zip', browser_download_url: 'https://dl/ue' },
+        { name: 'Luma-Prey-Test.zip', browser_download_url: 'https://dl/prey-test' },
+        { name: 'Luma-Prey.zip', browser_download_url: 'https://dl/prey' },
+      ] }) };
+    }
+    if (url === 'https://dl/prey') return { ok: true, status: 200, arrayBuffer: async () => preyZip.buffer.slice(preyZip.byteOffset, preyZip.byteOffset + preyZip.byteLength) };
+    throw new Error('unexpected ' + url);
+  };
+  try {
+    const root = scratchDir('prey-deploy');
+    const exe = fakeExe(path.join(root, 'Binaries', 'Danielle', 'x64', 'Release'), 'Prey.exe');
+    const dir = path.dirname(exe);
+    write(dir, 'nvngx_dlss.dll', 'already here');
+    const feeder = require(path.join(REPO, 'src', 'feeder'));
+    const origDlss = feeder.deployNvngxDlss;
+    feeder.deployNvngxDlss = async () => ({ deployed: false });
+    try {
+      await assert.rejects(lumaue.deployLumaUeStack(dir, { cacheDir: path.join(root, 'cache'), profile: lumaue.LUMA_PROFILES.prey }), /licence/);
+      const res = await lumaue.deployLumaUeStack(dir, { cacheDir: path.join(root, 'cache'), licenseConfirmed: true, profile: lumaue.LUMA_PROFILES.prey });
+      assert.equal(res.deployed, true);
+    } finally {
+      feeder.deployNvngxDlss = origDlss;
+    }
+    assert.ok(seen.includes('https://dl/prey'), 'the Prey mod, not the Test build or the Unreal one');
+    assert.equal(fs.readFileSync(path.join(dir, 'Luma-Prey.addon'), 'utf8'), 'MZ prey addon');
+    assert.equal(fs.readFileSync(path.join(dir, 'ReShade64.dll'), 'utf8'), 'MZ reshade', "Luma's ReShade goes in as ReShade64.dll");
+    assert.ok(!fs.existsSync(path.join(dir, 'dxgi.dll')), 'the dxgi.dll slot stays free for OptiScaler');
+    assert.ok(fs.existsSync(path.join(dir, 'Luma', 'Global', 'Luma_Copy_PS.hlsl')));
+
+    const r = await lumaue.removeLumaStack(dir);
+    assert.ok(r.removed.includes('Luma-Prey.addon'));
+    assert.ok(!fs.existsSync(path.join(dir, 'Luma')));
+    assert.equal(lumaue.lumaUeDeployed(dir), false);
+  } finally {
+    global.fetch = realFetch;
+  }
+});
+
 test('Spyro is refused for Luma, with the reason', () => {
   const dir = scratchDir('spyro');
   const exe = fakeExe(path.join(dir, 'Spyro', 'Binaries', 'Win64'), 'Spyro-Win64-Shipping.exe');

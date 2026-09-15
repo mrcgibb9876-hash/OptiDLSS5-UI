@@ -48,8 +48,44 @@ const feeder = require('./feeder');
 const verified = require('./verified');
 
 const LUMA_RELEASES_API = 'https://api.github.com/repos/Filoppi/Luma-Framework/releases/latest';
-// The production build, not "-Test" (Luma's own debug/verbose variant -- see the repo's ReadMe).
-const LUMA_ASSET_PATTERN = /^Luma-Unreal_Engine\.zip$/i;
+
+// Which Luma mod a game gets. Luma-Framework publishes one zip per game mod, all with the same layout
+// (Luma\ shaders, Luma's ReShade as dxgi.dll, one compiled .addon, nvngx_dlss.dll), so a profile is
+// just the asset and the add-on name. The production builds, never "-Test" (Luma's debug variant).
+//
+//   ue    Luma's generic Unreal Engine 4 mod: stock TAA replaced with DLAA (Fallen Order, verified).
+//   prey  Pumbo's Prey (2017) mod: the game's post-processing rebuilt with DLSS Super Resolution and
+//         HDR -- a real DLSS call with the engine's own motion vectors and depth, where the Feeder
+//         could only estimate them. Asked for by a user (2026-09-15); the OptiScaler wiki's Prey page
+//         documents exactly this stack ("Method 1": Luma's ReShade renamed ReShade64.dll, OptiScaler
+//         as dxgi.dll, LoadReshade=true), which is the layout this module already deploys.
+//         Luma-Prey.zip listed directly (latest-676): Luma/** (incl. its own d3dcompiler_47.dll),
+//         dxgi.dll, Luma-Prey.addon, nvngx_dlss.dll.
+const LUMA_PROFILES = {
+  ue: { id: 'ue', name: 'Luma UE', asset: /^Luma-Unreal_Engine\.zip$/i, assetName: 'Luma-Unreal_Engine.zip', addon: 'Luma-Unreal Engine.addon' },
+  prey: { id: 'prey', name: 'Luma (Prey)', asset: /^Luma-Prey\.zip$/i, assetName: 'Luma-Prey.zip', addon: 'Luma-Prey.addon' },
+};
+const LUMA_ADDON_NAMES = Object.values(LUMA_PROFILES).map((p) => p.addon);
+
+// Prey (2017) and Mooncrash: Prey.exe under Binaries\Danielle\x64\Release, CryEngine DLLs beside it.
+// The path or CrySystem.dll tells it apart from Prey (2006), a 32-bit idTech 4 game with the same exe name.
+function isPrey2017(exePath) {
+  if (!exePath || path.basename(exePath).toLowerCase() !== 'prey.exe') return false;
+  const dir = path.dirname(exePath);
+  return /[\\/]danielle[\\/]/i.test(dir) || fs.existsSync(path.join(dir, 'CrySystem.dll'));
+}
+
+// The Luma mod for this game, or null. `detected` as for isLumaUeGame.
+function lumaProfileFor(exePath, detected) {
+  if (isPrey2017(exePath)) return LUMA_PROFILES.prey;
+  if (isLumaUeGame(exePath, detected)) return LUMA_PROFILES.ue;
+  return null;
+}
+
+// The profile whose add-on is on disk here, if any.
+function deployedProfile(dir) {
+  return Object.values(LUMA_PROFILES).find((p) => fs.existsSync(path.join(dir, p.addon))) || null;
+}
 
 // Real names inside the release zip, confirmed by downloading and listing it directly
 // (2026-09-10, tag latest-645): Luma/** (shader source Luma's addon loads from disk at
@@ -59,7 +95,6 @@ const LUMA_ASSET_PATTERN = /^Luma-Unreal_Engine\.zip$/i;
 // source for that file across both integrations rather than two).
 const LUMA_SHADER_PREFIX = 'Luma/';
 const LUMA_DXGI_ENTRY = /^dxgi\.dll$/i;
-const LUMA_ADDON_ENTRY = /^Luma-Unreal Engine\.addon$/i;
 
 // Method 2 from the OptiScaler wiki page for this game: OptiScaler takes the dxgi.dll proxy
 // slot (installProxy() in main.js, same as every other game in this app), and Luma's own
@@ -68,7 +103,6 @@ const LUMA_ADDON_ENTRY = /^Luma-Unreal Engine\.addon$/i;
 // already uses, for the same reason (two independent proxies fighting over the swapchain hook
 // broke on a real game there; see feeder.js's file header).
 const RESHADE_DLL_NAME = 'ReShade64.dll';
-const LUMA_ADDON_DEST_NAME = 'Luma-Unreal Engine.addon';
 
 const LUMA_DEPLOY_MARKER = '.dlss5ui-lumaue-deploy.json';
 
@@ -133,12 +167,15 @@ function lumaUeKnownBad(exePath) {
 // eligible UE4 D3D11 game defaults to the Feeder and gets Luma as an experimental option in Edit
 // -- the wider gate shipped in 1.25.0 on the strength of one game and broke Spyro within a day.
 function isLumaUeDefault(exePath) {
-  return isFallenOrder(exePath) || verified.defaultRoute(exePath) === 'lumaue';
+  return isFallenOrder(exePath) || isPrey2017(exePath) || verified.defaultRoute(exePath) === 'lumaue';
 }
 
 function lumaUeDeployed(dir) {
-  return fs.existsSync(path.join(dir, LUMA_ADDON_DEST_NAME));
+  return !!deployedProfile(dir);
 }
+
+const LUMA_PREY_NOTE = 'Luma\'s Prey mod adds real DLSS with the game\'s own motion vectors, the reason it beats the Feeder ' +
+  'here. Not yet run with this app. After deploying, press Home in the game and pick DLSS in Luma\'s settings.';
 
 // Same "explain, don't just disable" shape as feeder.js's feederReadiness().
 function lumaUeReadiness(dir, exePath, detected = null) {
@@ -150,7 +187,8 @@ function lumaUeReadiness(dir, exePath, detected = null) {
       reasonVars: { why: knownBad },
     };
   }
-  if (!isLumaUeGame(exePath, detected) && !lumaUeDeployed(dir)) {
+  const profile = deployedProfile(dir) || lumaProfileFor(exePath, detected);
+  if (!profile) {
     return {
       supported: false,
       reason: 'Luma UE is for Unreal Engine 4 games rendering with DirectX 11 and no DLSS of their own -- this game reads as {engine} on {api}, so the DLSS5 Feeder is the route here.',
@@ -159,7 +197,7 @@ function lumaUeReadiness(dir, exePath, detected = null) {
   }
 
   const reshadeInstalled = fs.existsSync(path.join(dir, RESHADE_DLL_NAME));
-  const addonInstalled = fs.existsSync(path.join(dir, LUMA_ADDON_DEST_NAME));
+  const addonInstalled = fs.existsSync(path.join(dir, profile.addon));
   const shadersInstalled = fs.existsSync(path.join(dir, 'Luma', 'Global', 'Luma_Copy_PS.hlsl'));
   const dlssInstalled = fs.existsSync(path.join(dir, 'nvngx_dlss.dll'));
 
@@ -171,13 +209,15 @@ function lumaUeReadiness(dir, exePath, detected = null) {
 
   return {
     supported: true,
+    profile: profile.id,
+    profileName: profile.name,
     blockedByFeeder,
     reason: blockedByFeeder
       ? 'The DLSS5 Feeder is deployed here. Luma UE and the Feeder are both ReShade add-ons supplying the DLSS call, and only one can run -- Deploy removes the Feeder first, then puts Luma UE in.'
       : null,
-    experimental: !isFallenOrder(exePath),
+    experimental: !isFallenOrder(exePath) && profile.id !== 'prey',
     knownBad,
-    knownIssue: isFallenOrder(exePath) ? LUMA_KNOWN_ISSUE : LUMA_GENERIC_NOTE,
+    knownIssue: profile.id === 'prey' ? LUMA_PREY_NOTE : isFallenOrder(exePath) ? LUMA_KNOWN_ISSUE : LUMA_GENERIC_NOTE,
     licenseSummary: LUMA_LICENSE_SUMMARY,
     reshadeInstalled,
     addonInstalled,
@@ -202,13 +242,14 @@ async function downloadToCache(url, cacheDir, fileName, ghHeaders) {
   return dest;
 }
 
-async function resolveLumaAsset(ghHeaders) {
+async function resolveLumaAsset(ghHeaders, profile = LUMA_PROFILES.ue) {
   const res = await fetch(LUMA_RELEASES_API, { headers: ghHeaders });
   if (!res.ok) throw new Error(`Could not check the Luma-Framework release: HTTP ${res.status}`);
   const release = await res.json();
-  const asset = (release.assets || []).find((a) => LUMA_ASSET_PATTERN.test(a.name));
-  if (!asset) throw new Error('No matching Luma-Unreal_Engine.zip asset in the latest Luma-Framework release');
-  return { url: asset.browser_download_url, name: asset.name, tag: release.tag_name };
+  const asset = (release.assets || []).find((a) => profile.asset.test(a.name));
+  if (!asset) throw new Error(`No ${profile.assetName} asset in the latest Luma-Framework release`);
+  // Luma publishes a rolling "latest-<n>" tag; the cache file is named per tag so an update is fetched.
+  return { url: asset.browser_download_url, name: `${String(release.tag_name || 'latest').replace(/[^\w.-]/g, '')}-${asset.name}`, tag: release.tag_name };
 }
 
 // --- deploy -------------------------------------------------------------------------------
@@ -222,7 +263,7 @@ async function resolveLumaAsset(ghHeaders) {
 //
 // Refuses outright without licenseConfirmed:true -- see LUMA_LICENSE_SUMMARY. Enforced here,
 // not just in the UI, so a UI bug can't silently bypass consent.
-async function deployLumaUeStack(dir, { cacheDir, getRhiManifest, compareVersions, ghHeaders, force = false, licenseConfirmed = false }) {
+async function deployLumaUeStack(dir, { cacheDir, getRhiManifest, compareVersions, ghHeaders, force = false, licenseConfirmed = false, profile = LUMA_PROFILES.ue }) {
   if (!licenseConfirmed) {
     throw new Error('Luma UE requires explicit licence confirmation before it can be fetched -- ' +
       'see LUMA_LICENSE_SUMMARY. Refusing.');
@@ -232,7 +273,7 @@ async function deployLumaUeStack(dir, { cacheDir, getRhiManifest, compareVersion
     return { deployed: false, reason: 'already present' };
   }
 
-  const asset = await resolveLumaAsset(ghHeaders);
+  const asset = await resolveLumaAsset(ghHeaders, profile);
   const zipPath = await downloadToCache(asset.url, cacheDir, asset.name, ghHeaders);
   const zip = openZip(zipPath);
 
@@ -247,9 +288,9 @@ async function deployLumaUeStack(dir, { cacheDir, getRhiManifest, compareVersion
   if (!dxgiEntry) throw new Error('dxgi.dll not found in the Luma-Framework release');
   extractEntryTo(zip, dxgiEntry, path.join(dir, RESHADE_DLL_NAME));
 
-  const addonEntry = findEntry(zip, LUMA_ADDON_ENTRY);
-  if (!addonEntry) throw new Error('"Luma-Unreal Engine.addon" not found in the Luma-Framework release');
-  extractEntryTo(zip, addonEntry, path.join(dir, LUMA_ADDON_DEST_NAME));
+  const addonEntry = zip.entries.find((e) => e.name.replace(/\\/g, '/').toLowerCase() === profile.addon.toLowerCase());
+  if (!addonEntry) throw new Error(`"${profile.addon}" not found in ${profile.assetName}`);
+  extractEntryTo(zip, addonEntry, path.join(dir, profile.addon));
 
   const dlss = await feeder.deployNvngxDlss(dir, getRhiManifest, compareVersions, cacheDir, ghHeaders);
   // Luma ships no .fx effects (its shaders live under Luma\); pointing ReShade at the Feeder's
@@ -258,7 +299,7 @@ async function deployLumaUeStack(dir, { cacheDir, getRhiManifest, compareVersion
 
   fs.writeFileSync(
     path.join(dir, LUMA_DEPLOY_MARKER),
-    JSON.stringify({ lumaVersion: asset.tag, placedNvngxDlss: !!(dlss && dlss.deployed), deployedAt: new Date().toISOString() }, null, 2),
+    JSON.stringify({ lumaVersion: asset.tag, profile: profile.id, addon: profile.addon, placedNvngxDlss: !!(dlss && dlss.deployed), deployedAt: new Date().toISOString() }, null, 2),
     'utf8',
   );
 
@@ -280,7 +321,7 @@ async function removeLumaStack(dir) {
     removed.push(rel);
   };
   await rm('Luma');
-  await rm(LUMA_ADDON_DEST_NAME);
+  for (const addon of LUMA_ADDON_NAMES) await rm(addon);
   for (const name of [RESHADE_DLL_NAME, 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log']) await rm(name);
   if (!(marker && marker.placedNvngxDlss === false)) await rm('nvngx_dlss.dll');
   else kept.push('nvngx_dlss.dll (was already here before Luma)');
@@ -289,6 +330,11 @@ async function removeLumaStack(dir) {
 }
 
 module.exports = {
+  LUMA_PROFILES,
+  LUMA_ADDON_NAMES,
+  isPrey2017,
+  lumaProfileFor,
+  deployedProfile,
   removeLumaStack,
   isFallenOrder,
   isLumaUeGame,
