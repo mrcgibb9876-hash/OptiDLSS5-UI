@@ -7,8 +7,8 @@
 // same-device D3D12 session), so the Feeder route never ran DLSS 5 there. On the Present route the pass runs
 // on OptiScaler's own command list over the game's TAA, with depth tracked from the game and optical-flow
 // motion vectors -- ELDEN RING, 2026-09-15: 4800 frames, 0 model failures, 45 fps at 2560x1600 on an
-// RTX 5070 Ti laptop, letterboxed 16:9 picture found by itself. Armored Core VI and Nightreign share the
-// engine and the Feeder crash; not yet run on this route.
+// RTX 5070 Ti laptop, letterboxed 16:9 picture found by itself. ARMORED CORE VI the same day: 4800 frames, 0 model
+// failures, 50-60 fps with one pass. Nightreign shares the engine; not yet run on this route.
 //
 // No Feeder on these games: its ReShade wraps the D3D12 device and the Present route then sees a different
 // device from the swapchain's (the engine also stands down while the Feeder is loaded).

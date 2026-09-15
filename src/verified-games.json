@@ -113,6 +113,19 @@
       "route": "present",
       "verified": "2026-09-15",
       "notes": "DLSS 5 on the engine Present route ([DlssNr] Placement=present), no Feeder: the Feeder crashed the model on its first frame. Depth tracked from the game, optical-flow motion vectors; 4800 frames, 0 model failures. Launch from the app (skips EasyAntiCheat), offline only. Load a save: menus have no depth."
+    },
+    {
+      "id": "armored-core-vi",
+      "name": "ARMORED CORE VI FIRES OF RUBICON",
+      "match": {
+        "exe": [
+          "armoredcore6.exe"
+        ]
+      },
+      "engine": "FromSoftware (D3D12)",
+      "route": "present",
+      "verified": "2026-09-15",
+      "notes": "DLSS 5 on the engine Present route ([DlssNr] Placement=present), no Feeder: the Feeder crashed the model on its first frame. Depth tracked from the game, optical-flow motion vectors; 4800 frames, 0 model failures, 50-60 fps with 1 pass at 2560x1600. Launch from the app (skips EasyAntiCheat), offline only."
     }
   ]
 }
