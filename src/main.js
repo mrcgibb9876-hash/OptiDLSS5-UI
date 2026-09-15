@@ -2413,6 +2413,9 @@ async function helpContext(exePath, detected, fixesTried = []) {
     foreign: foreignToolchains(dir),
     backends: detectInstalledBackends(dir),
     lumaKnownBad: route.lumaDeployed ? lumaue.lumaUeKnownBad(exePath) : null,
+    // Luma's Prey mod only replaces the game's TAA / SMAA 2TX pass: with anti-aliasing off, FXAA or SMAA 1X
+    // there is no pass for DLSS to take over (Luma-Framework Games/Prey/main.cpp, shader_hashes_PostAA_TAA).
+    lumaPrey: route.lumaDeployed && lumaue.isPrey2017(exePath),
     reEngine,
     reframeworkPresent: reEngine ? fs.existsSync(path.join(dir, REFRAMEWORK_DLL_NAME)) : null,
     // RE2/3/4/7/Village: the pd-upscaler route's three files (reengine.js), null elsewhere.

@@ -761,7 +761,10 @@ function helpSteps(diag) {
     case 'anticheat-launch-direct': return [t("Start the game with this app's Launch button"), t('Single-player only -- stay offline')];
     // The app presets DLSS in Luma (v1.69.2), so a run with no DLSS is nearly always one that never reached
     // gameplay (Prey, a player's bundle 2026-09-15: 35 seconds, menus only). The overlay check comes second.
-    case 'luma-select-dlss': return [t('Play a minute of actual gameplay, then quit'), t("In the game: Home > Luma > select DLSS"), launch];
+    case 'luma-select-dlss': return v.prey
+      // Prey: Luma puts DLSS in place of the game's TAA / SMAA 2TX pass, so the game's own AA setting decides.
+      ? [t("In Prey: Options > Display > Anti-Aliasing: TAA (or SMAA 2TX)"), t('Play a minute of actual gameplay, then quit'), launch]
+      : [t('Play a minute of actual gameplay, then quit'), t("In the game: Home > Luma > select DLSS"), launch];
     case 'needs-run': case 'needs-run-after-fix': return [t('Launch the game'), t('Play a minute of actual gameplay, then quit'), t('Come back here')];
     case 'ok-panel-in-helper': return [t('Change settings in Edit here while the game runs -- they apply live'), t('Or: Home > Add-ons > DLSS 5 Feed > tick "Show the DLSS 5 host window"'), t('Alt-tab to that window, click in it, press Insert')];
     case 'vulkan-layer-missing': return [t('Install ReShade with add-on support for this exe, choosing Vulkan'), t('Or switch the emulator to OpenGL and pick OpenGL in Edit'), t('Press Install here again')];

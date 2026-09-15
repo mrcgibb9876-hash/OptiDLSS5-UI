@@ -152,14 +152,14 @@ function diagnose(ctx) {
     case 'init-no-feature':
       if (run.dlssRuntimeMissing) return fix('dlss-runtime-missing', 'reconfigure');
       if (run.detail === 'feeder-technique-missing') return fix('feeder-technique', 'install');
-      if (route.lumaDeployed) return out('step', 'luma-select-dlss');
+      if (route.lumaDeployed) return out('step', 'luma-select-dlss', { prey: !!ctx.lumaPrey });
       return out('unknown', 'init-no-feature');
     case 'no-dlss':
       // OptiScaler said why itself, a line into the log: no nvngx_dlss.dll beside the exe, so it
       // switched DLSS off before the game drew anything. That turns "nothing called DLSS" -- which
       // reads as a mystery -- into one missing file that Reconfigure puts back.
       if (run.dlssRuntimeMissing) return fix('dlss-runtime-missing', 'reconfigure');
-      if (route.lumaDeployed) return out('step', 'luma-select-dlss');
+      if (route.lumaDeployed) return out('step', 'luma-select-dlss', { prey: !!ctx.lumaPrey });
       // Vulkan (Ryujinx, a player's bundle 2026-09-15): the Feeder is a ReShade add-on, and on Vulkan ReShade
       // is only ever the machine-wide Vulkan layer. No dlss5-feed.log at all means the add-on never loaded,
       // so nothing could call DLSS; which of the two layer faults it is decides the step.

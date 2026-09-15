@@ -20,6 +20,13 @@ const base = (over = {}) => ({
   vulkanFeeder: over.vulkanFeeder || null,
 });
 
+// Prey through Luma (a player's bundle, 2026-09-15): Luma's DLSS replaces the game's TAA / SMAA 2TX pass.
+test('a Luma Prey run with no DLSS carries the Prey flag so the steps name the anti-aliasing setting', () => {
+  const luma = (lumaPrey) => ({ ...base({ route: { route: 'lumaue', lumaDeployed: true }, run: { ran: true, verdict: 'init-no-feature' } }), lumaPrey });
+  assert.deepEqual(diagnose(luma(true)).vars, { prey: true });
+  assert.deepEqual(diagnose(luma(false)).vars, { prey: false });
+});
+
 // Ryujinx on Vulkan (a player's bundle, 2026-09-15): the Feeder never loaded, and Game Help said "no known fix".
 test('a Vulkan Feeder game whose Feeder never loaded names the ReShade layer fault', () => {
   const vk = (vulkanFeeder) => base({
