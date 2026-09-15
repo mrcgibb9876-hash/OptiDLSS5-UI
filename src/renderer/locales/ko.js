@@ -631,4 +631,12 @@ window.I18N.register("ko", {
   "RTXMFG could not be installed: {error}": "RTXMFG를 설치할 수 없음: {error}",
   "RTXMFG removed.": "RTXMFG 제거됨.",
   "RTXMFG could not be removed: {error}": "RTXMFG를 제거할 수 없음: {error}",
+  "Your NVIDIA driver is too old for DLSS 5: it reported Neural Rendering as out of date, and it needs {min} or newer.": "NVIDIA 드라이버가 DLSS 5에 비해 너무 오래되었습니다: Neural Rendering을 구버전으로 보고했으며 {min} 이상이 필요합니다.",
+  "Your NVIDIA driver is too old for DLSS 5: it reported Neural Rendering as out of date.": "NVIDIA 드라이버가 DLSS 5에 비해 너무 오래되었습니다: Neural Rendering을 구버전으로 보고했습니다.",
+  "Installed: {current}.": "설치됨: {current}.",
+  "Nothing in the game folder can work around that -- plain DLSS may still start, but the neural model either never loads or crashes on its first frame. Update the driver from the NVIDIA app or nvidia.com, then launch the game again.": "게임 폴더의 어떤 것으로도 이를 우회할 수 없습니다 -- 일반 DLSS는 시작될 수 있지만 신경망 모델은 로드되지 않거나 첫 프레임에서 충돌합니다. NVIDIA 앱이나 nvidia.com에서 드라이버를 업데이트한 뒤 게임을 다시 실행하세요.",
+  "Update the NVIDIA driver ({min} or newer)": "NVIDIA 드라이버 업데이트 ({min} 이상)",
+  "Update the NVIDIA driver": "NVIDIA 드라이버 업데이트",
+  "the NVIDIA driver is too old for DLSS 5 (needs {min} or newer)": "NVIDIA 드라이버가 DLSS 5에 비해 너무 오래됨 ({min} 이상 필요)",
+  "the NVIDIA driver is too old for DLSS 5": "NVIDIA 드라이버가 DLSS 5에 비해 너무 오래됨",
 });

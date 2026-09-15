@@ -631,4 +631,12 @@ window.I18N.register("ru", {
   "RTXMFG could not be installed: {error}": "Не удалось установить RTXMFG: {error}",
   "RTXMFG removed.": "RTXMFG удалён.",
   "RTXMFG could not be removed: {error}": "Не удалось удалить RTXMFG: {error}",
+  "Your NVIDIA driver is too old for DLSS 5: it reported Neural Rendering as out of date, and it needs {min} or newer.": "Драйвер NVIDIA слишком старый для DLSS 5: он сообщает, что Neural Rendering устарел, и нужна версия {min} или новее.",
+  "Your NVIDIA driver is too old for DLSS 5: it reported Neural Rendering as out of date.": "Драйвер NVIDIA слишком старый для DLSS 5: он сообщает, что Neural Rendering устарел.",
+  "Installed: {current}.": "Установлен: {current}.",
+  "Nothing in the game folder can work around that -- plain DLSS may still start, but the neural model either never loads or crashes on its first frame. Update the driver from the NVIDIA app or nvidia.com, then launch the game again.": "Ничто в папке игры этого не обойдёт -- обычный DLSS ещё может запуститься, но нейросетевая модель либо не загружается, либо падает на первом кадре. Обновите драйвер через приложение NVIDIA или nvidia.com и запустите игру снова.",
+  "Update the NVIDIA driver ({min} or newer)": "Обновите драйвер NVIDIA ({min} или новее)",
+  "Update the NVIDIA driver": "Обновите драйвер NVIDIA",
+  "the NVIDIA driver is too old for DLSS 5 (needs {min} or newer)": "драйвер NVIDIA слишком старый для DLSS 5 (нужен {min} или новее)",
+  "the NVIDIA driver is too old for DLSS 5": "драйвер NVIDIA слишком старый для DLSS 5",
 });

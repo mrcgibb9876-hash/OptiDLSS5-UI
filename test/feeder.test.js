@@ -461,6 +461,33 @@ test('the run\'s frame count comes from the heartbeat, not from how many lines t
   assert.equal(ok.vars.count, 1800);
 });
 
+// DOOM 3 BFG (support bundle, 2026-09-13): no OptiScaler.log (LogToFile never on), so Game Help waited for
+// "a run" -- while dlss5-feed.log held the run, the crash, and the reason: driver 610.88 reports feature 18
+// OutOfDate and needs 616.56.
+test('with no OptiScaler.log the Feeder log is the run, and an out-of-date driver is named before anything else', async () => {
+  const dir = scratchDir('feed-driver-outdated');
+  write(dir, 'dlss5-feed.log', [
+    '18:05:08.595  [feed] first frame fed from thread 18452',
+    '18:05:08.611  [feed] same (the game\'s) device adapter: NVIDIA GeForce RTX 4070 Ti SUPER  LUID 00000000:0CDD9F4C  PCI 10DE:2705  driver 610.88',
+    '18:05:10.214  [feed] NGX feature requirements: feature 18 (neural rendering, what nvngx_dlssnr.dll backs) -> the query itself failed 0xBAD0000C (OutOfDate)',
+    '18:05:10.214  [feed]   *** The installed NVIDIA driver reports feature 18 as OutOfDate. Plain DLSS/DLAA may still initialise, but DLSS 5 neural rendering is unavailable until the driver is updated to 616.56 or newer. ***',
+    '18:05:18.342  [feed] evaluate raised 0xC0000005 (reading address FFFFFFFFFFFFFFFF) (caught; nothing submitted)',
+  ].join('\n'));
+  const run = await runlog.analyzeRun(dir);
+  assert.equal(run.ran, true, 'the Feeder log counts as a run');
+  assert.equal(run.optiLogMissing, true);
+  assert.equal(run.verdict, 'driver-outdated');
+  assert.equal(run.detail, '616.56');
+  assert.equal(run.driverVersion, '610.88');
+  const d = diagnose({ detected: { bitness: 64, optiScalerProxy: { file: 'winmm.dll', matchesOurBuild: false } }, route: { route: 'feeder', optiInstalled: true, feederDeployed: true }, run });
+  assert.equal(d.code, 'driver-outdated', 'named ahead of anything in the folder');
+  assert.deepEqual(d.vars, { min: '616.56', current: '610.88' });
+
+  // A Feeder that only attached and never fed a frame is still no run.
+  write(dir, 'dlss5-feed.log', '18:05:03.690  dlss5-feed 1.16.0-beta.1 attached.\n');
+  assert.equal((await runlog.analyzeRun(dir)).verdict, 'no-log');
+});
+
 test('switching provider takes the old one\'s files out, but never a bring-your-own install', async () => {
   const dir = scratchDir('feeder-switch');
   const cacheDir = path.join(dir, 'cache');

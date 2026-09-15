@@ -676,6 +676,11 @@ function helpWords(diag) {
     case 'ue-crash-luma': return t('The game crashed (Unreal crash report: {message}) with Luma UE deployed, and Luma is not verified on this game. Remove Luma UE and try the Feeder route.', { message: (v.message || '').slice(0, 120) });
     case 'ue-crash-feeder': return t('The game crashed (Unreal crash report: {message}) with the Feeder deployed. Remove the Feeder and check whether it runs clean.', { message: (v.message || '').slice(0, 120) });
     case 'ue-crash': return t('The game crashed (Unreal crash report: {message}). No rule covers this. Save the bundle to share, or ask the AI.', { message: (v.message || '').slice(0, 120) });
+    case 'driver-outdated': return (v.min
+      ? t('Your NVIDIA driver is too old for DLSS 5: it reported Neural Rendering as out of date, and it needs {min} or newer.', v)
+      : t('Your NVIDIA driver is too old for DLSS 5: it reported Neural Rendering as out of date.')) +
+      (v.current ? ' ' + t('Installed: {current}.', v) : '') + ' ' +
+      t('Nothing in the game folder can work around that -- plain DLSS may still start, but the neural model either never loads or crashes on its first frame. Update the driver from the NVIDIA app or nvidia.com, then launch the game again.');
     case 'nr-model-crash-emulator': return t('The DLSS 5 model crashed on its very first frame, inside NVIDIA\'s own code, and the Feeder stopped -- {name} carried on without it. It crashed on {name}\'s Direct3D 12 device, where the Feeder hands the model the emulator\'s own device. No ini setting changes that. What to try: in {name}, Graphics > Backend: Direct3D 11. On D3D11 the Feeder runs DLSS on a device of its own, the path that keeps working where this one crashes. Launch once and this app picks up the new API by itself.', v) +
       (v.smoothMotion ? ' ' + t('NVIDIA Smooth Motion was also on inside this process. Turn it off for this game in the NVIDIA app if the crash stays.') : '');
     case 'nr-model-crash': return t('The DLSS 5 model crashed on its very first frame, inside NVIDIA\'s own code ({stack}), and the Feeder stopped. The game carried on without it. No ini setting this app knows changes that. If the game has a Direct3D 11 mode, try it: the Feeder then runs DLSS on a device of its own. Otherwise save the bundle to share.', v) +
@@ -724,6 +729,7 @@ function helpShort(diag) {
     case 'ue-crash-luma': return t('Crashed with Luma UE');
     case 'ue-crash-feeder': return t('Crashed with the Feeder');
     case 'ue-crash': return t('Crashed -- no known fix');
+    case 'driver-outdated': return v.min ? t('Update the NVIDIA driver ({min} or newer)', v) : t('Update the NVIDIA driver');
     case 'nr-model-crash-emulator': return t('DLSS 5 crashed on D3D12 -- switch to Direct3D 11');
     case 'nr-model-crash': return t('The DLSS 5 model crashed');
     case 'feed-stopped': return t('The Feeder gave up');
@@ -1264,6 +1270,7 @@ function describeRun(run) {
     case 'duplicate-dlss': return t('crashed: two DLSS DLLs loaded (a Feeder on a game that ships DLSS) -- remove the Feeder');
     case 'shutdown-fault': return t('crashed on the way out inside NVIDIA\'s NGX shutdown (a Feeder on a game that ships DLSS) -- remove the Feeder');
     case 'ue-crash': return t('crashed (Unreal crash report: {message})', { message: (run.detail || '').slice(0, 120) || t('see the report') });
+    case 'driver-outdated': return run.detail ? t('the NVIDIA driver is too old for DLSS 5 (needs {min} or newer)', { min: run.detail }) : t('the NVIDIA driver is too old for DLSS 5');
     case 'nr-model-crash': return t('the DLSS 5 model crashed on its first frame and the Feeder stopped');
     case 'feed-stopped': return t('the Feeder gave up this run -- see dlss5-feed.log for its own diagnosis');
     case 'feed-no-motion': return t('the feed ran but DLSS got no motion vectors -- sharp when still, smearing in motion; deploy the Feeder again');

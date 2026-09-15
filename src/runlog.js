@@ -7,6 +7,8 @@
 //   shutdown-fault     NVIDIA's own Shutdown1 faulted while the Feeder's private session was
 //                      live (same folders, on the way down)
 //   ue-crash           Unreal's crash reporter wrote a report within minutes of the run
+//   driver-outdated    the NVIDIA driver reports DLSS 5 (feature 18) as OutOfDate; the Feeder names
+//                      the minimum version (DOOM 3 BFG on 610.88, needs 616.56)
 //   nr-model-crash     the neural model crashed inside the Feeder's evaluate, which then stopped
 //                      (Dolphin on DX12, same device; Armored Core VI before it)
 //   feed-stopped       the Feeder gave up ("The feed stops here") -- its own diagnosis follows
@@ -101,27 +103,24 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   const feedPath = path.join(dir, 'dlss5-feed.log');
   const feed = (await readHead(feedPath)) || '';
   const wrapperCrash = wrapperFault(feed, dir);
-  let stat;
-  try { stat = fs.statSync(optiPath); } catch {
-    // A wrapper that crashes the game at startup leaves no OptiScaler.log at all -- on the 32-bit
-    // route the helper that would write it never starts -- so the Feeder's log is the run.
-    if (!wrapperCrash) return { ran: false, verdict: 'no-log' };
-    let feedStat;
-    try { feedStat = fs.statSync(feedPath); } catch { return { ran: false, verdict: 'no-log' }; }
-    return {
-      ran: true, at: feedStat.mtime.toISOString(), runtimeApi: null, nrDispatch: 0, nrFrames: 0, nrComposition: 0, dlssCreated: 0,
-      fps: null, feedFrames: 0, feedEvaluateCrash: false, feedSameDevice: false, feedSmoothMotion: false, cleanExit: false, logLevel: null, crash: null, dlssRuntimeMissing: false,
-      srBackendFallback: null, srCreateResult: null, upscaleSkipped: 0, feedInvalidRedist: false, feedMvProblem: null,
-      feedNoMotion: false, feedDepthFlat: false, feedDepthFlatMoving: false, wrapperCrash,
-      verdict: 'wrapper-crash', detail: wrapperCrash,
-    };
+  let stat = null;
+  try { stat = fs.statSync(optiPath); } catch {}
+  let feedStat = null;
+  try { feedStat = fs.statSync(feedPath); } catch {}
+  if (!stat) {
+    // No OptiScaler.log is not the same as no run. A wrapper that crashes the game at startup leaves
+    // none (on the 32-bit route the helper that would write it never starts), and neither does an
+    // OptiScaler whose ini never had LogToFile switched on -- a DOOM 3 BFG install (2026-09-13) whose
+    // Feeder log held a whole run, the crash and the reason, while Game Help waited for "a run". When
+    // the Feeder actually fed frames (or a wrapper in the game folder faulted), its log is the run.
+    const feedRan = !!wrapperCrash || /first frame fed/.test(feed);
+    if (!feedStat || !feedRan) return { ran: false, verdict: 'no-log' };
+    stat = feedStat;
+  } else if (feedStat && feedStat.mtimeMs > stat.mtimeMs) {
+    // The Feeder's log is rewritten every launch; the helper's OptiScaler.log is not, so after a
+    // crash it can be the older of the two. The run is as recent as the newer one.
+    stat = feedStat;
   }
-  // The Feeder's log is rewritten every launch; the helper's OptiScaler.log is not, so after a
-  // crash it can be the older of the two. The run is as recent as the newer one.
-  try {
-    const feedStat = fs.statSync(feedPath);
-    if (feedStat.mtimeMs > stat.mtimeMs) stat = feedStat;
-  } catch {}
   const opti = (await readHead(optiPath)) || '';
 
   const runtime = await optiScalerRuntimeApi(optiDir);
@@ -216,6 +215,17 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   const feedEvaluateCrash = /\[feed\] evaluate raised 0x[0-9A-F]{8}|stopped: the DLSS evaluate crashed/i.test(feed);
   const feedFaultStack = (/evaluate fault stack, by module \(innermost first\): ([^\r\n]+)/.exec(feed) || [])[1] || null;
   const feedSameDevice = /transport same-device D3D12/.test(feed);
+  // The driver itself says DLSS 5 cannot run: the Feeder's requirements probe for feature 18 came
+  // back OutOfDate, and the Feeder names the minimum version.
+  //
+  //   *** The installed NVIDIA driver reports feature 18 as OutOfDate. ... unavailable until the
+  //   driver is updated to 616.56 or newer. ***
+  //
+  // Nothing else in a run like that means anything: the model is either never created or, as on
+  // DOOM 3 BFG with driver 610.88 (2026-09-13), crashes in its first evaluate.
+  const driverMatch = /feature 18 as OutOfDate[^\r\n]*?updated to ([\d.]+)/.exec(feed);
+  const feedDriverOutdated = driverMatch ? driverMatch[1] : (/feature 18[^\r\n]*0xBAD0000C \(OutOfDate\)/.test(feed) ? '' : null);
+  const driverVersion = (/\bdriver (\d{3}\.\d{2})\b/.exec(feed) || [])[1] || null;
   // NVIDIA Smooth Motion in the game process: the Feeder warns about it itself.
   const feedSmoothMotion = /NVIDIA Smooth Motion is active in this process/.test(feed);
 
@@ -226,6 +236,8 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   // First: a game that died in its own DirectX wrapper as it started ran nothing else worth judging,
   // whatever an older OptiScaler.log still says.
   if (wrapperCrash) { verdict = 'wrapper-crash'; detail = wrapperCrash; }
+  // A driver too old for DLSS 5 explains every other symptom in the run, so it is named first.
+  else if (feedDriverOutdated !== null) { verdict = 'driver-outdated'; detail = feedDriverOutdated || null; }
   else if (feedCreateFault && feedTwoCopies) verdict = 'duplicate-dlss';
   else if (shutdownFault) verdict = 'shutdown-fault';
   else if (crash && !cleanExit) { verdict = 'ue-crash'; detail = crash.message; }
@@ -261,6 +273,9 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     feedEvaluateCrash,
     feedSameDevice,
     feedSmoothMotion,
+    feedDriverOutdated,
+    driverVersion,
+    optiLogMissing: !opti,
     cleanExit,
     logLevel: logLevel ? Number(logLevel) : null,
     crash,

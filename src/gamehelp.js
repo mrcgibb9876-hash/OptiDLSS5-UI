@@ -50,6 +50,11 @@ function diagnose(ctx) {
 
   // Two stacks on one DLSS call crash before anything else can be judged.
   if (foreign.length) return fix('foreign', 'remove-foreign', { tool: foreign.map((f) => f.tool).join(', ') });
+  // The driver says DLSS 5 cannot run on it. No file in the game folder changes that, so it goes
+  // before every per-folder finding -- otherwise the user fixes those first and still gets nothing.
+  if (run.ran && run.verdict === 'driver-outdated') {
+    return out('step', 'driver-outdated', { min: run.detail || '', current: run.driverVersion || '' });
+  }
   // A second OptiScaler, under a proxy name, that is not the build this app installed. It is the
   // one the game loads and the one that answers the NGX calls -- so an upstream build there means
   // no neural pass, whatever this app has put beside it. Nothing here deletes another tool's DLL

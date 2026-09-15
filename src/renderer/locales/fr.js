@@ -720,4 +720,12 @@ window.I18N.register("fr", {
   "RTXMFG could not be installed: {error}": "RTXMFG n'a pas pu être installé : {error}",
   "RTXMFG removed.": "RTXMFG supprimé.",
   "RTXMFG could not be removed: {error}": "RTXMFG n'a pas pu être supprimé : {error}",
+  "Your NVIDIA driver is too old for DLSS 5: it reported Neural Rendering as out of date, and it needs {min} or newer.": "Votre pilote NVIDIA est trop ancien pour DLSS 5 : il signale le Neural Rendering comme obsolète et il faut la version {min} ou plus récente.",
+  "Your NVIDIA driver is too old for DLSS 5: it reported Neural Rendering as out of date.": "Votre pilote NVIDIA est trop ancien pour DLSS 5 : il signale le Neural Rendering comme obsolète.",
+  "Installed: {current}.": "Installé : {current}.",
+  "Nothing in the game folder can work around that -- plain DLSS may still start, but the neural model either never loads or crashes on its first frame. Update the driver from the NVIDIA app or nvidia.com, then launch the game again.": "Rien dans le dossier du jeu ne peut contourner cela -- le DLSS classique peut encore démarrer, mais le modèle neuronal ne se charge jamais ou plante dès sa première image. Mettez à jour le pilote via l'application NVIDIA ou nvidia.com, puis relancez le jeu.",
+  "Update the NVIDIA driver ({min} or newer)": "Mettez à jour le pilote NVIDIA ({min} ou plus récent)",
+  "Update the NVIDIA driver": "Mettez à jour le pilote NVIDIA",
+  "the NVIDIA driver is too old for DLSS 5 (needs {min} or newer)": "le pilote NVIDIA est trop ancien pour DLSS 5 (il faut {min} ou plus récent)",
+  "the NVIDIA driver is too old for DLSS 5": "le pilote NVIDIA est trop ancien pour DLSS 5",
 });
