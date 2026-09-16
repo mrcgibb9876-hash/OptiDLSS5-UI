@@ -988,6 +988,13 @@ const FOREIGN_TOOLCHAINS = [
   { tool: 'DLSS5-Swapper', files: ['_DLSS5_Backup/manifest.json', 'renodx-dlss5.addon64', 'host64/renodx-dlss5.addon64', 'dlss5-feed-host64.exe'] },
   { tool: 'DLSSNR-Cost-Scaler', files: ['nvngx_dlssnr_proxy.dll'] },
   { tool: 'a RenoDX DLSS 5 add-on', pattern: /^renodx-dlss.*\.addon(64|32)?$/i },
+  // Deep Fried Chicken is not a rival installer like the ones above -- it is another neural add-on,
+  // and a good one, which someone may be running on purpose. It is here because the clash with ours
+  // is SILENT: its own documentation says never to install two neural add-ons, and that when it
+  // finds a competing one "it does nothing at all for the whole session". OptiScaler's NR pass is a
+  // competing one. Without this the user sees an install that reports success, a panel that opens,
+  // and no picture change ever, with nothing anywhere saying why.
+  { tool: 'Deep Fried Chicken', files: ['deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg'] },
 ];
 
 // What each recognised tool is known to place -- the explicit "remove the other toolchain"
@@ -1009,6 +1016,10 @@ const FOREIGN_REMOVALS = {
   },
   'DLSSNR-Cost-Scaler': { files: ['nvngx_dlssnr_proxy.dll'], patterns: [/cost[_ -]?scaler/i] },
   'a RenoDX DLSS 5 add-on': { patterns: [/^renodx-dlss.*\.addon(64|32)?$/i, /^renodx.*\.ini$/i] },
+  // Only the three files Deep Fried Chicken ships. It places no backups and patches nothing, so
+  // there is nothing to restore -- and the log it writes beside them goes too. Offered rather than
+  // done: someone may be running it on purpose and want ours gone instead, which Remove already does.
+  'Deep Fried Chicken': { files: ['deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg', 'deep-fried-chicken.log'] },
 };
 // A backed-up name a game could legitimately own comes back from the backup; anything else that
 // only a DLSS 5 tool would put there is deleted along with its backup.

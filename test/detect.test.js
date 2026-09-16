@@ -271,3 +271,31 @@ test('the shape a real install leaves: no OptiScaler.dll, the journal names the 
   assert.equal(both.optiScalerProxy.file, 'winmm.dll', 'the one that is not ours is the one reported');
   assert.equal(both.optiScalerProxy.matchesOurBuild, false);
 });
+
+// Deep Fried Chicken is another neural add-on, not a rival installer -- but its clash with ours is
+// silent. Its documentation says never to run two, and that when it finds a competitor it does
+// nothing at all for the whole session. Without this the user gets a successful install, a panel
+// that opens, and no picture change ever, with nothing saying why.
+test('Deep Fried Chicken is recognised, and removal takes only its own files', () => {
+  const dir = scratchDir('foreign-dfc');
+  write(dir, 'Game.exe', 'x');
+  write(dir, 'deep-fried-chicken.addon64', 'x');
+  write(dir, 'deep-fried-chicken-nvngx.dll', 'x');
+  write(dir, 'deep-fried-chicken.cfg', 'x');
+
+  assert.deepEqual(detect.foreignToolchains(dir).map((f) => f.tool), ['Deep Fried Chicken']);
+
+  return detect.planForeignRemoval(dir).then((plan) => {
+    assert.deepEqual(plan.del, ['deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.addon64', 'deep-fried-chicken.cfg']);
+    // The game's own files are never in a foreign removal.
+    assert.ok(!plan.del.includes('Game.exe'));
+  });
+});
+
+test('a folder with our install and no other add-on accuses nobody of being Deep Fried Chicken', () => {
+  const dir = scratchDir('foreign-dfc-clean');
+  write(dir, 'Game.exe', 'x');
+  write(dir, 'OptiScaler.ini', 'x');
+  write(dir, 'nvngx_dlssnr.dll', 'x');
+  assert.deepEqual(detect.foreignToolchains(dir), []);
+});
