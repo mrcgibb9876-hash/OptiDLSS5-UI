@@ -1702,6 +1702,26 @@ function paintRange(input) {
 const sliderPos = (f, v) => Math.round((f.log ? Math.log(v / f.min) / Math.log(f.max / f.min) : (v - f.min) / (f.max - f.min)) * 1000);
 const sliderVal = (f, pos) => (f.log ? f.min * Math.pow(f.max / f.min, pos / 1000) : f.min + (pos / 1000) * (f.max - f.min));
 
+// Keyboard stepping. The sliders are positioned on a 0..1000 scale so a log range can be resolved
+// at all, which means the browser's own arrow-key step is a thousandth of the range -- 0.002 of a
+// Model pass, 0.175% of Model resolution -- and each field's declared step went unused. These move
+// by that step instead, snapped to its grid so repeated presses land on round numbers (1.1, 1.2,
+// 1.3) rather than drifting off them, with Page Up/Down for ten at a time and Home/End for the ends.
+const STEP_DIR = { ArrowRight: 1, ArrowUp: 1, PageUp: 1, ArrowLeft: -1, ArrowDown: -1, PageDown: -1 };
+
+function stepOf(field) {
+  return Number(field.step) || (field.type === 'int' ? 1 : 0.05);
+}
+
+function steppedValue(field, value, dir, big) {
+  const step = stepOf(field) * (big ? 10 : 1);
+  const snapped = Math.round(value / step) * step;
+  // Already on the grid, or snapping moved it the way we were going anyway.
+  const next = Math.abs(snapped - value) > 1e-9 && Math.sign(snapped - value) === dir ? snapped : snapped + dir * step;
+  const clamped = Math.min(field.max, Math.max(field.min, next));
+  return field.type === 'int' ? Math.round(clamped) : Number(clamped.toFixed(6));
+}
+
 function showNumber(field, value) {
   if (field.percent) return `${Math.round(value * 100)}%`;
   if (field.type === 'int') return String(Math.round(value));
@@ -1787,6 +1807,21 @@ function renderDlssNrFields(game) {
         reset.addEventListener('click', () => applyDlssNr(game, field.key, null));
         row.appendChild(reset);
         input.addEventListener('input', () => { readout.textContent = showNumber(field, sliderVal(field, Number(input.value))); paintRange(input); });
+        let pendingKey = null;
+        input.addEventListener('keydown', (e) => {
+          const dir = STEP_DIR[e.key];
+          const ends = e.key === 'Home' || e.key === 'End';
+          if (dir === undefined && !ends) return;
+          e.preventDefault();
+          const at = sliderVal(field, Number(input.value));
+          const next = ends ? (e.key === 'Home' ? field.min : field.max)
+                            : steppedValue(field, at, dir, e.key.startsWith('Page'));
+          input.value = String(sliderPos(field, next));
+          paintRange(input);
+          readout.textContent = showNumber(field, next);
+          clearTimeout(pendingKey);
+          pendingKey = setTimeout(() => applyDlssNr(game, field.key, next), 180);
+        });
         input.addEventListener('change', () => {
           const v = sliderVal(field, Number(input.value));
           applyDlssNr(game, field.key, field.type === 'int' ? Math.round(v) : Number(v.toFixed(4)));

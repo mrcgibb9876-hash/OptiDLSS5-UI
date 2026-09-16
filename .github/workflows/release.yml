@@ -173,7 +173,11 @@ jobs:
 
     # A card in the Discord server's #announcements once the release is live. The webhook URL lives
     # in the DISCORD_RELEASE_WEBHOOK secret; without it (a fork) this step does nothing. Pre-releases
-    # stay quiet. A failed post never fails the release.
+    # stay quiet. A failed post never fails the release -- shipping the build matters more than
+    # announcing it -- but it does raise a warning that lands on the run's summary page, because the
+    # alternative is what happened with v1.73.0: the webhook had been deleted, Discord answered
+    # "Unknown Webhook" (code 10015), the step went red inside a green job, and the release went out
+    # with nobody told. A post that silently does not happen is worse than one that fails loudly.
     - name: Announce on Discord
       if: ${{ !inputs.prerelease }}
       shell: pwsh
@@ -183,7 +187,10 @@ jobs:
         TAG: ${{ inputs.tag }}
         TITLE: ${{ inputs.title }}
       run: |
-        if (-not $env:DISCORD_RELEASE_WEBHOOK) { Write-Output "No DISCORD_RELEASE_WEBHOOK secret; skipping."; exit 0 }
+        if (-not $env:DISCORD_RELEASE_WEBHOOK) {
+          Write-Output "::warning title=Discord announcement skipped::No DISCORD_RELEASE_WEBHOOK secret is set, so this release was not announced."
+          exit 0
+        }
         $repo = "${{ github.repository }}"
         $page = "https://github.com/$repo/releases/tag/$env:TAG"
         $engine = if (Test-Path engine\VERSION) { (Get-Content engine\VERSION -Raw).Trim() } else { $null }
@@ -204,5 +211,16 @@ jobs:
             timestamp = (Get-Date).ToUniversalTime().ToString("o")
           })
         } | ConvertTo-Json -Depth 6
-        Invoke-RestMethod -Method Post -Uri $env:DISCORD_RELEASE_WEBHOOK -ContentType "application/json; charset=utf-8" -Body ([System.Text.Encoding]::UTF8.GetBytes($payload))
-        Write-Output "Posted to Discord."
+        try {
+          Invoke-RestMethod -Method Post -Uri $env:DISCORD_RELEASE_WEBHOOK -ContentType "application/json; charset=utf-8" -Body ([System.Text.Encoding]::UTF8.GetBytes($payload))
+          Write-Output "Posted to Discord."
+        }
+        catch {
+          # Discord's own reason, not just a status code: 10015 "Unknown Webhook" means the webhook
+          # has been deleted and the secret needs replacing, which reads nothing like a network blip.
+          $reason = $_.ErrorDetails.Message
+          if (-not $reason) { $reason = $_.Exception.Message }
+          $reason = ($reason -replace '\s+', ' ').Trim()
+          Write-Output "::warning title=Discord announcement failed::$env:TAG went out but was not announced. Discord said: $reason  -- if this is code 10015 (Unknown Webhook), the DISCORD_RELEASE_WEBHOOK secret points at a webhook that no longer exists; make a new one in Server Settings > Integrations > Webhooks and update the secret."
+          exit 0
+        }
