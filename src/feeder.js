@@ -1008,6 +1008,44 @@ function configureReShadeIni(dir, {
   return { configured: true, depthProfile: depthProfile || (unity ? 'unity' : null) };
 }
 
+// dlss5-feed.cfg: the add-on's own settings, plain `key=value` lines with no sections. The Feeder
+// writes the whole file when the user changes something in its panel and reads only the keys that
+// are present, defaulting the rest -- so a file holding one key is valid and everything else stays
+// at the Feeder's own defaults.
+//
+// Only `cast_key` is set here, and only when nobody has chosen one. It is the virtual-key code that
+// shows and hides the DLSS 5 panel inside the game, and it ships as 0, meaning "no key": out of the
+// box the panel can only be summoned by finding "Show the DLSS 5 panel in-game" in ReShade's add-on
+// tab, which is exactly the step players never discover. VK_HOME (0x24) makes it Alt+Home, the same
+// chord as the engine's own panel on the 64-bit routes, so there is one thing to tell players
+// whatever route their game takes.
+//
+// Alt+Home rather than Home because the Feeder matches the bare virtual key, ignoring modifiers,
+// while ReShade's own overlay is Home with no modifier and matches the modifiers exactly. Holding
+// Alt therefore reaches the cast and leaves ReShade's overlay shut -- opening that overlay is what
+// broke the panel for Luma users before.
+const CAST_KEY_HOME = 0x24;
+
+function configureFeedCfg(dir, { castKey = CAST_KEY_HOME } = {}) {
+  const cfgPath = path.join(dir, 'dlss5-feed.cfg');
+  const existing = fs.existsSync(cfgPath) ? fs.readFileSync(cfgPath, 'utf8') : '';
+  const lines = existing ? existing.split(/\r?\n/) : [];
+  const at = lines.findIndex((line) => /^\s*cast_key\s*=/i.test(line));
+
+  if (at !== -1) {
+    const current = Number(String(lines[at]).split('=')[1]);
+    // A key the user picked in the Feeder's own panel is theirs; only "none" is ours to fill in.
+    if (Number.isFinite(current) && current > 0) return { configured: false, castKey: current, kept: true };
+    lines[at] = `cast_key=${castKey}`;
+  } else {
+    while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+    lines.push(`cast_key=${castKey}`);
+  }
+
+  fs.writeFileSync(cfgPath, `${lines.join('\n')}\n`, 'utf8');
+  return { configured: true, castKey, kept: false };
+}
+
 // --- update checking --------------------------------------------------------------------
 
 function readFeederDeployMarker(dir) {
@@ -1262,6 +1300,8 @@ module.exports = {
   deployNvngxDlss,
   configurePreset,
   configureReShadeIni,
+  configureFeedCfg,
+  CAST_KEY_HOME,
   deployFeederStack,
   fetchWithRetry,
   fetchReShadeHeader,

@@ -68,12 +68,14 @@ const ROUTE_TEXT = {
   // opens with Insert in the host window: press 'Show the DLSS 5 panel in-game' above and then
   // Insert, or run with host_window=1." Alt+Home is the DLSS 5 panel's key inside OptiScaler; it
   // is Insert that opens OptiScaler in the helper, and this text said Alt+Home until then.
-  // The Feeder's "Show the DLSS 5 panel in-game" is a DWM thumbnail of the helper's window: the helper's own
-  // log says "menu is visible but no input was received ... focused: no" (Metal Gear Rising: Revengeance,
-  // 2026-09-15). Edit is the working way to tune it -- LiveReload is on in the helper -- and the host window
-  // (host_window=1) is the working way to reach OptiScaler's panel.
+  // The Feeder's "Show the DLSS 5 panel in-game" is a DWM thumbnail of the helper's window, and it took no clicks
+  // until engine v1.0.34: the helper's own log said "menu is visible but no input was received ... focused: no"
+  // (Metal Gear Rising: Revengeance, 2026-09-15). That was our OptiInput discarding the messages the Feeder posts
+  // because the helper's window is never focused. With that fixed, and with the deploy now writing the Feeder's
+  // cast_key and opening the panel in the helper on startup (engine v1.0.35), Alt+Home is all it takes -- the same
+  // key as every other route. Verified on Alien: Isolation, 2026-09-16.
   host32Panel:
-    'Nothing of OptiScaler appears in the game itself, because it runs in that helper. Change its settings in Edit while the game runs: on this route they apply live. The Feeder\'s "Show the DLSS 5 panel in-game" is only a picture of the helper\'s window and takes no clicks; to use OptiScaler\'s own panel, tick "Show the DLSS 5 host window" (Home -> Add-ons -> DLSS 5 Feed), alt-tab to that window, click inside it and press Insert.',
+    'Press Alt+Home in the game for the DLSS 5 panel, the same as any other game. It is drawn by the helper and shown over the game, and its controls take clicks there. Settings also apply live from Edit here while the game runs, if you would rather change them outside.',
   host32Lead:
     'Experimental. A 32-bit game cannot run DLSS in its own process -- NVIDIA ships no 32-bit version -- so the DLSS5 ' +
     'Feeder\'s 32-bit add-on sends each frame to its 64-bit helper beside the game, and OptiScaler runs Neural Rendering ' +

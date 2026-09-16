@@ -3925,6 +3925,8 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDl
       // DG_WINDOWED): an exclusive-fullscreen game can freeze the moment the helper starts.
       let dgWindowed = false;
       try { dgWindowed = legacy.ensureDgVoodooWindowed(dir); } catch {}
+      // Installs from before the deploy gave the in-game panel its Alt+Home key (legacy.js ensureCastKey).
+      try { legacy.ensureCastKey(dir); } catch {}
       return { ok: true, updated: updated || nrUpdated, nrUpdated, dgWindowed, reason: 'legacy 32-bit route', autoConfigured: [] };
     }
     // A 64-bit DirectX 8/9 game behind dgVoodoo2 gets the same scaled-to-screen display (legacy.js DG_DISPLAY).

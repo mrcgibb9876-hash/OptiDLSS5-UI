@@ -669,7 +669,7 @@ function helpWords(diag) {
     case 'needs-run': return t('No run to judge yet. Launch the game, reach actual gameplay (not a menu), play a minute, then quit. Come back here and it is checked.');
     case 'needs-run-after-fix': return t('"{fix}" was applied. The old log still says what it said, so launch the game, reach gameplay, play a minute, quit, and this is checked again.', { fix: helpFixLabel(v.fix) });
     case 'ok': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}{api}.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '', api: v.api ? ' (' + v.api + ')' : '' });
-    case 'ok-panel-in-helper': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}. A 32-bit game cannot run DLSS itself, so the neural pass and OptiScaler run in the 64-bit helper beside the game -- which is why nothing of OptiScaler appears in the game on its own. To change settings, use Edit here while the game runs: on this route the helper reads its settings file again within a second, so every change applies live. The Feeder\'s "Show the DLSS 5 panel in-game" only draws a picture of the helper\'s window over the game; clicks land on the game underneath, so its controls cannot be used there. To use OptiScaler\'s own panel, tick "Show the DLSS 5 host window" under Home > Add-ons > DLSS 5 Feed, alt-tab to that window, click inside it once, and press Insert.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '' });
+    case 'ok-panel-in-helper': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}. A 32-bit game cannot run DLSS itself, so the neural pass and OptiScaler run in the 64-bit helper beside the game. Press Alt+Home in the game for the DLSS 5 panel: the helper draws it, the game shows it over itself, and its controls take clicks there -- the same key as every other game. Settings also apply live from Edit here while the game runs, if you would rather change them outside.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '' });
     case 'ok-exit-crash': return t('Neural Rendering ran ({count} passes). The game crashed only on the way out, inside NVIDIA\'s shutdown, which does not affect play.', v);
     case 'd3d11-native': return t('DLSS was created on the native D3D11 path, so the Neural Rendering pass never ran. Dx11Upscaler must be dlss_12. Reconfigure writes it.');
     case 'nr-disabled': return t('DLSS ran but Neural Rendering is switched off in OptiScaler.ini. Reconfigure turns it on.');
@@ -766,7 +766,7 @@ function helpSteps(diag) {
       ? [t("In Prey: Options > Display > Anti-Aliasing: TAA (or SMAA 2TX)"), t('Play a minute of actual gameplay, then quit'), launch]
       : [t('Play a minute of actual gameplay, then quit'), t("In the game: Home > Luma > select DLSS"), launch];
     case 'needs-run': case 'needs-run-after-fix': return [t('Launch the game'), t('Play a minute of actual gameplay, then quit'), t('Come back here')];
-    case 'ok-panel-in-helper': return [t('Change settings in Edit here while the game runs -- they apply live'), t('Or: Home > Add-ons > DLSS 5 Feed > tick "Show the DLSS 5 host window"'), t('Alt-tab to that window, click in it, press Insert')];
+    case 'ok-panel-in-helper': return [t('Press Alt+Home in the game for the DLSS 5 panel'), t('Its controls take clicks there, as in any other game'), t('Or change settings in Edit here -- they apply live')];
     case 'vulkan-layer-missing': return [t('Install ReShade with add-on support for this exe, choosing Vulkan'), t('Or switch the emulator to OpenGL and pick OpenGL in Edit'), t('Press Install here again')];
     case 'vulkan-layer-no-addon': return [t('Reinstall ReShade with "Enable loading of add-ons"'), t('Press Install here again')];
     case 'vulkan-layer-not-loaded': return [t('Run ReShade\'s installer for this exe, choosing Vulkan'), t('Turn NVIDIA Smooth Motion off for it'), t('Launch again')];
@@ -822,7 +822,7 @@ function helpShort(diag) {
     case 'feed-agility-redist': case 'feed-agility-redist-elsewhere': return t('D3D12 refused every device (redist)');
     case 'upscale-skipped': return t('Black screen: every frame dropped');
     case 'sr-backend-fallback': return t('Not DLSS -- fell back to {backend}', v);
-    case 'ok-panel-in-helper': return t('Working -- change settings in Edit (the panel is in the 64-bit helper)');
+    case 'ok-panel-in-helper': return t('Working -- press Alt+Home in the game for the panel');
     case 'vulkan-layer-missing': return t('ReShade\'s Vulkan layer is not installed');
     case 'vulkan-layer-no-addon': return t('ReShade\'s Vulkan layer has no add-on support');
     case 'vulkan-layer-not-loaded': return t('ReShade\'s Vulkan layer did not load here');

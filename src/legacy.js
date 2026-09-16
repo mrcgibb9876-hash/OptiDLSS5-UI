@@ -48,6 +48,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { openZip, findEntry, extractEntry } = require('./zip');
 const { setIniKey, getIniKey } = require('./ini-merge');
+const { configureFeedCfg } = require('./feeder');
 
 const MARKER = '.dlss5ui-legacy.json';
 const HOST_DIR = 'host64';
@@ -311,6 +312,42 @@ function ensureDgVoodooWindowed(dir) {
   return true;
 }
 
+// host64\ReShade.ini: the helper's own ReShade must never put its overlay on screen. That ReShade is
+// plumbing -- it exists so the helper can load the add-on chain -- and the helper's window is what
+// the game shows as the DLSS 5 panel, so anything ReShade draws there lands on top of the panel and
+// is all the player sees. Alt+Home did exactly that on Alien: Isolation (2026-09-16): the cast came
+// up showing ReShade's Add-ons tab, with OptiScaler's panel behind it.
+//
+// KeyOverlay is [INPUT] KeyOverlay = key,ctrl,shift,alt, and ReShade's is_key_pressed returns false
+// outright for key 0 (input.cpp: `if (keycode == 0) return false`), so a zero disables the hotkey
+// rather than binding something. The game's own ReShade.ini is untouched -- there the overlay is a
+// real feature the player may want.
+const HOST_RESHADE_KEYS = [
+  ['INPUT', 'KeyOverlay', '0,0,0,0'],
+];
+
+// Gives an existing 32-bit install the Alt+Home key for the in-game panel (installs made before the
+// deploy set it). Only for this route: a cast_key on any other route would toggle a picture of a
+// host process that is not running there. Returns true when the file changed.
+function ensureCastKey(dir) {
+  const marker = readMarker(dir);
+  if (!marker || !marker.host32) return false;
+
+  let changed = false;
+  try { changed = configureFeedCfg(dir).configured; } catch { /* the Feeder writes its own on first save */ }
+
+  // The same upgrade for the helper's ReShade overlay key (HOST_RESHADE_KEYS).
+  const hostIniPath = path.join(dir, HOST_DIR, 'ReShade.ini');
+  try {
+    const text = fs.readFileSync(hostIniPath, 'utf8');
+    let next = text;
+    for (const [section, key, value] of HOST_RESHADE_KEYS) next = setIniKey(next, section, key, value);
+    if (next !== text) { fs.writeFileSync(hostIniPath, next, 'utf8'); changed = true; }
+  } catch { /* no helper ini yet */ }
+
+  return changed;
+}
+
 // LEGACY_QUARANTINE_WAIT_MS lets tests skip the pause a real security scanner needs.
 async function stillThere(file) {
   const wait = Number(process.env.LEGACY_QUARANTINE_WAIT_MS ?? 1500);
@@ -440,6 +477,7 @@ async function deployHost32(dir, plan, deps) {
   let hostIni = fs.existsSync(path.join(hostDir, 'ReShade.ini')) ? fs.readFileSync(path.join(hostDir, 'ReShade.ini'), 'utf8') : '';
   hostIni = setIniKey(hostIni, 'ADDON', 'AddonPath', '.\\');
   if (!getIniKey(hostIni, 'OVERLAY', 'TutorialProgress')) hostIni = setIniKey(hostIni, 'OVERLAY', 'TutorialProgress', '4');
+  for (const [section, key, value] of HOST_RESHADE_KEYS) hostIni = setIniKey(hostIni, section, key, value);
   await rec.write(path.join(hostDir, 'ReShade.ini'), Buffer.from(hostIni, 'utf8'), { ours: () => true });
 
   // OptiScaler_DLSSNR, the release as it ships, with OptiScaler.dll as winmm.dll (the helper imports it).
@@ -482,6 +520,14 @@ async function deployHost32(dir, plan, deps) {
     await deps.deployNvngxDlss(hostDir);
     if (!had && fs.existsSync(path.join(hostDir, 'nvngx_dlss.dll'))) marker.files.push(`${HOST_DIR}/nvngx_dlss.dll`);
   }
+
+  // Alt+Home shows the helper's panel inside the game. This is the only route where that takes a
+  // key at all -- on every other route OptiScaler draws the panel in the game's own process and
+  // owns Alt+Home itself, while here the panel lives in host64\ and the game shows a cast of it,
+  // which the Feeder only puts on screen when its cast_key is pressed. That key ships as "none".
+  // Directly, not through ensureCastKey: the marker that would tell it this is a host32 install is
+  // written a few lines below, so on a fresh deploy that check has nothing to find yet.
+  configureFeedCfg(dir);
 
   marker.host32 = { api: plan.api, reshadeName: plan.reshadeName };
   marker.placedAt = new Date().toISOString();
@@ -552,5 +598,5 @@ async function removeLegacy(dir) {
 
 module.exports = {
   MARKER, HOST_DIR, DGVOODOO, planFor, status, readMarker, ensureDgVoodoo, importDgVoodooZip, cachedDgVoodoo,
-  isDgVoodooZip, configureDgVoodoo, ensureDgVoodooWindowed, deployDgVoodoo, deployHost32, removalPlan, removeLegacy,
+  isDgVoodooZip, configureDgVoodoo, ensureDgVoodooWindowed, ensureCastKey, deployDgVoodoo, deployHost32, removalPlan, removeLegacy,
 };
