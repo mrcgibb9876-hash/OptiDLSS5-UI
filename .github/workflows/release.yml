@@ -214,6 +214,7 @@ jobs:
         try {
           Invoke-RestMethod -Method Post -Uri $env:DISCORD_RELEASE_WEBHOOK -ContentType "application/json; charset=utf-8" -Body ([System.Text.Encoding]::UTF8.GetBytes($payload))
           Write-Output "Posted to Discord."
+          "✅ Announced on Discord." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
         }
         catch {
           # Discord's own reason, not just a status code: 10015 "Unknown Webhook" means the webhook
@@ -222,5 +223,15 @@ jobs:
           if (-not $reason) { $reason = $_.Exception.Message }
           $reason = ($reason -replace '\s+', ' ').Trim()
           Write-Output "::warning title=Discord announcement failed::$env:TAG went out but was not announced. Discord said: $reason  -- if this is code 10015 (Unknown Webhook), the DISCORD_RELEASE_WEBHOOK secret points at a webhook that no longer exists; make a new one in Server Settings > Integrations > Webhooks and update the secret."
-          exit 0
+          # The run summary, not just an annotation: this is the line a human actually sees on the
+          # run page without opening the log.
+          "❌ **$env:TAG was NOT announced on Discord.** Discord said: ``$reason``" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          "Code 10015 (Unknown Webhook) means ``DISCORD_RELEASE_WEBHOOK`` points at a webhook that no longer exists. Make a new one in Server Settings > Integrations > Webhooks and run ``gh secret set DISCORD_RELEASE_WEBHOOK``." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          # exit 1, not 0. continue-on-error above already keeps the release green, so failing here
+          # costs nothing and is the only thing that makes the step read as failed rather than
+          # passed. It had `exit 0`, which is why v1.73.0, v1.74.1 and v1.74.2 all reported
+          # "Announce on Discord: success" while announcing nothing -- three releases in a row,
+          # twice believed by someone checking the step's conclusion through the API.
+          exit 1
         }
