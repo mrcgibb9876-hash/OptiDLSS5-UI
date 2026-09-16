@@ -145,13 +145,13 @@ const FIELDS = [
     label: 'Debug view',
     help: "Proxy is the picture handed to the model. Difference shows what the model actually changed, amplified twenty times and centred on grey." },
 
+  { key: 'PassRate', type: 'float', default: 1.0, min: 0.05, max: 1, step: 0.05, percent: true, group: 'Experimental',
+    label: 'Extra passes run on', dependsOn: { key: 'Passes', atLeast: 2 },
+    help: "How often the passes above the first actually run, as a share of frames. 100% is every frame, which is what this has always done; 50% is every other frame.\n\nWhat it buys is the ground between one pass and two. Two passes cost twice the model time and there is no step between them -- this makes one and a half reachable. Watch the frame rate: that is the whole point of it.\n\nWhat it costs is that a frame where the extra pass was skipped is genuinely less processed than one where it ran, so the picture alternates between two looks. Whether that reads as a pulse or as nothing depends on the game and on how much the extra layer was changing. Chained temporal history decides what the skipped frames do to that pass's history: on, it now has gaps in it.\n\nNeeds more than one pass to do anything, and needs engine v1.0.34 or newer." },
   { key: 'ProxyProbe', type: 'bool', default: false, group: 'Experimental', label: 'Probe the driver',
     help: "Asks the driver's nvngx.dll once per session whether it already knows the model. Writes the answer to the log and changes nothing else.\n\nRead when the model is built, so it applies from the next session." },
   { key: 'UseProxy', type: 'bool', default: false, group: 'Experimental', label: 'Run through the driver',
     help: "Drives the model through the driver's own nvngx.dll instead of the forwarder -- the way DLSS itself is called. If the picture matches, the forwarder is unnecessary.\n\nCompare before trusting it: turn on Compare above and look for a difference." },
-  { key: 'PassRate', type: 'float', default: 1.0, min: 0.05, max: 1, step: 0.05, percent: true, group: 'Experimental',
-    label: 'Extra passes run on', dependsOn: { key: 'Passes', atLeast: 2 },
-    help: "How often the passes above the first actually run, as a share of frames. 100% is every frame, which is what this has always done; 50% is every other frame.\n\nWhat it buys is the ground between one pass and two. Two passes cost twice the model time and there is no step between them -- this makes one and a half reachable. Watch the frame rate: that is the whole point of it.\n\nWhat it costs is that a frame where the extra pass was skipped is genuinely less processed than one where it ran, so the picture alternates between two looks. Whether that reads as a pulse or as nothing depends on the game and on how much the extra layer was changing. Chained temporal history decides what the skipped frames do to that pass's history: on, it now has gaps in it.\n\nNeeds more than one pass to do anything, and needs engine v1.0.34 or newer." },
   { key: 'OpticalFlow', type: 'bool', default: true, group: 'Experimental', label: 'Optical flow',
     help: "Gives the model motion between frames. Off is a diagnostic." },
 
