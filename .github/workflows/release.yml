@@ -173,6 +173,12 @@ jobs:
 
     # A card in the Discord server's #announcements once the release is live. The webhook URL lives
     # in the DISCORD_RELEASE_WEBHOOK secret; without it (a fork) this step does nothing. Pre-releases
+    #
+    # Where the webhook is, for when it next needs replacing: guild "OptiDLSS5-UI"
+    # (1549486108859957308), channel #announcements (1549487286364934174), webhook named
+    # "OptiDLSS5-UI Releases". It has died twice now -- once before v1.73.0, and again when the
+    # setup bot was removed from the server, which cost the v1.74.1 and v1.74.2 announcements.
+    # Remaking it needs Manage Webhooks in that server and `gh secret set DISCORD_RELEASE_WEBHOOK`.
     # stay quiet. A failed post never fails the release -- shipping the build matters more than
     # announcing it -- but it does raise a warning that lands on the run's summary page, because the
     # alternative is what happened with v1.73.0: the webhook had been deleted, Discord answered
