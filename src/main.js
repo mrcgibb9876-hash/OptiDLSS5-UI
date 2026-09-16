@@ -2242,7 +2242,7 @@ async function planUninstall(dir) {
   if (journal.pdPlugin && pdplugin.isOurCopy(dir, journal.pdPlugin)) add(pdplugin.PLUGIN_NAME);
   for (const rel of rtxmfg.removalPlan(dir)) add(rel);
   if (journal.proxy) add(journal.proxy);
-  if (journal.backedUp && has(journal.backedUp)) restore.push(`${journal.proxy} (from ${journal.backedUp})`);
+  if (journal.backedUp && has(journal.backedUp)) restore.push(`${journal.backedUpAs || journal.proxy} (from ${journal.backedUp})`);
   for (const n of ['OptiScaler.dll', 'OptiScaler_OpticalFlow.dll', 'OptiScaler.ini', 'OptiScaler.log', 'nvngx.dll_dlssnr.dll', 'Remove_OptiScaler.bat', 'setup_windows.bat', 'setup_linux.sh', 'nvngx_dlssnr.dll', 'OptiScaler', '!! EXTRACT ALL FILES TO GAME FOLDER !!']) add(n);
   for (const f of RELEASE_LICENSE_FILES) add('Licenses/' + f);
   for (const rel of journal.added || []) add(rel);
@@ -4287,14 +4287,29 @@ function proxyOverrideFor(exePath) {
   return exePath ? PROXY_OVERRIDES[path.basename(exePath).toLowerCase()] || null : null;
 }
 
-// Moves a proxy this app placed under the wrong name to the game's override. Only when the journal proves
-// the proxy is ours and no original of the game's was backed up under that name (restoring someone's file
-// is not a rename). A folder where the right name already holds OptiScaler just has its journal corrected.
+// The proxy name a game should have now, when it differs from dxgi.dll for a reason: a measured override
+// (PROXY_OVERRIDES), or a Feeder game on Vulkan, OpenGL or DirectX 9, where nothing loads a dxgi.dll from
+// the game's folder. Star Wars: The Old Republic (2026-09-16): installed as dxgi.dll while it was still
+// misread as native DLSS, it kept that name when the Feeder route replaced it -- DXVK renders it, ReShade's
+// Vulkan layer loads the system dxgi.dll by full path, and the Feeder reported "OptiScaler: not present" for
+// 18,000 frames of plain DLAA. Null when dxgi.dll is right.
+async function wantedProxyFor(dir, exePath) {
+  const override = proxyOverrideFor(exePath);
+  if (override) return override;
+  if (!isFeederGame(dir)) return null;
+  const name = await proxyNameForGame(dir, exePath, true);
+  return name && name.toLowerCase() !== DEFAULT_PROXY.toLowerCase() ? name : null;
+}
+
+// Moves a proxy this app placed under the wrong name to the one the game loads. Only when the journal proves
+// the proxy is ours. An original of the game's backed up under the old name stays backed up where it is --
+// it is not put back, since the new name is not a rename of it -- and the journal keeps the name it came
+// from (backedUpAs), so Remove still restores it there. A folder where the right name already holds
+// OptiScaler just has its journal corrected.
 async function migrateProxyIfNeeded(dir, exePath) {
-  const wanted = proxyOverrideFor(exePath);
+  const wanted = await wantedProxyFor(dir, exePath);
   const journal = readInstallMarker(dir);
-  if (!wanted || !journal || typeof journal.proxy !== 'string' || journal.proxy.toLowerCase() === wanted) return null;
-  if (journal.backedUp) return { from: journal.proxy, to: wanted, skipped: 'an original was backed up under the old name' };
+  if (!wanted || !journal || typeof journal.proxy !== 'string' || journal.proxy.toLowerCase() === wanted.toLowerCase()) return null;
 
   const from = path.join(dir, journal.proxy);
   const to = path.join(dir, wanted);
@@ -4314,7 +4329,9 @@ async function migrateProxyIfNeeded(dir, exePath) {
     await fsp.rename(from, to);
   }
 
-  updateInstallJournal(dir, { proxy: wanted });
+  const patch = { proxy: wanted };
+  if (journal.backedUp && !journal.backedUpAs) patch.backedUpAs = journal.proxy;
+  updateInstallJournal(dir, patch);
   return { from: journal.proxy, to: wanted };
 }
 
@@ -4451,10 +4468,12 @@ async function uninstallOptiScaler(dir) {
 
   if (marker && marker.backedUp) {
     const backup = path.join(dir, marker.backedUp);
-    const restoreTo = path.join(dir, marker.proxy);
+    // backedUpAs: the name the original had, when the proxy has since moved to another (migrateProxyIfNeeded).
+    const originalName = marker.backedUpAs || marker.proxy;
+    const restoreTo = path.join(dir, originalName);
     if (fs.existsSync(backup) && !fs.existsSync(restoreTo)) {
       await fsp.rename(backup, restoreTo);
-      removed.push(`restored ${marker.proxy}`);
+      removed.push(`restored ${originalName}`);
     }
   }
 

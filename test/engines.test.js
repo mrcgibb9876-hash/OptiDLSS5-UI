@@ -286,3 +286,38 @@ test('update:check and update:install per engine, with the sha256 asset checked'
     global.fetch = realFetch;
   }
 });
+
+// Star Wars: The Old Republic (2026-09-16): OptiScaler went in as dxgi.dll while the game was misread as
+// native DLSS (its player's original dxgi.dll backed up), and kept that name when the Feeder route took
+// over. On Vulkan nothing loads a dxgi.dll from the folder, so the Feeder ran plain DLAA with "OptiScaler:
+// not present". Sync moves ours to the name the game loads; Remove still puts the original dxgi.dll back.
+test('a Vulkan Feeder game installed as dxgi.dll moves to an early proxy on sync, and Remove restores the backed-up original', { skip: !onWindows }, async () => {
+  const base = scratchDir('engine-vulkan-feeder-proxy');
+  const release = fakeReleaseFolder(base);
+  const nr = fakeNrModel(base);
+  const { invoke } = loadMain();
+
+  const game = path.join(base, 'swtor');
+  const exe = fakeExe(game, 'swtor.exe');
+  fs.writeFileSync(path.join(game, 'dxgi.dll'), 'the player\'s own dxgi.dll');
+  const inst = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: nr, proxyName: 'dxgi.dll' });
+  assert.equal(inst.ok, true, inst.error);
+  const journal = () => JSON.parse(fs.readFileSync(path.join(game, '.optiscaler-manager-install.json'), 'utf8'));
+  assert.equal(journal().proxy, 'dxgi.dll');
+  assert.ok(journal().backedUp, 'the original was backed up');
+
+  // Now a Feeder game on Vulkan (as the Edit override records it).
+  fs.writeFileSync(path.join(game, 'dlss5-feed.addon64'), 'x');
+  fs.writeFileSync(path.join(game, '.dlss5ui-api.json'), JSON.stringify({ api: 'vulkan' }));
+
+  const sync = await invoke('game:sync-if-stale', { exePath: exe, releaseFolder: release, nrDllPath: nr });
+  assert.equal(sync.ok, true, sync.error);
+  assert.notEqual(journal().proxy.toLowerCase(), 'dxgi.dll', 'moved off dxgi.dll');
+  assert.ok(fs.existsSync(path.join(game, journal().proxy)), 'OptiScaler is at the new name');
+  assert.equal(journal().backedUpAs, 'dxgi.dll');
+  assert.ok(!fs.existsSync(path.join(game, 'dxgi.dll')), 'no OptiScaler left at dxgi.dll');
+
+  const un = await invoke('game:run-uninstall', exe);
+  assert.equal(un.ok, true, un.error);
+  assert.equal(fs.readFileSync(path.join(game, 'dxgi.dll'), 'utf8'), 'the player\'s own dxgi.dll', 'the original is back under its own name');
+});
