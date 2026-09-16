@@ -183,6 +183,57 @@ function probeReadings(feed) {
   };
 }
 
+// The window and the resolutions the game ran at, for the card. The engine writes the window as one
+// line (wrapped_swapchain.cpp ReportWindowState) on its first Present and again whenever it changes,
+// so the last one is how the game ran:
+//
+//   DLSS-NR window: 2560x1600 borderless
+//   DLSS-NR window: 2560x1600 borderless (the game asked for exclusive fullscreen; ForceBorderless kept it out)
+//   DLSS-NR window: 1920x1080 windowed on a 2560x1600 monitor
+//   DLSS-NR window: 2560x1600 exclusive fullscreen
+//
+// Engines before that line, and Vulkan games (no DXGI swapchain to ask), never write it. The display
+// size then comes from what the neural pass was given ("running after SR: target WxH", every route)
+// or from the upscaler's own init line, and the mode stays unknown rather than guessed. The render
+// resolution is only known where the game calls an upscaler: a Present-route game draws at display
+// size and has none.
+//
+//   IFeature::SetInitParameters Render Resolution: 1706x960, Display Resolution 2560x1440, Quality: 2
+//   DlssNr_Dx12::Dispatch DLSS-NR running after SR: target 2560x1440, model 2560x1440, guides 1706x960 ...
+//
+// `latest` is the tail of the log when the head was capped, and the head otherwise; `whole` is the
+// head, a fallback for a line that last appeared before the tail begins.
+const WINDOW_MODES = { 'exclusive fullscreen': 'fullscreen', borderless: 'borderless', windowed: 'windowed' };
+
+function screenState(latest, whole) {
+  const lastMatch = (re) => {
+    for (const text of [latest, whole]) {
+      const all = [...String(text).matchAll(re)];
+      if (all.length) return all[all.length - 1];
+    }
+    return null;
+  };
+  const size = (m, w, h) => (m && m[w] !== undefined ? { width: Number(m[w]), height: Number(m[h]) } : null);
+
+  const w = lastMatch(/DLSS-NR window: (\d+)x(\d+) (exclusive fullscreen|borderless|windowed)(?: on a (\d+)x(\d+) monitor)?( \(the game asked for exclusive fullscreen)?/g);
+  const window = w ? {
+    width: Number(w[1]),
+    height: Number(w[2]),
+    mode: WINDOW_MODES[w[3]],
+    monitor: size(w, 4, 5),
+    // ForceBorderless refused the exclusive fullscreen the game asked for.
+    fullscreenRefused: !!w[6],
+  } : null;
+
+  const display = window
+    ? { width: window.width, height: window.height }
+    : size(lastMatch(/DLSS-NR running (?:after|before) SR: target (\d+)x(\d+)/g), 1, 2)
+      || size(lastMatch(/Display Resolution (\d+)x(\d+)/g), 1, 2);
+  const render = size(lastMatch(/Render Resolution: (\d+)x(\d+), Display Resolution/g), 1, 2);
+
+  return { window, display, render };
+}
+
 // optiDir: where OptiScaler (and its log) lives when that is not the game folder -- a 32-bit game's
 // DLSS work runs in the Feeder's 64-bit helper, in host64\ beside it (legacy.js). The Feeder's own
 // log stays beside the game.
@@ -210,6 +261,11 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     stat = feedStat;
   }
   const opti = (await readHead(optiPath)) || '';
+  // The head is enough for the counts and verdicts, but "how the game ran" is a matter of the last
+  // line that says so, and on a long session that is past the cap. Only a capped read costs the
+  // second read; the usual few-hundred-line log is its own tail.
+  const optiTail = opti.length >= MAX_READ ? (await readTail(optiPath)) || opti : opti;
+  const screen = screenState(optiTail, opti);
 
   const runtime = await optiScalerRuntimeApi(optiDir);
   const nrDispatch = count(opti, /DlssNr_(?:Dx12|Vk)::Dispatch DLSS-NR (?:running|composition)/g);
@@ -386,6 +442,11 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     feedDepthFlat,
     feedDepthFlatMoving,
     wrapperCrash,
+    // How the game ran on screen: the window (size, mode, monitor, whether ForceBorderless refused
+    // exclusive fullscreen), the display size and the render size -- each null when the log did not say.
+    window: screen.window,
+    display: screen.display,
+    render: screen.render,
     verdict,
     detail,
   };
@@ -471,4 +532,4 @@ async function collectSupportBundle(dir, { zipPath, extra = {}, execFileAsync, o
   return { zipPath, files: copied, run };
 }
 
-module.exports = { analyzeRun, collectSupportBundle, gatherSupportFiles, unrealCrashNear, nrTiming };
+module.exports = { analyzeRun, collectSupportBundle, gatherSupportFiles, unrealCrashNear, nrTiming, screenState };

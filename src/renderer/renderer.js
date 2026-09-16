@@ -251,6 +251,7 @@ async function renderGrid() {
         <div class="card-path card-panel-note hidden"></div>
         <div class="card-warning card-detect-warning hidden"></div>
         <div class="card-path card-lastrun hidden"></div>
+        <div class="card-path card-screen hidden"></div>
         <div class="card-live hidden"><span class="card-live-dot"></span><span class="card-live-text"></span></div>
         <div class="card-help hidden"><span class="card-help-text"></span><button class="btn btn-small btn-primary btn-card-fix hidden"></button></div>
         ${(status.warnings || []).map((w) => `<div class="card-warning" title="${escapeHtml(t(w.message, w.vars))}">⚠ ${escapeHtml(t('Another DLSS 5 tool is in the folder'))}</div>`).join('')}
@@ -548,6 +549,15 @@ async function applyRecommendation(game, card, backends, generation = renderGene
       lastRunEl.title = lastRunEl.textContent;
     } else {
       lastRunEl.classList.add('hidden');
+    }
+    // The window and resolution that run had, on the line below -- the answer to "was it really
+    // borderless" and "what is it rendering at" without opening the log or the game's settings.
+    const screenEl = card.querySelector('.card-screen');
+    if (screenEl) {
+      const text = run && run.ran ? describeScreen(run) : '';
+      screenEl.classList.toggle('hidden', !text);
+      screenEl.textContent = text;
+      screenEl.title = text ? `${text}\n${t('Read from the last run\'s OptiScaler.log: the window the game drew in and, where it calls an upscaler, the size it rendered at before upscaling.')}` : '';
     }
   }
 
@@ -1501,6 +1511,27 @@ function describeRun(run) {
     case 'wrapper-crash': return t('crashed as it started, inside {dll} (a DirectX wrapper in the game folder)', { dll: run.detail || '' });
     default: return t('not run yet');
   }
+}
+
+// The window and resolutions of the last run, from runlog.js screenState: "Window: 2560x1600
+// borderless, renders at 1706x960". A run whose log said none of it gives '' and the line stays
+// hidden -- an older engine, or a Vulkan game, rather than a guess.
+function describeScreen(run) {
+  const size = (s) => `${s.width}x${s.height}`;
+  const parts = [];
+  if (run.window) {
+    const w = run.window;
+    let mode = w.mode === 'fullscreen' ? t('fullscreen') : w.mode === 'borderless' ? t('borderless') : t('windowed');
+    if (w.mode === 'windowed' && w.monitor) mode = t('windowed on a {monitor} monitor', { monitor: size(w.monitor) });
+    if (w.fullscreenRefused) mode += ' ' + t('(kept out of exclusive fullscreen)');
+    parts.push(t('Window: {size} {mode}', { size: size(w), mode }));
+  } else if (run.display) {
+    parts.push(t('Display: {size}', { size: size(run.display) }));
+  }
+  if (parts.length && run.render && run.display && (run.render.width !== run.display.width || run.render.height !== run.display.height)) {
+    parts.push(t(', renders at {size}', { size: size(run.render) }));
+  }
+  return parts.join('');
 }
 
 function describeUninstall(res) {
