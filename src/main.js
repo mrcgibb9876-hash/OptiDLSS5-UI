@@ -3735,6 +3735,21 @@ async function autoConfigureGame(dir, exePath) {
   edits.push({ section: 'Log', key: 'LogToFile', value: 'true' });
   edits.push({ section: 'Log', key: 'LogLevel', value: '2' });
 
+  // The engine only polls its ini for changes when it thinks the in-game panel is out of reach, and
+  // it decides that by asking whether it is running in the 32-bit route's helper. On an OpenGL or
+  // Vulkan game that misses this case: OptiScaler is in the game's own process, so it answers "the
+  // panel is right there on a keypress" -- but there is no DXGI swapchain for it to draw on, the
+  // menu never initialises, and Alt+Home does nothing. The ini is the only way in, and it was the
+  // one route where the engine had stopped reading it.
+  //
+  // Tomb Raider I-III Remastered, 2026-09-16: "Live settings reload: off (this game can open the
+  // panel itself)" in a log with zero menu lines in it. Every edit from the pop-out panel and from
+  // Edit here sat on disk unread, which is exactly what it looked like from the outside -- controls
+  // that changed nothing.
+  if (api === 'opengl' || api === 'vulkan') {
+    edits.push({ section: 'DlssNr', key: 'LiveReload', value: 'true' });
+  }
+
   const reEngine = isReEngineGame(dir);
   let reframework = null;
   let reframeworkConfig = [];
