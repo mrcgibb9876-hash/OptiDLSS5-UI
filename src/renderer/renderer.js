@@ -418,12 +418,14 @@ async function renderGrid() {
     }
     card.querySelector('.btn-help').addEventListener('click', () => openHelp(game));
     card.querySelector('.btn-launch').addEventListener('click', async () => {
-      const res = await window.api.launchGame(game.exePath);
+      const res = await window.api.launchGame(game.exePath, game.launcher);
       if (!res.ok) { toast(t('Could not launch {name}: {error}', { name: game.name, error: res.error })); return; }
       if (res.cancelled) { toast(t('Not launched.')); return; }
       const exe = res.target.split(/[\\/]/).pop();
       toast(res.via === 'steam'
         ? t('Launching {name} through Steam.', { name: game.name })
+        : res.via === 'launcher'
+          ? t('Started {name} through its launcher ({exe}). Sign in there; the game is watched once it starts.', { name: game.name, exe: String(res.launcher).split(/[\\/]/).pop() })
         // Said out loud on every launch, remembered choice or not: what started, and what it costs.
         : res.via === 'exe-no-anticheat'
           ? t('Launched {name} without {antiCheat} ({exe}) -- online play will not work while it is modded.', { name: game.name, antiCheat: res.antiCheat || t('anti-cheat'), exe })
@@ -1098,7 +1100,7 @@ $('#help-apply').addEventListener('click', async () => {
 
 $('#help-launch').addEventListener('click', async () => {
   if (!helpGame) return;
-  const res = await window.api.launchGame(helpGame.exePath);
+  const res = await window.api.launchGame(helpGame.exePath, helpGame.launcher);
   if (!res.ok) { toast(t('Could not launch {name}: {error}', { name: helpGame.name, error: res.error })); return; }
   $('#help-waiting').classList.remove('hidden');
   $('#help-waiting').textContent = t('Launched. Reach gameplay, play a minute, quit -- this checks the new log by itself.');
@@ -1614,6 +1616,34 @@ async function removeGame(game) {
 let lastPickedExe = null;
 const gameModal = $('#game-modal');
 
+// Edit's "Launch through": auto (a launcher.exe found near the game, else the exe), the exe directly, or
+// a launcher someone picked. Stored on the game as launcher: 'auto' | 'direct' | a path.
+async function loadLauncherChoice(game, chosen = game ? game.launcher : undefined) {
+  const select = $('#game-launcher');
+  const exePath = $('#game-exe').value.trim() || (game && game.exePath) || '';
+  let found = null;
+  try { found = exePath ? (await window.api.gameLauncher(exePath)).found : null; } catch {}
+  const name = (p) => String(p).split(/[\\/]/).pop();
+  select.innerHTML = '';
+  const add = (value, text) => {
+    const o = document.createElement('option');
+    o.value = value; o.textContent = text; select.appendChild(o);
+  };
+  add('auto', found ? t('Auto: {exe} found beside the game', { exe: name(found) }) : t('Auto: the game exe (no launcher found)'));
+  add('direct', t('The game exe directly'));
+  if (chosen && chosen !== 'auto' && chosen !== 'direct') add(chosen, t('Launcher: {exe}', { exe: chosen }));
+  select.value = chosen && [...select.options].some((o) => o.value === chosen) ? chosen : 'auto';
+}
+
+$('#btn-browse-launcher').addEventListener('click', async () => {
+  const res = await window.api.pickExe();
+  if (!res) return;
+  // The launcher is taken exactly as picked; no Unreal shipping-exe swap applies to it.
+  const picked = res.picked || res.path;
+  const game = games.find((g) => g.id === editingGameId) || null;
+  await loadLauncherChoice(game, picked);
+});
+
 async function openGameModal(game, { focus = null } = {}) {
   editingGameId = game ? game.id : null;
   $('#game-modal-title').textContent = game ? t('Edit Game') : t('Add Game');
@@ -1622,6 +1652,7 @@ async function openGameModal(game, { focus = null } = {}) {
   lastPickedExe = null;
   exeNote('');
   loadExeCandidates(game);
+  loadLauncherChoice(game);
   pendingBanner = {
     appid: game ? game.bannerAppId || null : null,
     localPath: game ? game.bannerLocalPath || null : null
@@ -3267,6 +3298,7 @@ $('#btn-save-game').addEventListener('click', async () => {
   if (!name) return toast(t('Give the game a name.'));
 
   const launchMode = $('#game-launch-mode').value === 'injector' ? 'injector' : 'proxy';
+  const launcher = $('#game-launcher').value || 'auto';
 
   if (editingGameId) {
     const g = games.find((x) => x.id === editingGameId);
@@ -3280,6 +3312,7 @@ $('#btn-save-game').addEventListener('click', async () => {
     g.bannerAppId = pendingBanner.appid;
     g.bannerLocalPath = pendingBanner.localPath;
     g.launchMode = launchMode;
+    g.launcher = launcher;
     if (exeChanged) {
       g.detectedPath = null;
       // Chosen by a person: nothing should quietly re-resolve it afterwards.
@@ -3299,7 +3332,8 @@ $('#btn-save-game').addEventListener('click', async () => {
       name,
       bannerAppId: pendingBanner.appid,
       bannerLocalPath: pendingBanner.localPath,
-      launchMode
+      launchMode,
+      launcher
     });
   }
   await window.api.saveGames(games);

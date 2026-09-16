@@ -1023,7 +1023,10 @@ const FOREIGN_TOOLCHAINS = [
   { tool: 'DLSS5oneclick', files: ['nvngx_dlssnr.dll.dlss5oneclick', '!! EXTRACT ALL FILES TO GAME FOLDER !!.dlss5oneclick', 'Core/dlss5-feed.addon64', 'Core/renodx-dlss5.addon64', 'get_streamline.ps1', 'get_streamline.bat', 'get_streamline.cmd'], pattern: /\.dlss5oneclick$/i },
   { tool: 'DLSS5-Swapper', files: ['_DLSS5_Backup/manifest.json', 'renodx-dlss5.addon64', 'host64/renodx-dlss5.addon64', 'dlss5-feed-host64.exe'] },
   { tool: 'DLSSNR-Cost-Scaler', files: ['nvngx_dlssnr_proxy.dll'] },
-  { tool: 'a RenoDX DLSS 5 add-on', pattern: /^renodx-dlss.*\.addon(64|32)?$/i },
+  // Anywhere in the name, not only at its start: ReShade loads every .addon64 whatever it is called, and
+  // a renamed copy (SWTOR's "Xrenodx-dlss5.addon64", 2026-09-16) went unseen -- so its Streamline files
+  // were read as the game's own DLSS and Install replaced the ReShade that loaded it.
+  { tool: 'a RenoDX DLSS 5 add-on', pattern: /renodx-dlss.*\.addon(64|32)?$/i },
   // Deep Fried Chicken is not a rival installer like the ones above -- it is another neural add-on,
   // and a good one, which someone may be running on purpose. It is here because the clash with ours
   // is SILENT: its own documentation says never to install two neural add-ons, and that when it
@@ -1051,7 +1054,7 @@ const FOREIGN_REMOVALS = {
     manifest: '_DLSS5_Backup',
   },
   'DLSSNR-Cost-Scaler': { files: ['nvngx_dlssnr_proxy.dll'], patterns: [/cost[_ -]?scaler/i] },
-  'a RenoDX DLSS 5 add-on': { patterns: [/^renodx-dlss.*\.addon(64|32)?$/i, /^renodx.*\.ini$/i] },
+  'a RenoDX DLSS 5 add-on': { patterns: [/renodx-dlss.*\.addon(64|32)?$/i, /^renodx.*\.ini$/i] },
   // Only the three files Deep Fried Chicken ships. It places no backups and patches nothing, so
   // there is nothing to restore -- and the log it writes beside them goes too. Offered rather than
   // done: someone may be running it on purpose and want ours gone instead, which Remove already does.

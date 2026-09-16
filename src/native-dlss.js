@@ -183,9 +183,22 @@ function shipsNativeDlss(dir) {
   return shippedDlssPath(dir) !== null;
 }
 
+// A detection whose renderer cannot make a DLSS call: DirectX 8, 9 or 10, whether the game presents it
+// itself or through a Vulkan wrapper such as DXVK. DLSS needs D3D11, D3D12 or native Vulkan, so
+// Streamline or DLSS files beside such a game belong to a mod. A game that also links D3D11 or D3D12 is
+// not called legacy -- it may have a modern path.
+const LEGACY_APIS = ['dx8', 'dx9', 'dx10'];
+function rendererCannotCallDlss(detected) {
+  if (!detected) return false;
+  const apis = new Set([detected.api, ...(detected.apis || [])].filter(Boolean));
+  if (apis.has('dx11') || apis.has('dx12')) return false;
+  if (LEGACY_APIS.includes(detected.api)) return true;
+  return !!detected.vulkanWrapper && LEGACY_APIS.some((a) => apis.has(a));
+}
+
 function hasNativeDlss(dir) {
   if (isEmulatorDir(dir)) return false;
   return shipsNativeDlss(dir) || fs.existsSync(path.join(dir, 'nvngx_dlss.dll'));
 }
 
-module.exports = { shippedDlssPath, shipsNativeDlss, hasNativeDlss, installRoot, findInGameTree, isEmulatorDir };
+module.exports = { shippedDlssPath, shipsNativeDlss, hasNativeDlss, installRoot, findInGameTree, isEmulatorDir, rendererCannotCallDlss };

@@ -112,3 +112,28 @@ test('games:running answers for a whole library from one process listing', { ski
   assert.deepEqual(Object.keys(res.running).sort(), [mine, invented].sort());
   assert.deepEqual((await invoke('games:running', [])).running, {}, 'an empty library asks nothing');
 });
+
+test('a game with its own launcher starts through it, unless Edit says to run the exe directly', async () => {
+  // Star Wars: The Old Republic: swtor.exe in swtor\retailclient exits unless launcher.exe, two folders
+  // up, has signed the player in (user report, 2026-09-16).
+  const root = scratchDir('launch-launcher');
+  const launcher = fakeExe(root, 'launcher.exe');
+  const exe = fakeExe(path.join(root, 'swtor', 'retailclient'), 'swtor.exe');
+  const { invoke } = loadMain();
+
+  const auto = await invoke('game:launch', { exePath: exe, dryRun: true });
+  assert.equal(auto.ok, true, auto.error);
+  assert.equal(auto.via, 'launcher');
+  assert.equal(path.resolve(auto.launcher), path.resolve(launcher));
+  assert.equal(path.resolve(auto.target), path.resolve(exe), 'the game exe is still what is watched');
+
+  const direct = await invoke('game:launch', { exePath: exe, launcher: 'direct', dryRun: true });
+  assert.equal(direct.via, 'exe');
+
+  const found = await invoke('game:launcher', exe);
+  assert.equal(path.resolve(found.found), path.resolve(launcher));
+
+  const plain = scratchDir('launch-no-launcher');
+  const other = fakeExe(plain, 'Game.exe');
+  assert.equal((await invoke('game:launch', { exePath: other, dryRun: true })).via, 'exe');
+});

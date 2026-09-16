@@ -67,6 +67,13 @@
         <select id="game-exe-candidates" class="hidden"></select>
         <p id="game-exe-note" class="field-hint hidden"></p>
 
+        <label class="field-label" data-i18n>Launch through</label>
+        <div class="field-row">
+          <select id="game-launcher"></select>
+          <button id="btn-browse-launcher" class="btn btn-ghost" data-i18n>Choose launcher…</button>
+        </div>
+        <p class="field-hint" data-i18n>Some games will not start without their own launcher -- it signs you in and then starts the game. Launch and Game Help's "Launch and check" run it instead of the game exe, and still watch the game exe itself. Steam games always go through Steam.</p>
+
         <label class="field-label" data-i18n>Display name</label>
         <input id="game-name" type="text" data-i18n-placeholder placeholder="Game name" />
 

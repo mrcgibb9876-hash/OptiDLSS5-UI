@@ -2780,6 +2780,43 @@ ipcMain.handle('game:help-ai', async (evt, { exePath, detected, fixesTried = [] 
 // install root (the exe the store lists); the process that actually renders is the
 // <Project>-Win64-Shipping.exe under <Project>\Binaries\Win64, and that is what OptiScaler is
 // installed beside -- so that is what runs. Anything else runs as it is.
+// A game that will not start without its own launcher. Star Wars: The Old Republic's swtor.exe exits at
+// once unless launcher.exe -- two folders up -- has signed the player in and started it, so the card's
+// Launch and Game Help's "Launch and check" did nothing at all (user report, 2026-09-16). A launcher.exe
+// in the exe's folder or up to three above is taken as the game's own; Edit can pick another or say the
+// exe runs on its own. The running check still watches the game's exe, which the launcher starts.
+function findGameLauncher(exePath) {
+  let dir = path.dirname(path.resolve(exePath));
+  for (let up = 0; up <= 3; up++) {
+    let names = [];
+    try { names = fs.readdirSync(dir); } catch { names = []; }
+    const hit = names.find((n) => n.toLowerCase() === 'launcher.exe');
+    if (hit) {
+      const full = path.join(dir, hit);
+      if (full.toLowerCase() !== path.resolve(exePath).toLowerCase()) return full;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+// 'direct' = the game exe; an absolute path = that launcher; anything else (undefined, 'auto') = found.
+function resolveGameLauncher(exePath, choice) {
+  if (choice === 'direct') return null;
+  if (choice && choice !== 'auto') return fs.existsSync(choice) ? choice : null;
+  return findGameLauncher(exePath);
+}
+
+ipcMain.handle('game:launcher', (_evt, exePath) => {
+  try {
+    return { found: exePath && fs.existsSync(exePath) ? findGameLauncher(exePath) : null };
+  } catch {
+    return { found: null };
+  }
+});
+
 function launchTarget(exePath) {
   if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
   const resolved = resolveUnrealShippingExe(exePath);
@@ -2873,7 +2910,7 @@ async function startDetached(file, argv = [], { cwd, env } = {}) {
   return { elevated: true };
 }
 
-ipcMain.handle('game:launch', async (_evt, { exePath, dryRun = false } = {}) => {
+ipcMain.handle('game:launch', async (_evt, { exePath, launcher = 'auto', dryRun = false } = {}) => {
   try {
     const target = launchTarget(exePath);
     const dir = path.dirname(target);
@@ -2934,6 +2971,13 @@ ipcMain.handle('game:launch', async (_evt, { exePath, dryRun = false } = {}) => 
     if (steamAppId) {
       if (!dryRun) await shell.openExternal(`steam://rungameid/${steamAppId}`);
       return { ok: true, target, via: 'steam', steamAppId };
+    }
+    // A game with a launcher of its own starts through it (see findGameLauncher).
+    const gameLauncher = resolveGameLauncher(target, launcher);
+    if (gameLauncher) {
+      let launcherElevated = false;
+      if (!dryRun) ({ elevated: launcherElevated } = await startDetached(gameLauncher, [], { cwd: path.dirname(gameLauncher) }));
+      return { ok: true, target, launcher: gameLauncher, via: 'launcher', elevated: launcherElevated };
     }
     let elevated = false;
     if (!dryRun) {

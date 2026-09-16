@@ -200,8 +200,13 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts
   // plugin tree) -- evidence no deploy of ours can fake, so it wins over the markers. Otherwise
   // needsFeeder() is the inverse of hasNativeDlss() and flips the moment a Feeder or Luma
   // deploy places nvngx_dlss.dll -- hence the two markers.
-  const shipsDlss = nativeDlss.shipsNativeDlss(dir);
-  const shippedDlss = shipsDlss || (!feeder.needsFeeder(dir) && !feederDeployed && !lumaDeployed);
+  // Except where the game's own renderer cannot make a DLSS call at all: DirectX 8/9/10, including one
+  // presented through a DXVK wrapper. Streamline files beside such an exe belong to a DLSS 5 mod, not the
+  // game -- Star Wars: The Old Republic (DX9 via DXVK) was told it "ships its own DLSS" by a RenoDX
+  // DLSS 5 setup's sl.* files, and got an OptiScaler install its renderer never loads (2026-09-16).
+  const legacyRenderer = nativeDlss.rendererCannotCallDlss(detected);
+  const shipsDlss = !legacyRenderer && nativeDlss.shipsNativeDlss(dir);
+  const shippedDlss = shipsDlss || (!legacyRenderer && !feeder.needsFeeder(dir) && !feederDeployed && !lumaDeployed);
   // A Feeder on a game that ships DLSS: an older version of this app could not see DLSS kept
   // under an Unreal plugin folder and deployed it anyway. The two crash together.
   const feederMisdeployed = shipsDlss && feederDeployed;

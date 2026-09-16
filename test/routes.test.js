@@ -382,3 +382,20 @@ test('a Luma game defaults to DX11, and still takes a choice', () => {
   assert.equal(chosen.api, 'dx12', 'and the user can still say otherwise');
   assert.equal(chosen.apiOverride, 'dx12');
 });
+
+test('a DirectX 9 game through DXVK does not "ship DLSS" because a DLSS 5 mod put Streamline beside it', () => {
+  // Star Wars: The Old Republic, 2026-09-16: sl.* files from a RenoDX DLSS 5 setup (renamed
+  // Xrenodx-dlss5.addon64), D3D9.dll = DXVK. It was routed as native DLSS and got an OptiScaler its
+  // renderer never loads; the renamed add-on went unseen as another DLSS 5 toolchain.
+  const nativeDlss = require(path.join(REPO, 'src', 'native-dlss'));
+  const detect = require(path.join(REPO, 'src', 'detect'));
+  const dir = scratchDir('swtor');
+  for (const f of ['swtor.exe', 'sl.interposer.dll', 'sl.dlss_nr.dll', 'D3D9.dll', 'Xrenodx-dlss5.addon64']) write(dir, f, 'x');
+  const det = { api: 'vulkan', apis: ['vulkan', 'dx9'], bitness: 64, recommend: 'optiscaler', vulkanWrapper: { file: 'd3d9.dll', kind: 'DXVK' } };
+  assert.equal(nativeDlss.rendererCannotCallDlss(det), true);
+  assert.notEqual(route.recommendRoute(dir, path.join(dir, 'swtor.exe'), det, 'nvidia').route, 'optiscaler');
+  assert.deepEqual(detect.foreignToolchains(dir).map((f) => f.tool), ['a RenoDX DLSS 5 add-on']);
+
+  assert.equal(nativeDlss.rendererCannotCallDlss({ api: 'dx12', apis: ['dx12', 'dx9'] }), false, 'a modern path keeps native DLSS possible');
+  assert.equal(nativeDlss.rendererCannotCallDlss({ api: 'vulkan', apis: ['vulkan'] }), false, 'native Vulkan can call DLSS');
+});
