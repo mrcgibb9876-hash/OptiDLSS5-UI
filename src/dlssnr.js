@@ -55,6 +55,14 @@ const FIELDS = [
   // rewrote every swapchain's descriptor and put Monster Hunter: World in a title-barred window.
   { key: 'ForceBorderless', type: 'bool', default: false, group: 'Display', label: 'Borderless window',
     help: "Keeps the game in a borderless window that fills its monitor, whatever its own display setting says. Exclusive fullscreen is refused when the game asks for it; a game that already runs windowed or borderless is left exactly as it is.\n\nWhat needs it: Lossless Scaling, which cannot capture exclusive fullscreen (configuring it turns this on), and the pop-out panel, which Windows cannot draw over an exclusive-fullscreen game.\n\nThis changes the window, not the picture: the game keeps rendering at its own resolution and is scaled to the monitor. Only where OptiScaler sits inside the game's process with a DirectX swapchain -- greyed out on the 32-bit route and on OpenGL or Vulkan, where it has no hold on the window." },
+  // [DlssNr] BorderlessWidth / BorderlessHeight (engine v1.0.38). 0 is the monitor. Both must be set for
+  // either to count, which the engine enforces (Util::BorderlessSizeRequested); the help says so.
+  { key: 'BorderlessWidth', type: 'int', default: 0, min: 0, max: 7680, step: 1, group: 'Display',
+    label: 'Window width', dependsOn: { key: 'ForceBorderless', is: true },
+    help: "The borderless window's width in pixels; 0 (the default) means the monitor's full width. Set both width and height or neither -- one alone is ignored. Centred on the monitor.\n\nThe game is fitted into the window. Many games re-render at the window's size once they are windowed, so this then acts as a resolution; others keep their own render size and are scaled into it. Which you get is the game's own windowed-mode behaviour, not something this controls -- the frame-cost figure in this panel will tell you which happened.\n\nWith a size set, the window is also sized for a game that already runs windowed or borderless, which the switch above alone leaves untouched." },
+  { key: 'BorderlessHeight', type: 'int', default: 0, min: 0, max: 4320, step: 1, group: 'Display',
+    label: 'Window height', dependsOn: { key: 'ForceBorderless', is: true },
+    help: "The borderless window's height in pixels; 0 (the default) means the monitor's full height. Set both width and height or neither -- one alone is ignored. See Window width." },
 
   { key: 'LocalStructure', type: 'float', default: 1.0, min: 0, max: 1, step: 0.01, group: 'Global Controls',
     label: 'Structure Intensity', help: "The model's structure-synthesis strength across the whole frame." },

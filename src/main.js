@@ -1609,15 +1609,22 @@ ipcMain.handle('dlssnr:get', async (_evt, exePath) => {
     // On the 32-bit route OptiScaler is in the helper: the flag would restyle the helper's window --
     // the very one the Feeder casts into the game -- and leave the game exactly as it was. On OpenGL
     // and Vulkan there is no DXGI swapchain to intercept at all.
+    let borderlessReason = null;
     if (inHelper) {
-      forced.ForceBorderless = 'Not available on the 32-bit route: OptiScaler runs in the 64-bit helper beside the game, so it has no hold on the game\'s own window. Set Borderless or Windowed in the game\'s display settings.';
+      borderlessReason = 'Not available on the 32-bit route: OptiScaler runs in the 64-bit helper beside the game, so it has no hold on the game\'s own window. Set Borderless or Windowed in the game\'s display settings.';
     } else {
       let api = null;
       try { api = await resolveApi(dir, exePath); } catch { /* unknown api: offer the switch */ }
       // One string for both, not a template: the renderer translates the reason by exact text.
       if (api === 'opengl' || api === 'vulkan') {
-        forced.ForceBorderless = 'Not available on OpenGL or Vulkan: the borderless window is made by intercepting the game\'s DirectX swapchain, and this game has none. Set Borderless or Windowed in the game\'s display settings.';
+        borderlessReason = 'Not available on OpenGL or Vulkan: the borderless window is made by intercepting the game\'s DirectX swapchain, and this game has none. Set Borderless or Windowed in the game\'s display settings.';
       }
+    }
+    // The window size rides on the switch, so it is held off wherever the switch is.
+    if (borderlessReason) {
+      forced.ForceBorderless = borderlessReason;
+      forced.BorderlessWidth = borderlessReason;
+      forced.BorderlessHeight = borderlessReason;
     }
     return { ok: true, inHelper, iniPath, forced, fields: dlssnr.readSettings(iniPath) };
   } catch (error) {

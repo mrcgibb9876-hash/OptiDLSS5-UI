@@ -193,3 +193,32 @@ test('the borderless window is a switch of its own, written the way the engine r
   assert.ok(off.ok);
   assert.equal(getIniKey(fs.readFileSync(ini, 'utf8'), 'DlssNr', 'ForceBorderless'), 'auto');
 });
+
+test('the window size rides on the borderless switch and is written as the engine reads it', () => {
+  // [DlssNr] BorderlessWidth / BorderlessHeight (engine v1.0.38): 0 is the monitor; both or neither
+  // count, which the engine enforces. Greyed unless the switch is on, since it is meaningless alone.
+  const w = dlssnr.FIELDS.find((f) => f.key === 'BorderlessWidth');
+  const h = dlssnr.FIELDS.find((f) => f.key === 'BorderlessHeight');
+  for (const f of [w, h]) {
+    assert.ok(f, 'both fields exist');
+    assert.equal(f.type, 'int');
+    assert.equal(f.default, 0);
+    assert.equal(f.group, 'Display');
+    assert.deepEqual(f.dependsOn, { key: 'ForceBorderless', is: true });
+    assert.match(f.help, /both width and height or neither/i, 'the help states the both-or-neither rule');
+  }
+  assert.match(w.help, /not something this controls/, 'the help does not promise a render-resolution change');
+
+  const ini = freshIni('dlssnr-window-size');
+  assert.ok(dlssnr.writeSettings(ini, { ForceBorderless: true, BorderlessWidth: 1920, BorderlessHeight: 1080 }).ok);
+  const text = fs.readFileSync(ini, 'utf8');
+  assert.equal(getIniKey(text, 'DlssNr', 'BorderlessWidth'), '1920');
+  assert.equal(getIniKey(text, 'DlssNr', 'BorderlessHeight'), '1080');
+
+  // Out of range is clamped, as every other field is, and back to 0 is stored as auto.
+  assert.ok(dlssnr.writeSettings(ini, { BorderlessWidth: 99999 }).ok);
+  assert.equal(getIniKey(fs.readFileSync(ini, 'utf8'), 'DlssNr', 'BorderlessWidth'), '7680');
+  assert.ok(dlssnr.writeSettings(ini, { BorderlessWidth: 0, BorderlessHeight: 0 }).ok);
+  assert.equal(getIniKey(fs.readFileSync(ini, 'utf8'), 'DlssNr', 'BorderlessWidth'), 'auto');
+  assert.equal(getIniKey(fs.readFileSync(ini, 'utf8'), 'DlssNr', 'BorderlessHeight'), 'auto');
+});
