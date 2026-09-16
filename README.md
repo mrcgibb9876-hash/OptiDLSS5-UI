@@ -129,9 +129,16 @@ registered with Windows, and the controls write to `OptiScaler.ini`, which the e
 opens on whichever of your games is running. Settings has a switch for it, a box to rebind the key by pressing it,
 and a button to open it now.
 
-It is the app, not a Windows dialog: no title bar, drag it by its own top bar, the app's colours, accent and
-language, and the same **Dark / Light** theme (Settings, or the half-circle button in its bar — either switches
-both windows at once).
+It is not a Windows dialog and it is not styled like the manager: it is **the in-game panel, outside the game** —
+the same sections in the same order, the same rows with the same labels, drawn in the engine's own palette
+(sampled off NVIDIA's panel, and converted straight from the constants in `DlssNr_Menu.cpp`). No title bar; drag
+it by its top bar, resize it from any edge, and it comes back where you left it. Its **Light panel** and **Vendor
+colours** switches are `[DlssNr] LightTheme` and `VendorColours`, so the two panels always agree about how they
+look.
+
+What it does not carry is the handful of in-game rows that act on a frame being drawn right now — *Capture 8
+frames*, *Anchor here*, *Show Mask*, the frame-generation state readout. Those have no ini key to write, so a
+window outside the game has nothing to say for them.
 
 The one thing it cannot do is sit on top of a game in **exclusive fullscreen** — Windows will not composite
 another window over a game that owns the display. Run that game borderless or windowed (`[DlssNr] ForceBorderless`

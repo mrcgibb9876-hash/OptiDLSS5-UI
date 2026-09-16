@@ -78,3 +78,28 @@ test('rubbish in settings.json does not produce a window with NaN bounds', () =>
     for (const value of Object.values(bounds)) assert.ok(Number.isFinite(value), `${JSON.stringify(saved)} -> ${JSON.stringify(bounds)}`);
   }
 });
+
+// The window is frameless, so nothing about moving or resizing it is free: without an explicit drag
+// region it cannot be moved at all, and a button inside that region drags instead of clicking.
+// These read the files rather than the running window, which is weak, but the failure they guard
+// against is silent -- a panel that cannot be moved looks exactly like one that can.
+test('the panel is draggable by its title bar, and its buttons are not', () => {
+  const css = require('node:fs').readFileSync(path.join(REPO, 'src', 'renderer', 'panel.css'), 'utf8');
+  const title = css.slice(css.indexOf('.p-title {'), css.indexOf('.p-title h1'));
+  assert.match(title, /-webkit-app-region:\s*drag/, 'the title bar must be the drag handle');
+
+  const actions = css.slice(css.indexOf('.p-title-actions'));
+  assert.match(actions.slice(0, 200), /-webkit-app-region:\s*no-drag/, 'the buttons must opt out of it');
+});
+
+test('the window is created resizable, with a floor', () => {
+  const src = require('node:fs').readFileSync(path.join(REPO, 'src', 'panelwindow.js'), 'utf8');
+  const options = src.slice(src.indexOf('const win = new BrowserWindow('), src.indexOf('win.loadFile'));
+  assert.match(options, /resizable:\s*true/);
+  assert.match(options, /frame:\s*false/);
+  assert.match(options, /minWidth:\s*MIN_WIDTH/);
+  assert.match(options, /minHeight:\s*MIN_HEIGHT/);
+  // Moving or resizing it has to be remembered, or it comes back in the wrong place every time.
+  assert.match(src, /win\.on\('moved'/);
+  assert.match(src, /win\.on\('resized'/);
+});

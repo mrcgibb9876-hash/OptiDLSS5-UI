@@ -1,101 +1,87 @@
 // The pop-out DLSS 5 panel's renderer.
 //
-// It draws the same controls as the Edit dialog's DLSS 5 tab, from the same source -- dlssnr:get
-// and dlssnr:set -- so what a setting means, what its default is and how "auto" round-trips are
-// defined once, in src/dlssnr.js. What differs is only the window it lives in.
+// This window is the in-game DLSS 5 Developer Controls panel, outside the game: the same sections in
+// the same order, the same rows with the same labels, drawn in the engine's own palette (panel.css).
+// The two are the same panel in two places, so a user who learns one does not have to relearn the
+// other -- and the settings themselves are the same file, because every row here goes through
+// dlssnr:get / dlssnr:set onto the game's OptiScaler.ini, which the engine re-reads within a second.
 //
-// It is a separate file from renderer.js because that one is bound to the Edit dialog's element
-// ids and its module state, and loading a 3000-line file to show one dialog's worth of rows would
-// pull in the grid, the installer and the updater with it. Anything shared here is shared through
-// style.css and the locales, which is where sharing costs nothing.
+// What is deliberately not here: the in-game panel's live actions -- Capture 8 frames, Anchor here,
+// Show Mask, Retry, the frame-generation state readout. Those act on a frame being drawn right now,
+// or report what the engine is doing; there is no ini key to write for them, so a window outside the
+// process has nothing to say.
 
 const $ = (sel) => document.querySelector(sel);
 
 let targets = [];
-let current = null;   // { name, exePath, detectedPath, running, installed }
+let current = null;
 let fields = [];
 let forced = {};
-let isEmulator = false;
 let settings = {};
+let light = true;   // the engine's own default is the light panel
+let amd = false;
 
-// ── The app's own chrome ────────────────────────────────────────────────────────────────────────
-//
-// Language, theme and the vendor accent all come from the same settings.json the main window uses,
-// so the panel is never a different-looking app from the one that opened it.
+const valueOf = (key) => {
+  const f = fields.find((x) => x.key === key);
+  return f ? (f.value === null ? f.default : f.value) : null;
+};
+
+// ── Chrome ──────────────────────────────────────────────────────────────────────────────────────
 
 function applyLanguage() {
-  const wanted = settings.language && settings.language !== 'auto' ? settings.language : I18N.detect();
-  I18N.setLocale(wanted);
+  I18N.setLocale(settings.language && settings.language !== 'auto' ? settings.language : I18N.detect());
 }
 
-function applyTheme() {
-  const light = settings.theme === 'light';
-  document.body.classList.toggle('theme-light', light);
-  document.documentElement.classList.toggle('theme-light', light);
+// The panel's own look is a DLSS 5 setting like any other: [DlssNr] LightTheme and VendorColours are
+// what the in-game panel reads, so this window reads them too and the two always agree.
+function applyPalette() {
+  const themeField = fields.find((f) => f.key === 'LightTheme');
+  const vendorField = fields.find((f) => f.key === 'VendorColours');
+  if (themeField) light = themeField.value === null ? themeField.default : themeField.value;
+  const vendor = vendorField ? (vendorField.value === null ? vendorField.default : vendorField.value) : true;
+  document.body.classList.toggle('is-light', !!light);
+  document.body.classList.toggle('is-amd', !!vendor && amd);
+  $('#p-theme').textContent = light ? t('Dark') : t('Light');
 }
 
-async function applyVendor() {
-  try {
-    const gpu = await window.api.gpuInfo();
-    document.body.classList.toggle('vendor-amd', !!gpu && gpu.vendor === 'amd');
-  } catch {
-    // The accent is cosmetic; a panel in the default green beats no panel.
-  }
-}
-
-// One floating tip for every [data-tip] element, the same behaviour as the main window: positioned
-// above, flipped below when there is no room, kept inside the window either way. Every row's help
-// text is on its label, which is the only place the long explanations fit in a window this size.
 let tipEl = null;
 function showTip(target) {
   const text = target.getAttribute('data-tip');
   if (!text) return;
   if (!tipEl) {
     tipEl = document.createElement('div');
-    tipEl.className = 'floating-tip';
+    tipEl.className = 'p-tip';
     tipEl.setAttribute('role', 'tooltip');
     document.body.appendChild(tipEl);
   }
   tipEl.textContent = text;
   tipEl.classList.remove('show');
   const r = target.getBoundingClientRect();
-  const w = tipEl.offsetWidth;
-  const h = tipEl.offsetHeight;
   const margin = 8;
-  let left = Math.max(margin, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - margin));
-  let top = r.top - h - margin;
+  const left = Math.max(margin, Math.min(r.left + r.width / 2 - tipEl.offsetWidth / 2, window.innerWidth - tipEl.offsetWidth - margin));
+  let top = r.top - tipEl.offsetHeight - margin;
   if (top < margin) top = r.bottom + margin;
   tipEl.style.left = `${Math.round(left)}px`;
   tipEl.style.top = `${Math.round(top)}px`;
   tipEl.classList.add('show');
 }
-function hideTip() { if (tipEl) tipEl.classList.remove('show'); }
+const hideTip = () => { if (tipEl) tipEl.classList.remove('show'); };
 document.addEventListener('mouseover', (e) => { const el = e.target.closest && e.target.closest('[data-tip]'); if (el) showTip(el); });
 document.addEventListener('mouseout', (e) => {
   const el = e.target.closest && e.target.closest('[data-tip]');
   if (el && !(e.relatedTarget && el.contains(e.relatedTarget))) hideTip();
 });
-document.addEventListener('focusin', (e) => { const el = e.target.closest && e.target.closest('[data-tip]'); if (el) showTip(el); });
-document.addEventListener('focusout', hideTip);
 document.addEventListener('click', hideTip, true);
 window.addEventListener('scroll', hideTip, true);
 
-function setStatus(text, kind) {
-  const el = $('#panel-status');
+function setStatus(text, accent) {
+  const el = $('#p-status');
   el.textContent = text;
-  el.className = `status-line${kind ? ' ' + kind : ''}`;
+  el.className = `p-note${accent ? ' is-accent' : ''}`;
 }
 
-// ── The rows ────────────────────────────────────────────────────────────────────────────────────
+// ── Rows ────────────────────────────────────────────────────────────────────────────────────────
 
-function valueOf(key) {
-  const field = fields.find((f) => f.key === key);
-  if (!field) return null;
-  return field.value === null ? field.default : field.value;
-}
-
-// The same three forms the field data uses. A field whose condition is not met is greyed rather
-// than hidden: a control that vanishes leaves the reader wondering whether they imagined it.
 function dependencyMet(field) {
   const d = field.dependsOn;
   if (!d) return true;
@@ -103,257 +89,212 @@ function dependencyMet(field) {
   if (d.is !== undefined) return v === d.is;
   if (d.atLeast !== undefined) return Number(v) >= d.atLeast;
   if (d.above !== undefined) return Number(v) > d.above;
+  if (d.below !== undefined) return Number(v) < d.below;
   return true;
 }
 
-function displayPixels() {
-  const ratio = window.devicePixelRatio || 1;
-  return { width: Math.round(window.screen.width * ratio), height: Math.round(window.screen.height * ratio) };
+// Paper white runs 0.25 to 2000: linear, its whole usable range would be the first pixel of the
+// track. The engine puts those sliders on a log scale and so does this.
+const toSlider = (f, v) => (f.log ? Math.log(v / f.min) / Math.log(f.max / f.min) : (v - f.min) / (f.max - f.min));
+const fromSlider = (f, t) => (f.log ? f.min * Math.pow(f.max / f.min, t) : f.min + t * (f.max - f.min));
+
+function formatNumber(field, value) {
+  if (field.percent) return `${Math.round(value * 100)}%`;
+  if (field.type === 'int') return String(Math.round(value));
+  if (field.log) return `${Number(value).toFixed(2)}x`;
+  return Number(value).toFixed(2);
 }
 
-// What the settings above cost, in the only terms that mean anything while a game is running: the
-// size the model actually works at, and that as a share of what it would cost at display size.
-// Model resolution is squared (it is an area) and each extra pass costs another whole run of the
-// model, which is what the engine's own timings show.
-function costNote() {
-  const scale = Number(valueOf('WorkingScale'));
-  const passes = Math.max(1, Math.round(Number(valueOf('Passes')) || 1));
-  if (!Number.isFinite(scale) || scale <= 0) return '';
-  const display = displayPixels();
-  const size = `${Math.round(display.width * scale)}x${Math.round(display.height * scale)}`;
-  const pct = Math.round(scale * scale * passes * 100);
-  return passes > 1
-    ? t('Model works at {size}, {passes} passes -- about {pct}% of the cost of one pass at display resolution.', { size, passes, pct })
-    : t('Model works at {size} -- about {pct}% of the cost at display resolution.', { size, pct });
+function row(field, cls) {
+  const el = document.createElement('div');
+  el.className = `p-row${cls ? ' ' + cls : ''}${field.caps ? ' is-caps' : ''}`;
+  return el;
 }
 
-// CSS cannot read an input's value, so the filled part of a slider's track is a percentage this
-// sets on the element (see input[type="range"] in style.css).
-function paintRange(input) {
-  const min = Number(input.min);
-  const max = Number(input.max);
-  const pct = max > min ? ((Number(input.value) - min) / (max - min)) * 100 : 0;
-  input.style.setProperty('--fill', `${Math.max(0, Math.min(100, pct)).toFixed(1)}%`);
+function helpMarker(text) {
+  const el = document.createElement('span');
+  el.className = 'p-help';
+  el.textContent = '(?)';
+  el.setAttribute('data-tip', text);
+  return el;
 }
 
 function renderFields() {
-  const host = $('#panel-fields');
+  const host = $('#p-fields');
   host.innerHTML = '';
   if (fields.length === 0) return;
 
-  for (const groupName of [...new Set(fields.map((f) => f.group))]) {
-    const head = document.createElement('div');
-    head.className = 'field-label dlssnr-group';
-    head.textContent = t(groupName);
-    host.appendChild(head);
+  for (const group of [...new Set(fields.map((f) => f.group))]) {
+    const cap = document.createElement('div');
+    cap.className = 'p-caption';
+    cap.textContent = t(group);
+    host.appendChild(cap);
 
-    for (const field of fields.filter((f) => f.group === groupName)) {
-      const row = document.createElement('div');
-      row.className = 'dlssnr-row';
-      const heldReason = forced[field.key] || null;
-      const met = dependencyMet(field) && !heldReason;
-      row.classList.toggle('dlssnr-inactive', !met);
-
-      const label = document.createElement('label');
-      label.className = 'dlssnr-label has-tip';
-      label.textContent = t(field.label);
-      label.setAttribute('data-tip', heldReason ? t(heldReason) : t(field.help));
-      row.appendChild(label);
-
+    for (const field of fields.filter((f) => f.group === group)) {
+      const held = forced[field.key] || null;
+      const met = dependencyMet(field) && !held;
       const shown = field.value === null ? field.default : field.value;
-      let input;
+
+      const label = document.createElement('span');
+      label.className = 'p-row-label';
+      label.textContent = t(field.label);
+
+      const ctl = document.createElement('span');
+      ctl.className = 'p-row-ctl';
+
+      const value = document.createElement('span');
+      value.className = 'p-row-value';
+
+      let el;
 
       if (field.type === 'bool') {
-        input = document.createElement('select');
-        for (const [value, text] of [
-          ['auto', t('Default ({state})', { state: field.default ? t('on') : t('off') })],
-          ['true', t('On')],
-          ['false', t('Off')],
-        ]) {
-          const o = document.createElement('option');
-          o.value = value;
-          o.textContent = text;
-          input.appendChild(o);
+        el = row(field, 'is-check');
+        const box = document.createElement('button');
+        box.className = `p-check${shown ? ' on' : ''}`;
+        box.disabled = !met;
+        box.addEventListener('click', () => apply(field.key, !shown));
+        ctl.appendChild(box);
+        value.textContent = held ? t('held off') : field.value === null ? t('default') : '';
+        el.append(ctl, label, value);
+      } else if (field.type === 'enum' && field.segmented) {
+        // The Models row: one pill per model across the whole row, the selected one filled with the
+        // accent. No label column -- the section caption above it already says Models, and the
+        // engine gives the pills the full row width so four model names fit without being cut.
+        el = row(field, 'is-seg');
+        const seg = document.createElement('span');
+        seg.className = 'p-seg';
+        for (const [v, text] of field.options || []) {
+          const b = document.createElement('button');
+          b.textContent = t(text);
+          b.disabled = !met;
+          b.setAttribute('data-tip', t(field.help));
+          if (String(shown) === String(v)) b.classList.add('on');
+          b.addEventListener('click', () => apply(field.key, v));
+          seg.appendChild(b);
         }
-        input.value = field.value === null ? 'auto' : String(field.value);
+        ctl.appendChild(seg);
+        el.append(ctl);
       } else if (field.type === 'enum') {
-        input = document.createElement('select');
+        el = row(field);
+        const sel = document.createElement('select');
+        sel.className = 'p-select';
+        sel.disabled = !met;
         const def = document.createElement('option');
         def.value = 'auto';
         const defOption = (field.options || []).find(([v]) => v === field.default);
         def.textContent = field.default === null
           ? t('Default (follow pass 1)')
           : t('Default ({state})', { state: defOption ? t(defOption[1]) : String(field.default) });
-        input.appendChild(def);
-        for (const [value, text] of field.options || []) {
+        sel.appendChild(def);
+        for (const [v, text] of field.options || []) {
           const o = document.createElement('option');
-          o.value = String(value);
+          o.value = String(v);
           o.textContent = t(text);
-          input.appendChild(o);
+          sel.appendChild(o);
         }
-        input.value = field.value === null ? 'auto' : String(field.value);
+        sel.value = field.value === null ? 'auto' : String(field.value);
+        sel.addEventListener('change', () => apply(field.key, sel.value === 'auto' ? null : sel.value));
+        ctl.appendChild(sel);
+        el.append(label, ctl, value);
       } else {
-        // Numbers get a slider and a readout, with "Default" as its own button rather than a magic
-        // position on the track -- auto is a state, not a value. Same as the Edit dialog.
-        input = document.createElement('input');
-        input.type = 'range';
-        input.min = String(field.min);
-        input.max = String(field.max);
-        input.step = String(field.step || (field.type === 'int' ? 1 : 0.05));
-        input.value = String(shown);
-        paintRange(input);
-      }
+        el = row(field);
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.className = 'p-slider';
+        slider.min = '0';
+        slider.max = '1000';
+        slider.step = '1';
+        slider.disabled = !met;
+        slider.value = String(Math.round(toSlider(field, Number(shown)) * 1000));
+        slider.style.setProperty('--fill', `${(Number(slider.value) / 10).toFixed(1)}%`);
+        value.textContent = held ? t('held off') : formatNumber(field, shown);
 
-      input.className = 'dlssnr-input';
-      input.disabled = !met;
-      row.appendChild(input);
+        const live = () => {
+          const v = fromSlider(field, Number(slider.value) / 1000);
+          slider.style.setProperty('--fill', `${(Number(slider.value) / 10).toFixed(1)}%`);
+          value.textContent = formatNumber(field, field.type === 'int' ? Math.round(v) : v);
+          return v;
+        };
+        slider.addEventListener('input', live);
+        // Applied when the handle is let go, not while it is moving -- the engine does the same,
+        // because every move would otherwise rewrite the ini and rebuild the feature.
+        slider.addEventListener('change', () => {
+          const v = fromSlider(field, Number(slider.value) / 1000);
+          apply(field.key, field.type === 'int' ? Math.round(v) : Number(v.toFixed(4)));
+        });
+        ctl.appendChild(slider);
 
-      const readout = document.createElement('span');
-      readout.className = 'dlssnr-readout';
-      readout.textContent = heldReason
-        ? t('held off')
-        : field.type === 'bool' || field.type === 'enum'
-          ? (field.value === null ? t('default') : '')
-          : (field.value === null ? t('{n} (default)', { n: shown }) : String(shown));
-      row.appendChild(readout);
-
-      if (field.type === 'float' || field.type === 'int') {
         const reset = document.createElement('button');
-        reset.className = 'btn btn-ghost btn-small';
-        reset.textContent = t('Default');
-        reset.disabled = !met;
+        reset.className = 'p-small';
+        reset.textContent = t('Reset');
+        reset.disabled = !met || field.value === null;
         reset.addEventListener('click', () => apply(field.key, null));
-        row.appendChild(reset);
-        input.addEventListener('input', () => { readout.textContent = String(input.value); paintRange(input); });
-        input.addEventListener('change', () => apply(field.key, Number(input.value)));
-      } else {
-        input.addEventListener('change', () => apply(field.key, input.value === 'auto' ? null : input.value));
+
+        el.append(label, ctl, value, reset);
       }
 
-      host.appendChild(row);
-    }
-
-    // The cost readout belongs with the two controls it reads, not at the bottom of the window.
-    if (groupName === 'Cost') {
-      const note = document.createElement('div');
-      note.className = 'status-line panel-cost';
-      note.textContent = costNote();
-      host.appendChild(note);
+      el.classList.toggle('is-off', !met);
+      el.appendChild(helpMarker(held ? t(held) : t(field.help)));
+      host.appendChild(el);
     }
   }
 }
 
-// An emulator hands DLSS 5 its whole window, so the model works at display resolution whatever the
-// emulator renders at internally. This names Model resolution the way that user thinks of it.
-const EMULATOR_MODEL_HEIGHTS = [2160, 1800, 1440, 1080, 900, 720];
-
-function renderEmulator() {
-  $('#panel-emulator').classList.toggle('hidden', !isEmulator);
-  if (!isEmulator) return;
-
-  const select = $('#panel-emulator-res');
-  const display = displayPixels();
-  const scale = Number(valueOf('WorkingScale')) || 1;
-  const sizeAt = (s) => `${Math.round(display.width * s)}x${Math.round(display.height * s)}`;
-
-  select.innerHTML = '';
-  const add = (value, text) => {
-    const o = document.createElement('option');
-    o.value = value;
-    o.textContent = text;
-    select.appendChild(o);
-  };
-  add('1', t('Display resolution ({size}) -- default', { size: `${display.width}x${display.height}` }));
-  for (const h of EMULATOR_MODEL_HEIGHTS) {
-    const s = h / display.height;
-    if (s >= 0.999 || s < 0.25) continue;
-    add(String(Math.round(s * 100) / 100), t('{h}p ({size}, {pct}% of the work area)', { h, size: sizeAt(s), pct: Math.round(s * 100) }));
-  }
-  const currentScale = String(Math.round(scale * 100) / 100);
-  if (![...select.options].some((o) => o.value === currentScale)) {
-    add(currentScale, t('Custom: {pct}% ({size})', { pct: Math.round(scale * 100), size: sizeAt(scale) }));
-  }
-  select.value = currentScale;
-
-  $('#panel-emulator-note').textContent = scale < 0.999
-    ? t('The model works at {size}: about {pct}% of the display-resolution cost.', { size: sizeAt(scale), pct: Math.round(scale * scale * 100) })
-    : '';
-  select.onchange = () => apply('WorkingScale', Number(select.value) >= 0.999 ? null : Number(select.value));
-}
-
-function render() {
-  renderEmulator();
-  renderFields();
-}
-
-// The engine re-reads the ini while the game runs, so a change lands within about a second. That is
-// what this window is for, and why its wording differs from the Edit dialog's "next time it starts".
 async function apply(key, value) {
   if (!current) return;
   const res = await window.api.dlssNrSet(current.exePath, { [key]: value });
   if (!res || !res.ok) {
-    setStatus(t('Could not save: {error}', { error: (res && res.error) || t('unknown') }), 'status-bad');
+    setStatus(t('Could not save: {error}', { error: (res && res.error) || t('unknown') }));
     return;
   }
   fields = res.fields;
+  applyPalette();
   setStatus(res.written.length
     ? (current.running ? t('Saved. A running game picks it up within a second.') : t('Saved. Applies the next time the game starts.'))
-    : t('Nothing to change.'));
-  render();
+    : t('Nothing to change.'), true);
+  renderFields();
 }
 
 async function loadGame(exePath) {
   current = targets.find((g) => g.exePath === exePath) || null;
   fields = [];
   forced = {};
-  isEmulator = false;
-  $('#panel-helper-note').classList.add('hidden');
 
   if (!current) {
-    render();
+    renderFields();
     setStatus(t('Pick a game.'));
     return;
   }
 
   const res = await window.api.dlssNrGet(current.exePath);
   if (!res || !res.ok) {
-    render();
+    renderFields();
     setStatus(res && res.error === 'not-installed'
       ? t('OptiScaler is not installed for this game yet.')
-      : t('Could not read the settings: {error}', { error: (res && res.error) || t('unknown') }), 'status-bad');
+      : t('Could not read the settings: {error}', { error: (res && res.error) || t('unknown') }));
     return;
   }
 
   fields = res.fields || [];
   forced = res.forced || {};
-  // inHelper means the ini being edited is the 64-bit helper's: the 32-bit case, and exactly the one
-  // where the in-game panel is a picture of a panel rather than a panel.
-  $('#panel-helper-note').classList.toggle('hidden', !res.inHelper);
-
-  try {
-    const route = await window.api.gameRoute(current.exePath, current.detectedPath);
-    isEmulator = !!(route && route.emulator);
-  } catch {
-    // No route means no emulator block; the sliders below still work.
-  }
-
-  render();
-  setStatus(current.running
-    ? t('Game is running. Changes land within a second.')
-    : t('Game is not running. Changes apply when it starts.'));
+  applyPalette();
+  renderFields();
+  setStatus(res.inHelper
+    ? t('Editing the 64-bit helper this 32-bit game uses.')
+    : current.running ? t('Game is running. Changes land within a second.') : t('Game is not running. Changes apply when it starts.'));
 }
 
 async function refreshTargets() {
   const res = await window.api.panelTargets();
   targets = (res && res.ok && Array.isArray(res.games)) ? res.games : [];
 
-  const select = $('#panel-game');
+  const select = $('#p-game');
   const previous = current ? current.exePath : null;
   select.innerHTML = '';
 
   if (targets.length === 0) {
     setStatus(t('No games added yet.'));
-    render();
+    renderFields();
     return;
   }
 
@@ -364,9 +305,6 @@ async function refreshTargets() {
     select.appendChild(o);
   }
 
-  // A running game wins, because that is the one being tuned; otherwise whatever was open before,
-  // otherwise the first game that has anything to edit. Re-picked on every open, so the panel
-  // follows the session rather than whatever was showing when it was last put away.
   const running = targets.find((g) => g.running);
   const keep = previous && targets.some((g) => g.exePath === previous) ? previous : null;
   const installed = targets.find((g) => g.installed);
@@ -375,64 +313,33 @@ async function refreshTargets() {
   await loadGame(chosen);
 }
 
-$('#panel-game').addEventListener('change', (e) => loadGame(e.target.value));
-$('#panel-close').addEventListener('click', () => window.api.panelClose());
+$('#p-game').addEventListener('change', (e) => loadGame(e.target.value));
+$('#p-close').addEventListener('click', () => window.api.panelClose());
+// Writes [DlssNr] LightTheme, so the in-game panel changes with it.
+$('#p-theme').addEventListener('click', () => apply('LightTheme', !light));
 
-// The theme is one switch for the whole app: saving it here is what the main window reads too, so
-// the two never disagree about which theme this app is in.
-$('#panel-theme').addEventListener('click', async () => {
-  settings.theme = settings.theme === 'light' ? 'dark' : 'light';
-  applyTheme();
-  await window.api.saveSettings(settings);
-});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.api.panelClose(); });
 
-$('#panel-reset').addEventListener('click', async () => {
-  if (!current || fields.length === 0) return;
-  const all = {};
-  for (const f of fields) all[f.key] = null;
-  const res = await window.api.dlssNrSet(current.exePath, all);
-  if (!res || !res.ok) {
-    setStatus(t('Could not save: {error}', { error: (res && res.error) || t('unknown') }), 'status-bad');
-    return;
-  }
-  fields = res.fields;
-  setStatus(current.running
-    ? t('Everything back to default. A running game picks it up within a second.')
-    : t('Everything back to default. Applies the next time the game starts.'));
-  render();
-});
+function applyStaticTips() {
+  for (const el of document.querySelectorAll('[data-tip-key]')) el.setAttribute('data-tip', t(el.getAttribute('data-tip-key')));
+}
 
-// Escape closes, matching every other dismissible surface in this app.
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') window.api.panelClose();
-});
-
-// Re-read on every open rather than only at startup: which game is running, what its ini says, and
-// which theme and language the app is in are all likely to have changed since it was put away.
-window.api.onPanelOpened(async () => {
+async function reload() {
   const data = await window.api.loadData();
   settings = data.settings || {};
   applyLanguage();
-  applyTheme();
   I18N.applyStatic();
+  applyStaticTips();
   await refreshTargets();
-});
+}
 
-// The main window's Settings can change the theme or the language while the panel is open.
-window.api.onSettingsChanged((next) => {
-  settings = next || {};
-  applyLanguage();
-  applyTheme();
-  I18N.applyStatic();
-  render();
-});
+window.api.onPanelOpened(() => reload());
+window.api.onSettingsChanged((next) => { settings = next || {}; applyLanguage(); I18N.applyStatic(); applyStaticTips(); renderFields(); });
 
 (async () => {
-  const data = await window.api.loadData();
-  settings = data.settings || {};
-  applyLanguage();
-  applyTheme();
-  I18N.applyStatic();
-  await applyVendor();
-  await refreshTargets();
+  try {
+    const gpu = await window.api.gpuInfo();
+    amd = !!gpu && gpu.vendor === 'amd';
+  } catch { amd = false; }
+  await reload();
 })();

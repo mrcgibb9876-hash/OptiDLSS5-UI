@@ -1612,6 +1612,7 @@ function dlssNrDependencyMet(field) {
   if (d.is !== undefined) return v === d.is;
   if (d.atLeast !== undefined) return Number(v) >= d.atLeast;
   if (d.above !== undefined) return Number(v) > d.above;
+  if (d.below !== undefined) return Number(v) < d.below;
   return true;
 }
 
@@ -1695,6 +1696,19 @@ function paintRange(input) {
   input.style.setProperty('--fill', `${Math.max(0, Math.min(100, pct)).toFixed(1)}%`);
 }
 
+// Paper white runs 0.25 to 2000. On a linear track its whole usable range is the first pixel, so
+// those fields carry log: true and the slider is a 0..1000 position mapped onto the range instead
+// -- the same thing the in-game panel does with them.
+const sliderPos = (f, v) => Math.round((f.log ? Math.log(v / f.min) / Math.log(f.max / f.min) : (v - f.min) / (f.max - f.min)) * 1000);
+const sliderVal = (f, pos) => (f.log ? f.min * Math.pow(f.max / f.min, pos / 1000) : f.min + (pos / 1000) * (f.max - f.min));
+
+function showNumber(field, value) {
+  if (field.percent) return `${Math.round(value * 100)}%`;
+  if (field.type === 'int') return String(Math.round(value));
+  if (field.log) return `${Number(value).toFixed(2)}x`;
+  return String(Number(Number(value).toFixed(4)));
+}
+
 function renderDlssNrFields(game) {
   renderDlssNrEmulator(game);
   const host = $('#game-dlssnr-fields');
@@ -1745,10 +1759,10 @@ function renderDlssNrFields(game) {
         // magic position on the track -- auto is a state, not a value.
         input = document.createElement('input');
         input.type = 'range';
-        input.min = String(field.min);
-        input.max = String(field.max);
-        input.step = String(field.step || (field.type === 'int' ? 1 : 0.05));
-        input.value = String(shown);
+        input.min = '0';
+        input.max = '1000';
+        input.step = '1';
+        input.value = String(sliderPos(field, Number(shown)));
         paintRange(input);
       }
       input.className = 'dlssnr-input';
@@ -1760,7 +1774,7 @@ function renderDlssNrFields(game) {
       const describe = () => {
         if (heldReason) return t('held off');
         if (field.type === 'bool' || field.type === 'enum') return field.value === null ? t('default') : '';
-        return field.value === null ? t('{n} (default)', { n: shown }) : String(shown);
+        return field.value === null ? t('{n} (default)', { n: showNumber(field, shown) }) : showNumber(field, shown);
       };
       readout.textContent = describe();
       row.appendChild(readout);
@@ -1772,8 +1786,11 @@ function renderDlssNrFields(game) {
         reset.disabled = !met;
         reset.addEventListener('click', () => applyDlssNr(game, field.key, null));
         row.appendChild(reset);
-        input.addEventListener('input', () => { readout.textContent = String(input.value); paintRange(input); });
-        input.addEventListener('change', () => applyDlssNr(game, field.key, Number(input.value)));
+        input.addEventListener('input', () => { readout.textContent = showNumber(field, sliderVal(field, Number(input.value))); paintRange(input); });
+        input.addEventListener('change', () => {
+          const v = sliderVal(field, Number(input.value));
+          applyDlssNr(game, field.key, field.type === 'int' ? Math.round(v) : Number(v.toFixed(4)));
+        });
       } else {
         input.addEventListener('change', () => applyDlssNr(game, field.key, input.value === 'auto' ? null : input.value));
       }

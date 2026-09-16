@@ -2,48 +2,29 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>DLSS 5</title>
-<link rel="stylesheet" href="style.css" />
+<title>DLSS 5 Developer Controls</title>
 <link rel="stylesheet" href="panel.css" />
 </head>
-<body class="panel-body">
-  <!-- The whole bar drags the window: it is frameless, so this is the title bar. It is the app's own
-       topbar, same colours and same brand mark, so the panel reads as this app and not as a stray
-       Windows window. The buttons opt back out of the drag region or they would drag, not click. -->
-  <header class="topbar panel-bar">
-    <div class="brand">
-      <img class="brand-mark" src="icon.png" alt="" />
-      <span class="brand-name">DLSS 5</span>
-    </div>
-    <div class="topbar-actions panel-bar-actions">
-      <button id="panel-theme" class="btn btn-ghost btn-small btn-icon" data-i18n-title title="Light or dark" aria-label="Light or dark"><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M8 1.2a6.8 6.8 0 1 0 0 13.6A6.8 6.8 0 0 0 8 1.2zm0 1.4v10.8a5.4 5.4 0 0 1 0-10.8z"/></svg></button>
-      <button id="panel-close" class="btn btn-ghost btn-small btn-icon" data-i18n-title title="Close (the hotkey reopens it)" aria-label="Close"><svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M4 4l8 8M12 4l-8 8"/></svg></button>
+<body class="dlss5">
+  <!-- The title row is the drag handle: the window is frameless, so this is its title bar. The
+       buttons opt back out, or they would drag instead of click. Every edge resizes it (Windows
+       gives a frameless resizable window its own borders). -->
+  <header class="p-title">
+    <h1 data-i18n>DLSS 5 Developer Controls</h1>
+    <span class="p-help" data-tip-key="Drag the title bar to move this window, or drag any edge or corner to resize it. Where it is and how big it is are remembered.">(?)</span>
+    <div class="p-title-actions">
+      <button id="p-theme" class="p-small" data-i18n>Light</button>
+      <button id="p-close" class="p-close" data-tip-key="Close the panel. Its key opens it again.">X</button>
     </div>
   </header>
 
-  <div class="panel-scroll">
-    <label class="field-label" data-i18n>Game</label>
-    <div class="field-row">
-      <select id="panel-game"></select>
+  <div class="p-scroll">
+    <div class="p-row">
+      <span class="p-row-label" data-i18n>Game</span>
+      <span class="p-row-ctl"><select id="p-game" class="p-select"></select></span>
     </div>
-    <div id="panel-status" class="status-line"></div>
-    <p id="panel-helper-note" class="field-hint hidden" data-i18n><strong>This game runs the 32-bit route</strong>, so these are read from and written to host64\OptiScaler.ini -- the copy the helper process actually loads. That is also why the panel never appears over the game.</p>
-
-    <!-- Emulators only: the model's resolution named as a resolution, the way an RPCS3 user thinks
-         of it. Hidden for everything else, exactly as in the Edit dialog. -->
-    <div id="panel-emulator" class="field-subblock hidden">
-      <label class="field-label" data-i18n>Emulator: DLSS 5 resolution</label>
-      <div class="field-row">
-        <select id="panel-emulator-res"></select>
-      </div>
-      <span id="panel-emulator-note" class="status-line"></span>
-    </div>
-
-    <div id="panel-fields"></div>
-
-    <div class="field-row panel-footer">
-      <button id="panel-reset" class="btn btn-ghost" data-i18n>Reset all to default</button>
-    </div>
+    <div id="p-status" class="p-note"></div>
+    <div id="p-fields"></div>
   </div>
 
   <script src="i18n.js"></script>
