@@ -111,6 +111,26 @@ function dependencyMet(field) {
 const toSlider = (f, v) => (f.log ? Math.log(v / f.min) / Math.log(f.max / f.min) : (v - f.min) / (f.max - f.min));
 const fromSlider = (f, t) => (f.log ? f.min * Math.pow(f.max / f.min, t) : f.min + t * (f.max - f.min));
 
+// Keyboard stepping. The sliders are positioned on a 0..1000 scale so a log range can be resolved
+// at all, which means the browser's own arrow-key step is a thousandth of the range -- 0.002 of a
+// Model pass, 0.175% of Model resolution -- and each field's declared step went unused. These move
+// by that step instead, snapped to its grid so repeated presses land on round numbers (1.1, 1.2,
+// 1.3) rather than drifting off them, with Page Up/Down for ten at a time and Home/End for the ends.
+const STEP_DIR = { ArrowRight: 1, ArrowUp: 1, PageUp: 1, ArrowLeft: -1, ArrowDown: -1, PageDown: -1 };
+
+function stepOf(field) {
+  return Number(field.step) || (field.type === 'int' ? 1 : 0.05);
+}
+
+function steppedValue(field, value, dir, big) {
+  const step = stepOf(field) * (big ? 10 : 1);
+  const snapped = Math.round(value / step) * step;
+  // Already on the grid, or snapping moved it the way we were going anyway.
+  const next = Math.abs(snapped - value) > 1e-9 && Math.sign(snapped - value) === dir ? snapped : snapped + dir * step;
+  const clamped = Math.min(field.max, Math.max(field.min, next));
+  return field.type === 'int' ? Math.round(clamped) : Number(clamped.toFixed(6));
+}
+
 function formatNumber(field, value) {
   if (field.percent) return `${Math.round(value * 100)}%`;
   if (field.type === 'int') return String(Math.round(value));
@@ -229,6 +249,24 @@ function renderFields() {
           return v;
         };
         slider.addEventListener('input', live);
+
+        // Held keys repeat, and one ini write per repeat would be dozens a second, so the picture
+        // moves at once and the write follows the last press.
+        let pending = null;
+        slider.addEventListener('keydown', (e) => {
+          const dir = STEP_DIR[e.key];
+          const ends = e.key === 'Home' || e.key === 'End';
+          if (dir === undefined && !ends) return;
+          e.preventDefault();
+          const at = fromSlider(field, Number(slider.value) / 1000);
+          const next = ends ? (e.key === 'Home' ? field.min : field.max)
+                            : steppedValue(field, at, dir, e.key.startsWith('Page'));
+          slider.value = String(Math.round(toSlider(field, next) * 1000));
+          live();
+          value.textContent = formatNumber(field, next);
+          clearTimeout(pending);
+          pending = setTimeout(() => apply(field.key, next), 180);
+        });
         // Applied when the handle is let go, not while it is moving -- the engine does the same,
         // because every move would otherwise rewrite the ini and rebuild the feature.
         slider.addEventListener('change', () => {
