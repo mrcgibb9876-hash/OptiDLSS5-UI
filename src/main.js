@@ -1602,7 +1602,10 @@ ipcMain.handle('dlssnr:get', async (_evt, exePath) => {
     // puts back is worse than not offering it: the Feeder's synthetic frame has no pre-upscale
     // colour for Pre-SR to run on, and on Armored Core VI turning it on faulted the model every run.
     const forced = isFeederGame(dir)
-      ? { RunBeforeSR: 'Held off on a Feeder game: there is no real pre-upscale frame for the pass to run on, and on Armored Core VI switching it on faulted the model on every run.' }
+      ? {
+        RunBeforeSR: 'Held off on a Feeder game: there is no real pre-upscale frame for the pass to run on, and on Armored Core VI switching it on faulted the model on every run.',
+        RunBeforeRR: 'Held off on a Feeder game: there is no real pre-upscale frame for the pass to run on, and on Armored Core VI switching it on faulted the model on every run.',
+      }
       : {};
     // The borderless window is made by OptiScaler intercepting the game's own DXGI swapchain, so it
     // only exists where OptiScaler is inside the game's process and the game draws through DXGI.
@@ -2783,6 +2786,47 @@ async function confirmLaunchWithoutAntiCheat(exePath, { stub, antiCheat, appId, 
   return true;
 }
 
+// Starts a game detached, in its own folder, owing nothing to this app.
+//
+// spawn() cannot start an exe that needs elevation -- one with Windows' "Run this program as an
+// administrator" compatibility box ticked, or a manifest asking for it. CreateProcess refuses with
+// ERROR_ELEVATION_REQUIRED, which libuv reports as EACCES, and the card said "spawn EACCES"
+// (Cyberpunk 2077, whose exe carried RUNASADMIN in HKCU AppCompatFlags, 2026-09-16). The Windows
+// shell is what honours that flag and shows the UAC prompt, so the exe is handed to it instead.
+// The shell takes no environment, so a Steam app id passed that way does not reach the game on
+// this path; the argument list is kept.
+async function startDetached(file, argv = [], { cwd, env } = {}) {
+  try {
+    const child = spawn(file, argv, { cwd, detached: true, stdio: 'ignore', windowsHide: false, ...(env ? { env } : {}) });
+    await new Promise((resolve, reject) => {
+      child.once('spawn', resolve);
+      child.once('error', reject);
+    });
+    child.unref();
+    return { elevated: false };
+  } catch (e) {
+    const needsElevation = e && (e.code === 'EACCES' || e.errno === 740 || e.errno === -4092);
+    if (!needsElevation) throw new Error(`could not start ${path.basename(file)}: ${e && e.message ? e.message : e}`);
+  }
+  // Start-Process -Verb RunAs is ShellExecute with the elevation verb, the argument list intact and
+  // the working folder set -- shell.openPath would lose both.
+  const quote = (s) => `'${String(s).replace(/'/g, "''")}'`;
+  const script = [
+    `Start-Process -FilePath ${quote(file)}`,
+    `-WorkingDirectory ${quote(cwd || path.dirname(file))}`,
+    argv.length ? `-ArgumentList @(${argv.map(quote).join(',')})` : '',
+    '-Verb RunAs',
+  ].filter(Boolean).join(' ');
+  try {
+    await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true });
+  } catch (e) {
+    // Declining the UAC prompt lands here too ("The operation was canceled by the user").
+    const detail = String((e && (e.stderr || e.message)) || e).split(/\r?\n/).find((l) => l.trim()) || 'refused';
+    throw new Error(`${path.basename(file)} is set to run as administrator and did not start: ${detail.trim()}`);
+  }
+  return { elevated: true };
+}
+
 ipcMain.handle('game:launch', async (_evt, { exePath, dryRun = false } = {}) => {
   try {
     const target = launchTarget(exePath);
@@ -2820,12 +2864,7 @@ ipcMain.handle('game:launch', async (_evt, { exePath, dryRun = false } = {}) => 
         } else {
           const file = steamExe || launcher;
           const argv = steamExe ? ['-applaunch', String(steamAppId), ...args] : args;
-          const child = spawn(file, argv, { cwd: steamExe ? path.dirname(steamExe) : dir, detached: true, stdio: 'ignore', windowsHide: false });
-          await new Promise((resolve, reject) => {
-            child.once('spawn', resolve);
-            child.once('error', (e) => reject(new Error(`could not start ${path.basename(file)}: ${e && e.message ? e.message : e}`)));
-          });
-          child.unref();
+          await startDetached(file, argv, { cwd: steamExe ? path.dirname(steamExe) : dir });
         }
         return { ok: true, target: launcher, via, args, steamAppId, stub, antiCheat };
       }
@@ -2840,13 +2879,8 @@ ipcMain.handle('game:launch', async (_evt, { exePath, dryRun = false } = {}) => 
       const env = { ...process.env };
       if (steamAppId) { env.SteamAppId = String(steamAppId); env.SteamGameId = String(steamAppId); }
       // `real`, not `target`: when the card holds the stub itself, target is the stub.
-      const child = spawn(real, [], { cwd: dir, detached: true, stdio: 'ignore', windowsHide: false, env });
-      await new Promise((resolve, reject) => {
-        child.once('spawn', resolve);
-        child.once('error', (e) => reject(new Error(`could not start ${path.basename(real)}: ${e && e.message ? e.message : e}`)));
-      });
-      child.unref();
-      return { ok: true, target: real, via: 'exe-no-anticheat', steamAppId, stub, antiCheat };
+      const started = await startDetached(real, [], { cwd: dir, env });
+      return { ok: true, target: real, via: 'exe-no-anticheat', elevated: started.elevated, steamAppId, stub, antiCheat };
     }
     // A Steam-installed game goes through Steam: its DRM, overlay, cloud saves and launch
     // options all expect that, and some games refuse to start any other way. Steam then runs the
@@ -2855,19 +2889,13 @@ ipcMain.handle('game:launch', async (_evt, { exePath, dryRun = false } = {}) => 
       if (!dryRun) await shell.openExternal(`steam://rungameid/${steamAppId}`);
       return { ok: true, target, via: 'steam', steamAppId };
     }
+    let elevated = false;
     if (!dryRun) {
       // Detached, own folder as cwd (Unreal and Unity both resolve their data relative to it),
       // nothing inherited from this app: the game outlives the manager if it is closed.
-      // spawn() reports a refusal (an exe that demands elevation, a blocked file) as an
-      // asynchronous 'error' event; unhandled, that event would take the whole app down.
-      const child = spawn(target, [], { cwd: path.dirname(target), detached: true, stdio: 'ignore', windowsHide: false });
-      await new Promise((resolve, reject) => {
-        child.once('spawn', resolve);
-        child.once('error', (e) => reject(new Error(`could not start ${path.basename(target)}: ${e && e.message ? e.message : e}`)));
-      });
-      child.unref();
+      ({ elevated } = await startDetached(target, [], { cwd: path.dirname(target) }));
     }
-    return { ok: true, target, via: 'exe' };
+    return { ok: true, target, via: 'exe', elevated };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }

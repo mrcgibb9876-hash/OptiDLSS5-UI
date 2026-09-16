@@ -46,6 +46,10 @@ const FIELDS = [
     help: "Whether the model's edit is applied. Off shows the clean upscaler frame while the pass keeps running -- so with Hold frame, under Inspect, you can freeze a frame and toggle this to see the same frozen frame with and without Neural Rendering. Leave it on for normal use." },
   { key: 'RunBeforeSR', type: 'bool', default: false, group: 'DLSS 5', label: 'Before Super Resolution',
     help: "Where the pass sits. Off is the original placement: the model runs on the finished upscaled frame. On runs it at render resolution on the colour SR is about to consume, so SR then accumulates and upscales an already-enhanced picture.\n\nRay Reconstruction always stays on the post-upscale path -- its inputs are a different contract. A colour image padded inside a larger texture is staged at its real size; one offset from the corner still falls back after upscaling.\n\nD3D12 and its D3D11/Vulkan bridges only; native Vulkan keeps the old placement." },
+  // [DlssNr] RunBeforeRR (engine v1.0.38): the same placement for Ray Reconstruction, experimentally.
+  { key: 'RunBeforeRR', type: 'bool', default: false, group: 'DLSS 5', label: 'Before Ray Reconstruction (experimental)',
+    dependsOn: { key: 'RunBeforeSR', is: true },
+    help: "Also runs the pass before Ray Reconstruction, at render resolution, on the colour it is about to denoise and upscale -- far cheaper than after it.\n\nEXPERIMENTAL: that colour is the noisy ray-traced frame rather than a finished one, so the model may enhance noise and Ray Reconstruction may smear what it added. Try it, compare, and turn it off if it looks worse. Needs Before Super Resolution on." },
 
   // [DlssNr] ForceBorderless. Lossless Scaling turns it on for its games (main.js applyLosslessMarker);
   // this is the same switch offered directly, for the pop-out panel's sake as much as anything --
