@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>DLSS 5 panel</title>
+<link rel="stylesheet" href="style.css" />
+<link rel="stylesheet" href="panel.css" />
+</head>
+<body class="panel-body">
+  <!-- The whole bar drags the window: it is frameless, so this is the title bar. The buttons opt
+       back out with -webkit-app-region: no-drag, or they would drag instead of click. -->
+  <header class="panel-bar">
+    <span class="panel-title" data-i18n>DLSS 5</span>
+    <div class="panel-bar-actions">
+      <button id="panel-close" class="btn btn-ghost btn-small" data-i18n-title title="Close (the hotkey reopens it)">✕</button>
+    </div>
+  </header>
+
+  <div class="panel-scroll">
+    <label class="field-label" data-i18n>Game</label>
+    <div class="field-row">
+      <select id="panel-game"></select>
+    </div>
+    <div id="panel-status" class="status-line"></div>
+
+    <div id="panel-fields"></div>
+
+    <div class="panel-footer">
+      <button id="panel-reset" class="btn btn-ghost btn-small" data-i18n>Everything back to default</button>
+    </div>
+  </div>
+
+  <script src="i18n.js"></script>
+  <script src="locales/pt-BR.js"></script>
+  <script src="locales/ru.js"></script>
+  <script src="locales/ko.js"></script>
+  <script src="locales/zh-CN.js"></script>
+  <script src="locales/es.js"></script>
+  <script src="locales/de.js"></script>
+  <script src="locales/fr.js"></script>
+  <script src="panel.js"></script>
+</body>
+</html>

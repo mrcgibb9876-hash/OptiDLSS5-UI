@@ -107,13 +107,29 @@ the game really ran DX11.
 
 | Key | Opens |
 |---|---|
+| `Alt+Shift+Home` | The app's own pop-out DLSS 5 panel, on top of the game (see below) |
 | `Alt+Home` | DLSS 5 Developer Controls panel (drag to move, drag an edge to resize, **Reset layout** in its title) |
 | `Insert` | OptiScaler's own menu (`Alt+O` on RE Engine games, where REFramework uses Insert) |
 | `Home` | ReShade, on Feeder routes |
 
-Both are rebindable. Settings changed in the app are written to the game's `OptiScaler.ini`. On the 32-bit route
-the game reads them live, because its panel sits in the helper: Home > Add-ons > DLSS 5 Feed > *Show the DLSS 5
-panel in-game* > Insert.
+All of them are rebindable. Settings changed in the app are written to the game's `OptiScaler.ini`. On the 32-bit
+route the game reads them live, because its panel sits in the helper: Home > Add-ons > DLSS 5 Feed > *Show the
+DLSS 5 panel in-game* > Insert.
+
+### The pop-out panel
+
+The panels above are drawn inside the game, so they depend on the game cooperating: some games swallow `Alt+Home`,
+and a 32-bit game only ever shows a mirror of the 64-bit helper's panel, which is why it can appear and then do
+nothing when you click it.
+
+`Alt+Shift+Home` opens a small window of the app's own instead, always on top of the game, resizable, with the
+same DLSS 5 settings in it. Nothing is asked of the game: the hotkey is registered with Windows, and the controls
+write to `OptiScaler.ini`, which the engine re-reads within a second. It opens on whichever of your games is
+running. Settings has a switch for it, a box to rebind the key by pressing it, and a button to open it now.
+
+The one thing it cannot do is sit on top of a game in **exclusive fullscreen** — Windows will not composite
+another window over a game that owns the display. Run that game borderless or windowed (`[DlssNr] ForceBorderless`
+does it for you).
 
 **Launch** starts a Steam game through Steam. A game behind an anti-cheat stub (EasyAntiCheat, BattlEye) is
 started from its own exe instead, after asking. That means single-player only: going online with these files

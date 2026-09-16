@@ -35,6 +35,7 @@ const engines = require('./engines');
 const pdplugin = require('./pdplugin');
 const rtxmfg = require('./rtxmfg');
 const legacy = require('./legacy');
+const panelwindow = require('./panelwindow');
 let electronAutoUpdater = null;
 try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
 const ENGINE_KNOWN_GAMES = new Set(require('./engine-known-games.json').exeNames);
@@ -90,6 +91,9 @@ function createWindow() {
     }
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  // The pop-out panel is hidden rather than closed, so it would keep the app alive after the main
+  // window has gone -- and it is skipTaskbar, so there would be nothing left to click.
+  win.on('closed', () => panelwindow.destroy());
 }
 
 app.whenReady().then(() => {
@@ -109,6 +113,7 @@ app.whenReady().then(() => {
       }
     },
   });
+  applyPanelHotkey();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -117,6 +122,9 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
+// A global shortcut outlives the window that registered it, so it has to be handed back explicitly.
+app.on('will-quit', () => panelwindow.unregisterHotkey());
 
 ipcMain.handle('data:load', () => {
   const games = readJson(gamesFile(), []);
@@ -147,6 +155,9 @@ ipcMain.handle('data:save-settings', (_evt, settings) => {
       }
     }
   }
+  // The break-away panel's hotkey is owned by the OS, not by a window, so a changed key (or the
+  // panel being switched off) has to be handed back and re-taken here rather than at next launch.
+  if (panelHotkeySignature(before) !== panelHotkeySignature(settings)) applyPanelHotkey(settings);
   return true;
 });
 
@@ -1548,6 +1559,99 @@ ipcMain.handle('dlssnr:set', (_evt, { exePath, values } = {}) => {
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
+});
+
+// The break-away DLSS 5 panel. Same settings as the Edit dialog's DLSS 5 tab and the in-game panel,
+// in a small always-on-top window of this app's own, opened by a global hotkey. It exists because
+// the in-game panel depends on the game cooperating: some games swallow Alt+Home, and a 32-bit game
+// only ever shows a mirror of the 64-bit helper's panel. This one needs nothing from the game.
+// See src/panelwindow.js for why it cannot beat exclusive fullscreen.
+function panelEnabled(settings) {
+  // On by default: a hotkey the user never has to find is the whole point, and the window itself
+  // costs nothing until it is first opened.
+  return !settings || settings.panelEnabled === undefined || !!settings.panelEnabled;
+}
+
+function panelHotkeySignature(settings) {
+  return panelEnabled(settings) ? panelwindow.accelerator(settings) : '';
+}
+
+let panelHotkeyState = { ok: false, accelerator: panelwindow.DEFAULT_ACCELERATOR };
+
+function panelOptions() {
+  return {
+    preload: path.join(__dirname, 'preload.js'),
+    page: path.join(__dirname, 'renderer', 'panel.html'),
+    savedBounds: readJson(settingsFile(), {}).panelBounds,
+    // Written back on move and resize so the panel returns where it was left. Re-read here rather
+    // than closed over, because the renderer saves settings.json too and would otherwise be undone.
+    onBoundsChanged: (bounds) => {
+      try {
+        const current = readJson(settingsFile(), {});
+        current.panelBounds = bounds;
+        writeJson(settingsFile(), current);
+      } catch {
+        // Losing the remembered position is not worth an error dialog over a game.
+      }
+    },
+  };
+}
+
+function applyPanelHotkey(settings = readJson(settingsFile(), {})) {
+  if (!panelEnabled(settings)) {
+    panelwindow.unregisterHotkey();
+    panelwindow.hide();
+    panelHotkeyState = { ok: false, accelerator: panelwindow.accelerator(settings), disabled: true };
+    return panelHotkeyState;
+  }
+  panelHotkeyState = panelwindow.registerHotkey(settings, () => panelwindow.toggle(panelOptions()));
+  return panelHotkeyState;
+}
+
+ipcMain.handle('panel:hotkeyState', () => panelHotkeyState);
+
+ipcMain.handle('panel:close', () => {
+  panelwindow.hide();
+  return true;
+});
+
+// Settings' "Open it now": the same thing the hotkey does, for a user checking it works before
+// there is a game in front of it, or one whose key combination another application has taken.
+ipcMain.handle('panel:open', () => {
+  panelwindow.show(panelOptions());
+  return true;
+});
+
+// One tasklist call for the whole list, the same way games:running does it: the panel opens on the
+// running game, so it has to know which that is before it can show anything.
+ipcMain.handle('panel:targets', async () => {
+  const games = readJson(gamesFile(), []);
+  let running = new Set();
+  try {
+    const { stdout } = await execFileAsync('tasklist.exe', ['/NH', '/FO', 'CSV'], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
+    for (const line of stdout.split(/\r?\n/)) {
+      const m = /^"([^"]+)"/.exec(line.trim());
+      if (m) running.add(m[1].toLowerCase());
+    }
+  } catch {
+    // No process list means nothing is known to be running, which is still a usable panel.
+    running = new Set();
+  }
+
+  const out = [];
+  for (const game of games) {
+    if (!game || !game.exePath) continue;
+    let isRunning = false;
+    let installed = false;
+    try {
+      isRunning = running.has(path.basename(launchTarget(game.exePath)).toLowerCase());
+      installed = fs.existsSync(path.join(optiScalerDirFor(gameDir(game.exePath)), 'OptiScaler.ini'));
+    } catch {
+      // A game whose exe has gone still belongs in the list; it just has nothing to edit.
+    }
+    out.push({ name: game.name || path.basename(game.exePath), exePath: game.exePath, running: isRunning, installed });
+  }
+  return { ok: true, games: out };
 });
 
 ipcMain.handle('game:status', (_evt, exePath) => {

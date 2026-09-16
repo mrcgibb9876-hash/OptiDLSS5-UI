@@ -3169,6 +3169,9 @@ function openSettingsModal() {
   $('#settings-show-advanced').checked = !!settings.showAdvanced;
   $('#settings-advanced').classList.toggle('hidden', !settings.showAdvanced);
   $('#settings-feeder-prerelease').checked = !!settings.feederPrerelease;
+  $('#settings-panel-enabled').checked = panelEnabled();
+  $('#settings-panel-hotkey').value = settings.panelHotkey || DEFAULT_PANEL_HOTKEY;
+  showPanelHotkeyState();
   $('#settings-ai-key').value = settings.anthropicApiKey || '';
   $('#settings-ai-model').value = settings.aiModel || 'claude-sonnet-5';
   $('#settings-nr-dll').value = settings.nrDllPath || '';
@@ -3249,6 +3252,75 @@ $('#settings-feeder-prerelease').addEventListener('change', async (e) => {
   settings.feederPrerelease = !!e.target.checked;
   await window.api.saveSettings(settings);
 });
+
+// The pop-out DLSS 5 panel (src/panelwindow.js). Its hotkey belongs to the OS rather than to this
+// window, so saving the setting is what re-registers it; main.js does that on every settings save.
+const DEFAULT_PANEL_HOTKEY = 'Alt+Shift+Home';
+
+function panelEnabled() {
+  return settings.panelEnabled === undefined || !!settings.panelEnabled;
+}
+
+async function showPanelHotkeyState() {
+  const el = $('#panel-hotkey-status');
+  const state = await window.api.panelHotkeyState();
+  if (!state || state.disabled || !panelEnabled()) {
+    el.textContent = t('The hotkey is off. The button above still opens it.');
+    el.className = 'status-line';
+    return;
+  }
+  el.textContent = state.ok
+    ? t('{key} opens and closes it, even while a game has focus.', { key: state.accelerator })
+    : t('Windows would not give this app {key} — another program already has it. Pick a different combination.', { key: state.accelerator });
+  el.className = `status-line ${state.ok ? 'status-ok' : 'status-bad'}`;
+}
+
+// Typed by pressing the combination rather than spelling it out: an accelerator is Electron's own
+// syntax, and a user who mistypes it gets a hotkey that silently never fires.
+$('#settings-panel-hotkey').addEventListener('keydown', async (e) => {
+  e.preventDefault();
+  const key = e.key;
+  if (key === 'Tab') return;
+  if (key === 'Backspace' || key === 'Delete') {
+    delete settings.panelHotkey;
+    $('#settings-panel-hotkey').value = DEFAULT_PANEL_HOTKEY;
+    await window.api.saveSettings(settings);
+    showPanelHotkeyState();
+    return;
+  }
+  // A bare modifier is the half-pressed state on the way to a real combination, not a choice.
+  if (['Control', 'Alt', 'Shift', 'Meta', 'OS'].includes(key)) return;
+
+  const parts = [];
+  if (e.ctrlKey) parts.push('Ctrl');
+  if (e.altKey) parts.push('Alt');
+  if (e.shiftKey) parts.push('Shift');
+  if (e.metaKey) parts.push('Super');
+  // Windows hands a plain letter or F-key to whatever has focus, so one on its own would be taken
+  // from every other program in the system. A modifier is required.
+  if (parts.length === 0) {
+    const el = $('#panel-hotkey-status');
+    el.textContent = t('Hold Ctrl, Alt or Shift as well — a key on its own would be taken from every other program.');
+    el.className = 'status-line status-bad';
+    return;
+  }
+
+  const named = { ' ': 'Space', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Escape: 'Esc' };
+  parts.push(named[key] || (key.length === 1 ? key.toUpperCase() : key));
+
+  settings.panelHotkey = parts.join('+');
+  $('#settings-panel-hotkey').value = settings.panelHotkey;
+  await window.api.saveSettings(settings);
+  showPanelHotkeyState();
+});
+
+$('#settings-panel-enabled').addEventListener('change', async (e) => {
+  settings.panelEnabled = !!e.target.checked;
+  await window.api.saveSettings(settings);
+  showPanelHotkeyState();
+});
+
+$('#btn-panel-open').addEventListener('click', () => window.api.panelOpen());
 
 $('#settings-language').addEventListener('change', async (e) => {
   settings.language = e.target.value || 'auto';
