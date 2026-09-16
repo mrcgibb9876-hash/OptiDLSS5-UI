@@ -92,6 +92,19 @@ test('an emulator never counts as having DLSS of its own, so the Feeder stays it
   assert.equal(nativeDlss.hasNativeDlss(game), true, 'the same files on an ordinary game still mean shipped DLSS');
 });
 
+test('FIFA 16: a protected exe that names no API is still DX11, so the Feeder is offered', { skip: !onWindows }, async () => {
+  // notepad.exe carries no D3D import or string, which is what FIFA 16's protected exe looks like to the scan.
+  const dir = scratchDir('fifa16');
+  const exe = exeWith(dir, 'fifa16.exe');
+  const det = await detect.detectGame(dir, exe);
+  assert.equal(det.api, 'dx11');
+  assert.equal(det.recommend, 'optiscaler');
+  assert.equal(route.recommendRoute(dir, exe, det, 'nvidia').route, 'feeder');
+
+  const other = exeWith(scratchDir('no-api'), 'somegame.exe');
+  assert.equal((await detect.detectGame(path.dirname(other), other)).api, null, 'only the named game is assumed');
+});
+
 test('detection: emulators, 32-bit and DirectX 8/9 games are offered experimental routes', { skip: !onWindows }, async () => {
   const base = scratchDir('legacy-detect');
   const pcsx2 = await detect.detectGame(path.join(base, 'pcsx2'), exeWith(path.join(base, 'pcsx2'), 'pcsx2-qt.exe'));

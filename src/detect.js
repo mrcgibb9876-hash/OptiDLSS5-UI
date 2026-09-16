@@ -23,6 +23,8 @@ const { findUnrealPluginFile } = require('./framegen');
 const emulators = require('./emulators');
 const rtxmfg = require('./rtxmfg');
 
+// 11: KNOWN_RENDERERS names the API of games whose executable cannot say it (FIFA 16), so a stored
+// "API not detected" for one of them is thrown away and the DLSS5 Feeder route is offered.
 // 10: optiScalerProxy.matchesOurBuild reads the install journal instead of measuring an
 // OptiScaler.dll that a finished install has already renamed away -- v1.57.5 stored false for
 // every normal install, which reads as "somebody else's OptiScaler is here".
@@ -32,7 +34,7 @@ const rtxmfg = require('./rtxmfg');
 // FromSoftware title) -- a stored detection from before this said antiCheat: null for them.
 // 7: DX8 told apart from DX9, emulators recognised, 32-bit and DX8/DX9 games offered the
 // experimental Feeder routes (legacy.js) instead of "unsupported".
-const DETECT_VERSION = 10;
+const DETECT_VERSION = 11;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
@@ -590,6 +592,25 @@ function oldShaderCompiler(dir) {
   return { file: 'D3DCompiler_47.dll', version };
 }
 
+// Games whose renderer the executable scan cannot read, by exe name. FIFA 16's exe is protected, so
+// neither its imports nor its strings show the D3D11 it renders with: detection said "API not
+// detected", the route stopped at Undetermined, and the DLSS5 Feeder -- which the game needs, having
+// no DLSS of its own -- was never offered (user report, 2026-09-16). An entry is the game's one fixed
+// renderer, so it wins over the scan; a game with a renderer setting gets its own reader instead
+// (rdr2Renderer below).
+const KNOWN_RENDERERS = {
+  'fifa16.exe': { api: 'dx11', name: 'FIFA 16' },
+};
+
+function knownRenderer(exePath) {
+  const known = KNOWN_RENDERERS[path.basename(String(exePath || '')).toLowerCase()];
+  if (!known) return null;
+  return {
+    api: known.api, apis: [known.api], old: [],
+    reason: `${API_LABEL[known.api]} -- what ${known.name} renders with; its protected executable does not say so itself`,
+  };
+}
+
 // RDR2's executable is byte-for-byte the same under DX12 and Vulkan; its own settings file is
 // the only place the answer exists. One-way: only an explicit Vulkan setting moves the answer.
 function rdr2Renderer() {
@@ -1098,6 +1119,7 @@ async function detectGame(dir, exePath) {
   if (engine.id === 'unity') found = await detectUnity(dir, exePath);
   else if (engine.id === 'red') found = detectRedEngine(dir, exePath);
   else if (/^rdr2\.exe$/i.test(path.basename(exePath))) found = rdr2Renderer();
+  if (!found) found = knownRenderer(exePath);
   if (!found) found = await genericApiDetection(dir, exePath, exe || (await scanExecutable(exePath)));
   if (engine.id === 'unreal') found = unrealStaticApi(dir, found, engine);
 
