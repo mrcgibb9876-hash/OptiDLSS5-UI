@@ -155,6 +155,16 @@ ipcMain.handle('data:save-settings', (_evt, settings) => {
       }
     }
   }
+  // The same for DLSS 5 on/off at game start, in the game folder and, on the 32-bit route, the helper's.
+  if (process.env.OPTIDLSS5_NO_SYNC !== '1' && nrStartDefault(before) !== nrStartDefault(settings)) {
+    for (const game of readJson(gamesFile(), [])) {
+      if (!game || !game.exePath) continue;
+      const dir = gameDir(game.exePath);
+      for (const target of [dir, path.join(dir, legacy.HOST_DIR)]) {
+        try { applyNrStartDefault(target, settings); } catch {}
+      }
+    }
+  }
   // The break-away panel's hotkey is owned by the OS, not by a window, so a changed key (or the
   // panel being switched off) has to be handed back and re-taken here rather than at next launch.
   if (panelHotkeySignature(before) !== panelHotkeySignature(settings)) applyPanelHotkey(settings);
@@ -175,6 +185,28 @@ ipcMain.handle('data:save-settings', (_evt, settings) => {
 function panelLanguageValue(settings) {
   const lang = settings && settings.language ? String(settings.language) : 'auto';
   return lang === 'auto' ? 'auto' : lang.toLowerCase();
+}
+
+// DLSS 5 on or off in every game when it starts ([DlssNr] Enabled), from the top bar. 'game' leaves each
+// game's own choice alone -- what this app did before the setting existed. 'on' only reaches a folder
+// that has the model: switching the pass on with nothing to run crashed launches (see autoConfigureGame).
+// Applied to every installed game when it changes, and on every install and sync after that, so a game
+// switched in its own panel goes back to this at its next sync -- "at game start" is the promise.
+const NR_START_DEFAULTS = ['game', 'on', 'off'];
+
+function nrStartDefault(settings) {
+  const value = settings && settings.nrStartDefault;
+  return NR_START_DEFAULTS.includes(value) ? value : 'game';
+}
+
+function applyNrStartDefault(dir, settings = readJson(settingsFile(), {})) {
+  const mode = nrStartDefault(settings);
+  if (mode === 'game') return [];
+  const iniPath = path.join(dir, 'OptiScaler.ini');
+  if (!fs.existsSync(iniPath)) return [];
+  if (mode === 'on' && !fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'))) return [];
+  const value = mode === 'on' ? 'true' : 'false';
+  return ensureIniKey(iniPath, 'DlssNr', 'Enabled', value) ? [{ section: 'DlssNr', key: 'Enabled', value }] : [];
 }
 
 function applyPanelLanguage(dir, settings = readJson(settingsFile(), {})) {
@@ -830,6 +862,7 @@ ipcMain.handle('legacy:installHost32', async (_evt, { exePath, detected, release
       deployNvngxDlss: (hostDir) => feeder.deployNvngxDlss(hostDir, getRhiManifest, compareStreamlineVersions, feederCacheDir(), GITHUB_HEADERS),
     });
     try { applyPanelLanguage(path.join(dir, legacy.HOST_DIR)); } catch {}
+    try { applyNrStartDefault(path.join(dir, legacy.HOST_DIR)); } catch {}
     return { ok: true, ...res, feederVersion: asset.tag, api: plan.api };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
@@ -1756,6 +1789,19 @@ ipcMain.handle('panel:timing', async (_evt, exePath) => {
   }
 });
 
+// The store a game came from (library.storeFor), for the grid's filter. A game does not move between
+// stores, so it is worked out once per exe per session: the grid asks for every card on every render.
+const storeCache = new Map();
+function storeOf(exePath) {
+  const key = String(exePath).toLowerCase();
+  if (!storeCache.has(key)) {
+    let store = 'other';
+    try { store = library.storeFor(exePath); } catch {}
+    storeCache.set(key, store);
+  }
+  return storeCache.get(key);
+}
+
 ipcMain.handle('game:status', (_evt, exePath) => {
   if (!exePath || !fs.existsSync(exePath)) return { exeMissing: true };
   const dir = gameDir(exePath);
@@ -1774,7 +1820,7 @@ ipcMain.handle('game:status', (_evt, exePath) => {
   }));
   const marker = engines.readEngineMarker(dir);
   const engine = marker && marker.engine ? engines.normalizeEngine(marker.engine) : null;
-  return { exeMissing: false, hasIni, hasNr, hasUninstaller, dir, backends, foreign, warnings, engine };
+  return { exeMissing: false, hasIni, hasNr, hasUninstaller, dir, backends, foreign, warnings, engine, store: storeOf(exePath) };
 });
 
 // The one-line answer the card tags and the Install button acts on -- see route.js. `detected`
@@ -3966,6 +4012,7 @@ async function autoConfigureGame(dir, exePath) {
   forced = [...forced, ...applyFrameGenMarker(dir)];
   forced = [...forced, ...applyEngineMarker(dir)];
   forced = [...forced, ...applyPanelLanguage(dir)];
+  forced = [...forced, ...applyNrStartDefault(dir)];
   return {
     api, applied: [...applied, ...forced], streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix,
     profile: dlss5Only ? (optiFgOn ? 'dlss5-only+optifg' : 'dlss5-only') : 'full',
@@ -4056,6 +4103,7 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDl
         nrUpdated = true;
       }
       try { applyPanelLanguage(hostDir); } catch {}
+      try { applyNrStartDefault(hostDir); } catch {}
       // Installs from before 32-bit DirectX 8/9 games were held in a borderless window (legacy.js
       // DG_WINDOWED): an exclusive-fullscreen game can freeze the moment the helper starts.
       let dgWindowed = false;

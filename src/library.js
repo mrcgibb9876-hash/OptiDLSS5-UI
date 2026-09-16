@@ -451,4 +451,36 @@ function pickBannerMatch(query, items) {
   return best ? best.item : null;
 }
 
-module.exports = { discover, folder, dedupe, autoRoots, drives, isInside, filterExcluded, steam, linuxSteamRoots, steamAppIdFor, steamExe, steamManifestFor, nameForExe, bannerSearchTerms, pickBannerMatch, titleTokens };
+// Which store a game came from, for the grid's filter. Nothing records it when a game is added, and a
+// banner's Steam app id says only where its art came from, so it is read off the install itself:
+// Steam's appmanifest beside steamapps\common, the files Epic (.egstore) and GOG (goggame-*.info) leave
+// in a game's root, and the folder names the Xbox app, EA app and Ubisoft Connect install under. A copy
+// in a folder of someone's own is "other". Walks up from the exe at most five levels.
+const STORE_FOLDERS = [
+  [/^(xboxgames|windowsapps|modifiablewindowsapps)$/i, 'xbox'],
+  [/^(ea games|origin games)$/i, 'ea'],
+  [/^ubisoft game launcher$/i, 'ubisoft'],
+  [/^(epic games)$/i, 'epic'],
+  [/^(gog games|gog galaxy)$/i, 'gog'],
+];
+
+function storeFor(exePath) {
+  if (!exePath) return 'other';
+  if (steamManifestFor(exePath)) return 'steam';
+  let dir = path.dirname(path.resolve(exePath));
+  for (let up = 0; up <= 5; up++) {
+    let names = [];
+    try { names = fs.readdirSync(dir); } catch { names = []; }
+    if (names.some((n) => n.toLowerCase() === '.egstore')) return 'epic';
+    if (names.some((n) => /^goggame-\d+\.info$/i.test(n))) return 'gog';
+    if (names.some((n) => n.toLowerCase() === 'microsoftgame.config')) return 'xbox';
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    const base = path.basename(parent);
+    for (const [re, store] of STORE_FOLDERS) if (re.test(base)) return store;
+    dir = parent;
+  }
+  return 'other';
+}
+
+module.exports = { discover, folder, dedupe, autoRoots, drives, isInside, filterExcluded, steam, linuxSteamRoots, steamAppIdFor, steamExe, steamManifestFor, storeFor, nameForExe, bannerSearchTerms, pickBannerMatch, titleTokens };

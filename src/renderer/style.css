@@ -134,6 +134,12 @@ body {
 
 .topbar-actions { display: flex; gap: 10px; }
 
+/* Grid filter and the DLSS 5 at-start default, between the brand and the buttons. They wrap under
+   the brand on a narrow window rather than squeezing the buttons. */
+.topbar-filters { display: flex; gap: 10px; flex: 1 1 auto; justify-content: center; margin: 0 16px; min-width: 0; flex-wrap: wrap; }
+.topbar-select { flex: 0 1 auto; max-width: 260px; }
+.grid-filter-empty { grid-column: 1 / -1; color: var(--text-dim); padding: 24px 4px; margin: 0; }
+
 .btn {
   border: 1px solid var(--border);
   background: var(--bg-elev-2);
