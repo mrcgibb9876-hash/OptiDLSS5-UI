@@ -910,4 +910,12 @@ window.I18N.register("zh-CN", {
   "Optical flow": "光流",
   "Model": "模型",
   "Default (follow Windows)": "默认（跟随 Windows）",
+  "{ms} ms per frame": "每帧 {ms} 毫秒",
+  "at {fps} fps": "{fps} fps",
+  "{model} ms model + {ours} ms ours": "模型 {model} 毫秒 + 我们 {ours} 毫秒",
+  "{frames} frames": "{frames} 帧",
+  "{n} model failures": "{n} 次模型失败",
+  "from the last run": "来自上次运行",
+  "No GPU timing": "没有 GPU 计时",
+  "The engine could not time the GPU here ({reason}).": "引擎在这里无法对 GPU 计时（{reason}）。",
 });

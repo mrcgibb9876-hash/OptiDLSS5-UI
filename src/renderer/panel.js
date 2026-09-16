@@ -312,6 +312,8 @@ async function loadGame(exePath) {
   forced = {};
 
   if (!current) {
+    stopTimingPoll();
+    renderTiming(null);
     renderFields();
     setStatus(t('Pick a game.'));
     return;
@@ -319,6 +321,8 @@ async function loadGame(exePath) {
 
   const res = await window.api.dlssNrGet(current.exePath);
   if (!res || !res.ok) {
+    stopTimingPoll();
+    renderTiming(null);
     renderFields();
     setStatus(res && res.error === 'not-installed'
       ? t('OptiScaler is not installed for this game yet.')
@@ -333,7 +337,75 @@ async function loadGame(exePath) {
   setStatus(res.inHelper
     ? t('Editing the 64-bit helper this 32-bit game uses.')
     : current.running ? t('Game is running. Changes land within a second.') : t('Game is not running. Changes apply when it starts.'));
+  startTimingPoll();
 }
+
+// The engine writes its timing every 600 frames, so there is nothing to gain from asking faster
+// than a few seconds -- and this reads a file, so asking faster would only cost. The poll runs
+// while the panel is open and stops when it is hidden, since the window is only hidden, never
+// destroyed: a timer left running would keep reading logs for a panel nobody is looking at.
+const TIMING_POLL_MS = 3000;
+// Past this the reading is from a session that has stopped, not from what is on screen now.
+const TIMING_STALE_MS = 30000;
+let timingTimer = null;
+
+function renderTiming(timing) {
+  const box = $('#p-timing');
+  if (!timing || !timing.ok || timing.msPerFrame === null) {
+    // A game that is running but has not reached its first report yet is worth saying, because the
+    // wait is otherwise unexplained. Anything else just leaves the readout off.
+    if (timing && timing.ok && timing.gpuUnavailable && current && current.running) {
+      box.hidden = false;
+      box.classList.add('is-stale');
+      $('#p-timing-ms').textContent = t('No GPU timing');
+      $('#p-timing-fps').textContent = '';
+      $('#p-timing-sub').textContent = t('The engine could not time the GPU here ({reason}).', { reason: timing.gpuUnavailable });
+      return;
+    }
+    box.hidden = true;
+    return;
+  }
+
+  const stale = !current || !current.running || (Date.now() - timing.atMs) > TIMING_STALE_MS;
+  box.hidden = false;
+  box.classList.toggle('is-stale', stale);
+  $('#p-timing-ms').textContent = t('{ms} ms per frame', { ms: timing.msPerFrame.toFixed(2) });
+  $('#p-timing-fps').textContent = timing.fps ? t('at {fps} fps', { fps: Math.round(timing.fps) }) : '';
+
+  const parts = [];
+  if (timing.modelMs !== null) {
+    parts.push(t('{model} ms model + {ours} ms ours', { model: timing.modelMs.toFixed(2), ours: timing.oursMs.toFixed(2) }));
+  }
+  parts.push(t('{frames} frames', { frames: timing.frames.toLocaleString() }));
+  if (timing.failures > 0) parts.push(t('{n} model failures', { n: timing.failures }));
+  if (stale) parts.push(t('from the last run'));
+  $('#p-timing-sub').textContent = parts.join('  ·  ');
+}
+
+async function refreshTiming() {
+  if (!current || !current.exePath) { renderTiming(null); return; }
+  try {
+    renderTiming(await window.api.panelTiming(current.exePath));
+  } catch {
+    renderTiming(null);
+  }
+}
+
+function startTimingPoll() {
+  stopTimingPoll();
+  refreshTiming();
+  timingTimer = setInterval(refreshTiming, TIMING_POLL_MS);
+}
+
+function stopTimingPoll() {
+  if (timingTimer !== null) { clearInterval(timingTimer); timingTimer = null; }
+}
+
+// The panel is hidden rather than closed, so 'hidden' is the only signal that nobody is watching.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopTimingPoll();
+  else if (current) startTimingPoll();
+});
 
 async function refreshTargets() {
   const res = await window.api.panelTargets();

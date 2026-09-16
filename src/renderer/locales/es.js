@@ -910,4 +910,12 @@ window.I18N.register("es", {
   "Zoom": "Zoom",
   "Model": "Modelo",
   "Default (follow Windows)": "Predeterminado (seguir a Windows)",
+  "{ms} ms per frame": "{ms} ms por fotograma",
+  "at {fps} fps": "a {fps} fps",
+  "{model} ms model + {ours} ms ours": "{model} ms modelo + {ours} ms nuestros",
+  "{frames} frames": "{frames} fotogramas",
+  "{n} model failures": "{n} fallos del modelo",
+  "from the last run": "de la última sesión",
+  "No GPU timing": "Sin medición de GPU",
+  "The engine could not time the GPU here ({reason}).": "El motor no pudo medir la GPU aquí ({reason}).",
 });

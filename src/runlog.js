@@ -51,6 +51,69 @@ async function readHead(file, max = MAX_READ) {
 
 const count = (text, re) => (text.match(re) || []).length;
 
+// The end of a log, for the things that are only interesting as "the latest one". readHead is the
+// wrong tool for those: a long session writes past its 6 MB cap and the newest lines are exactly
+// what falls outside it.
+const TAIL_READ = 256 * 1024;
+
+async function readTail(file, max = TAIL_READ) {
+  let fh;
+  try { fh = await fsp.open(file, 'r'); } catch { return null; }
+  try {
+    const { size } = await fh.stat();
+    if (size <= 0) return '';
+    const take = Math.min(size, max);
+    const buf = Buffer.allocUnsafe(take);
+    const { bytesRead } = await fh.read(buf, 0, take, size - take);
+    return buf.subarray(0, bytesRead).toString('latin1');
+  } catch {
+    return null;
+  } finally {
+    await fh.close();
+  }
+}
+
+// What the neural pass is costing right now, for the break-away panel's readout. The engine writes
+// this every 600 frames (DlssNr_Dx12.cpp), which is the same number its own in-game panel shows as
+// "Running - N ms per frame" -- Alien: Isolation read 16.43 there against GPU 16.49 in the log.
+//
+//   DLSS-NR heartbeat: 5400 frames run (0 model failures), 48 fps, GPU 16.49 ms | intensity ...
+//   DLSS-NR cost: 16.38 ms total = 16.11 ms model + 0.27 ms ours (2% ours)
+//
+// GPU is not always a number: the engine says "n/a (timer unreliable)", "not read yet" or
+// "n/a (no queue)" when it cannot trust the timestamp query, and those are passed through as a
+// reason rather than turned into a fake 0.00 ms.
+async function nrTiming(optiDir) {
+  const file = path.join(optiDir, 'OptiScaler.log');
+  let stat = null;
+  try { stat = fs.statSync(file); } catch { return { ok: false, reason: 'no-log' }; }
+
+  const tail = (await readTail(file)) || '';
+  const beats = [...tail.matchAll(/DLSS-NR heartbeat: (\d+) frames run \((\d+) model failures\), ([\d.]+) fps, GPU ([^|]+?) \|/g)];
+  if (beats.length === 0) return { ok: false, reason: 'no-heartbeat', atMs: stat.mtimeMs };
+
+  const last = beats[beats.length - 1];
+  const gpuText = last[4].trim();
+  const gpuMs = /^([\d.]+) ms$/.exec(gpuText);
+
+  // The cost line follows its heartbeat, so the last one in the tail belongs to the last beat.
+  const costs = [...tail.matchAll(/DLSS-NR cost: ([\d.]+) ms total = ([\d.]+) ms model \+ ([\d.]+) ms ours/g)];
+  const cost = costs.length ? costs[costs.length - 1] : null;
+
+  return {
+    ok: true,
+    frames: Number(last[1]),
+    failures: Number(last[2]),
+    fps: Number(last[3]),
+    msPerFrame: gpuMs ? Number(gpuMs[1]) : null,
+    gpuUnavailable: gpuMs ? null : gpuText,
+    totalMs: cost ? Number(cost[1]) : null,
+    modelMs: cost ? Number(cost[2]) : null,
+    oursMs: cost ? Number(cost[3]) : null,
+    atMs: stat.mtimeMs,
+  };
+}
+
 // Unreal's crash reporter writes under %LOCALAPPDATA%\<Project>\Saved\Crashes\; the project is
 // the folder two above Binaries\Win64. Only a report from around the last run counts.
 function unrealCrashNear(dir, whenMs) {
@@ -408,4 +471,4 @@ async function collectSupportBundle(dir, { zipPath, extra = {}, execFileAsync, o
   return { zipPath, files: copied, run };
 }
 
-module.exports = { analyzeRun, collectSupportBundle, gatherSupportFiles, unrealCrashNear };
+module.exports = { analyzeRun, collectSupportBundle, gatherSupportFiles, unrealCrashNear, nrTiming };

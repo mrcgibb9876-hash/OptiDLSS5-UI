@@ -1661,6 +1661,21 @@ ipcMain.handle('panel:targets', async () => {
   return { ok: true, games: out };
 });
 
+// What the neural pass costs, for the break-away panel. The engine's in-game panel shows this as
+// "Running - N ms per frame" and the panel that stands in for it had no equivalent, which on the
+// routes where the in-game one cannot draw at all (OpenGL, and the 32-bit helper) left no way to
+// see it. Read from OptiScaler.log rather than asked of the engine: it is already written there
+// every 600 frames, and this needs no engine release to reach installs that already exist.
+ipcMain.handle('panel:timing', async (_evt, exePath) => {
+  if (!exePath || !fs.existsSync(exePath)) return { ok: false, reason: 'no-log' };
+  try {
+    const dir = gameDir(exePath);
+    return await runlog.nrTiming(optiScalerDirFor(dir));
+  } catch {
+    return { ok: false, reason: 'no-log' };
+  }
+});
+
 ipcMain.handle('game:status', (_evt, exePath) => {
   if (!exePath || !fs.existsSync(exePath)) return { exeMissing: true };
   const dir = gameDir(exePath);

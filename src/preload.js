@@ -114,6 +114,7 @@ contextBridge.exposeInMainWorld('api', {
   // The break-away DLSS 5 panel (src/panelwindow.js). panelTargets is its own list rather than
   // loadData's, because it also says which game is running -- that is what it opens on.
   panelTargets: () => ipcRenderer.invoke('panel:targets'),
+  panelTiming: (exePath) => ipcRenderer.invoke('panel:timing', exePath),
   panelClose: () => ipcRenderer.invoke('panel:close'),
   panelOpen: () => ipcRenderer.invoke('panel:open'),
   panelHotkeyState: () => ipcRenderer.invoke('panel:hotkeyState'),

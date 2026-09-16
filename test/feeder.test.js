@@ -780,3 +780,42 @@ test('a game that crashes inside dgVoodoo2 as it starts is a run, and Game Help 
   assert.equal(again.verdict, 'wrapper-crash');
   assert.ok(Date.parse(again.at) > past.getTime(), 'the run is dated by the newer log');
 });
+
+test('the frame-time readout takes the newest heartbeat, from the end of a long log', async () => {
+  // The same number the in-game panel shows as "Running - N ms per frame": Alien: Isolation read
+  // 16.43 there against GPU 16.49 in the log. Read from the tail, because a long session writes
+  // past the 6 MB readHead cap and the newest lines are exactly the ones that fall outside it.
+  const dir = scratchDir('nr-timing');
+  const beat = (frames, fps, gpu) => `[00:00:00.000] [I] DlssNr_Dx12::Dispatch DLSS-NR heartbeat: ${frames} frames run (0 model failures), ${fps} fps, GPU ${gpu} ms | intensity 1.00, preset 0, style 0, passes 1 (1 this frame), full resolution`;
+  const cost = (total, model, ours) => `[00:00:00.000] [I] DlssNr_Dx12::Dispatch DLSS-NR cost: ${total} ms total = ${model} ms model + ${ours} ms ours (2% ours)`;
+
+  write(dir, 'OptiScaler.log', [
+    'x'.repeat(400000),
+    beat(600, 50, '20.10'), cost('20.20', '19.90', '0.30'),
+    beat(5400, 48, '16.49'), cost('16.38', '16.11', '0.27'),
+    '',
+  ].join('\n'));
+
+  const t = await runlog.nrTiming(dir);
+  assert.equal(t.ok, true);
+  assert.equal(t.msPerFrame, 16.49, 'the newest heartbeat wins, not the first');
+  assert.equal(t.fps, 48);
+  assert.equal(t.frames, 5400);
+  assert.equal(t.failures, 0);
+  assert.equal(t.modelMs, 16.11);
+  assert.equal(t.oursMs, 0.27);
+
+  // The engine does not always have a GPU time. Those are reasons, not a fake 0.00 ms.
+  write(dir, 'OptiScaler.log', beat(1200, 60, 'n/a (timer unreliable)').replace(' ms |', ' |') + '\n');
+  const untimed = await runlog.nrTiming(dir);
+  assert.equal(untimed.ok, true);
+  assert.equal(untimed.msPerFrame, null);
+  assert.equal(untimed.gpuUnavailable, 'n/a (timer unreliable)');
+  assert.equal(untimed.fps, 60, 'the rest of the heartbeat is still usable');
+
+  // A log with no heartbeat yet, and no log at all, are told apart: the first is a game that has
+  // not reached 600 frames, the second is a game that has never run.
+  write(dir, 'OptiScaler.log', 'Log.LogLevel: 2\nNVSDK_NGX_D3D12_Init\n');
+  assert.equal((await runlog.nrTiming(dir)).reason, 'no-heartbeat');
+  assert.equal((await runlog.nrTiming(scratchDir('nr-timing-empty'))).reason, 'no-log');
+});

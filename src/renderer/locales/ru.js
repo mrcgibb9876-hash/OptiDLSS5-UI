@@ -910,4 +910,12 @@ window.I18N.register("ru", {
   "Model": "Модель",
   "Paper white": "Опорный белый",
   "Default (follow Windows)": "По умолчанию (как в Windows)",
+  "{ms} ms per frame": "{ms} мс на кадр",
+  "at {fps} fps": "при {fps} к/с",
+  "{model} ms model + {ours} ms ours": "{model} мс модель + {ours} мс наши",
+  "{frames} frames": "кадров: {frames}",
+  "{n} model failures": "сбоев модели: {n}",
+  "from the last run": "из последнего запуска",
+  "No GPU timing": "Нет замера GPU",
+  "The engine could not time the GPU here ({reason}).": "Движок не смог замерить GPU здесь ({reason}).",
 });

@@ -985,4 +985,11 @@ window.I18N.register("fr", {
   "Style": "Style",
   "Guide": "Repères",
   "Default (follow Windows)": "Par défaut (suivre Windows)",
+  "{ms} ms per frame": "{ms} ms par image",
+  "{model} ms model + {ours} ms ours": "{model} ms modèle + {ours} ms les nôtres",
+  "{frames} frames": "{frames} images",
+  "{n} model failures": "{n} échecs du modèle",
+  "from the last run": "de la dernière exécution",
+  "No GPU timing": "Pas de mesure GPU",
+  "The engine could not time the GPU here ({reason}).": "Le moteur n'a pas pu mesurer le GPU ici ({reason}).",
 });

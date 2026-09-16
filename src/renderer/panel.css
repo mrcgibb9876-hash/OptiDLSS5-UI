@@ -135,6 +135,30 @@ html, body { margin: 0; height: 100%; }
 .p-note { margin: 5px 0; color: var(--dim); font-size: 12px; }
 .p-note.is-accent { color: var(--accent); }
 
+/* The frame-time readout. Wraps rather than clipping, because the panel can be dragged narrow.
+ *
+ * The [hidden] rule has to be here: `display: flex` below is a class rule, and it beats the user
+ * agent's own `[hidden] { display: none }` on specificity. Without it el.hidden = true changes
+ * nothing on screen and a game with no timing to show gets an empty bordered box instead. */
+.p-timing[hidden] { display: none; }
+.p-timing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 6px 0 9px;
+  padding: 7px 9px;
+  border: 1px solid var(--track);
+  border-radius: 5px;
+  /* --shade, so this lightens on the dark panel and darkens on the light one (see the note above). */
+  background: rgba(var(--shade), 0.05);
+}
+.p-timing-main { font-size: 15px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.p-timing-main b { font-weight: 600; }
+.p-timing-fps { font-size: 12px; color: var(--dim); }
+.p-timing-sub { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.p-timing.is-stale .p-timing-main { color: var(--dim); }
+
 /* ── Rows ───────────────────────────────────────────────────────────────────────────────────── */
 
 /* Label 44% of the row, then the control, then the value right-aligned in its own column, then the

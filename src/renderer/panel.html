@@ -24,6 +24,12 @@
       <span class="p-row-ctl"><select id="p-game" class="p-select"></select></span>
     </div>
     <div id="p-status" class="p-note"></div>
+    <!-- The same number the in-game panel shows as "Running - N ms per frame". Hidden until there
+         is one to show, so a game that has never run does not carry an empty readout. -->
+    <div id="p-timing" class="p-timing" hidden>
+      <span class="p-timing-main"><b id="p-timing-ms"></b> <span id="p-timing-fps" class="p-timing-fps"></span></span>
+      <span id="p-timing-sub" class="p-timing-sub"></span>
+    </div>
     <div id="p-fields"></div>
   </div>
 

@@ -910,4 +910,12 @@ window.I18N.register("ko", {
   "Optical flow": "옵티컬 플로우",
   "Model": "모델",
   "Default (follow Windows)": "기본값 (Windows를 따름)",
+  "{ms} ms per frame": "프레임당 {ms} ms",
+  "at {fps} fps": "{fps} fps",
+  "{model} ms model + {ours} ms ours": "모델 {model} ms + 자체 {ours} ms",
+  "{frames} frames": "{frames} 프레임",
+  "{n} model failures": "모델 실패 {n}회",
+  "from the last run": "마지막 실행 기준",
+  "No GPU timing": "GPU 시간 측정 없음",
+  "The engine could not time the GPU here ({reason}).": "엔진이 여기서 GPU 시간을 측정할 수 없었습니다 ({reason}).",
 });
