@@ -909,4 +909,5 @@ window.I18N.register('pt-BR', {
   "Optical flow": "Fluxo óptico",
   "Zoom": "Zoom",
   "Model": "Modelo",
+  "Default (follow Windows)": "Padrão (seguir o Windows)",
 });

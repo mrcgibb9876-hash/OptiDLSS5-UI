@@ -28,12 +28,25 @@ const valueOf = (key) => {
 
 // ── Chrome ──────────────────────────────────────────────────────────────────────────────────────
 
+// The language is the game's own [DlssNr] Language -- the very key the in-game panel reads -- so
+// the two panels are never in different languages for the same game. It falls back to this app's
+// Settings, and then to Windows. Resolved through I18N.resolve because the engine lower-cases what
+// it writes (pt-br, zh-cn) and the dictionaries are keyed pt-BR and zh-CN.
 function applyLanguage() {
-  I18N.setLocale(settings.language && settings.language !== 'auto' ? settings.language : I18N.detect());
+  const field = fields.find((f) => f.key === 'Language');
+  const fromGame = field ? I18N.resolve(field.value) : null;
+  I18N.setLocale(fromGame || I18N.resolve(settings.language) || I18N.detect());
 }
 
 // The panel's own look is a DLSS 5 setting like any other: [DlssNr] LightTheme and VendorColours are
 // what the in-game panel reads, so this window reads them too and the two always agree.
+function applyChrome() {
+  applyLanguage();
+  I18N.applyStatic();
+  applyStaticTips();
+  applyPalette();
+}
+
 function applyPalette() {
   const themeField = fields.find((f) => f.key === 'LightTheme');
   const vendorField = fields.find((f) => f.key === 'VendorColours');
@@ -174,7 +187,7 @@ function renderFields() {
         }
         ctl.appendChild(seg);
         el.append(ctl);
-      } else if (field.type === 'enum') {
+      } else if (field.type === 'enum' || field.type === 'code') {
         el = row(field);
         const sel = document.createElement('select');
         sel.className = 'p-select';
@@ -183,7 +196,7 @@ function renderFields() {
         def.value = 'auto';
         const defOption = (field.options || []).find(([v]) => v === field.default);
         def.textContent = field.default === null
-          ? t('Default (follow pass 1)')
+          ? t(field.type === 'code' ? 'Default (follow Windows)' : 'Default (follow pass 1)')
           : t('Default ({state})', { state: defOption ? t(defOption[1]) : String(field.default) });
         sel.appendChild(def);
         for (const [v, text] of field.options || []) {
@@ -248,7 +261,7 @@ async function apply(key, value) {
     return;
   }
   fields = res.fields;
-  applyPalette();
+  applyChrome();
   setStatus(res.written.length
     ? (current.running ? t('Saved. A running game picks it up within a second.') : t('Saved. Applies the next time the game starts.'))
     : t('Nothing to change.'), true);
@@ -277,7 +290,7 @@ async function loadGame(exePath) {
 
   fields = res.fields || [];
   forced = res.forced || {};
-  applyPalette();
+  applyChrome();
   renderFields();
   setStatus(res.inHelper
     ? t('Editing the 64-bit helper this 32-bit game uses.')
@@ -327,14 +340,12 @@ function applyStaticTips() {
 async function reload() {
   const data = await window.api.loadData();
   settings = data.settings || {};
-  applyLanguage();
-  I18N.applyStatic();
-  applyStaticTips();
+  applyChrome();
   await refreshTargets();
 }
 
 window.api.onPanelOpened(() => reload());
-window.api.onSettingsChanged((next) => { settings = next || {}; applyLanguage(); I18N.applyStatic(); applyStaticTips(); renderFields(); });
+window.api.onSettingsChanged((next) => { settings = next || {}; applyChrome(); renderFields(); });
 
 (async () => {
   try {

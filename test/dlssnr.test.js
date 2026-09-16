@@ -42,8 +42,8 @@ const valueOf = (file, key) => dlssnr.readSettings(file).find((f) => f.key === k
 test('every field is described well enough to build a control from', () => {
   for (const f of dlssnr.FIELDS) {
     assert.ok(f.key && f.label && f.help && f.group, `${f.key} is missing something`);
-    assert.ok(['bool', 'int', 'float', 'enum'].includes(f.type), `${f.key} type`);
-    if (f.type === 'enum') assert.ok(Array.isArray(f.options) && f.options.length, `${f.key} options`);
+    assert.ok(['bool', 'int', 'float', 'enum', 'code'].includes(f.type), `${f.key} type`);
+    if (f.type === 'enum' || f.type === 'code') assert.ok(Array.isArray(f.options) && f.options.length, `${f.key} options`);
     if (f.type === 'float' || f.type === 'int') {
       assert.equal(typeof f.min, 'number', `${f.key} min`);
       assert.equal(typeof f.max, 'number', `${f.key} max`);
@@ -137,4 +137,33 @@ test('a file the in-game panel has already written round-trips unchanged', () =>
   const res = dlssnr.writeSettings(file, values);
   assert.deepEqual(res.written, [], 'a read followed by a write of the same values is a no-op');
   assert.deepEqual(dlssnr.readSettings(file), before);
+});
+
+// The language the two panels are written in is one value in one place -- the game's own
+// [DlssNr] Language. It is the only setting here that is a string rather than a number or a bool,
+// and it was getting dropped on the way back in: the engine lower-cases what it writes, and every
+// comparison on the way through was case-sensitive.
+test('Language round-trips as a code, whatever case the ini has it in', () => {
+  const dir = scratchDir('dlssnr-language');
+  const ini = path.join(dir, 'OptiScaler.ini');
+
+  for (const written of ['pt-br', 'pt-BR', 'PT-BR', 'zh-cn', 'ZH-CN']) {
+    write(dir, 'OptiScaler.ini', `[DlssNr]\nLanguage=${written}\n`);
+    const field = dlssnr.readSettings(ini).find((f) => f.key === 'Language');
+    assert.equal(field.value, written.toLowerCase(), `${written} should read back as a known code`);
+  }
+
+  // Anything this app does not ship reads as auto rather than as itself: a code nothing can render
+  // would leave the panel blank in a language nobody chose.
+  write(dir, 'OptiScaler.ini', '[DlssNr]\nLanguage=kl-GL\n');
+  assert.equal(dlssnr.readSettings(ini).find((f) => f.key === 'Language').value, null);
+
+  // auto is a real third state, and is what a language set back to default must write.
+  write(dir, 'OptiScaler.ini', '[DlssNr]\nLanguage=de\n');
+  assert.deepEqual(dlssnr.writeSettings(ini, { Language: null }).written, ['Language']);
+  assert.equal(getIniKey(fs.readFileSync(ini, 'utf8'), 'DlssNr', 'Language'), 'auto');
+
+  // And it is written as the engine writes it, so the in-game panel reads back what it set.
+  assert.deepEqual(dlssnr.writeSettings(ini, { Language: 'zh-cn' }).written, ['Language']);
+  assert.equal(getIniKey(fs.readFileSync(ini, 'utf8'), 'DlssNr', 'Language'), 'zh-cn');
 });

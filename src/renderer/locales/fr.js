@@ -983,4 +983,5 @@ window.I18N.register("fr", {
   "Model": "Modèle",
   "Style": "Style",
   "Guide": "Repères",
+  "Default (follow Windows)": "Par défaut (suivre Windows)",
 });

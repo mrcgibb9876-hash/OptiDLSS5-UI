@@ -1742,12 +1742,12 @@ function renderDlssNrFields(game) {
           o.value = value; o.textContent = text; input.appendChild(o);
         }
         input.value = field.value === null ? 'auto' : String(field.value);
-      } else if (field.type === 'enum') {
+      } else if (field.type === 'enum' || field.type === 'code') {
         input = document.createElement('select');
         const def = document.createElement('option');
         def.value = 'auto';
         const defOption = (field.options || []).find(([v]) => v === field.default);
-        def.textContent = field.default === null ? t('Default (follow pass 1)') : t('Default ({state})', { state: defOption ? t(defOption[1]) : String(field.default) });
+        def.textContent = field.default === null ? t(field.type === 'code' ? 'Default (follow Windows)' : 'Default (follow pass 1)') : t('Default ({state})', { state: defOption ? t(defOption[1]) : String(field.default) });
         input.appendChild(def);
         for (const [value, text] of field.options || []) {
           const o = document.createElement('option');

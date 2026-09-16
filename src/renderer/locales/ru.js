@@ -908,4 +908,5 @@ window.I18N.register("ru", {
   "Optical flow": "Оптический поток",
   "Model": "Модель",
   "Paper white": "Опорный белый",
+  "Default (follow Windows)": "По умолчанию (как в Windows)",
 });

@@ -908,4 +908,5 @@ window.I18N.register("ko", {
   "Chained temporal history": "연결된 시간적 히스토리",
   "Optical flow": "옵티컬 플로우",
   "Model": "모델",
+  "Default (follow Windows)": "기본값 (Windows를 따름)",
 });

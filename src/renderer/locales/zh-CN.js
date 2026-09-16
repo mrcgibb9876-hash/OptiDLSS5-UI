@@ -908,4 +908,5 @@ window.I18N.register("zh-CN", {
   "Chained temporal history": "链式时间历史",
   "Optical flow": "光流",
   "Model": "模型",
+  "Default (follow Windows)": "默认（跟随 Windows）",
 });

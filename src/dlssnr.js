@@ -25,6 +25,12 @@ const PRESETS = [[0, 'Default'], [1, 'Model A'], [2, 'Model B'], [3, 'Model C']]
 const STYLES = [[0, 'Default (standard)'], [1, 'Natural'], [2, 'Cinematic']];
 const DOWNSCALERS = [[0, 'FSR1'], [1, 'Bicubic'], [2, 'Catmull-Rom'], [3, 'Lanczos2'], [4, 'Lanczos3'], [5, 'Kaiser2'], [6, 'Kaiser3'], [7, 'MAGIC']];
 const REVERSIBLE = [[0, 'Off (soft knee)'], [1, 'Neutwo proxy + composed'], [2, 'Neutwo proxy + replace'], [3, 'Hybrid proxy + composed'], [4, 'Hybrid proxy + replace']];
+// The codes the engine writes for [DlssNr] Language, lower-cased, as its own panel writes them.
+const LANGUAGES = [
+  ['en', 'English'], ['pt-br', 'Português (Brasil)'], ['ru', 'Русский'], ['ko', '한국어'],
+  ['zh-cn', '简体中文'], ['es', 'Español'], ['de', 'Deutsch'], ['fr', 'Français'],
+];
+
 const WHITE_POINT_SOURCES = [[0, 'Paper white only'], [1, "The game's own exposure"], [2, 'A buffer the scan found']];
 
 // group / label / order are the in-game panel's own, section for section and row for row, because
@@ -150,6 +156,8 @@ const FIELDS = [
     help: "Light is the default. The dark palette this panel was originally styled after put its dimmed text at 2.65:1 against the background, against the 4.5:1 that reads comfortably -- and an overlay is read at a glance, over a moving picture.\n\nUnticking restores NVIDIA's own colouring." },
   { key: 'VendorColours', type: 'bool', default: true, group: 'Appearance', label: 'Vendor colours',
     help: "NVIDIA green, or AMD red on an AMD card. Off keeps green everywhere." },
+  { key: 'Language', type: 'code', default: null, options: LANGUAGES, group: 'Appearance', label: 'Language',
+    help: "The language this panel and the in-game one are written in. Default follows Windows. OptiScaler's own menu stays English. A language that needs its own font (Chinese, Korean) loads it from Windows on the next frame." },
   { key: 'FontScale', type: 'float', default: 1.15, min: 0.75, max: 2, step: 0.05, group: 'Appearance',
     label: 'Font size', help: "This panel's text only -- OptiScaler's own menu keeps its [Menu] FontSize.\n\nRow widths are worked out from the font size, so far above 1.5x labels start running into their values." },
 ];
@@ -163,6 +171,12 @@ const isAuto = (raw) => raw === null || raw === undefined || String(raw).trim() 
 function parseValue(field, raw) {
   if (isAuto(raw)) return null;
   const text = String(raw).trim();
+  // A code, not a number: matched case-insensitively because the engine lower-cases what it writes
+  // and a hand-edited ini may not have.
+  if (field.type === 'code') {
+    const hit = (field.options || []).find(([v]) => String(v).toLowerCase() === text.toLowerCase());
+    return hit ? hit[0] : null;
+  }
   if (field.type === 'bool') {
     if (/^(true|1)$/i.test(text)) return true;
     if (/^(false|0)$/i.test(text)) return false;
@@ -181,6 +195,7 @@ function parseValue(field, raw) {
 
 function formatValue(field, value) {
   if (value === null || value === undefined) return 'auto';
+  if (field.type === 'code') return String(value);
   if (field.type === 'bool') return value ? 'true' : 'false';
   if (field.type === 'float') return String(Number(value));
   return String(Math.round(Number(value)));

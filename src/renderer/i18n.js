@@ -75,14 +75,34 @@ window.I18N = (() => {
     }
   }
 
+  // Any spelling of a language to one this app ships, or null. The codes here are written in two
+  // places with two conventions: this app's own setting keeps pt-BR and zh-CN, while the engine's
+  // [DlssNr] Language is lower-cased (pt-br, zh-cn) -- and dicts is keyed on the first. Matching on
+  // the exact string sent every lower-cased code quietly to English, which is what the in-game
+  // panel and this one disagreeing about the language came down to.
+  function resolve(code) {
+    if (!code) return null;
+    const want = String(code).trim().toLowerCase();
+    if (!want || want === 'auto') return null;
+    for (const key of Object.keys(dicts)) {
+      if (key.toLowerCase() === want) return key;
+    }
+    // A region this app does not ship separately still picks the language it does: pt-PT -> pt-BR.
+    const base = want.split(/[-_]/)[0];
+    for (const key of Object.keys(dicts)) {
+      if (key.toLowerCase().split('-')[0] === base) return key;
+    }
+    return base === 'en' ? 'en' : null;
+  }
+
   function setLocale(code) {
-    locale = dicts[code] ? code : 'en';
+    locale = resolve(code) || (dicts[code] ? code : 'en');
     document.documentElement.lang = locale;
     applyStatic();
     return locale;
   }
 
-  return { t, register, available, detect, setLocale, applyStatic, get locale() { return locale; } };
+  return { t, register, available, detect, resolve, setLocale, applyStatic, get locale() { return locale; } };
 })();
 
 // Short alias for the renderer.
