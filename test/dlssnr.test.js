@@ -167,3 +167,29 @@ test('Language round-trips as a code, whatever case the ini has it in', () => {
   assert.deepEqual(dlssnr.writeSettings(ini, { Language: 'zh-cn' }).written, ['Language']);
   assert.equal(getIniKey(fs.readFileSync(ini, 'utf8'), 'DlssNr', 'Language'), 'zh-cn');
 });
+
+test('the borderless window is a switch of its own, written the way the engine reads it', () => {
+  // [DlssNr] ForceBorderless: Lossless Scaling turned it on behind the scenes (applyLosslessMarker);
+  // this offers the same switch directly, in Edit and in the pop-out panel. Where the engine has no
+  // hold on the window -- the 32-bit route, OpenGL, Vulkan -- dlssnr:get holds it off with a reason
+  // rather than offering a switch that does nothing.
+  const field = dlssnr.FIELDS.find((f) => f.key === 'ForceBorderless');
+  assert.ok(field, 'the field exists');
+  assert.equal(field.type, 'bool');
+  assert.equal(field.default, false);
+  assert.equal(field.group, 'Display');
+  assert.ok(dlssnr.GROUPS.includes('Display'), 'its group is listed for the form');
+  assert.match(field.help, /not the picture/, 'the help says what it does not do: change render resolution');
+
+  const ini = freshIni('dlssnr-borderless');
+
+  const on = dlssnr.writeSettings(ini, { ForceBorderless: true });
+  assert.ok(on.ok);
+  assert.equal(getIniKey(fs.readFileSync(ini, 'utf8'), 'DlssNr', 'ForceBorderless'), 'true');
+  assert.equal(dlssnr.readSettings(ini).find((f) => f.key === 'ForceBorderless').value, true);
+
+  // Back to default is stored as auto, as every other field is, so the engine's own default applies.
+  const off = dlssnr.writeSettings(ini, { ForceBorderless: false });
+  assert.ok(off.ok);
+  assert.equal(getIniKey(fs.readFileSync(ini, 'utf8'), 'DlssNr', 'ForceBorderless'), 'auto');
+});

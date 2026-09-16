@@ -918,4 +918,9 @@ window.I18N.register("zh-CN", {
   "from the last run": "来自上次运行",
   "No GPU timing": "没有 GPU 计时",
   "The engine could not time the GPU here ({reason}).": "引擎在这里无法对 GPU 计时（{reason}）。",
+  "Display": "显示",
+  "Borderless window": "无边框窗口",
+  "Keeps the game in a borderless window that fills its monitor, whatever its own display setting says. Exclusive fullscreen is refused when the game asks for it; a game that already runs windowed or borderless is left exactly as it is.\n\nWhat needs it: Lossless Scaling, which cannot capture exclusive fullscreen (configuring it turns this on), and the pop-out panel, which Windows cannot draw over an exclusive-fullscreen game.\n\nThis changes the window, not the picture: the game keeps rendering at its own resolution and is scaled to the monitor. Only where OptiScaler sits inside the game's process with a DirectX swapchain -- greyed out on the 32-bit route and on OpenGL or Vulkan, where it has no hold on the window.": "无论游戏自身的显示设置如何，都让游戏保持在填满显示器的无边框窗口中。游戏请求独占全屏时会被拒绝；已经以窗口或无边框运行的游戏则保持原样。\n\n谁需要它：无法捕获独占全屏的 Lossless Scaling（配置它会打开此项），以及 Windows 无法绘制在独占全屏游戏之上的弹出面板。\n\n这改变的是窗口而不是画面：游戏仍以自身分辨率渲染，再缩放到显示器。仅在 OptiScaler 位于游戏进程内并拥有 DirectX 交换链时可用——在 32 位路线以及 OpenGL 或 Vulkan 下为灰色，因为那里它无法控制窗口。",
+  "Not available on the 32-bit route: OptiScaler runs in the 64-bit helper beside the game, so it has no hold on the game's own window. Set Borderless or Windowed in the game's display settings.": "在 32 位路线上不可用：OptiScaler 运行在游戏旁边的 64 位辅助进程中，无法控制游戏自身的窗口。请在游戏的显示设置中选择无边框或窗口模式。",
+  "Not available on OpenGL or Vulkan: the borderless window is made by intercepting the game's DirectX swapchain, and this game has none. Set Borderless or Windowed in the game's display settings.": "在 OpenGL 或 Vulkan 下不可用：无边框窗口是通过拦截游戏的 DirectX 交换链实现的，而这个游戏没有交换链。请在游戏的显示设置中选择无边框或窗口模式。",
 });

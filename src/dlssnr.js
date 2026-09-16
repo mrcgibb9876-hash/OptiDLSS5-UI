@@ -47,6 +47,15 @@ const FIELDS = [
   { key: 'RunBeforeSR', type: 'bool', default: false, group: 'DLSS 5', label: 'Before Super Resolution',
     help: "Where the pass sits. Off is the original placement: the model runs on the finished upscaled frame. On runs it at render resolution on the colour SR is about to consume, so SR then accumulates and upscales an already-enhanced picture.\n\nRay Reconstruction always stays on the post-upscale path -- its inputs are a different contract. A colour image padded inside a larger texture is staged at its real size; one offset from the corner still falls back after upscaling.\n\nD3D12 and its D3D11/Vulkan bridges only; native Vulkan keeps the old placement." },
 
+  // [DlssNr] ForceBorderless. Lossless Scaling turns it on for its games (main.js applyLosslessMarker);
+  // this is the same switch offered directly, for the pop-out panel's sake as much as anything --
+  // Windows will not composite it over an exclusive-fullscreen game. Held off by dlssnr:get where the
+  // engine has no hold on the window: the 32-bit route (OptiScaler is in the helper) and OpenGL/Vulkan
+  // (no DXGI swapchain). Safe on a game that is already windowed since engine v1.0.36; before that it
+  // rewrote every swapchain's descriptor and put Monster Hunter: World in a title-barred window.
+  { key: 'ForceBorderless', type: 'bool', default: false, group: 'Display', label: 'Borderless window',
+    help: "Keeps the game in a borderless window that fills its monitor, whatever its own display setting says. Exclusive fullscreen is refused when the game asks for it; a game that already runs windowed or borderless is left exactly as it is.\n\nWhat needs it: Lossless Scaling, which cannot capture exclusive fullscreen (configuring it turns this on), and the pop-out panel, which Windows cannot draw over an exclusive-fullscreen game.\n\nThis changes the window, not the picture: the game keeps rendering at its own resolution and is scaled to the monitor. Only where OptiScaler sits inside the game's process with a DirectX swapchain -- greyed out on the 32-bit route and on OpenGL or Vulkan, where it has no hold on the window." },
+
   { key: 'LocalStructure', type: 'float', default: 1.0, min: 0, max: 1, step: 0.01, group: 'Global Controls',
     label: 'Structure Intensity', help: "The model's structure-synthesis strength across the whole frame." },
   { key: 'LocalTone', type: 'float', default: 1.0, min: 0, max: 1, step: 0.01, group: 'Global Controls',

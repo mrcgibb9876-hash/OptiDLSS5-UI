@@ -1590,20 +1590,36 @@ function detectInstalledBackends(dir) {
 // The DLSS 5 settings for one game, read from and written to the ini OptiScaler really loads.
 // The in-game panel is the other way in; on the 32-bit route it is behind the Feeder's add-on and
 // a user with a working install had no way to change anything at all (2026-09-14).
-ipcMain.handle('dlssnr:get', (_evt, exePath) => {
+ipcMain.handle('dlssnr:get', async (_evt, exePath) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) return { ok: false, error: 'Game .exe not found' };
     const dir = gameDir(exePath);
     const optiDir = optiScalerDirFor(dir);
     const iniPath = path.join(optiDir, 'OptiScaler.ini');
     if (!fs.existsSync(iniPath)) return { ok: false, error: 'not-installed' };
+    const inHelper = path.resolve(optiDir) !== path.resolve(dir);
     // Settings this app holds to a value, with the reason. Offering a slider the next sync quietly
     // puts back is worse than not offering it: the Feeder's synthetic frame has no pre-upscale
     // colour for Pre-SR to run on, and on Armored Core VI turning it on faulted the model every run.
     const forced = isFeederGame(dir)
       ? { RunBeforeSR: 'Held off on a Feeder game: there is no real pre-upscale frame for the pass to run on, and on Armored Core VI switching it on faulted the model on every run.' }
       : {};
-    return { ok: true, inHelper: path.resolve(optiDir) !== path.resolve(dir), iniPath, forced, fields: dlssnr.readSettings(iniPath) };
+    // The borderless window is made by OptiScaler intercepting the game's own DXGI swapchain, so it
+    // only exists where OptiScaler is inside the game's process and the game draws through DXGI.
+    // On the 32-bit route OptiScaler is in the helper: the flag would restyle the helper's window --
+    // the very one the Feeder casts into the game -- and leave the game exactly as it was. On OpenGL
+    // and Vulkan there is no DXGI swapchain to intercept at all.
+    if (inHelper) {
+      forced.ForceBorderless = 'Not available on the 32-bit route: OptiScaler runs in the 64-bit helper beside the game, so it has no hold on the game\'s own window. Set Borderless or Windowed in the game\'s display settings.';
+    } else {
+      let api = null;
+      try { api = await resolveApi(dir, exePath); } catch { /* unknown api: offer the switch */ }
+      // One string for both, not a template: the renderer translates the reason by exact text.
+      if (api === 'opengl' || api === 'vulkan') {
+        forced.ForceBorderless = 'Not available on OpenGL or Vulkan: the borderless window is made by intercepting the game\'s DirectX swapchain, and this game has none. Set Borderless or Windowed in the game\'s display settings.';
+      }
+    }
+    return { ok: true, inHelper, iniPath, forced, fields: dlssnr.readSettings(iniPath) };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
