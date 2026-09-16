@@ -1291,6 +1291,7 @@ module.exports = {
   feederDeployed,
   feederReadiness,
   feederUpdateCheck,
+  readFeederDeployMarker,
   removeFeederStack,
   deployReShade,
   deployReShadeCommonHeaders,

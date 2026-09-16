@@ -819,3 +819,20 @@ test('the frame-time readout takes the newest heartbeat, from the end of a long 
   assert.equal((await runlog.nrTiming(dir)).reason, 'no-heartbeat');
   assert.equal((await runlog.nrTiming(scratchDir('nr-timing-empty'))).reason, 'no-log');
 });
+
+test('a game keeps the Feeder it was deployed with only until a newer one is released', async () => {
+  // Games were left on whatever the Feeder was the day they were installed, so a library built up
+  // over weeks ran a different add-on per game -- and the fixes that matter most on this route
+  // (the Close() failure, the cast's input forwarding) ship in the add-on itself. Four of this
+  // machine's games sat on beta.1/beta.2 while beta.3 was out (2026-09-16).
+  const dir = scratchDir('feeder-stale');
+  assert.equal(feeder.readFeederDeployMarker(dir), null, 'no marker at all is not a version');
+
+  write(dir, '.dlss5ui-feeder-deploy.json', JSON.stringify({ feederVersion: 'v1.16.0-beta.2', mvProviderId: 'vort' }));
+  assert.equal(feeder.readFeederDeployMarker(dir).feederVersion, 'v1.16.0-beta.2');
+
+  // A marker written before version tracking existed carries no tag, and is left alone rather than
+  // force-redeployed on every sync.
+  write(dir, '.dlss5ui-feeder-deploy.json', JSON.stringify({ mvProviderId: 'vort' }));
+  assert.equal(feeder.readFeederDeployMarker(dir).feederVersion, undefined);
+});

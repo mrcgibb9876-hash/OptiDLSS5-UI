@@ -426,6 +426,60 @@ function feederPrereleaseEnabled() {
   return !!readJson(settingsFile(), {}).feederPrerelease;
 }
 
+// The newest Feeder tag, resolved once per app run and shared by every game's sync. Without the
+// cache a library of twenty Feeder games would hit the releases API twenty times on every pass.
+// A failure (offline, rate limited) is cached as null so it is not retried per game either.
+let latestFeederTagPromise = null;
+function latestFeederTag() {
+  if (latestFeederTagPromise === null) {
+    latestFeederTagPromise = feeder.resolveFeederAsset(GITHUB_HEADERS, { allowPrerelease: feederPrereleaseEnabled() })
+      .then((asset) => asset.tag || null)
+      .catch(() => null);
+  }
+  return latestFeederTagPromise;
+}
+
+// Brings a game's deployed Feeder up to the newest release, the same way Game Help's
+// "redeploy-feeder" does. Games were left on whatever the Feeder was when they were installed, so a
+// library built up over weeks ran a different Feeder per game -- and the fixes that matter most on
+// this route (a Close() failure, the cast's input forwarding) only arrive with the add-on itself.
+//
+// Only when the tag actually differs: the deploy rewrites the shader, the preset, both provider
+// levels and the ReShade ini, which is not something to do on every sync for no reason. Offline, or
+// a game whose marker predates version tracking, is left alone rather than force-redeployed.
+async function updateFeederIfStale(dir, exePath) {
+  if (!feeder.feederDeployed(dir)) return null;
+
+  const marker = feeder.readFeederDeployMarker(dir);
+  const current = marker && marker.feederVersion;
+  if (!current) return null;
+
+  const latest = await latestFeederTag();
+  if (!latest || latest === current) return null;
+
+  const api = await resolveApi(dir, exePath);
+  const status = feeder.feederProviderStatus(dir);
+  const provider = feeder.MV_PROVIDERS[status.id || ''] || null;
+  const keep = !!provider && provider.selectable !== false &&
+    (provider.bringYourOwn ? feeder.mvProviderPresent(dir, provider.id) : true);
+  const providerId = keep ? provider.id : feeder.defaultMvProviderId();
+
+  const results = await feeder.deployFeederStack(dir, api, providerId, {
+    cacheDir: feederCacheDir(),
+    getRhiManifest,
+    compareVersions: compareStreamlineVersions,
+    ghHeaders: GITHUB_HEADERS,
+    force: true,
+    allowPrerelease: feederPrereleaseEnabled(),
+    unity: isUnityGame(dir, exePath),
+    depthProfile: feeder.feederDepthProfile(dir),
+    execFileAsync,
+  });
+
+  const to = (results.addon && results.addon.version) || latest;
+  return { from: current, to };
+}
+
 ipcMain.handle('feeder:checkUpdate', async (_evt, exePath) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
@@ -3963,7 +4017,11 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDl
     try { legacy.ensureDgVoodooWindowed(dir); } catch {}
     // Luma installs from before DLSS was preset for them (lumaue.js ensureLumaDlss).
     try { lumaue.ensureLumaDlss(dir); } catch {}
-    if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: true, updated: false, reason: 'not installed' };
+    // The Feeder follows its own releases, not this app's: a game installed weeks ago kept whatever
+    // add-on it was deployed with, and the fixes that matter most on this route ship in the add-on.
+    let feederUpdated = null;
+    try { feederUpdated = await updateFeederIfStale(dir, exePath); } catch {}
+    if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: true, updated: !!feederUpdated, feederUpdated, reason: 'not installed' };
 
     const { api, applied: autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix } = await autoConfigureGame(dir, exePath);
 
@@ -4069,8 +4127,17 @@ const EARLY_PROXY_CANDIDATES = ['winmm.dll', 'version.dll', 'dbghelp.dll', 'wini
 // Monster Hunter: World (2026-09-14, a user report): installed as dxgi.dll, the game ran and wrote no
 // OptiScaler.log at all; its exe imports d3d11/d3d12 but not dxgi.dll. As winmm.dll, which it does import,
 // OptiScaler loaded, wrapped the DX12 swapchain and was handed the game's nvngx.
+//
+// Red Dead Redemption 2 (2026-09-16, a user report of no log at all): the same symptom, and the
+// cause is documented rather than measured here -- the game stopped loading a dxgi.dll from its own
+// folder, which is why ReShade's own troubleshooting tells people to rename to d3d12.dll or go
+// through the Vulkan layer. OptiScaler's wiki page for the game names winmm.dll as the proxy to
+// use, with version.dll and OptiScaler.asi as the other two it accepts. RDR2.exe is the game;
+// PlayRDR2.exe is Rockstar's launcher shim and never loads any of this itself.
+//   https://github.com/optiscaler/OptiScaler/wiki/Red-Dead-Redemption-II
 const PROXY_OVERRIDES = {
   'monsterhunterworld.exe': 'winmm.dll',
+  'rdr2.exe': 'winmm.dll',
 };
 
 function proxyOverrideFor(exePath) {
