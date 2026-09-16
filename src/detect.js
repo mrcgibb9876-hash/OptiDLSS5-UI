@@ -611,6 +611,21 @@ function pickModern(modern, imports) {
   const vulkanLinked = imports.includes(API_DLL.vulkan);
   const d3dLinked = imports.includes(API_DLL.dx12) || imports.includes(API_DLL.dx11);
   if (modern.has('vulkan') && vulkanLinked && !d3dLinked) return 'vulkan';
+  // An API the executable actually imports beats one that is merely a string inside it.
+  // apisFromEvidence counts both, because a game that loads its renderer with LoadLibrary names it
+  // nowhere else -- but that makes "d3d12.dll" appearing anywhere in the binary weigh as much as a
+  // real import, and MODERN_APIS puts dx12 first, so any mention at all won the tie.
+  //
+  // GTA V Legacy, 2026-09-16: reported as DX12. It is a DX10/11 game -- the DX12 one is Enhanced,
+  // a separate executable (gta5_enhanced.exe) -- and it imports d3d11.dll while only mentioning
+  // d3d12.dll. The route built on that answer is the wrong one for the game.
+  //
+  // A game that imports both still resolves to dx12, exactly as before: this only breaks the tie
+  // between something linked and something named. When the pick is a downgrade from a mention,
+  // dx12 stays in `apis` so the override and the post-run re-check from OptiScaler.log can correct
+  // it -- a renderer loaded purely through LoadLibrary is the case this cannot see.
+  const linked = MODERN_APIS.find((api) => modern.has(api) && imports.includes(API_DLL[api]));
+  if (linked) return linked;
   return MODERN_APIS.find((api) => modern.has(api)) || null;
 }
 
@@ -1434,4 +1449,4 @@ async function planForeignRemoval(dir, { ours = false } = {}) {
   return { found, del: [...del].sort(), restore, notes };
 }
 
-module.exports = { DETECT_VERSION, exeStamp, openPeResources, RT_ICON, RT_GROUP_ICON, RT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, foreignToolchains, planForeignRemoval };
+module.exports = { DETECT_VERSION, exeStamp, openPeResources, RT_ICON, RT_GROUP_ICON, RT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, pickModern, foreignToolchains, planForeignRemoval };

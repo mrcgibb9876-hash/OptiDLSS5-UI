@@ -299,3 +299,27 @@ test('a folder with our install and no other add-on accuses nobody of being Deep
   write(dir, 'nvngx_dlssnr.dll', 'x');
   assert.deepEqual(detect.foreignToolchains(dir), []);
 });
+
+test('an API the executable imports beats one it only mentions', async () => {
+  // GTA V Legacy was reported as DX12 (2026-09-16). It is a DX10/11 game -- the DX12 one is
+  // Enhanced, a separate executable -- but apisFromEvidence counts a DLL name found anywhere in the
+  // binary as evidence, which is deliberate (a renderer loaded with LoadLibrary is named nowhere
+  // else) and meant every stray mention of d3d12.dll weighed the same as a real import. MODERN_APIS
+  // puts dx12 first, so the mention won.
+  const linked = (...names) => names;
+
+  // The reported shape: imports d3d11, mentions d3d12.
+  assert.equal(detect.pickModern(new Set(['dx12', 'dx11']), linked('d3d11.dll', 'kernel32.dll')), 'dx11');
+
+  // A game that genuinely imports both still resolves to dx12, exactly as before.
+  assert.equal(detect.pickModern(new Set(['dx12', 'dx11']), linked('d3d11.dll', 'd3d12.dll')), 'dx12');
+
+  // Nothing linked at all: the old behaviour stands, since a mention is all there is to go on.
+  assert.equal(detect.pickModern(new Set(['dx12', 'dx11']), linked('kernel32.dll')), 'dx12');
+
+  // Vulkan keeps its own rule -- linked, and no Direct3D linked beside it.
+  assert.equal(detect.pickModern(new Set(['vulkan', 'dx12']), linked('vulkan-1.dll')), 'vulkan');
+  assert.equal(detect.pickModern(new Set(['vulkan', 'dx12']), linked('vulkan-1.dll', 'd3d12.dll')), 'dx12');
+
+  assert.equal(detect.pickModern(new Set(), linked('kernel32.dll')), null);
+});
