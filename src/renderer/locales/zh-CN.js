@@ -773,4 +773,22 @@ window.I18N.register("zh-CN", {
   "{key} opens and closes it, even while a game has focus.": "即使游戏处于焦点，{key} 也能打开和关闭它。",
   "Windows would not give this app {key} — another program already has it. Pick a different combination.": "Windows 没有把 {key} 分配给本应用 — 另一个程序已经占用了它。请换一个组合。",
   "Hold Ctrl, Alt or Shift as well — a key on its own would be taken from every other program.": "请同时按住 Ctrl、Alt 或 Shift — 单独一个键会被从其他所有程序手中夺走。",
+
+  // Theme, the emulator resolution block and the cost readout.
+  "Theme": "主题",
+  "Dark": "深色",
+  "Light": "浅色",
+  "Light or dark": "浅色或深色",
+  "Default": "默认",
+  "Reset all to default": "全部重置为默认",
+  "Emulator: DLSS 5 resolution": "模拟器：DLSS 5 分辨率",
+  "Model works at {size} -- about {pct}% of the cost at display resolution.": "模型在 {size} 下运算 —— 约为显示分辨率下开销的 {pct}%。",
+  "Model works at {size}, {passes} passes -- about {pct}% of the cost of one pass at display resolution.": "模型在 {size} 下运算，共 {passes} 遍 —— 约为显示分辨率下单遍开销的 {pct}%。",
+  "Display resolution ({size}) -- default": "显示分辨率（{size}）—— 默认",
+  "{h}p ({size}, {pct}% of the work area)": "{h}p（{size}，工作面积的 {pct}%）",
+  "Custom: {pct}% ({size})": "自定义：{pct}%（{size}）",
+  "The model works at {size}: about {pct}% of the display-resolution cost.": "模型在 {size} 下运算：约为显示分辨率下开销的 {pct}%。",
+  "Saved. Applies the next time the game starts.": "已保存。将在下次启动游戏时生效。",
+  "Everything back to default. Applies the next time the game starts.": "已全部恢复默认。将在下次启动游戏时生效。",
+  "<strong>This game runs the 32-bit route</strong>, so these are read from and written to host64\\OptiScaler.ini -- the copy the helper process actually loads. That is also why the panel never appears over the game.": "<strong>这款游戏走 32 位路线</strong>，因此这些设置从 host64\\OptiScaler.ini 读取并写回该文件 —— 那才是辅助进程实际加载的副本。面板从不显示在游戏之上，也是同样的原因。",
 });

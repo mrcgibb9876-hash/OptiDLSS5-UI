@@ -25,10 +25,12 @@ const electron = () => require('electron');
 // for would be a poor default. Shift makes it distinct while staying in the same finger position.
 const DEFAULT_ACCELERATOR = 'Alt+Shift+Home';
 
-const MIN_WIDTH = 380;
+// Wide enough that a slider row still fits its label, the slider, the readout and its Default
+// button side by side; below that the row wraps and the window stops being readable at a glance.
+const MIN_WIDTH = 430;
 const MIN_HEIGHT = 320;
-const DEFAULT_WIDTH = 460;
-const DEFAULT_HEIGHT = 620;
+const DEFAULT_WIDTH = 520;
+const DEFAULT_HEIGHT = 640;
 
 let panel = null;
 let registered = null;

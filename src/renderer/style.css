@@ -16,8 +16,40 @@
   --danger: #e5484d;
   --danger-rgb: 229, 72, 77;
   --warn: #d9a441;
+  --btn-hover: #2b303b;
+  --overlay: rgba(0, 0, 0, 0.55);
+  --shadow: rgba(0, 0, 0, 0.35);
   --radius: 10px;
 }
+
+/* Light. The same layout and the same accent -- only the neutrals are inverted, so a screenshot of
+   one reads as the same app as a screenshot of the other. The accent keeps its dark text on a solid
+   fill either way; what has to move is accent-text, which is drawn on the background rather than on
+   the accent, and green-on-white at that weight is not readable. */
+body.theme-light {
+  color-scheme: light;
+  --bg: #f3f4f7;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #e9ebf0;
+  --border: #d5d9e0;
+  --text: #171a1f;
+  --text-dim: #5b6472;
+  --accent-text: #4a7a00;
+  --danger: #c62b30;
+  --danger-rgb: 198, 43, 48;
+  --warn: #8a6100;
+  --btn-hover: #dee1e8;
+  --overlay: rgba(23, 26, 31, 0.35);
+  --shadow: rgba(23, 26, 31, 0.18);
+}
+
+/* vendor-amd sets the accent above; this only repeats the one token light has to move. */
+body.theme-light.vendor-amd { --accent-text: #b3161c; }
+
+/* Chromium resolves a form control's own painting -- a select's arrow, a slider's track -- from the
+   root element's colour scheme, not from the element the tokens are on, so the class goes on <html>
+   as well or the controls stay dark on a light page. Both renderers set both. */
+html.theme-light { color-scheme: light; }
 
 /* On an AMD card the app wears AMD's red instead (renderer.js sets the class from gpu:info).
    Danger moves to orange so a Remove button still reads differently from a primary one. */
@@ -32,6 +64,44 @@ body.vendor-amd {
 }
 
 * { box-sizing: border-box; }
+
+/* Checkboxes and radios are drawn by the browser, and its own blue is the one colour in this app
+   that never followed the accent -- NVIDIA green, AMD red or either theme. */
+input[type="checkbox"],
+input[type="radio"],
+progress { accent-color: var(--accent); }
+
+/* Sliders are drawn by hand rather than with accent-color, because Chromium paints the unfilled
+   part of the track from a palette of its own that ignores the page: with accent-color alone the
+   track stays dark grey on a light page. --fill is the percentage the value sits at, set by
+   whichever renderer built the row (paintRange), because CSS cannot read an input's value. */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 16px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: linear-gradient(to right, var(--accent) 0 var(--fill, 0%), var(--bg-elev-2) var(--fill, 0%) 100%);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-elev);
+  box-shadow: 0 1px 3px var(--shadow);
+}
+input[type="range"]:disabled { cursor: not-allowed; }
+input[type="range"]:disabled::-webkit-slider-thumb { background: var(--text-dim); }
+input[type="range"]:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 body {
   margin: 0;
@@ -74,7 +144,7 @@ body {
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, opacity 0.15s;
 }
-.btn:hover { background: #2b303b; }
+.btn:hover { background: var(--btn-hover); }
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -274,7 +344,7 @@ body {
   background: var(--bg-elev);
   color: var(--text);
   border: 1px solid var(--border);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  box-shadow: 0 8px 24px var(--shadow);
   font-size: 12px;
   line-height: 1.4;
   font-weight: 400;
@@ -291,7 +361,7 @@ body {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.55);
+  background: var(--overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -523,7 +593,7 @@ body:not(.show-advanced) #game-modal .advanced-only { display: none !important; 
   border-radius: 8px;
   font-size: 13px;
   z-index: 30;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+  box-shadow: 0 6px 20px var(--shadow);
 }
 
 /* Korean wraps between any two syllables by default, which splits short button labels mid-word

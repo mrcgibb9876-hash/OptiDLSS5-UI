@@ -856,4 +856,12 @@ window.I18N.register("fr", {
   "{key} opens and closes it, even while a game has focus.": "{key} l'ouvre et le ferme, même quand le jeu a le focus.",
   "Windows would not give this app {key} — another program already has it. Pick a different combination.": "Windows n'a pas accordé {key} à cette application — un autre programme l'utilise déjà. Choisissez une autre combinaison.",
   "Hold Ctrl, Alt or Shift as well — a key on its own would be taken from every other program.": "Maintenez aussi Ctrl, Alt ou Maj — une touche seule serait prise à tous les autres programmes.",
+
+  // Theme, the emulator resolution block and the cost readout.
+  "Theme": "Thème",
+  "Dark": "Sombre",
+  "Light": "Clair",
+  "Light or dark": "Clair ou sombre",
+  "Model works at {size} -- about {pct}% of the cost at display resolution.": "Le modèle travaille en {size} -- environ {pct}% du coût à la résolution d'affichage.",
+  "Model works at {size}, {passes} passes -- about {pct}% of the cost of one pass at display resolution.": "Le modèle travaille en {size}, {passes} passes -- environ {pct}% du coût d'une passe à la résolution d'affichage.",
 });

@@ -118,6 +118,7 @@ contextBridge.exposeInMainWorld('api', {
   panelOpen: () => ipcRenderer.invoke('panel:open'),
   panelHotkeyState: () => ipcRenderer.invoke('panel:hotkeyState'),
   onPanelOpened: (cb) => { ipcRenderer.on('panel:opened', () => cb()); },
+  onSettingsChanged: (cb) => { ipcRenderer.on('settings-changed', (_evt, settings) => cb(settings)); },
   importLocalBanner: (sourcePath) => ipcRenderer.invoke('banner:import-local', sourcePath),
 
   checkUpdate: (engine) => ipcRenderer.invoke('update:check', { engine }),

@@ -1686,6 +1686,15 @@ function renderDlssNrEmulator(game) {
   select.onchange = () => applyDlssNr(game, 'WorkingScale', Number(select.value) >= 0.999 ? null : Number(select.value));
 }
 
+// CSS cannot read an input's value, so the filled part of a slider's track is a percentage this
+// sets on the element (see input[type="range"] in style.css).
+function paintRange(input) {
+  const min = Number(input.min);
+  const max = Number(input.max);
+  const pct = max > min ? ((Number(input.value) - min) / (max - min)) * 100 : 0;
+  input.style.setProperty('--fill', `${Math.max(0, Math.min(100, pct)).toFixed(1)}%`);
+}
+
 function renderDlssNrFields(game) {
   renderDlssNrEmulator(game);
   const host = $('#game-dlssnr-fields');
@@ -1740,6 +1749,7 @@ function renderDlssNrFields(game) {
         input.max = String(field.max);
         input.step = String(field.step || (field.type === 'int' ? 1 : 0.05));
         input.value = String(shown);
+        paintRange(input);
       }
       input.className = 'dlssnr-input';
       input.disabled = !met;
@@ -1762,7 +1772,7 @@ function renderDlssNrFields(game) {
         reset.disabled = !met;
         reset.addEventListener('click', () => applyDlssNr(game, field.key, null));
         row.appendChild(reset);
-        input.addEventListener('input', () => { readout.textContent = String(input.value); });
+        input.addEventListener('input', () => { readout.textContent = String(input.value); paintRange(input); });
         input.addEventListener('change', () => applyDlssNr(game, field.key, Number(input.value)));
       } else {
         input.addEventListener('change', () => applyDlssNr(game, field.key, input.value === 'auto' ? null : input.value));
@@ -3166,6 +3176,7 @@ function openSettingsModal() {
       : gpu.vendor === 'intel' ? ' ' + t('-- no Neural Rendering route on Intel; OptiScaler still installs for its upscaler swap.')
       : gpu.vendor === 'unknown' ? ' ' + t('-- could not identify the GPU; assuming NVIDIA.') : '');
   $('#settings-language').value = settings.language || 'auto';
+  $('#settings-theme').value = settings.theme === 'light' ? 'light' : 'dark';
   $('#settings-show-advanced').checked = !!settings.showAdvanced;
   $('#settings-advanced').classList.toggle('hidden', !settings.showAdvanced);
   $('#settings-feeder-prerelease').checked = !!settings.feederPrerelease;
@@ -3321,6 +3332,26 @@ $('#settings-panel-enabled').addEventListener('change', async (e) => {
 });
 
 $('#btn-panel-open').addEventListener('click', () => window.api.panelOpen());
+
+// One switch for the whole app: the pop-out panel reads the same settings.json, and main.js tells
+// whichever window did not make the change.
+function applyTheme() {
+  const light = settings.theme === 'light';
+  document.body.classList.toggle('theme-light', light);
+  document.documentElement.classList.toggle('theme-light', light);
+}
+
+$('#settings-theme').addEventListener('change', async (e) => {
+  settings.theme = e.target.value === 'light' ? 'light' : 'dark';
+  applyTheme();
+  await window.api.saveSettings(settings);
+});
+
+window.api.onSettingsChanged((next) => {
+  if (!next) return;
+  settings.theme = next.theme;
+  applyTheme();
+});
 
 $('#settings-language').addEventListener('change', async (e) => {
   settings.language = e.target.value || 'auto';
@@ -3871,6 +3902,7 @@ window.addEventListener('focus', () => {
   games = data.games || [];
   settings = data.settings || { releaseFolder: '', nrDllPath: '', installedVersion: '' };
   applyLanguage();
+  applyTheme();
   document.body.classList.toggle('show-advanced', !!settings.showAdvanced);
   try { gpu = (await window.api.gpuInfo()) || gpu; } catch {}
   // Vendor colours: the default green is NVIDIA's; an AMD card gets AMD red (style.css, body.vendor-amd).

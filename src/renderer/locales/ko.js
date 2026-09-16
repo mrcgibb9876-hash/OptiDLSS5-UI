@@ -773,4 +773,22 @@ window.I18N.register("ko", {
   "{key} opens and closes it, even while a game has focus.": "게임에 포커스가 있어도 {key} 로 열고 닫을 수 있습니다.",
   "Windows would not give this app {key} — another program already has it. Pick a different combination.": "Windows가 이 앱에 {key} 를 내주지 않았습니다 — 다른 프로그램이 이미 사용 중입니다. 다른 조합을 선택하세요.",
   "Hold Ctrl, Alt or Shift as well — a key on its own would be taken from every other program.": "Ctrl, Alt 또는 Shift도 함께 누르세요 — 단독 키는 다른 모든 프로그램에서 빼앗게 됩니다.",
+
+  // Theme, the emulator resolution block and the cost readout.
+  "Theme": "테마",
+  "Dark": "어둡게",
+  "Light": "밝게",
+  "Light or dark": "밝게 또는 어둡게",
+  "Default": "기본값",
+  "Reset all to default": "모두 기본값으로 초기화",
+  "Emulator: DLSS 5 resolution": "에뮬레이터: DLSS 5 해상도",
+  "Model works at {size} -- about {pct}% of the cost at display resolution.": "모델이 {size}에서 동작합니다 -- 디스플레이 해상도 대비 약 {pct}% 비용입니다.",
+  "Model works at {size}, {passes} passes -- about {pct}% of the cost of one pass at display resolution.": "모델이 {size}에서 {passes}번 통과로 동작합니다 -- 디스플레이 해상도에서 1회 통과 대비 약 {pct}% 비용입니다.",
+  "Display resolution ({size}) -- default": "디스플레이 해상도 ({size}) -- 기본값",
+  "{h}p ({size}, {pct}% of the work area)": "{h}p ({size}, 작업 영역의 {pct}%)",
+  "Custom: {pct}% ({size})": "사용자 지정: {pct}% ({size})",
+  "The model works at {size}: about {pct}% of the display-resolution cost.": "모델이 {size}에서 동작합니다: 디스플레이 해상도 대비 약 {pct}% 비용입니다.",
+  "Saved. Applies the next time the game starts.": "저장했습니다. 게임을 다음에 시작할 때 적용됩니다.",
+  "Everything back to default. Applies the next time the game starts.": "모두 기본값으로 되돌렸습니다. 게임을 다음에 시작할 때 적용됩니다.",
+  "<strong>This game runs the 32-bit route</strong>, so these are read from and written to host64\\OptiScaler.ini -- the copy the helper process actually loads. That is also why the panel never appears over the game.": "<strong>이 게임은 32비트 경로로 실행됩니다</strong>. 따라서 이 설정은 도우미 프로세스가 실제로 불러오는 사본인 host64\\OptiScaler.ini에서 읽고 그곳에 기록됩니다. 패널이 게임 위에 나타나지 않는 것도 같은 이유입니다.",
 });

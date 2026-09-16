@@ -773,4 +773,22 @@ window.I18N.register('pt-BR', {
   "{key} opens and closes it, even while a game has focus.": "{key} abre e fecha o painel, mesmo com o jogo em foco.",
   "Windows would not give this app {key} — another program already has it. Pick a different combination.": "O Windows não deu {key} a este aplicativo — outro programa já usa essa combinação. Escolha outra.",
   "Hold Ctrl, Alt or Shift as well — a key on its own would be taken from every other program.": "Segure também Ctrl, Alt ou Shift — uma tecla sozinha seria tirada de todos os outros programas.",
+
+  // Theme, the emulator resolution block and the cost readout.
+  "Theme": "Tema",
+  "Dark": "Escuro",
+  "Light": "Claro",
+  "Light or dark": "Claro ou escuro",
+  "Default": "Padrão",
+  "Reset all to default": "Redefinir tudo para o padrão",
+  "Emulator: DLSS 5 resolution": "Emulador: resolução do DLSS 5",
+  "Model works at {size} -- about {pct}% of the cost at display resolution.": "O modelo trabalha em {size} -- cerca de {pct}% do custo na resolução da tela.",
+  "Model works at {size}, {passes} passes -- about {pct}% of the cost of one pass at display resolution.": "O modelo trabalha em {size}, {passes} passos -- cerca de {pct}% do custo de um passo na resolução da tela.",
+  "Display resolution ({size}) -- default": "Resolução da tela ({size}) -- padrão",
+  "{h}p ({size}, {pct}% of the work area)": "{h}p ({size}, {pct}% da área de trabalho)",
+  "Custom: {pct}% ({size})": "Personalizado: {pct}% ({size})",
+  "The model works at {size}: about {pct}% of the display-resolution cost.": "O modelo trabalha em {size}: cerca de {pct}% do custo na resolução da tela.",
+  "Saved. Applies the next time the game starts.": "Salvo. Vale na próxima vez que o jogo iniciar.",
+  "Everything back to default. Applies the next time the game starts.": "Tudo de volta ao padrão. Vale na próxima vez que o jogo iniciar.",
+  "<strong>This game runs the 32-bit route</strong>, so these are read from and written to host64\\OptiScaler.ini -- the copy the helper process actually loads. That is also why the panel never appears over the game.": "<strong>Este jogo usa a rota de 32 bits</strong>, então estas opções são lidas e gravadas em host64\\OptiScaler.ini -- a cópia que o processo auxiliar realmente carrega. É também por isso que o painel nunca aparece sobre o jogo.",
 });

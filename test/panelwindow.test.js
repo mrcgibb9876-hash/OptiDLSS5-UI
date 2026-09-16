@@ -68,7 +68,7 @@ test('a window dragged below the screen is dropped, not merely clamped', () => {
 
 test('a remembered size below the minimum is raised to it', () => {
   const bounds = panelwindow.visibleBounds({ x: 10, y: 10, width: 40, height: 20 }, ONE_SCREEN);
-  assert.ok(bounds.width >= 380, `width ${bounds.width}`);
+  assert.ok(bounds.width >= 430, `width ${bounds.width}`);
   assert.ok(bounds.height >= 320, `height ${bounds.height}`);
 });
 

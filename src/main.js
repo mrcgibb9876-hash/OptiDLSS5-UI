@@ -158,6 +158,13 @@ ipcMain.handle('data:save-settings', (_evt, settings) => {
   // The break-away panel's hotkey is owned by the OS, not by a window, so a changed key (or the
   // panel being switched off) has to be handed back and re-taken here rather than at next launch.
   if (panelHotkeySignature(before) !== panelHotkeySignature(settings)) applyPanelHotkey(settings);
+  // The pop-out panel and the main window share settings.json, and either can change the theme or
+  // the language, so whichever did not make the change is told rather than left stale.
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.webContents !== _evt.sender) {
+      try { win.webContents.send('settings-changed', settings); } catch {}
+    }
+  }
   return true;
 });
 
@@ -1649,7 +1656,7 @@ ipcMain.handle('panel:targets', async () => {
     } catch {
       // A game whose exe has gone still belongs in the list; it just has nothing to edit.
     }
-    out.push({ name: game.name || path.basename(game.exePath), exePath: game.exePath, running: isRunning, installed });
+    out.push({ name: game.name || path.basename(game.exePath), exePath: game.exePath, detectedPath: game.detectedPath || null, running: isRunning, installed });
   }
   return { ok: true, games: out };
 });

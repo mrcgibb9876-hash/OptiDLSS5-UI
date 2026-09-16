@@ -773,4 +773,22 @@ window.I18N.register("es", {
   "{key} opens and closes it, even while a game has focus.": "{key} lo abre y lo cierra, incluso mientras el juego tiene el foco.",
   "Windows would not give this app {key} — another program already has it. Pick a different combination.": "Windows no le dio {key} a esta aplicación — otro programa ya la tiene. Elige otra combinación.",
   "Hold Ctrl, Alt or Shift as well — a key on its own would be taken from every other program.": "Mantén pulsada también Ctrl, Alt o Shift — una tecla sola se le quitaría a todos los demás programas.",
+
+  // Theme, the emulator resolution block and the cost readout.
+  "Theme": "Tema",
+  "Dark": "Oscuro",
+  "Light": "Claro",
+  "Light or dark": "Claro u oscuro",
+  "Default": "Predeterminado",
+  "Reset all to default": "Restablecer todo a los valores predeterminados",
+  "Emulator: DLSS 5 resolution": "Emulador: resolución de DLSS 5",
+  "Model works at {size} -- about {pct}% of the cost at display resolution.": "El modelo trabaja a {size} -- alrededor del {pct}% del coste a resolución de pantalla.",
+  "Model works at {size}, {passes} passes -- about {pct}% of the cost of one pass at display resolution.": "El modelo trabaja a {size}, {passes} pasos -- alrededor del {pct}% del coste de un paso a resolución de pantalla.",
+  "Display resolution ({size}) -- default": "Resolución de pantalla ({size}) -- predeterminado",
+  "{h}p ({size}, {pct}% of the work area)": "{h}p ({size}, {pct}% del área de trabajo)",
+  "Custom: {pct}% ({size})": "Personalizado: {pct}% ({size})",
+  "The model works at {size}: about {pct}% of the display-resolution cost.": "El modelo trabaja a {size}: alrededor del {pct}% del coste a resolución de pantalla.",
+  "Saved. Applies the next time the game starts.": "Guardado. Se aplica la próxima vez que se inicie el juego.",
+  "Everything back to default. Applies the next time the game starts.": "Todo de vuelta a los valores predeterminados. Se aplica la próxima vez que se inicie el juego.",
+  "<strong>This game runs the 32-bit route</strong>, so these are read from and written to host64\\OptiScaler.ini -- the copy the helper process actually loads. That is also why the panel never appears over the game.": "<strong>Este juego usa la ruta de 32 bits</strong>, así que estos ajustes se leen y se escriben en host64\\OptiScaler.ini -- la copia que el proceso asistente carga realmente. Por eso mismo el panel nunca aparece sobre el juego.",
 });

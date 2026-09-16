@@ -773,4 +773,22 @@ window.I18N.register("ru", {
   "{key} opens and closes it, even while a game has focus.": "{key} открывает и закрывает панель, даже когда активна игра.",
   "Windows would not give this app {key} — another program already has it. Pick a different combination.": "Windows не выдала этому приложению {key} — сочетание уже занято другой программой. Выберите другое.",
   "Hold Ctrl, Alt or Shift as well — a key on its own would be taken from every other program.": "Удерживайте ещё Ctrl, Alt или Shift — одиночная клавиша была бы отнята у всех остальных программ.",
+
+  // Theme, the emulator resolution block and the cost readout.
+  "Theme": "Тема",
+  "Dark": "Тёмная",
+  "Light": "Светлая",
+  "Light or dark": "Светлая или тёмная",
+  "Default": "По умолчанию",
+  "Reset all to default": "Сбросить всё к значениям по умолчанию",
+  "Emulator: DLSS 5 resolution": "Эмулятор: разрешение DLSS 5",
+  "Model works at {size} -- about {pct}% of the cost at display resolution.": "Модель работает в {size} -- примерно {pct}% стоимости при разрешении экрана.",
+  "Model works at {size}, {passes} passes -- about {pct}% of the cost of one pass at display resolution.": "Модель работает в {size}, проходов: {passes} -- примерно {pct}% стоимости одного прохода при разрешении экрана.",
+  "Display resolution ({size}) -- default": "Разрешение экрана ({size}) -- по умолчанию",
+  "{h}p ({size}, {pct}% of the work area)": "{h}p ({size}, {pct}% рабочей площади)",
+  "Custom: {pct}% ({size})": "Своё: {pct}% ({size})",
+  "The model works at {size}: about {pct}% of the display-resolution cost.": "Модель работает в {size}: примерно {pct}% стоимости при разрешении экрана.",
+  "Saved. Applies the next time the game starts.": "Сохранено. Вступит в силу при следующем запуске игры.",
+  "Everything back to default. Applies the next time the game starts.": "Всё вернулось к значениям по умолчанию. Вступит в силу при следующем запуске игры.",
+  "<strong>This game runs the 32-bit route</strong>, so these are read from and written to host64\\OptiScaler.ini -- the copy the helper process actually loads. That is also why the panel never appears over the game.": "<strong>Эта игра идёт по 32-битному маршруту</strong>, поэтому настройки читаются из host64\\OptiScaler.ini и пишутся туда же -- это та копия, которую действительно загружает вспомогательный процесс. По той же причине панель никогда не появляется поверх игры.",
 });

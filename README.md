@@ -122,10 +122,16 @@ The panels above are drawn inside the game, so they depend on the game cooperati
 and a 32-bit game only ever shows a mirror of the 64-bit helper's panel, which is why it can appear and then do
 nothing when you click it.
 
-`Alt+Shift+Home` opens a small window of the app's own instead, always on top of the game, resizable, with the
-same DLSS 5 settings in it. Nothing is asked of the game: the hotkey is registered with Windows, and the controls
-write to `OptiScaler.ini`, which the engine re-reads within a second. It opens on whichever of your games is
-running. Settings has a switch for it, a box to rebind the key by pressing it, and a button to open it now.
+`Alt+Shift+Home` opens a small window of the app's own instead, always on top of the game, resizable, with
+**every** DLSS 5 control in it — the same rows as the Edit dialog and the in-game panel, from the same source, plus
+a readout of what the model's resolution and pass count cost. Nothing is asked of the game: the hotkey is
+registered with Windows, and the controls write to `OptiScaler.ini`, which the engine re-reads within a second. It
+opens on whichever of your games is running. Settings has a switch for it, a box to rebind the key by pressing it,
+and a button to open it now.
+
+It is the app, not a Windows dialog: no title bar, drag it by its own top bar, the app's colours, accent and
+language, and the same **Dark / Light** theme (Settings, or the half-circle button in its bar — either switches
+both windows at once).
 
 The one thing it cannot do is sit on top of a game in **exclusive fullscreen** — Windows will not composite
 another window over a game that owns the display. Run that game borderless or windowed (`[DlssNr] ForceBorderless`
