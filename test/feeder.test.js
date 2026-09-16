@@ -392,6 +392,33 @@ test('the Feeder\'s own log lines become the verdict: no motion, flat depth, and
   assert.equal(run.verdict, 'feed-depth-flat');
   assert.equal(run.feedDepthFlatMoving, true);
 
+  // A run that began at the main menu, which is every run. The Feeder writes its no-motion and
+  // flat-depth annotations at the first probe, and a menu has neither -- so those two lines alone
+  // used to decide the verdict, and Tomb Raider I-III Remastered was told "DLSS is getting no
+  // motion vectors" while its own later probes measured 23.8 px mean and 50.4 px max (2026-09-16).
+  write(dir, 'dlss5-feed.log', [
+    '[feed] MV probe (centre 64x64, frame 600): mean |mv| 0.000 px, max 0.00 px, 0% non-zero  <-- DLSS is getting (almost) no motion vectors',
+    '[feed] Depth probe (4x 32x32, frame 600): min 1, max 1, mean 1, variance 0, 100% finite  <-- sampled depth is flat; inspect the depth debug view / Generic Depth settings',
+    '[feed] MV probe (centre 64x64, frame 26400): mean |mv| 23.771 px, max 50.39 px, 96% non-zero',
+    '[feed] Depth probe (4x 32x32, frame 26400): min 0.979905, max 0.996492, mean 0.987121, variance 4.91e-05, 100% finite',
+    '',
+  ].join('\n'));
+  run = await runlog.analyzeRun(dir);
+  assert.equal(run.feedNoMotion, false, 'one probe that saw real motion settles it');
+  assert.equal(run.feedDepthFlat, false, 'and a real depth spread settles the depth half');
+  assert.notEqual(run.verdict, 'feed-no-motion');
+
+  // A run where nothing ever moved still reports it: the annotation is not being ignored, and a
+  // still scene in 3D (0.5 px) stays below the threshold that real movement clears by 10x.
+  write(dir, 'dlss5-feed.log', [
+    '[feed] MV probe (centre 64x64, frame 600): mean |mv| 0.000 px, max 0.00 px, 0% non-zero  <-- DLSS is getting (almost) no motion vectors',
+    '[feed] MV probe (centre 64x64, frame 6000): mean |mv| 0.062 px, max 0.50 px, 99% non-zero',
+    '',
+  ].join('\n'));
+  run = await runlog.analyzeRun(dir);
+  assert.equal(run.feedNoMotion, true, 'still-scene probes never clear it');
+  assert.equal(run.verdict, 'feed-no-motion');
+
   write(dir, 'dlss5-feed.log', '[feed] D3D12CreateDevice failed 0x887E0003 (D3D12_ERROR_INVALID_REDIST)\n');
   run = await runlog.analyzeRun(dir);
   assert.equal(run.verdict, 'feed-agility-redist');

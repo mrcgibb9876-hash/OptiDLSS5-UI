@@ -95,6 +95,31 @@ function wrapperFault(feed, dir) {
   return path.basename(m[1]);
 }
 
+// Every MV and depth probe the Feeder wrote, reduced to "did this run ever see real motion / real
+// depth". Menu frames read as neither, so a single bad probe proves nothing; one good one proves
+// the pipeline works.
+//
+//   [feed] MV probe (centre 64x64, frame 600): mean |mv| 23.771 px, max 50.39 px, 96% non-zero
+//   [feed] Depth probe (4x 32x32, frame 600): min 0.979905, max 0.996492, mean 0.987, variance 4.91e-05
+//
+// The thresholds sit above what a still scene measures and well below real movement. Standing in a
+// 3D scene without moving read 0.36 px mean / 2.12 px max on Tomb Raider I-III; walking read 23.8 /
+// 50.4. Depth in that game spans ~0.017 between near and far geometry while a menu reads exactly
+// flat, so any spread at all is the signal -- the absolute values are meaningless, since a
+// perspective z-buffer crowds everything against 1.0.
+const MOTION_MEAN_PX = 1.0;
+const MOTION_MAX_PX = 4.0;
+const DEPTH_SPREAD = 1e-4;
+
+function probeReadings(feed) {
+  const motion = [...String(feed).matchAll(/MV probe[^\r\n]*?mean \|mv\| ([\d.]+) px, max ([\d.]+) px/g)];
+  const depth = [...String(feed).matchAll(/Depth probe[^\r\n]*?min ([\d.eE+-]+), max ([\d.eE+-]+)/g)];
+  return {
+    sawMotion: motion.some((m) => Number(m[1]) >= MOTION_MEAN_PX || Number(m[2]) >= MOTION_MAX_PX),
+    sawDepth: depth.some((m) => Math.abs(Number(m[2]) - Number(m[1])) >= DEPTH_SPREAD),
+  };
+}
+
 // optiDir: where OptiScaler (and its log) lives when that is not the game folder -- a 32-bit game's
 // DLSS work runs in the Feeder's 64-bit helper, in host64\ beside it (legacy.js). The Feeder's own
 // log stays beside the game.
@@ -199,9 +224,18 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   //                  Unity failure); flat on its own can just be a menu.
   const feedInvalidRedist = /D3D12_ERROR_INVALID_REDIST|0x887E0003/i.test(feed);
   const feedMvProblem = (/\[feed\] ((?:DLSS5_Feed\.fx is compiled for motion-vector provider|motion-vector provider )[^\r\n]+)/.exec(feed) || [])[1] || null;
-  const feedNoMotion = /DLSS is getting \(almost\) no motion vectors/.test(feed);
+  // Both annotations are written the moment a single probe reads low, and the Feeder takes its
+  // first probe at frame 600 -- which in almost every game is the main menu, where nothing moves
+  // and nothing has depth. Taken at face value they made "DLSS is getting no motion vectors" the
+  // verdict for any session that started at a menu, which is every session.
+  //
+  // Tomb Raider I-III Remastered, 2026-09-16: reported feed-no-motion on a run whose own probes
+  // measured 23.8 px mean and 50.4 px max once the player was actually moving. So a probe that
+  // ever saw real motion settles it -- the annotation only stands if none did.
+  const probes = probeReadings(feed);
+  const feedNoMotion = /DLSS is getting \(almost\) no motion vectors/.test(feed) && !probes.sawMotion;
   const feedDepthFlatMoving = /depth is FLAT while the scene moves/.test(feed);
-  const feedDepthFlat = feedDepthFlatMoving || /sampled depth is flat/.test(feed);
+  const feedDepthFlat = feedDepthFlatMoving || (/sampled depth is flat/.test(feed) && !probes.sawDepth);
   // The neural model crashed inside the Feeder's evaluate and the Feeder stopped feeding:
   //
   //   [feed] evaluate raised 0xC0000005 (reading address FFFFFFFFFFFFFFFF) (caught; nothing submitted)
