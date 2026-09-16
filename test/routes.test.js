@@ -342,15 +342,43 @@ test('a game already on the grid is not re-proposed after its exe was changed by
   assert.equal(scan([path.join(dir, 'SomeGame_Launcher.exe')]).length, 0, 'same folder, different exe: still known');
 });
 
-// 2026-09-15: a game with both DX12 and DX11 is set up for DX12, no choice -- unless OptiScaler's log proves it
-// actually ran DX11 last time.
-test('both DX12 and DX11: DX12 wins, an old DX11 choice is dropped, and only a real DX11 run keeps DX11', () => {
+// A game with both DX12 and DX11 defaults to DX12 (2026-09-15) -- unless OptiScaler's log proves it actually
+// ran DX11 last time. What changed on 2026-09-16 is that this is a default rather than the final word: a DX11
+// choice made in Edit used to be dropped on the way through, so the setting appeared to do nothing and fell
+// back to Auto with nothing to say it had.
+test('both DX12 and DX11: DX12 is the default, and a choice made in Edit wins over it', () => {
   const { withApiOverride } = require('../src/route');
   const both = { api: 'dx11', apis: ['dx11', 'dx12'], recommend: 'optiscaler' };
+
+  // Auto, unchanged.
   assert.equal(withApiOverride(both, null).api, 'dx12');
-  assert.equal(withApiOverride(both, 'dx11').api, 'dx12', 'a DX11 override no longer applies');
   assert.equal(withApiOverride({ ...both, runtimeApi: 'dx11' }, null).api, 'dx11', 'the game really ran DX11');
   assert.equal(withApiOverride({ api: 'dx11', apis: ['dx11'] }, null).api, 'dx11', 'DX11-only stays DX11');
   assert.equal(withApiOverride({ api: 'vulkan', apis: ['vulkan', 'dx11', 'dx12'], runtimeApi: 'vulkan' }, null).api, 'vulkan');
-  assert.equal(withApiOverride(both, 'vulkan').api, 'vulkan', 'a non-DX11 choice still applies');
+
+  // Chosen, and honoured -- including DX11, which was the one that used to be thrown away.
+  const picked = withApiOverride(both, 'dx11');
+  assert.equal(picked.api, 'dx11', 'a DX11 choice applies');
+  assert.equal(picked.apiOverride, 'dx11', 'and is reported as a choice, so the card and Edit show it');
+  assert.equal(picked.apis[0], 'dx11');
+  assert.equal(withApiOverride(both, 'vulkan').api, 'vulkan');
+
+  // Nonsense is still ignored rather than taken as an API.
+  assert.equal(withApiOverride(both, 'glide').apiOverride, null);
+  assert.equal(withApiOverride(both, 'glide').api, 'dx12');
+});
+
+// Luma is a DX11 framework, so its games default to DX11 -- but that is also only a default now. The choice
+// used to be discarded outright here too, with apiOverride nulled, so Edit showed Auto whatever was picked.
+test('a Luma game defaults to DX11, and still takes a choice', () => {
+  const { withApiOverride } = require('../src/route');
+  const both = { api: 'dx12', apis: ['dx12', 'dx11'], recommend: 'optiscaler' };
+
+  const auto = withApiOverride(both, null, { luma: true });
+  assert.equal(auto.api, 'dx11', 'Luma prefers the API its framework is built on');
+  assert.equal(auto.apiOverride, null);
+
+  const chosen = withApiOverride(both, 'dx12', { luma: true });
+  assert.equal(chosen.api, 'dx12', 'and the user can still say otherwise');
+  assert.equal(chosen.apiOverride, 'dx12');
 });

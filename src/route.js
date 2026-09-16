@@ -123,21 +123,33 @@ function preferDx12(base) {
 // game offers it (the user's call, 2026-09-15).
 function withApiOverride(detected, override, opts = {}) {
   const raw = detected || {};
-  if (opts.luma && (raw.apis || []).includes('dx11')) {
+  const chosen = override && API_OVERRIDE_VALUES.includes(override) ? override : null;
+
+  // Everything below this line is a default, and a default is what the Auto setting picks. A choice
+  // made in Edit is the user saying which renderer their game actually runs, which is knowledge this
+  // code does not have -- detection reads a file on disk, and a game with two renderers in it looks
+  // the same either way.
+  //
+  // Both of these used to win over the choice instead. Picking DX11 in Edit on a game that also
+  // offers DX12 did nothing at all: the choice was dropped on the way through and the dropdown went
+  // back to Auto, with no way to tell it had. That was deliberate (2026-09-15, "no choice") and is
+  // reversed here on the same authority -- the automatic answer is unchanged, it is only no longer
+  // the final word.
+  if (!chosen && opts.luma && (raw.apis || []).includes('dx11')) {
+    // Luma is a DirectX 11 framework, so for its games the most compatible API wins over DX12.
     const apis = ['dx11', ...(raw.apis || []).filter((a) => a !== 'dx11')];
-    return { ...raw, api: 'dx11', apis, apiOverride: null, detectedApi: raw.api || null, lumaApi: true };
+    return { ...raw, api: 'dx11', apis, apiOverride: null, detectedApi: raw.api || null };
   }
+
   const base = preferDx12(raw);
-  // An old DX11 choice on a game that has DX12 no longer applies.
-  if (override === 'dx11' && (base.apis || []).includes('dx12') && base.runtimeApi !== 'dx11') override = null;
-  if (!override || !API_OVERRIDE_VALUES.includes(override)) return { ...base, apiOverride: null };
-  const apis = [override, ...(base.apis || []).filter((a) => a !== override)];
+  if (!chosen) return { ...base, apiOverride: null };
+  const apis = [chosen, ...(base.apis || []).filter((a) => a !== chosen)];
   return {
     ...base,
-    api: override,
+    api: chosen,
     apis,
     recommend: base.recommend === 'unsupported' ? 'optiscaler' : base.recommend,
-    apiOverride: override,
+    apiOverride: chosen,
     detectedApi: base.api || null,
   };
 }
