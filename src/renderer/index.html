@@ -377,6 +377,26 @@
         </select>
       </div>
 
+      <label class="field-label" data-i18n>Theme</label>
+      <div class="field-row">
+        <select id="settings-theme">
+          <option value="dark" data-i18n>Dark</option>
+          <option value="light" data-i18n>Light</option>
+        </select>
+      </div>
+
+      <label class="field-label" style="margin-top: 14px;" data-i18n>Pop-out DLSS 5 panel</label>
+      <p class="field-hint" data-i18n>A small window of this app's own that sits on top of the game and changes the DLSS 5 settings while it runs. Use it when the in-game panel will not open, or opens but does nothing — which is what happens on 32-bit games. It cannot sit on top of a game in exclusive fullscreen; run that game borderless or windowed.</p>
+      <label class="scan-checkbox-row">
+        <input id="settings-panel-enabled" type="checkbox" />
+        <span data-i18n>Open it with a hotkey</span>
+      </label>
+      <div class="field-row">
+        <input id="settings-panel-hotkey" type="text" data-i18n-placeholder placeholder="Alt+Shift+Home" autocomplete="off" spellcheck="false" />
+        <button id="btn-panel-open" class="btn btn-ghost" data-i18n>Open it now</button>
+      </div>
+      <div id="panel-hotkey-status" class="status-line"></div>
+
       <label class="scan-checkbox-row" style="margin-top: 14px;">
         <input id="settings-show-advanced" type="checkbox" />
         <span data-i18n>Show advanced options</span>

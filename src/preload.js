@@ -110,6 +110,15 @@ contextBridge.exposeInMainWorld('api', {
   gamesRunning: (exePaths) => ipcRenderer.invoke('games:running', exePaths),
   dlssNrGet: (exePath) => ipcRenderer.invoke('dlssnr:get', exePath),
   dlssNrSet: (exePath, values) => ipcRenderer.invoke('dlssnr:set', { exePath, values }),
+
+  // The break-away DLSS 5 panel (src/panelwindow.js). panelTargets is its own list rather than
+  // loadData's, because it also says which game is running -- that is what it opens on.
+  panelTargets: () => ipcRenderer.invoke('panel:targets'),
+  panelClose: () => ipcRenderer.invoke('panel:close'),
+  panelOpen: () => ipcRenderer.invoke('panel:open'),
+  panelHotkeyState: () => ipcRenderer.invoke('panel:hotkeyState'),
+  onPanelOpened: (cb) => { ipcRenderer.on('panel:opened', () => cb()); },
+  onSettingsChanged: (cb) => { ipcRenderer.on('settings-changed', (_evt, settings) => cb(settings)); },
   importLocalBanner: (sourcePath) => ipcRenderer.invoke('banner:import-local', sourcePath),
 
   checkUpdate: (engine) => ipcRenderer.invoke('update:check', { engine }),

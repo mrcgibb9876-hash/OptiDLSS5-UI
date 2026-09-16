@@ -1612,6 +1612,7 @@ function dlssNrDependencyMet(field) {
   if (d.is !== undefined) return v === d.is;
   if (d.atLeast !== undefined) return Number(v) >= d.atLeast;
   if (d.above !== undefined) return Number(v) > d.above;
+  if (d.below !== undefined) return Number(v) < d.below;
   return true;
 }
 
@@ -1686,6 +1687,28 @@ function renderDlssNrEmulator(game) {
   select.onchange = () => applyDlssNr(game, 'WorkingScale', Number(select.value) >= 0.999 ? null : Number(select.value));
 }
 
+// CSS cannot read an input's value, so the filled part of a slider's track is a percentage this
+// sets on the element (see input[type="range"] in style.css).
+function paintRange(input) {
+  const min = Number(input.min);
+  const max = Number(input.max);
+  const pct = max > min ? ((Number(input.value) - min) / (max - min)) * 100 : 0;
+  input.style.setProperty('--fill', `${Math.max(0, Math.min(100, pct)).toFixed(1)}%`);
+}
+
+// Paper white runs 0.25 to 2000. On a linear track its whole usable range is the first pixel, so
+// those fields carry log: true and the slider is a 0..1000 position mapped onto the range instead
+// -- the same thing the in-game panel does with them.
+const sliderPos = (f, v) => Math.round((f.log ? Math.log(v / f.min) / Math.log(f.max / f.min) : (v - f.min) / (f.max - f.min)) * 1000);
+const sliderVal = (f, pos) => (f.log ? f.min * Math.pow(f.max / f.min, pos / 1000) : f.min + (pos / 1000) * (f.max - f.min));
+
+function showNumber(field, value) {
+  if (field.percent) return `${Math.round(value * 100)}%`;
+  if (field.type === 'int') return String(Math.round(value));
+  if (field.log) return `${Number(value).toFixed(2)}x`;
+  return String(Number(Number(value).toFixed(4)));
+}
+
 function renderDlssNrFields(game) {
   renderDlssNrEmulator(game);
   const host = $('#game-dlssnr-fields');
@@ -1719,12 +1742,12 @@ function renderDlssNrFields(game) {
           o.value = value; o.textContent = text; input.appendChild(o);
         }
         input.value = field.value === null ? 'auto' : String(field.value);
-      } else if (field.type === 'enum') {
+      } else if (field.type === 'enum' || field.type === 'code') {
         input = document.createElement('select');
         const def = document.createElement('option');
         def.value = 'auto';
         const defOption = (field.options || []).find(([v]) => v === field.default);
-        def.textContent = field.default === null ? t('Default (follow pass 1)') : t('Default ({state})', { state: defOption ? t(defOption[1]) : String(field.default) });
+        def.textContent = field.default === null ? t(field.type === 'code' ? 'Default (follow Windows)' : 'Default (follow pass 1)') : t('Default ({state})', { state: defOption ? t(defOption[1]) : String(field.default) });
         input.appendChild(def);
         for (const [value, text] of field.options || []) {
           const o = document.createElement('option');
@@ -1736,10 +1759,11 @@ function renderDlssNrFields(game) {
         // magic position on the track -- auto is a state, not a value.
         input = document.createElement('input');
         input.type = 'range';
-        input.min = String(field.min);
-        input.max = String(field.max);
-        input.step = String(field.step || (field.type === 'int' ? 1 : 0.05));
-        input.value = String(shown);
+        input.min = '0';
+        input.max = '1000';
+        input.step = '1';
+        input.value = String(sliderPos(field, Number(shown)));
+        paintRange(input);
       }
       input.className = 'dlssnr-input';
       input.disabled = !met;
@@ -1750,7 +1774,7 @@ function renderDlssNrFields(game) {
       const describe = () => {
         if (heldReason) return t('held off');
         if (field.type === 'bool' || field.type === 'enum') return field.value === null ? t('default') : '';
-        return field.value === null ? t('{n} (default)', { n: shown }) : String(shown);
+        return field.value === null ? t('{n} (default)', { n: showNumber(field, shown) }) : showNumber(field, shown);
       };
       readout.textContent = describe();
       row.appendChild(readout);
@@ -1762,8 +1786,11 @@ function renderDlssNrFields(game) {
         reset.disabled = !met;
         reset.addEventListener('click', () => applyDlssNr(game, field.key, null));
         row.appendChild(reset);
-        input.addEventListener('input', () => { readout.textContent = String(input.value); });
-        input.addEventListener('change', () => applyDlssNr(game, field.key, Number(input.value)));
+        input.addEventListener('input', () => { readout.textContent = showNumber(field, sliderVal(field, Number(input.value))); paintRange(input); });
+        input.addEventListener('change', () => {
+          const v = sliderVal(field, Number(input.value));
+          applyDlssNr(game, field.key, field.type === 'int' ? Math.round(v) : Number(v.toFixed(4)));
+        });
       } else {
         input.addEventListener('change', () => applyDlssNr(game, field.key, input.value === 'auto' ? null : input.value));
       }
@@ -3166,9 +3193,13 @@ function openSettingsModal() {
       : gpu.vendor === 'intel' ? ' ' + t('-- no Neural Rendering route on Intel; OptiScaler still installs for its upscaler swap.')
       : gpu.vendor === 'unknown' ? ' ' + t('-- could not identify the GPU; assuming NVIDIA.') : '');
   $('#settings-language').value = settings.language || 'auto';
+  $('#settings-theme').value = settings.theme === 'light' ? 'light' : 'dark';
   $('#settings-show-advanced').checked = !!settings.showAdvanced;
   $('#settings-advanced').classList.toggle('hidden', !settings.showAdvanced);
   $('#settings-feeder-prerelease').checked = !!settings.feederPrerelease;
+  $('#settings-panel-enabled').checked = panelEnabled();
+  $('#settings-panel-hotkey').value = settings.panelHotkey || DEFAULT_PANEL_HOTKEY;
+  showPanelHotkeyState();
   $('#settings-ai-key').value = settings.anthropicApiKey || '';
   $('#settings-ai-model').value = settings.aiModel || 'claude-sonnet-5';
   $('#settings-nr-dll').value = settings.nrDllPath || '';
@@ -3248,6 +3279,95 @@ $('#settings-show-advanced').addEventListener('change', async (e) => {
 $('#settings-feeder-prerelease').addEventListener('change', async (e) => {
   settings.feederPrerelease = !!e.target.checked;
   await window.api.saveSettings(settings);
+});
+
+// The pop-out DLSS 5 panel (src/panelwindow.js). Its hotkey belongs to the OS rather than to this
+// window, so saving the setting is what re-registers it; main.js does that on every settings save.
+const DEFAULT_PANEL_HOTKEY = 'Alt+Shift+Home';
+
+function panelEnabled() {
+  return settings.panelEnabled === undefined || !!settings.panelEnabled;
+}
+
+async function showPanelHotkeyState() {
+  const el = $('#panel-hotkey-status');
+  const state = await window.api.panelHotkeyState();
+  if (!state || state.disabled || !panelEnabled()) {
+    el.textContent = t('The hotkey is off. The button above still opens it.');
+    el.className = 'status-line';
+    return;
+  }
+  el.textContent = state.ok
+    ? t('{key} opens and closes it, even while a game has focus.', { key: state.accelerator })
+    : t('Windows would not give this app {key} — another program already has it. Pick a different combination.', { key: state.accelerator });
+  el.className = `status-line ${state.ok ? 'status-ok' : 'status-bad'}`;
+}
+
+// Typed by pressing the combination rather than spelling it out: an accelerator is Electron's own
+// syntax, and a user who mistypes it gets a hotkey that silently never fires.
+$('#settings-panel-hotkey').addEventListener('keydown', async (e) => {
+  e.preventDefault();
+  const key = e.key;
+  if (key === 'Tab') return;
+  if (key === 'Backspace' || key === 'Delete') {
+    delete settings.panelHotkey;
+    $('#settings-panel-hotkey').value = DEFAULT_PANEL_HOTKEY;
+    await window.api.saveSettings(settings);
+    showPanelHotkeyState();
+    return;
+  }
+  // A bare modifier is the half-pressed state on the way to a real combination, not a choice.
+  if (['Control', 'Alt', 'Shift', 'Meta', 'OS'].includes(key)) return;
+
+  const parts = [];
+  if (e.ctrlKey) parts.push('Ctrl');
+  if (e.altKey) parts.push('Alt');
+  if (e.shiftKey) parts.push('Shift');
+  if (e.metaKey) parts.push('Super');
+  // Windows hands a plain letter or F-key to whatever has focus, so one on its own would be taken
+  // from every other program in the system. A modifier is required.
+  if (parts.length === 0) {
+    const el = $('#panel-hotkey-status');
+    el.textContent = t('Hold Ctrl, Alt or Shift as well — a key on its own would be taken from every other program.');
+    el.className = 'status-line status-bad';
+    return;
+  }
+
+  const named = { ' ': 'Space', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Escape: 'Esc' };
+  parts.push(named[key] || (key.length === 1 ? key.toUpperCase() : key));
+
+  settings.panelHotkey = parts.join('+');
+  $('#settings-panel-hotkey').value = settings.panelHotkey;
+  await window.api.saveSettings(settings);
+  showPanelHotkeyState();
+});
+
+$('#settings-panel-enabled').addEventListener('change', async (e) => {
+  settings.panelEnabled = !!e.target.checked;
+  await window.api.saveSettings(settings);
+  showPanelHotkeyState();
+});
+
+$('#btn-panel-open').addEventListener('click', () => window.api.panelOpen());
+
+// One switch for the whole app: the pop-out panel reads the same settings.json, and main.js tells
+// whichever window did not make the change.
+function applyTheme() {
+  const light = settings.theme === 'light';
+  document.body.classList.toggle('theme-light', light);
+  document.documentElement.classList.toggle('theme-light', light);
+}
+
+$('#settings-theme').addEventListener('change', async (e) => {
+  settings.theme = e.target.value === 'light' ? 'light' : 'dark';
+  applyTheme();
+  await window.api.saveSettings(settings);
+});
+
+window.api.onSettingsChanged((next) => {
+  if (!next) return;
+  settings.theme = next.theme;
+  applyTheme();
 });
 
 $('#settings-language').addEventListener('change', async (e) => {
@@ -3799,6 +3919,7 @@ window.addEventListener('focus', () => {
   games = data.games || [];
   settings = data.settings || { releaseFolder: '', nrDllPath: '', installedVersion: '' };
   applyLanguage();
+  applyTheme();
   document.body.classList.toggle('show-advanced', !!settings.showAdvanced);
   try { gpu = (await window.api.gpuInfo()) || gpu; } catch {}
   // Vendor colours: the default green is NVIDIA's; an AMD card gets AMD red (style.css, body.vendor-amd).
