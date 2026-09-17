@@ -452,7 +452,7 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
 // this is read by a person and by a script, and a script should not have to parse prose.
 //
 // Redaction is the caller's: ghreport.sendReport redacts the whole body, this included.
-function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = null, route = null } = {}) {
+function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = null, route = null, feeder = null } = {}) {
   const lines = [];
   const add = (key, value) => { if (value !== null && value !== undefined && value !== '' && value !== false) lines.push(`${key}: ${value}`); };
 
@@ -473,8 +473,14 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = 
     // The files beside the exe that change the answer above, and that no header line mentions.
     if (detected.vulkanWrapper) add('wrapper', `${detected.vulkanWrapper.file} beside the exe is ${detected.vulkanWrapper.kind}, so the game reaches the GPU through Vulkan`);
     if (detected.reshadeProxy) add('reshade', `loaded locally as ${detected.reshadeProxy} (not the Vulkan layer)`);
+    // detect.js records ANY OptiScaler found under a proxy name, ours included -- matchesOurBuild
+    // says which. Calling our own install "other optiscaler" sent a real report (#50) looking for a
+    // rival build that was not there, so the two cases are named apart. The proxy name itself is
+    // worth printing either way: it is the whole of what went wrong on the first SWTOR report.
     if (detected.optiScalerProxy && detected.optiScalerProxy.file) {
-      add('other optiscaler', `${detected.optiScalerProxy.file}${detected.optiScalerProxy.matchesOurBuild === false ? ', NOT the build this app installed' : ''}`);
+      add('optiscaler', detected.optiScalerProxy.matchesOurBuild === false
+        ? `${detected.optiScalerProxy.file} -- NOT the build this app installed, and it is the one that answers the game's NGX calls`
+        : `${detected.optiScalerProxy.file} (this app's own install)`);
     }
     if (detected.antiCheat) add('anti-cheat', detected.antiCheat);
   }
@@ -539,6 +545,23 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = 
 
   // State the body never carried, and both halves of a Feeder deploy that can look complete and feed
   // nothing: which motion-vector shader is set up, and whether ReShade's Vulkan layer is on this exe.
+  // Whether the Feeder stack is actually all there. A "no-dlss" verdict on a Feeder game means
+  // nothing ever made a DLSS call, and the first question is always which piece is missing -- the
+  // add-on is a ReShade add-on, so a ReShade that did not load means no feed at all, and nothing in
+  // the body said so (#50, 2026-09-17: route feeder, verdict no-dlss, and no way to tell why).
+  if (feeder && feeder.supported) {
+    const missing = [
+      !feeder.reshadeInstalled && 'ReShade',
+      !feeder.addonInstalled && 'the add-on',
+      !feeder.fxInstalled && 'DLSS5_Feed.fx',
+      !feeder.headersInstalled && 'the ReShade headers',
+      !feeder.dlssInstalled && 'nvngx_dlss.dll',
+      !feeder.dlssnrInstalled && 'nvngx_dlssnr.dll',
+    ].filter(Boolean);
+    add('feeder', missing.length
+      ? `INCOMPLETE -- missing ${missing.join(', ')} (ReShade reaches this game ${feeder.reshadeMode})`
+      : `complete (ReShade reaches this game ${feeder.reshadeMode})`);
+  }
   if (mvProvider && mvProvider.id) {
     const bad = [
       mvProvider.broken && 'cannot work',

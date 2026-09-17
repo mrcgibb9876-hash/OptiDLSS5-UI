@@ -2523,7 +2523,7 @@ ipcMain.handle('report:send', async (_evt, { exePath, detected, title, body } = 
       mvProvider: helpCtx ? helpCtx.mvProvider : null,
       vulkanFeeder: helpCtx ? helpCtx.vulkanFeeder : null,
       detected: helpCtx ? helpCtx.detected : effective,
-      route: helpCtx ? helpCtx.route : null,
+      route: helpCtx ? helpCtx.route : null, feeder: helpCtx ? helpCtx.feederReady : null,
     });
     const out = await ghreport.sendReport({ token, title, body: runlog.withDigest(body, digest), files: withText });
     return { ok: true, ...out };
@@ -2592,6 +2592,11 @@ async function helpContext(exePath, detected, fixesTried = []) {
     // agrees with itself -- a Feeder deploy can be complete in every file sense and still feed
     // nothing (feeder.js's feederProviderStatus).
     mvProvider: feeder.feederDeployed(dir) ? feeder.feederProviderStatus(dir) : null,
+    // Which pieces of the Feeder stack are actually on disk. A "no-dlss" verdict on this route is
+    // almost always one of them missing -- above all ReShade, which the add-on needs to load at all.
+    feederReady: feeder.feederDeployed(dir)
+      ? await feeder.feederReadiness(dir, effective.api, { execFileAsync, exePath }).catch(() => null)
+      : null,
     nrEnabledInIni,
     gpuVendor: vendor || 'unknown',
   };
@@ -2606,7 +2611,7 @@ ipcMain.handle('game:help', async (_evt, { exePath, detected, fixesTried = [] } 
     // browser itself ("Report on GitHub"), not only in the one report:send posts.
     const digest = runlog.reportDigest(ctx.run, {
       mvProvider: ctx.mvProvider, vulkanFeeder: ctx.vulkanFeeder,
-      detected: ctx.detected, route: ctx.route,
+      detected: ctx.detected, route: ctx.route, feeder: ctx.feederReady,
     });
     return { ok: true, ...diag, run: ctx.run, route: { route: ctx.route.route, label: ctx.route.label, reason: ctx.route.reason }, foreign: ctx.foreign, digest };
   } catch (error) {

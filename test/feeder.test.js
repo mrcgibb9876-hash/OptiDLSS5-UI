@@ -672,6 +672,35 @@ test('the digest says why the game is on the API it is on', async () => {
   assert.doesNotMatch(runlog.reportDigest(run), /^api:|^route:|^bitness:/m);
 });
 
+// #50 (2026-09-17) came back with route feeder and verdict no-dlss, and nothing in the body said
+// which piece of the stack was missing -- the add-on is a ReShade add-on, so a ReShade that never
+// loaded means no feed at all. The same report called this app's own OptiScaler "other optiscaler",
+// which sent the reader looking for a rival build that was not there.
+test('the digest names the missing Feeder piece, and does not call our own OptiScaler somebody else\'s', async () => {
+  const run = await runlog.analyzeRun(scratchDir('digest-feeder'));
+  const ready = (over) => ({
+    supported: true, reshadeMode: 'local', reshadeInstalled: true, addonInstalled: true, fxInstalled: true,
+    headersInstalled: true, dlssInstalled: true, dlssnrInstalled: true, ...over,
+  });
+
+  const whole = runlog.reportDigest(run, { feeder: ready() });
+  assert.match(whole, /feeder: complete \(ReShade reaches this game local\)/);
+
+  const gap = runlog.reportDigest(run, { feeder: ready({ reshadeInstalled: false, dlssInstalled: false }) });
+  assert.match(gap, /feeder: INCOMPLETE -- missing ReShade, nvngx_dlss\.dll/);
+
+  // An unsupported API reports no feeder line at all rather than six missing pieces.
+  assert.doesNotMatch(runlog.reportDigest(run, { feeder: { supported: false } }), /feeder:/);
+
+  // Ours versus somebody else's, which decides whether there is anything to go and delete.
+  const ours = runlog.reportDigest(run, { detected: { optiScalerProxy: { file: 'dxgi.dll', matchesOurBuild: true } } });
+  assert.match(ours, /optiscaler: dxgi\.dll \(this app's own install\)/);
+  assert.doesNotMatch(ours, /other optiscaler|NOT the build/);
+
+  const theirs = runlog.reportDigest(run, { detected: { optiScalerProxy: { file: 'winmm.dll', matchesOurBuild: false } } });
+  assert.match(theirs, /optiscaler: winmm\.dll -- NOT the build this app installed/);
+});
+
 // Dolphin on DX12 (support bundle, 2026-09-15): DLSS created, the model crashed in the Feeder's first
 // evaluate, the Feeder stopped. It used to read as dlss-no-nr, "not a known case".
 test('a model crash in the Feeder\'s evaluate is named, and an emulator is pointed at Direct3D 11', async () => {
