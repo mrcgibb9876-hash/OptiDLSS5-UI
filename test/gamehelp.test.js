@@ -37,6 +37,12 @@ test('a Vulkan Feeder game whose Feeder never loaded names the ReShade layer fau
   assert.equal(diagnose(vk({ layerRegistered: true, layerAddon: false, feederLogPresent: false })).code, 'vulkan-layer-no-addon');
   assert.equal(diagnose(vk({ layerRegistered: true, layerAddon: true, feederLogPresent: false })).code, 'vulkan-layer-not-loaded');
   assert.equal(diagnose(vk({ layerRegistered: true, layerAddon: true, feederLogPresent: true })).code, 'no-hook', 'the Feeder loaded: another fault');
+  // The layer is there, with add-ons, and its own app list (ReShadeApps.ini) leaves this exe out: the
+  // usual reason it "did not load", and the one with a precise step.
+  const skipped = diagnose(vk({ layerRegistered: true, layerAddon: true, appListed: false, exe: 'swtor.exe', feederLogPresent: false }));
+  assert.equal(skipped.code, 'vulkan-layer-app-not-listed');
+  assert.deepEqual(skipped.vars, { exe: 'swtor.exe' });
+  assert.equal(diagnose(vk({ layerRegistered: true, layerAddon: true, appListed: true, feederLogPresent: false })).code, 'vulkan-layer-not-loaded');
 });
 
 const rows = [
@@ -74,6 +80,12 @@ const rows = [
   ['Luma route with no Luma yet: Install sets it up', base({ route: { route: 'lumaue', lumaDeployed: false }, run: { ran: false, verdict: 'no-log' } }), { status: 'fix', code: 'luma-missing', fix: 'install' }],
   ['a Feeder where Luma-Framework has a DLSS mod: switch to Luma', base({ route: { route: 'feeder', feederDeployed: true, lumaAvailable: true }, run: { ran: true, verdict: 'nr-ran', nrDispatch: 10 } }), { status: 'fix', code: 'luma-available', fix: 'switch-to-luma' }],
   ['Luma deployed but the game ran DX12: switch the game to DX11', base({ route: { route: 'lumaue', lumaDeployed: true }, run: { ran: true, verdict: 'no-dlss', runtimeApi: 'dx12' } }), { status: 'step', code: 'luma-needs-dx11' }],
+  // SWTOR (2026-09-16): the Feeder said "OptiScaler: not present" -- installed as dxgi.dll beside DXVK.
+  ['Feeder found no OptiScaler and the app knows the name the game loads: reconfigure moves it', { ...base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'opti-not-loaded' } }), optiProxy: 'dxgi.dll', wantedProxy: 'winmm.dll' }, { status: 'fix', code: 'opti-proxy-name', fix: 'reconfigure' }],
+  ['Feeder found no OptiScaler and the name is already the best guess: a user step', { ...base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'opti-not-loaded' } }), optiProxy: 'winmm.dll', wantedProxy: null }, { status: 'step', code: 'opti-not-loaded' }],
+  ['the driver answered the Feeder\'s probe instead of OptiScaler: reconfigure', base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'opti-not-routed' } }), { status: 'fix', code: 'opti-not-routed', fix: 'reconfigure' }],
+  ['a stock OptiScaler answered the Feeder: Install puts the fork back', base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'opti-not-fork' } }), { status: 'fix', code: 'opti-not-fork', fix: 'install' }],
+  ['the Feeder\'s Vulkan interop never opened: the fallback layer is the step', base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'feed-vulkan-interop' } }), { status: 'step', code: 'feed-vulkan-interop' }],
 ];
 
 for (const [name, ctx, want] of rows) {

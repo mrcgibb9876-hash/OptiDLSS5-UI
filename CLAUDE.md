@@ -61,4 +61,16 @@ redistribution, so the manager only links to the release page and fetches the mo
   what CI uses.
 - `test/legacy.test.js` "emulator profiles" **fails on Linux only**: `emulators.profileFor()` uses
   `path.basename()`, which does not treat `\` as a separator off Windows. CI runs on
-  `windows-latest`, where it passes. Not a real bug.
+  `windows-latest`, where it passes. Not a real bug. `test/feeder.test.js` "crashes inside dgVoodoo2"
+  is the same story (its regex wants a drive-letter path).
+- **On a Feeder game, OptiScaler.log is the wrong log to start from.** `dlss5-feed.log` says whether
+  OptiScaler was even in the process (`OptiScaler: not present`, `... never loaded a DLL of that
+  name`, `the DRIVER answered the NGX probe`, `not the DLSS-NR fork`); runlog.js turns those into
+  verdicts. SWTOR (2026-09-16) fed 18,000 frames with OptiScaler installed as dxgi.dll beside DXVK.
+- **ReShade's Vulkan layer only attaches to exes on its own list**, `Apps=` in
+  `C:\ProgramData\ReShade\ReShadeApps.ini` (its setup writes it). A registered add-on layer that
+  skips the game looks exactly like "the layer did not load". The Feeder's DXVK route also wants
+  `dxvk.allowFse = False` in `dxvk.conf`; feeder.js writes it on deploy and takes it back on Remove.
+- The GitHub attachment host (`github.com/user-attachments/...`) is **blocked from these sessions**,
+  so a support zip on an issue cannot be opened here. Read what the earlier commit messages recorded
+  from it, or ask for the lines.

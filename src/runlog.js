@@ -201,7 +201,10 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     // OptiScaler whose ini never had LogToFile switched on -- a DOOM 3 BFG install (2026-09-13) whose
     // Feeder log held a whole run, the crash and the reason, while Game Help waited for "a run". When
     // the Feeder actually fed frames (or a wrapper in the game folder faulted), its log is the run.
-    const feedRan = !!wrapperCrash || /first frame fed/.test(feed);
+    // A Feeder that stopped itself before the first frame (its `stopped:` line), or that found no
+    // OptiScaler to route to, has still judged the run: with OptiScaler out of the loop there is no
+    // OptiScaler.log to wait for, and waiting is how SWTOR's 18,000 DLAA frames read as "no run".
+    const feedRan = !!wrapperCrash || /first frame fed|\bstopped: |OptiScaler: not present|is an OptiScaler build, but this game never loaded|DRIVER answered the NGX probe|is not the DLSS-NR fork/.test(feed);
     if (!feedStat || !feedRan) return { ran: false, verdict: 'no-log' };
     stat = feedStat;
   } else if (feedStat && feedStat.mtimeMs > stat.mtimeMs) {
@@ -326,6 +329,34 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   // NVIDIA Smooth Motion in the game process: the Feeder warns about it itself.
   const feedSmoothMotion = /NVIDIA Smooth Motion is active in this process/.test(feed);
 
+  // The Feeder's own account of the neural consumer (its dlss5-feed.cpp DetectOptiScaler and the NGX
+  // probe after it). On a Feeder game OptiScaler is not in the loop because it is installed: it is in
+  // the loop when the game LOADED it (a proxy name the exe imports) and its nvngx redirect then took
+  // the Feeder's NGX calls. Each line below is one way that fails, and each looked like plain "nothing
+  // called DLSS" from OptiScaler's side, because OptiScaler's side never ran:
+  //
+  //   [feed] OptiScaler: not present                    -- no OptiScaler module in the process at all.
+  //      Star Wars: The Old Republic (2026-09-16): OptiScaler sat beside the exe as dxgi.dll, a name
+  //      nothing loads in a DXVK game, and the Feeder fed 18,000 frames of plain DLAA.
+  //   winmm.dll is an OptiScaler build, but this game never loaded a DLL of that name
+  //      -- the same, and the Feeder names the file it found under a name the game skipped.
+  //   <module> is loaded but the DRIVER answered the NGX probe
+  //      -- loaded, but [Inputs] EnableDlssInputs / [Hooks] HookOriginalNvngxOnly stop the redirect.
+  //   this OptiScaler (<module>) is not the DLSS-NR fork  -- a stock build: upscales, no neural pass.
+  //   NGX calls are routed through OptiScaler DLSS-NR (<module>) -- the healthy line.
+  //   stopped: the Vulkan interop extensions are missing on this device
+  //      -- the Feeder's vkCreateDevice hook never got its extensions onto the game's device (the
+  //      README's fallback is its layer\run-with-feed-layer.bat); the lines above it say whether the
+  //      hook was not installed or never called.
+  const feedOptiRouted = /NGX calls are routed through OptiScaler DLSS-NR/.test(feed);
+  const feedOptiMissing = /\[feed\] OptiScaler: not present/.test(feed);
+  const feedOptiWrongName = (/([A-Za-z0-9_.-]+\.(?:dll|asi)) is an OptiScaler build, but this game never loaded a DLL of that name/i.exec(feed) || [])[1] || null;
+  const feedOptiNotRouted = /is loaded but the DRIVER answered the NGX probe/.test(feed);
+  const feedOptiNotFork = /is not the DLSS-NR fork/.test(feed);
+  const feedVulkanInteropMissing = /the Vulkan interop extensions are missing on this device/.test(feed);
+  const feedVulkanHookState = /vkCreateDevice hook was NOT installed/.test(feed) ? 'not-installed'
+    : /vkCreateDevice hook was installed but never called/.test(feed) ? 'never-called' : null;
+
   const crash = unrealCrashNear(dir, stat.mtimeMs);
 
   let verdict;
@@ -341,6 +372,14 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   // Before feed-stopped and before nr-ran: a session that never opened for this reason, and a
   // neural pass running on empty guides, both otherwise read as "no DLSS" or as a clean run.
   else if (feedInvalidRedist) verdict = 'feed-agility-redist';
+  // The Vulkan transport never opened: the Feeder itself stopped, before any consumer question.
+  else if (feedVulkanInteropMissing) { verdict = 'feed-vulkan-interop'; detail = feedVulkanHookState; }
+  // The neural consumer is not in the loop, in the Feeder's own words -- each of these outranks the
+  // motion and depth verdicts, since no guide helps a pass that never runs, and outranks nr-ran only
+  // in name: a run with OptiScaler out of the loop has no OptiScaler.log lines to count anyway.
+  else if (feedOptiMissing || feedOptiWrongName) { verdict = 'opti-not-loaded'; detail = feedOptiWrongName; }
+  else if (feedOptiNotFork) verdict = 'opti-not-fork';
+  else if (feedOptiNotRouted && !feedOptiRouted) verdict = 'opti-not-routed';
   else if (feedMvProblem || feedNoMotion) { verdict = 'feed-no-motion'; detail = feedMvProblem; }
   else if (feedDepthFlatMoving) verdict = 'feed-depth-flat';
   // Before feed-stopped: the Feeder gave up because the model crashed, and saying which is the point.
@@ -372,6 +411,12 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     feedSmoothMotion,
     feedDriverOutdated,
     driverVersion,
+    feedOptiRouted,
+    feedOptiMissing,
+    feedOptiWrongName,
+    feedOptiNotRouted,
+    feedOptiNotFork,
+    feedVulkanInteropMissing,
     optiLogMissing: !opti,
     cleanExit,
     logLevel: logLevel ? Number(logLevel) : null,

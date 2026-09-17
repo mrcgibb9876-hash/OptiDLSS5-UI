@@ -408,7 +408,7 @@ ipcMain.handle('feeder:readiness', async (_evt, exePath) => {
   if ((lumaue.isLumaUeDefault(exePath, lumaModFor(exePath, detected)) || lumaue.lumaUeDeployed(dir)) && !feeder.feederDeployed(dir)) {
     return { ready: false, needed: false, reason: 'This game uses Luma UE for its DLSS call, not the Feeder -- see the Luma UE section.' };
   }
-  return { needed: true, ...(await feeder.feederReadiness(dir, detected.api, { execFileAsync })) };
+  return { needed: true, ...(await feeder.feederReadiness(dir, detected.api, { execFileAsync, exePath })) };
 });
 
 // ReShade's own installer, for the one step this app leaves to it: registering ReShade as the
@@ -506,6 +506,7 @@ async function updateFeederIfStale(dir, exePath) {
     unity: isUnityGame(dir, exePath),
     depthProfile: feeder.feederDepthProfile(dir),
     execFileAsync,
+    exePath,
   });
 
   const to = (results.addon && results.addon.version) || latest;
@@ -752,6 +753,7 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
       // re-deploy with nothing passed keeps whatever the last deploy chose.
       depthProfile: depthProfile || feeder.feederDepthProfile(dir),
       execFileAsync,
+      exePath,
     });
     return { ok: true, ...results };
   } catch (error) {
@@ -2545,12 +2547,22 @@ async function helpContext(exePath, detected, fixesTried = []) {
   let vulkanFeeder = null;
   if (effective.api === 'vulkan' && feeder.feederDeployed(dir)) {
     try {
-      const layer = await feeder.vulkanLayerStatus({ execFileAsync });
-      vulkanFeeder = { layerRegistered: !!layer.registered, layerAddon: !!layer.addon, feederLogPresent: fs.existsSync(path.join(dir, 'dlss5-feed.log')) };
+      const layer = await feeder.vulkanLayerStatus({ execFileAsync, exePath });
+      vulkanFeeder = {
+        layerRegistered: !!layer.registered, layerAddon: !!layer.addon, appListed: layer.appListed, exe: path.basename(exePath),
+        feederLogPresent: fs.existsSync(path.join(dir, 'dlss5-feed.log')),
+      };
     } catch {}
   }
+  // The proxy name this app installed OptiScaler under, and the one the game would load if that
+  // differs (wantedProxyFor): the Feeder's "OptiScaler: not present" is that mismatch on a Vulkan,
+  // OpenGL or DirectX 9 game, and Reconfigure moves the file (migrateProxyIfNeeded).
+  const journal = readInstallMarker(dir);
+  const optiProxy = journal && typeof journal.proxy === 'string' ? journal.proxy : null;
+  let wantedProxy = null;
+  try { wantedProxy = optiProxy ? await wantedProxyFor(dir, exePath) : null; } catch {}
   return {
-    dir, exePath, detected: effective, route, run, fixesTried, vulkanFeeder,
+    dir, exePath, detected: effective, route, run, fixesTried, vulkanFeeder, optiProxy, wantedProxy,
     foreign: foreignToolchains(dir),
     backends: detectInstalledBackends(dir),
     lumaKnownBad: route.lumaDeployed ? lumaue.lumaUeKnownBad(exePath) : null,
@@ -2613,10 +2625,20 @@ async function applyHelpFix(exePath, fixId) {
     }
     case 'reconfigure': {
       if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { done: false, text: 'OptiScaler is not installed here' };
+      // The proxy under a name this game never loads (SWTOR's dxgi.dll beside DXVK) is as much a
+      // configuration as any ini key, and the same migration sync runs -- Game Help's opti-proxy-name
+      // finding lands here.
+      let moved = '';
+      try {
+        const m = await migrateProxyIfNeeded(dir, exePath);
+        if (m && !m.skipped) moved = `moved OptiScaler from ${m.from} to ${m.to}`;
+        else if (m && m.skipped) moved = `could not move OptiScaler from ${m.from} to ${m.to}: ${m.skipped}`;
+      } catch {}
       const r = await autoConfigureGame(dir, exePath);
       const changed = (r.applied || []).map((e) => `${e.section}.${e.key}=${e.value}`);
       const refw = r.reframework && r.reframework.installed ? ', REFramework placed' : '';
-      return { done: true, text: changed.length ? `set ${changed.join(', ')}${refw}` : `nothing needed changing${refw}` };
+      const parts = [moved, changed.length ? `set ${changed.join(', ')}` : ''].filter(Boolean);
+      return { done: true, text: parts.length ? `${parts.join('; ')}${refw}` : `nothing needed changing${refw}` };
     }
     // Re-deploy the Feeder's own half of the stack, forced, from one answer: the provider (this
     // app's current default unless the game's existing choice is still usable), its shader, both
@@ -2642,6 +2664,7 @@ async function applyHelpFix(exePath, fixId) {
         unity: isUnityGame(dir, exePath),
         depthProfile: feeder.feederDepthProfile(dir),
         execFileAsync,
+        exePath,
       });
       await autoConfigureGame(dir, exePath);
       const version = results.addon && results.addon.version ? `, add-on ${results.addon.version}` : '';
@@ -3820,6 +3843,30 @@ const FEEDER_PRE_SR_OFF = [
   { section: 'DlssNr', key: 'RunBeforeSR', value: 'false' },
 ];
 
+// The two keys that decide whether the Feeder's NGX calls reach OptiScaler at all. The Feeder's own
+// log names exactly these when the driver answers its probe instead of OptiScaler ("[Inputs]
+// EnableDlssInputs must be true and [Hooks] HookOriginalNvngxOnly false"), and its README repeats
+// them as the two that can undo the redirect. Both are OptiScaler's defaults, so forcing them only
+// ever corrects a hand-set value -- and a hand-set value here is a neural pass that never runs.
+const FEEDER_NGX_REDIRECT = [
+  { section: 'Inputs', key: 'EnableDlssInputs', value: 'true' },
+  { section: 'Hooks', key: 'HookOriginalNvngxOnly', value: 'false' },
+];
+
+// How the Feeder's own installer sets up OptiScaler as the neural consumer (Install-DLSS5Feeder.ps1,
+// `-Consumer OptiScaler`): the inputs it will never see on this route off, the spoofs for
+// non-NVIDIA cards off, no update check from inside the game. Defaults, in the installer's own
+// sense -- "a key the user has already set by hand (anything but auto) is left alone".
+const FEEDER_CONSUMER_DEFAULTS = [
+  { section: 'Spoofing', key: 'Dxgi', value: 'false' },
+  { section: 'Spoofing', key: 'StreamlineSpoofing', value: 'false' },
+  { section: 'Inputs', key: 'EnableXeSSInputs', value: 'false' },
+  { section: 'Inputs', key: 'EnableFsr2Inputs', value: 'false' },
+  { section: 'Inputs', key: 'EnableFsr3Inputs', value: 'false' },
+  { section: 'Inputs', key: 'EnableFfxInputs', value: 'false' },
+  { section: 'Hotfix', key: 'CheckForUpdate', value: 'false' },
+];
+
 // The panel's Inspect tools, put back to neutral whenever this app configures a game.
 //
 // They are session tools that persist like preferences, and one of them costs people hours.
@@ -4015,6 +4062,9 @@ async function autoConfigureGame(dir, exePath) {
   // bridge, so it has no default-path reason to run once that bridge isn't forced on.
   const streamline = null;
 
+  // The Feeder's installer's own consumer set-up for OptiScaler, as defaults (FEEDER_CONSUMER_DEFAULTS).
+  if (feederGame && feeder.feederDeployed(dir)) edits.push(...FEEDER_CONSUMER_DEFAULTS);
+
   const applied = patchIniDefaults(iniPath, edits);
   // A DLSS-5-only game keeps its own DLSS whether or not OptiFG is layered on -- see
   // keepGamesOwnDlss for why the upscaler key cannot be left at auto.
@@ -4045,6 +4095,9 @@ async function autoConfigureGame(dir, exePath) {
     // change -- and a crash is not a preference. The panel can still turn it on for a native-DLSS
     // game, where it is a real choice and works.
     forced = [...forced, ...patchIniValues(iniPath, FEEDER_PRE_SR_OFF)];
+    // And the redirect itself: without these two at their defaults the driver answers the Feeder's
+    // NGX calls and OptiScaler, loaded or not, sees nothing (FEEDER_NGX_REDIRECT).
+    forced = [...forced, ...patchIniValues(iniPath, FEEDER_NGX_REDIRECT)];
   }
   // Luma UE deploys its own ReShade64.dll the same non-proxying way the Feeder does (see
   // lumaue.js's file header) -- OptiScaler needs the same explicit LoadReshade nudge to load it.
