@@ -517,7 +517,23 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null } = {}) {
     ].filter(Boolean).join(', '));
   }
 
-  return ['<details><summary>Run digest (read from the logs by the app)</summary>', '', '```', ...lines, '```', '', '</details>'].join('\n');
+  return [DIGEST_MARKER, '', '```', ...lines, '```', '', '</details>'].join('\n');
+}
+
+// The folded block's first line, which is how a body that already carries a digest is recognised.
+const DIGEST_MARKER = '<details><summary>Run digest (read from the logs by the app)</summary>';
+
+// The digest belongs in every issue body, whichever way the report goes: "Send game failure" posts
+// through main.js, but "Report on GitHub" (and the fallback when no GitHub app is configured) opens
+// the browser with a body the renderer built, and a v1.80.0 report arrived that way with only the
+// header lines (#50, the same SWTOR that the digest was added for). So the renderer appends the
+// digest it got with Game Help, and the send path calls this rather than appending blindly: a body
+// that already has the block keeps it, one from an older renderer gets it.
+function withDigest(body, digest) {
+  const text = String(body || '');
+  if (!digest) return text;
+  if (text.includes(DIGEST_MARKER)) return text;
+  return `${text.trimEnd()}\n\n${digest}`;
 }
 
 const BUNDLE_FILES = ['OptiScaler.log', 'OptiScaler.ini', 'ReShade.log', 'ReShade.ini', 'ReShadePreset.ini', 'dlss5-feed.log', 'dlss5-feed.cfg', '.optiscaler-manager-install.json', '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.dlss5ui-api.json', '.dlss5ui-lossless.json', '.dlss5ui-legacy.json'];
@@ -600,4 +616,4 @@ async function collectSupportBundle(dir, { zipPath, extra = {}, execFileAsync, o
   return { zipPath, files: copied, run };
 }
 
-module.exports = { analyzeRun, collectSupportBundle, gatherSupportFiles, reportDigest, unrealCrashNear, nrTiming };
+module.exports = { analyzeRun, collectSupportBundle, gatherSupportFiles, reportDigest, withDigest, DIGEST_MARKER, unrealCrashNear, nrTiming };
