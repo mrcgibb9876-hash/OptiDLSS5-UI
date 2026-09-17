@@ -166,6 +166,9 @@ function diagnose(ctx) {
       if (route.route === 'feeder' && route.feederDeployed && ctx.vulkanFeeder && !ctx.vulkanFeeder.feederLogPresent) {
         if (!ctx.vulkanFeeder.layerRegistered) return out('step', 'vulkan-layer-missing');
         if (!ctx.vulkanFeeder.layerAddon) return out('step', 'vulkan-layer-no-addon');
+        // The layer attaches only to exes on its own app list (feeder.js reshadeAppsListing); one that
+        // was never run through ReShade's installer is the usual reason "the layer did not load".
+        if (ctx.vulkanFeeder.appListed === false) return out('step', 'vulkan-layer-app-not-listed', { exe: ctx.vulkanFeeder.exe || '' });
         return out('step', 'vulkan-layer-not-loaded');
       }
       if (route.route === 'feeder' && route.feederDeployed) return out('unknown', 'no-hook');
@@ -207,6 +210,34 @@ function diagnose(ctx) {
     }
     case 'feed-stopped':
       return fix('feed-stopped', 'reconfigure');
+    // The Feeder ran and said, itself, that OptiScaler was not in the loop (runlog.js). Three
+    // faults, each with the Feeder's own line behind it:
+    //
+    // Not loaded at all. On a Vulkan, OpenGL or DirectX 9 game nothing loads a dxgi.dll from the
+    // folder, and an install made while the game was misread (Star Wars: The Old Republic, 2026-09-16:
+    // OptiScaler as dxgi.dll beside DXVK's d3d9.dll, 18,000 frames of plain DLAA) keeps that name
+    // until the sync migration moves it (main.js migrateProxyIfNeeded). When the app knows a better
+    // name, Reconfigure runs that migration; when it does not, the name is the user's to change.
+    case 'opti-not-loaded': {
+      const from = ctx.optiProxy || run.detail || '';
+      if (ctx.wantedProxy && ctx.optiProxy && ctx.wantedProxy.toLowerCase() !== ctx.optiProxy.toLowerCase()) {
+        return fix('opti-proxy-name', 'reconfigure', { from, to: ctx.wantedProxy });
+      }
+      return out('step', 'opti-not-loaded', { file: from });
+    }
+    // Loaded, and a stock OptiScaler rather than the DLSS-NR fork: Install puts the fork back.
+    case 'opti-not-fork':
+      return fix('opti-not-fork', 'install');
+    // Loaded, and the driver answered the Feeder's NGX probe instead of it: the two ini keys the
+    // Feeder names ([Inputs] EnableDlssInputs, [Hooks] HookOriginalNvngxOnly) are forced on Feeder
+    // games by Reconfigure (main.js FEEDER_NGX_REDIRECT).
+    case 'opti-not-routed':
+      return fix('opti-not-routed', 'reconfigure');
+    // The Feeder's Vulkan transport could not open: its vkCreateDevice hook did not get the interop
+    // extensions onto the game's device. The Feeder's README has one fallback, its out-of-process
+    // layer, which this app does not deploy; the step names it.
+    case 'feed-vulkan-interop':
+      return out('step', 'feed-vulkan-interop', { hook: run.detail || '' });
     // The game died inside a DirectX 8/9 wrapper in its own folder as it started. When that wrapper
     // is the dgVoodoo2 this app placed, there is no setting to try: on Castlevania: Lords of Shadow 2
     // (2026-09-14) VRAM, output API, windowed mode, adapter, GPU preference, CPU affinity and the

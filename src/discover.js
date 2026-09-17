@@ -9,7 +9,13 @@ const { resolveUnrealShippingExe } = require('./detect');
 // the anti-cheat and then the real exe, so it is never the game and never what this app installs
 // beside -- it was showing up as a candidate for every FromSoftware game.
 const NOT_A_GAME_EXE = /^(unins|setup|install|vcredist|vc_redist|dxsetup|dxwebsetup|dotnet|dotnetfx|oalinst|crashpad|crashreport|crashhandler|launcher_installer|easyanticheat|eac|battleye|be_service|start_protected_game|belauncher|eaclauncher|activation|patch|update|touchup|rapidcrc|autorun|autoplay|quicksfv|readme|config|cleanup|modorganizer|redlauncher|skse\d*_loader|steamerrorreporter|dgvoodoocpl|reshade_setup|gamelaunchhelper)/i;
-const NOT_THE_GAME = /(launcher|crashreport|crashhandler|redist|touchup|activation|eac|easyanticheat|battleye|be_service|steam_api|dxwebsetup|helper|updater|report|benchmark|editor|server|dedicated)/i;
+// A companion tool shipped beside the game: an editor, a dedicated server, a workshop uploader.
+// uploader/workshop come from a real report (Duke Nukem 3D: 20th Anniversary World Tour,
+// 2026-09-17): the folder holds duke3d.exe and DukeWorkshopUploader.exe, neither name matches
+// the game's, so both scored 0 and the only tie-break left was size -- and the uploader is the
+// bigger file by 850 KB. The card was built on a wxWidgets tool that renders nothing, which is
+// exactly why detection then reported "graphics API not detected".
+const NOT_THE_GAME = /(launcher|crashreport|crashhandler|redist|touchup|activation|eac|easyanticheat|battleye|be_service|steam_api|dxwebsetup|helper|updater|uploader|workshop|report|benchmark|editor|server|dedicated)/i;
 const GOOD_DIRS = /(?:^|[\\/])(binaries[\\/]win64|binaries[\\/]win32|bin[\\/]x64|bin[\\/]win64|bin|x64|win64|game)(?:[\\/]|$)/i;
 
 // Asset trees hold tens of thousands of files and never the exe; installers, redistributables
@@ -79,9 +85,13 @@ function score(exePath, gameDir, gameName) {
     if (NOT_A_GAME_EXE.test(base)) return -1000;
 
     let s = 0;
-    if (NOT_THE_GAME.test(base)) s -= 50;
     const nameKey = String(gameName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     const baseKey = base.replace(/[^a-z0-9]/g, '');
+
+    // An exe named exactly the game is the game, whatever word its title happens to contain --
+    // Workshop Simulator's own exe must not be read as somebody's workshop tool. Exact only: a
+    // FarmingSimulatorEditor.exe beside FarmingSimulator.exe is still the editor.
+    if (NOT_THE_GAME.test(base) && baseKey !== nameKey) s -= 50;
 
     if (nameKey && baseKey && (baseKey.includes(nameKey) || nameKey.includes(baseKey))) s += 20;
 

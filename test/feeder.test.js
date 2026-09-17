@@ -112,6 +112,83 @@ test('ReShade reaches the game differently per API, and the Vulkan layer is judg
 
   const none = await feeder.vulkanLayerStatus({ regQuery: async () => '' });
   assert.equal(none.registered, false);
+
+  // The layer's own per-app switch: ReShade's setup lists the exes it attaches to in ReShadeApps.ini
+  // beside the manifest. No file means an older setup that attaches everywhere (null, not a finding);
+  // a list without this exe means the layer stays inert in it, whatever the registry says.
+  const exe = path.join(scratchDir('vk-game'), 'retailclient', 'swtor.exe');
+  const noList = await feeder.vulkanLayerStatus({ regQuery, exePath: exe });
+  assert.equal(noList.appListed, null);
+  write(layerDir, 'ReShadeApps.ini', '\uFEFFApps=C:\\Games\\Other\\game.exe\r\n');
+  const notListed = await feeder.vulkanLayerStatus({ regQuery, exePath: exe });
+  assert.equal(notListed.appListed, false);
+  assert.equal(path.resolve(notListed.appsPath), path.resolve(layerDir, 'ReShadeApps.ini'));
+  write(layerDir, 'ReShadeApps.ini', `Apps=C:\\Games\\Other\\game.exe,${exe.toUpperCase()}\r\n`);
+  const listed = await feeder.vulkanLayerStatus({ regQuery, exePath: exe });
+  assert.equal(listed.appListed, true, 'case-insensitive, like the file system');
+  assert.equal((await feeder.vulkanLayerStatus({ regQuery })).appListed, null, 'nothing to compare without an exe');
+});
+
+// Star Wars: The Old Republic (2026-09-16): a 64-bit DirectX 9 game the player runs through DXVK's
+// d3d9.dll. The Feeder's README routes that through ReShade's Vulkan layer with one dxvk.conf
+// setting, allowFse off; nothing wrote it.
+test('a DXVK-wrapped game gets dxvk.allowFse = False on deploy, keeps the rest of dxvk.conf, and Remove puts it back', () => {
+  const dir = scratchDir('feeder-dxvk');
+  assert.equal(feeder.dxvkWrapperFile(dir), null);
+  write(dir, 'd3d9.dll', 'MZ ... DXVK ... vkGetInstanceProcAddr');
+  assert.equal(feeder.dxvkWrapperFile(dir), 'd3d9.dll');
+  write(dir, 'dxgi.dll', 'MZ ReShade build that also mentions DXVK');
+  assert.equal(feeder.dxvkWrapperFile(dir), 'd3d9.dll', 'a ReShade DLL is not the wrapper');
+
+  // No conf yet: the file is created and later removed whole.
+  let r = feeder.configureDxvkConf(dir);
+  assert.deepEqual(r, { configured: true, file: 'dxvk.conf', added: true, previous: null });
+  assert.equal(feeder.readDxvkConf(dir).allowFse, 'false');
+  assert.deepEqual(feeder.configureDxvkConf(dir), { configured: false, file: 'dxvk.conf', added: false, previous: 'false' }, 'already set: untouched');
+  assert.equal(feeder.restoreDxvkConf(dir, r), true);
+  assert.equal(fs.existsSync(path.join(dir, 'dxvk.conf')), false, 'a file this app created goes');
+
+  // The player's own conf with the key set the other way: changed in place, other keys kept, put back.
+  write(dir, 'dxvk.conf', '# my settings\ndxvk.maxFrameRate = 120\ndxvk.allowFse = True\n');
+  r = feeder.configureDxvkConf(dir);
+  assert.deepEqual(r, { configured: true, file: 'dxvk.conf', added: false, previous: 'true' });
+  let text = fs.readFileSync(path.join(dir, 'dxvk.conf'), 'utf8');
+  assert.match(text, /^dxvk\.allowFse = False$/m);
+  assert.match(text, /dxvk\.maxFrameRate = 120/);
+  assert.equal((text.match(/allowFse/g) || []).length, 1);
+  assert.equal(feeder.restoreDxvkConf(dir, r), true);
+  text = fs.readFileSync(path.join(dir, 'dxvk.conf'), 'utf8');
+  assert.match(text, /^dxvk\.allowFse = True$/m);
+  assert.match(text, /dxvk\.maxFrameRate = 120/);
+
+  // A conf without the key: the line is added and later taken out, the rest stays.
+  write(dir, 'dxvk.conf', 'dxvk.maxFrameRate = 120\n');
+  r = feeder.configureDxvkConf(dir);
+  assert.deepEqual(r, { configured: true, file: 'dxvk.conf', added: false, previous: null });
+  assert.equal(feeder.restoreDxvkConf(dir, r), true);
+  assert.equal(fs.readFileSync(path.join(dir, 'dxvk.conf'), 'utf8'), 'dxvk.maxFrameRate = 120\n');
+});
+
+test('readiness on a DXVK game says what dxvk.conf needs, and a layer that skips this exe is not "installed"', async () => {
+  const dir = scratchDir('ready-dxvk');
+  write(dir, 'd3d9.dll', 'MZ DXVK');
+  const before = await feeder.feederReadiness(dir, 'vulkan', {});
+  assert.ok(before.notes.some((n) => /d3d9\.dll is DXVK/.test(n) && /Deploy writes it/.test(n)), JSON.stringify(before.notes));
+  feeder.configureDxvkConf(dir);
+  const after = await feeder.feederReadiness(dir, 'vulkan', {});
+  assert.ok(after.notes.some((n) => /has dxvk\.allowFse = False/.test(n)), JSON.stringify(after.notes));
+
+  // The registry says an add-on layer is there; its app list says not for this exe.
+  const layerDir = scratchDir('vk-layer-apps');
+  const manifest = path.join(layerDir, 'ReShade64.json');
+  write(layerDir, 'ReShade64.json', JSON.stringify({ layer: { library_path: '.' + path.sep + 'ReShade64.dll' } }));
+  write(layerDir, 'ReShade64.dll', 'MZ ReShadeRegisterAddon');
+  write(layerDir, 'ReShadeApps.ini', 'Apps=C:\\Games\\Other\\game.exe\r\n');
+  const regQuery = async (hive) => (hive === 'HKLM' ? `    ${manifest}    REG_DWORD    0x0\r\n` : '');
+  const exe = path.join(dir, 'swtor.exe');
+  const status = await feeder.vulkanLayerStatus({ regQuery, exePath: exe });
+  assert.equal(status.addon, true);
+  assert.equal(status.appListed, false);
 });
 
 test('readiness on Vulkan wants the add-on layer and warns about Smooth Motion; on OpenGL it wants ReShade as opengl32.dll', async () => {
@@ -432,6 +509,102 @@ test('the Feeder\'s own log lines become the verdict: no motion, flat depth, and
   const elsewhere = diagnose({ ...base, run: { ran: true, verdict: 'feed-agility-redist' }, agilityRedist: { exports: true, folder: null } });
   assert.equal(elsewhere.status, 'step');
   assert.equal(elsewhere.code, 'feed-agility-redist-elsewhere');
+});
+
+// Star Wars: The Old Republic (support bundles, 2026-09-16): the Feeder fed 18,000 frames of plain DLAA
+// with "OptiScaler: not present" -- OptiScaler sat beside DXVK's d3d9.dll as dxgi.dll, a name the game
+// never loads. There was no OptiScaler.log, so the run read as "no run" and then as "no known fix".
+test('the Feeder\'s own verdict on the neural consumer becomes the verdict: not loaded, wrong name, not routed, stock build, no Vulkan interop', async () => {
+  const dir = scratchDir('feed-opti');
+  const feedLog = (...lines) => write(dir, 'dlss5-feed.log', lines.join('\n') + '\n');
+
+  feedLog('[feed] OptiScaler: not present', '[feed] first frame fed', '[feed] frame 18000 delivered');
+  let run = await runlog.analyzeRun(dir);
+  assert.equal(run.ran, true, 'no OptiScaler.log, and still a run to judge');
+  assert.equal(run.verdict, 'opti-not-loaded');
+  assert.equal(run.detail, null);
+  assert.equal(run.feedFrames, 18000);
+
+  feedLog('winmm.dll is an OptiScaler build, but this game never loaded a DLL of that name, so it cannot take the NGX calls and no neural pass will run. Rename it to a DLL the game imports (OptiScaler\'s own setup_windows.bat offers the choices; winmm.dll or version.dll suit most games).');
+  run = await runlog.analyzeRun(dir);
+  assert.equal(run.verdict, 'opti-not-loaded');
+  assert.equal(run.detail, 'winmm.dll', 'the Feeder names the file it found under a name the game skipped');
+
+  feedLog('[feed] OptiScaler DLSS-NR loaded as winmm.dll (OptiScaler.dll 0.2.0); OptiScaler.ini: [DlssNr] Enabled=true ScanExposure=false, [Upscalers] Dx12Upscaler=dlss, [Inputs] EnableDlssInputs=false, [Hooks] HookOriginalNvngxOnly=auto (= false)',
+    'winmm.dll is loaded but the DRIVER answered the NGX probe -- the NGX SDK in this add-on was not redirected, so OptiScaler sees nothing and its neural pass will not run. OptiScaler.ini: [Inputs] EnableDlssInputs must be true and [Hooks] HookOriginalNvngxOnly false',
+    '[feed] first frame fed');
+  run = await runlog.analyzeRun(dir);
+  assert.equal(run.verdict, 'opti-not-routed');
+
+  feedLog('this OptiScaler (winmm.dll) is not the DLSS-NR fork: it will take the NGX calls and upscale, and no neural pass will ever run.', '[feed] first frame fed');
+  run = await runlog.analyzeRun(dir);
+  assert.equal(run.verdict, 'opti-not-fork');
+
+  feedLog('[feed] The add-on\'s vkCreateDevice hook was installed but never called: this game creates its device some way it does not intercept.',
+    'stopped: the Vulkan interop extensions are missing on this device -- see dlss5-feed.log. The game renders normally. See dlss5-feed.log for the detail.');
+  run = await runlog.analyzeRun(dir);
+  assert.equal(run.verdict, 'feed-vulkan-interop');
+  assert.equal(run.detail, 'never-called');
+
+  // The healthy line, with OptiScaler's own log beside it, is not any of these.
+  feedLog('[feed] NGX calls are routed through OptiScaler DLSS-NR (winmm.dll): the requirements probe carries its fingerprint', '[feed] first frame fed');
+  write(dir, 'OptiScaler.log', 'Log.LogLevel: 2\nNVSDK_NGX_D3D12_Init\nDlssNr_Dx12::Dispatch DLSS-NR running\n');
+  run = await runlog.analyzeRun(dir);
+  assert.equal(run.verdict, 'nr-ran');
+
+  // And what Game Help does with each: the proxy move it can make itself, the redirect keys it can
+  // force, the fork it can reinstall, the rename and the fallback layer it can only name.
+  const base = { detected: { bitness: 64, api: 'vulkan' }, route: { route: 'feeder', optiInstalled: true, feederDeployed: true } };
+  const notLoaded = { ran: true, verdict: 'opti-not-loaded', detail: null };
+  let d = diagnose({ ...base, run: notLoaded, optiProxy: 'dxgi.dll', wantedProxy: 'winmm.dll' });
+  assert.equal(d.code, 'opti-proxy-name');
+  assert.equal(d.fix.id, 'reconfigure');
+  assert.deepEqual(d.vars, { from: 'dxgi.dll', to: 'winmm.dll' });
+  d = diagnose({ ...base, run: notLoaded, optiProxy: 'winmm.dll', wantedProxy: null });
+  assert.equal(d.status, 'step');
+  assert.equal(d.code, 'opti-not-loaded');
+  assert.equal(d.vars.file, 'winmm.dll');
+  d = diagnose({ ...base, run: { ran: true, verdict: 'opti-not-loaded', detail: 'version.dll' }, optiProxy: null, wantedProxy: null });
+  assert.equal(d.vars.file, 'version.dll', 'the Feeder\'s own name for the file when the journal has none');
+  assert.equal(diagnose({ ...base, run: { ran: true, verdict: 'opti-not-routed' } }).fix.id, 'reconfigure');
+  assert.equal(diagnose({ ...base, run: { ran: true, verdict: 'opti-not-fork' } }).fix.id, 'install');
+  d = diagnose({ ...base, run: { ran: true, verdict: 'feed-vulkan-interop', detail: 'not-installed' } });
+  assert.equal(d.status, 'step');
+  assert.deepEqual(d.vars, { hook: 'not-installed' });
+});
+
+// The gist the app posts its logs to, and the attachment host a player drags a zip to, both answer 403
+// to anything but a repository-scoped path -- so a scripted triage can read an issue and never its
+// logs. The decisive lines go in the body instead.
+test('the report digest carries what the logs decided, and says nothing it does not know', async () => {
+  const dir = scratchDir('digest');
+  write(dir, 'dlss5-feed.log', [
+    '[feed] OptiScaler: not present',
+    '[feed] first frame fed',
+    '[feed] frame 18000 delivered',
+    '[feed] frame interval 17.2 ms (58.1 fps)',
+  ].join('\n') + '\n');
+  const run = await runlog.analyzeRun(dir);
+  const digest = runlog.reportDigest(run, {
+    mvProvider: { id: 'vort', displayName: 'VORT', shaderPresent: true },
+    vulkanFeeder: { layerRegistered: true, layerAddon: true, appListed: false, feederLogPresent: true },
+  });
+
+  assert.match(digest, /verdict: opti-not-loaded/);
+  assert.match(digest, /optiscaler: not present in the process at all/);
+  assert.match(digest, /feeder frames: 18000/);
+  assert.match(digest, /fps: 58/);
+  assert.match(digest, /this exe is NOT on its app list/);
+  assert.match(digest, /mv provider: VORT$/m, 'a healthy provider is named and not complained about');
+  // Nothing it has no evidence for.
+  assert.doesNotMatch(digest, /motion vectors|depth:|driver:|smooth motion|unreal crash/);
+  assert.match(digest, /^<details>/, 'folded, so it does not bury the report');
+
+  // A folder nothing has run in says so in one line rather than printing empty fields.
+  const fresh = await runlog.analyzeRun(scratchDir('digest-fresh'));
+  const quiet = runlog.reportDigest(fresh);
+  assert.match(quiet, /ran: no/);
+  assert.doesNotMatch(quiet, /feeder frames|neural passes|exit:/);
 });
 
 // Dolphin on DX12 (support bundle, 2026-09-15): DLSS created, the model crashed in the Feeder's first

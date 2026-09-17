@@ -342,6 +342,34 @@ test('a game already on the grid is not re-proposed after its exe was changed by
   assert.equal(scan([path.join(dir, 'SomeGame_Launcher.exe')]).length, 0, 'same folder, different exe: still known');
 });
 
+// Duke Nukem 3D: 20th Anniversary World Tour (a user's bundle, 2026-09-17). The card was built on
+// DukeWorkshopUploader.exe -- a wxWidgets tool that renders nothing -- so detection could find no
+// graphics API and the route read "not supported", while duke3d.exe sat beside it. Neither name
+// matches the game's, so both scored 0 and size was the only tie-break left; the uploader is the
+// bigger file.
+test('a workshop uploader never outscores the game, and a game named after its own suspect word survives', () => {
+  const dir = scratchDir('duke');
+  write(dir, 'duke3d.exe', 'x'.repeat(6752400));
+  write(dir, 'DukeWorkshopUploader.exe', 'x'.repeat(7621120));
+  write(dir, 'unins000.exe', 'x'.repeat(1582449));
+  const picked = discover.chooseExe(dir, 'Duke Nukem 3D Twentieth Anniversary World Tour');
+  assert.equal(path.basename(picked.exePath), 'duke3d.exe', 'the game, not the bigger tool beside it');
+  assert.ok(!picked.alternatives.some((e) => /unins/i.test(e)), 'the uninstaller is not even an alternative');
+
+  // The penalty is on companion tools, not on a game whose own title carries the word: an exe named
+  // exactly the game is the game.
+  const sim = scratchDir('workshop-sim');
+  write(sim, 'WorkshopSimulator.exe', 'x'.repeat(4096));
+  write(sim, 'Benchmark.exe', 'x'.repeat(8192));
+  assert.equal(path.basename(discover.chooseExe(sim, 'Workshop Simulator').exePath), 'WorkshopSimulator.exe');
+
+  // ...and that guard is exact, so a tool that merely starts with the game's name stays a tool.
+  const fs2 = scratchDir('farm');
+  write(fs2, 'FarmingSimulator.exe', 'x'.repeat(4096));
+  write(fs2, 'FarmingSimulatorEditor.exe', 'x'.repeat(40 * 1024 * 1024));
+  assert.equal(path.basename(discover.chooseExe(fs2, 'Farming Simulator').exePath), 'FarmingSimulator.exe');
+});
+
 // A game with both DX12 and DX11 defaults to DX12 (2026-09-15) -- unless OptiScaler's log proves it actually
 // ran DX11 last time. What changed on 2026-09-16 is that this is a default rather than the final word: a DX11
 // choice made in Edit used to be dropped on the way through, so the setting appeared to do nothing and fell

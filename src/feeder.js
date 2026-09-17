@@ -331,7 +331,7 @@ function feederProviderStatus(dir) {
 // Bikes on OpenGL, "any ... game with a working ReShade depth buffer"); on the last two the
 // DLSS evaluate still happens on a private D3D12 device, and only how ReShade gets into the
 // game differs (reshadeModeForApi). Async because the Vulkan layer is a registry read.
-async function feederReadiness(dir, api, { execFileAsync = null } = {}) {
+async function feederReadiness(dir, api, { execFileAsync = null, exePath = null } = {}) {
   // dx9: a 64-bit DirectX 9 game behind dgVoodoo2 (legacy.js) renders D3D11, so ReShade goes in the
   // same local way as for D3D11. Experimental.
   if (!['dx11', 'dx12', 'vulkan', 'opengl', 'dx9'].includes(api)) {
@@ -342,8 +342,10 @@ async function feederReadiness(dir, api, { execFileAsync = null } = {}) {
   let reshadeInstalled = false;
   let vulkanLayer = null;
   if (mode === 'vulkan-layer') {
-    vulkanLayer = await vulkanLayerStatus({ execFileAsync });
-    reshadeInstalled = vulkanLayer.registered && vulkanLayer.addon;
+    vulkanLayer = await vulkanLayerStatus({ execFileAsync, exePath });
+    // The layer, with add-ons, and switched on for this exe (reshadeAppsListing): all three, or
+    // ReShade is not in this game whatever the registry says.
+    reshadeInstalled = vulkanLayer.registered && vulkanLayer.addon && vulkanLayer.appListed !== false;
   } else if (mode === 'opengl32') {
     reshadeInstalled = isReShadeDll(path.join(dir, OPENGL_PROXY_NAME));
   } else {
@@ -378,6 +380,16 @@ async function feederReadiness(dir, api, { execFileAsync = null } = {}) {
     notes.push('NVIDIA Smooth Motion must be off for this game: on Vulkan the driver invents its extra frames after the Feeder has run, so half the frames carry no neural pass (the Feeder\'s README, "Smooth Motion off on Vulkan"). NVIDIA app or Profile Inspector, per game.');
     if (vulkanLayer && vulkanLayer.registered && !vulkanLayer.addon) notes.push(`The ReShade Vulkan layer on this PC (${vulkanLayer.dllPath || vulkanLayer.manifestPath}) has no add-on support. ${VULKAN_LAYER_INSTRUCTION}`);
     else if (vulkanLayer && !vulkanLayer.registered) notes.push(`ReShade is not installed as a Vulkan layer on this PC. ${VULKAN_LAYER_INSTRUCTION}`);
+    else if (vulkanLayer && vulkanLayer.appListed === false) notes.push(VULKAN_APP_NOT_LISTED(exePath, vulkanLayer.appsPath));
+    // A DirectX 9 game presented through DXVK: the Feeder's README makes dxvk.conf's allowFse the one
+    // setting its DXVK route needs (configureDxvkConf); the deploy writes it, and this says so.
+    const dxvk = dxvkWrapperFile(dir);
+    if (dxvk) {
+      const conf = readDxvkConf(dir);
+      notes.push(conf.allowFse === 'false'
+        ? `${dxvk} is DXVK, so this game renders through Vulkan; dxvk.conf has dxvk.allowFse = False, as the Feeder's DXVK route needs.`
+        : `${dxvk} is DXVK, so this game renders through Vulkan. The Feeder's DXVK route needs dxvk.allowFse = False in dxvk.conf beside the exe -- Deploy writes it.`);
+    }
   }
 
   return {
@@ -531,8 +543,27 @@ function isReShadeDll(file) {
 // HKCU, so the registration that counts is the first one -- which is why a plain build
 // registered by an old ReShade install for some other game silently wins over anything
 // registered later.
-async function vulkanLayerStatus({ execFileAsync, regQuery = null } = {}) {
-  const out = { registered: false, manifestPath: null, dllPath: null, addon: false, hive: null };
+// The layer's per-app switch. ReShade's Vulkan layer is loaded into every Vulkan process on the PC,
+// and it attaches only to the exes its own installer listed in ReShadeApps.ini beside the manifest
+// (its setup writes `Apps=<full exe path>,<...>` at the top of that file, no section header). For any
+// other exe the layer stays inert: no overlay, no add-on, no dlss5-feed.log -- a game that was never
+// run through ReShade's installer looks exactly like a layer that "did not load". The Feeder's own
+// installer checks the same list and adds the exe under UAC; this app cannot write it (ProgramData),
+// so the answer is a yes/no the readiness and Game Help can name. null when nothing to compare.
+function reshadeAppsListing(manifestPath, exePath) {
+  const appsPath = path.join(path.dirname(manifestPath), 'ReShadeApps.ini');
+  let text;
+  try { text = fs.readFileSync(appsPath, 'utf8').replace(/^﻿/, ''); } catch { return { appsPath, apps: null, listed: null }; }
+  const line = text.split(/\r?\n/).find((l) => /^\s*Apps\s*=/i.test(l));
+  const apps = line ? line.replace(/^\s*Apps\s*=/i, '').split(',').map((s) => s.trim()).filter(Boolean) : [];
+  if (!exePath) return { appsPath, apps, listed: null };
+  const want = path.resolve(exePath).replace(/[\\/]+$/, '').toLowerCase();
+  const listed = apps.some((a) => a.replace(/[\\/]+$/, '').toLowerCase() === want);
+  return { appsPath, apps, listed };
+}
+
+async function vulkanLayerStatus({ execFileAsync, regQuery = null, exePath = null } = {}) {
+  const out = { registered: false, manifestPath: null, dllPath: null, addon: false, hive: null, appsPath: null, appListed: null };
   const query = regQuery || (execFileAsync
     ? async (hive) => (await execFileAsync('reg.exe', ['query', `${hive}\\SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers`], { windowsHide: true })).stdout
     : null);
@@ -552,26 +583,34 @@ async function vulkanLayerStatus({ execFileAsync, regQuery = null } = {}) {
       out.dllPath = path.isAbsolute(lib) ? lib : path.resolve(path.dirname(manifestPath), lib);
       out.addon = isAddonReShadeDll(out.dllPath);
     } catch {}
+    // A missing ReShadeApps.ini is not "not listed": an older ReShade setup, or a layer registered by
+    // hand, has none and attaches everywhere. Only a list that exists and lacks the exe is a finding.
+    const apps = reshadeAppsListing(manifestPath, exePath);
+    out.appsPath = apps.apps ? apps.appsPath : null;
+    out.appListed = apps.listed;
     return out;
   }
   return out;
 }
 
 const VULKAN_LAYER_INSTRUCTION = 'Run ReShade\'s installer, pick this game\'s exe, choose Vulkan and tick "Enable loading of add-ons" -- then deploy again.';
+const VULKAN_APP_NOT_LISTED = (exePath, appsPath) => `ReShade's Vulkan layer is on this PC, but ${path.basename(exePath)} is not on its app list (${appsPath}), so the layer stays inert in this game and the Feeder never loads. ${VULKAN_LAYER_INSTRUCTION}`;
 
-async function deployReShade(dir, cacheDir, ghHeaders, { force = false, api = 'dx11', execFileAsync = null } = {}) {
+async function deployReShade(dir, cacheDir, ghHeaders, { force = false, api = 'dx11', execFileAsync = null, exePath = null } = {}) {
   const mode = reshadeModeForApi(api);
 
   if (mode === 'vulkan-layer') {
     // Machine-wide and shared: an add-on build already registered is used as it is (its
     // version does not matter to the Feeder). Anything else is the user's installer run --
     // the setup exe is cached so the button in the Edit dialog can open it for them.
-    const status = await vulkanLayerStatus({ execFileAsync });
-    if (status.registered && status.addon) return { deployed: false, reason: 'add-on Vulkan layer already registered', file: status.dllPath, mode, manifestPath: status.manifestPath };
+    const status = await vulkanLayerStatus({ execFileAsync, exePath });
+    if (status.registered && status.addon && status.appListed !== false) return { deployed: false, reason: 'add-on Vulkan layer already registered', file: status.dllPath, mode, manifestPath: status.manifestPath };
     const setupPath = await downloadToCache(RESHADE_SETUP_URL, cacheDir, path.basename(RESHADE_SETUP_URL), ghHeaders);
-    const err = new Error(status.registered
-      ? `The ReShade Vulkan layer on this PC (${status.dllPath || status.manifestPath}) is a build without add-on support, so the Feeder would never load. ${VULKAN_LAYER_INSTRUCTION}`
-      : `ReShade is not installed as a Vulkan layer on this PC. ${VULKAN_LAYER_INSTRUCTION}`);
+    const err = new Error(status.registered && status.addon
+      ? VULKAN_APP_NOT_LISTED(exePath, status.appsPath)
+      : status.registered
+        ? `The ReShade Vulkan layer on this PC (${status.dllPath || status.manifestPath}) is a build without add-on support, so the Feeder would never load. ${VULKAN_LAYER_INSTRUCTION}`
+        : `ReShade is not installed as a Vulkan layer on this PC. ${VULKAN_LAYER_INSTRUCTION}`);
     err.needsReShadeInstaller = true;
     err.setupPath = setupPath;
     throw err;
@@ -1008,6 +1047,83 @@ function configureReShadeIni(dir, {
   return { configured: true, depthProfile: depthProfile || (unity ? 'unity' : null) };
 }
 
+// DXVK in front of a DirectX 9/10/11 game: the Direct3D DLL beside the exe is DXVK's, and the game
+// reaches the GPU through Vulkan. Star Wars: The Old Republic (2026-09-16) is the case: a 64-bit
+// DirectX 9 game the player runs through DXVK's d3d9.dll, so ReShade is the Vulkan layer and the
+// Feeder's Vulkan transport carries the frame. The Feeder's README gives that route for exactly this
+// shape ("A 64-bit D3D9 game has a second route ... put DXVK in front of it instead") with one
+// setting to it: `dxvk.allowFse = False` in dxvk.conf, "the only setting that mattered" on its
+// user-confirmed DXVK games. Exclusive fullscreen is what it turns off -- ReShade's overlay, the
+// Feeder's cast panel and the present it feeds from all need the swapchain DXVK builds without it.
+// The same literal detect.js reads (its HOOK_NEEDLES); a copy here keeps feeder.js off detect.js.
+const DXVK_WRAPPER_NAMES = ['d3d9.dll', 'dxgi.dll', 'd3d11.dll', 'd3d10core.dll'];
+const DXVK_CONF = 'dxvk.conf';
+
+function dxvkWrapperFile(dir) {
+  for (const name of DXVK_WRAPPER_NAMES) {
+    const p = path.join(dir, name);
+    try {
+      if (!fs.statSync(p).isFile()) continue;
+      const buf = fs.readFileSync(p);
+      if (buf.includes(Buffer.from('DXVK', 'latin1')) && !buf.includes(Buffer.from('ReShade', 'latin1'))) return name;
+    } catch {}
+  }
+  return null;
+}
+
+// dxvk.conf: `key = value` lines, `#` comments, no sections. Read for the one key this route cares
+// about (lower-cased value, or null when the file or key is absent).
+function readDxvkConf(dir) {
+  let text = null;
+  try { text = fs.readFileSync(path.join(dir, DXVK_CONF), 'utf8'); } catch {}
+  const m = text && /^\s*dxvk\.allowFse\s*=\s*([^#\r\n]*)/im.exec(text);
+  return { exists: text !== null, allowFse: m ? m[1].trim().toLowerCase() || null : null };
+}
+
+// Sets dxvk.allowFse = False, keeping everything else in the file. Returns what was there before so
+// Remove can put it back: { added: the file did not exist, previous: the key's old value or null }.
+function configureDxvkConf(dir) {
+  const confPath = path.join(dir, DXVK_CONF);
+  const before = readDxvkConf(dir);
+  if (before.allowFse === 'false') return { configured: false, file: DXVK_CONF, added: false, previous: 'false' };
+  let text = '';
+  try { text = fs.readFileSync(confPath, 'utf8'); } catch {}
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const lines = text ? text.split(/\r?\n/) : [];
+  const at = lines.findIndex((l) => /^\s*dxvk\.allowFse\s*=/i.test(l));
+  if (at !== -1) lines[at] = 'dxvk.allowFse = False';
+  else {
+    while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+    if (lines.length) lines.push('');
+    lines.push('# DLSS5 Feeder through ReShade\'s Vulkan layer: no exclusive fullscreen (OptiDLSS5-UI)');
+    lines.push('dxvk.allowFse = False');
+  }
+  fs.writeFileSync(confPath, lines.join(eol) + eol, 'utf8');
+  return { configured: true, file: DXVK_CONF, added: !before.exists, previous: before.allowFse };
+}
+
+// The reverse, from what the deploy recorded: a file this app created goes, a key it changed goes
+// back to its old value, a key it added is taken out. A file the user has since edited past that
+// point keeps everything else it holds.
+function restoreDxvkConf(dir, record) {
+  if (!record) return false;
+  const confPath = path.join(dir, DXVK_CONF);
+  let text;
+  try { text = fs.readFileSync(confPath, 'utf8'); } catch { return false; }
+  const lines = text.split(/\r?\n/);
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const ours = (l) => /^\s*dxvk\.allowFse\s*=\s*false\s*$/i.test(l) || /OptiDLSS5-UI\)\s*$/.test(l);
+  const rest = lines.filter((l) => !ours(l));
+  if (record.added && rest.every((l) => l.trim() === '')) {
+    fs.rmSync(confPath, { force: true });
+    return true;
+  }
+  if (record.previous && record.previous !== 'false') rest.push(`dxvk.allowFse = ${record.previous === 'true' ? 'True' : record.previous}`);
+  while (rest.length && rest[rest.length - 1].trim() === '') rest.pop();
+  fs.writeFileSync(confPath, rest.join(eol) + eol, 'utf8');
+  return true;
+}
+
 // dlss5-feed.cfg: the add-on's own settings, plain `key=value` lines with no sections. The Feeder
 // writes the whole file when the user changes something in its panel and reads only the keys that
 // are present, defaulting the rest -- so a file holding one key is valid and everything else stays
@@ -1099,9 +1215,9 @@ async function feederUpdateCheck(dir, ghHeaders, { allowPrerelease = false } = {
 // force: true re-fetches and overwrites everything (used by an update). licenseConfirmed: only
 // consulted when providerId names a non-auto-fetchable provider (currently just LumeniteFX) --
 // deployLumeniteFx() itself refuses without it, this just threads it through.
-async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifest, compareVersions, ghHeaders, force = false, licenseConfirmed = false, unity = false, depthProfile = null, execFileAsync = null, allowPrerelease = false }) {
+async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifest, compareVersions, ghHeaders, force = false, licenseConfirmed = false, unity = false, depthProfile = null, execFileAsync = null, allowPrerelease = false, exePath = null }) {
   const results = {};
-  results.reshade = await deployReShade(dir, cacheDir, ghHeaders, { force, api, execFileAsync });
+  results.reshade = await deployReShade(dir, cacheDir, ghHeaders, { force, api, execFileAsync, exePath });
   results.reshadeMode = results.reshade.mode || reshadeModeForApi(api);
   results.commonHeaders = await deployReShadeCommonHeaders(dir, ghHeaders, { force, cacheDir });
   results.addon = await deployFeederAddon(dir, cacheDir, ghHeaders, { force, allowPrerelease });
@@ -1156,11 +1272,18 @@ async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifes
   results.dlss = await deployNvngxDlss(dir, getRhiManifest, compareVersions, cacheDir, ghHeaders);
   results.ini = configureReShadeIni(dir, { unity, depthProfile });
   results.preset = configurePreset(dir, providerId);
+  // DXVK in front of the game (dxvkWrapperFile): the README's one dxvk.conf setting for this route.
+  const previousMarker = readFeederDeployMarker(dir);
+  const dxvk = dxvkWrapperFile(dir);
+  results.dxvk = dxvk ? { wrapper: dxvk, ...configureDxvkConf(dir) } : null;
+  // What Remove has to undo: the first deploy's record, since a re-deploy sees its own value.
+  const dxvkConf = results.dxvk
+    ? (previousMarker && previousMarker.dxvkConf) || { added: results.dxvk.added, previous: results.dxvk.previous }
+    : null;
 
   // The addon step only resolves the release tag when it actually deploys (fresh install, or
   // force). On a "already present, skip" run there's nothing fresh to record -- keep whatever
   // the marker already said rather than losing the version history feederUpdateCheck needs.
-  const previousMarker = readFeederDeployMarker(dir);
   const feederVersion = results.addon.version || (previousMarker && previousMarker.feederVersion) || null;
   if (feederVersion) {
     // placedNvngxDlss: whether THIS app put nvngx_dlss.dll here (as opposed to skipping one
@@ -1180,6 +1303,7 @@ async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifes
       depthProfile: results.ini.depthProfile,
       placedNvngxDlss,
       reshadeMode: results.reshadeMode,
+      dxvkConf,
       deployedAt: new Date().toISOString(),
     });
   }
@@ -1246,6 +1370,8 @@ async function removeFeederStack(dir, { keepReShade = false } = {}) {
   }
   // Vulkan: the ReShade layer is machine-wide and shared by every Vulkan game; it stays.
   if (marker && marker.reshadeMode === 'vulkan-layer') kept.push('the ReShade Vulkan layer (machine-wide, shared by other games)');
+  // DXVK's dxvk.conf: only the allowFse line this deploy wrote (or the file, when it made it) goes.
+  if (marker && marker.dxvkConf && restoreDxvkConf(dir, marker.dxvkConf)) removed.push(marker.dxvkConf.added ? DXVK_CONF : `${DXVK_CONF} (dxvk.allowFse line)`);
 
   const shipped = nativeDlss.shippedDlssPath(dir);
   if (shipped || !(marker && marker.placedNvngxDlss === false)) {
@@ -1303,6 +1429,10 @@ module.exports = {
   configureReShadeIni,
   configureFeedCfg,
   CAST_KEY_HOME,
+  dxvkWrapperFile,
+  readDxvkConf,
+  configureDxvkConf,
+  restoreDxvkConf,
   deployFeederStack,
   fetchWithRetry,
   fetchReShadeHeader,

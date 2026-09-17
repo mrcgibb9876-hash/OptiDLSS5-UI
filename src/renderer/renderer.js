@@ -767,6 +767,17 @@ function helpWords(diag) {
     case 'vulkan-layer-missing': return t('On Vulkan, the DLSS5 Feeder runs inside ReShade, and ReShade only reaches a Vulkan game as a layer installed for the whole PC. None is installed, so the Feeder never loaded and nothing called DLSS. Run ReShade\'s own installer (the version with add-on support), pick this exe, choose Vulkan, then Install here again. Or switch the emulator to OpenGL, or to Direct3D if it has it, and pick the same API in Edit: those need no layer.');
     case 'vulkan-layer-no-addon': return t('ReShade is installed as a Vulkan layer on this PC, but a build without add-on support, so the DLSS5 Feeder (an add-on) cannot load and nothing called DLSS. Reinstall ReShade with add-on support (its installer: "Enable loading of add-ons"), then Install here again.');
     case 'vulkan-layer-not-loaded': return t('ReShade\'s Vulkan layer with add-on support is installed, but it did not load in this program: the DLSS5 Feeder wrote no log at all. Run ReShade\'s installer once more for this exact exe and choose Vulkan (the layer only runs for programs it was set up for), check NVIDIA Smooth Motion is off for it, then launch again.');
+    case 'vulkan-layer-app-not-listed': return t('ReShade\'s Vulkan layer with add-on support is installed, but {exe} is not on its app list (ReShadeApps.ini next to the layer), so the layer stays inert in this game: no overlay, no DLSS5 Feeder, no log. ReShade\'s own installer adds it -- run it, pick this exact exe, choose Vulkan and keep "Enable loading of add-ons" ticked -- then launch again.', v);
+    case 'opti-proxy-name': return t('The DLSS5 Feeder ran and reported OptiScaler as not present: it is installed here as {from}, and nothing in this game loads a DLL of that name (a DirectX 9, Vulkan or OpenGL game never loads a dxgi.dll from its folder), so the Feeder fed plain DLAA with no neural pass. This game loads {to}. Reconfigure moves OptiScaler to that name.', v);
+    case 'opti-not-loaded': return t('The DLSS5 Feeder ran and reported OptiScaler as not present: the game never loaded {file}, so the Feeder\'s DLSS calls went to the driver and no neural pass ran. OptiScaler has to sit under a DLL name this exe imports at start (winmm.dll or version.dll suit most games; never dxgi.dll on a Vulkan, OpenGL or DirectX 9 game). Rename it in the game folder, then launch again -- or save the bundle so the name can be picked from the exe.', v);
+    case 'opti-not-fork': return t('The DLSS5 Feeder found a stock OptiScaler in this game, not the DLSS-NR fork: it takes the DLSS calls and upscales, and no neural pass can ever run. Install puts the fork this app ships back in its place.');
+    case 'opti-not-routed': return t('OptiScaler is loaded, but the driver answered the DLSS5 Feeder\'s NGX probe instead of it, so its neural pass never sees a frame. OptiScaler.ini decides that with two keys ([Inputs] EnableDlssInputs and [Hooks] HookOriginalNvngxOnly); Reconfigure sets both back to the values the redirect needs.');
+    case 'feed-vulkan-interop': return (v.hook === 'not-installed'
+      ? t('The DLSS5 Feeder stopped before its first frame: the Vulkan interop extensions it needs were not on the game\'s device, because its hook on vkCreateDevice could not be installed.')
+      : v.hook === 'never-called'
+        ? t('The DLSS5 Feeder stopped before its first frame: the Vulkan interop extensions it needs were not on the game\'s device -- its hook on vkCreateDevice was installed but this game creates its device some way the hook does not intercept.')
+        : t('The DLSS5 Feeder stopped before its first frame: the Vulkan interop extensions it needs were not on the game\'s device.')) + ' ' +
+      t('The Feeder\'s own fallback is its out-of-process layer: in its release zip, run layer\\run-with-feed-layer.bat with the path to this game\'s exe. This app does not deploy that layer; dlss5-feed.log has the driver\'s answer above the stop line.');
     case 'no-hook': return t('Nothing called DLSS on the last run, so nothing was hooked. Check the game\'s own graphics settings have DLSS or DLAA selected. If they do, this is not a known case: save the bundle or ask the AI.');
     case 'ue-crash-luma': return t('The game crashed (Unreal crash report: {message}) with Luma UE deployed, and Luma is not verified on this game. Remove Luma UE and try the Feeder route.', { message: (v.message || '').slice(0, 120) });
     case 'ue-crash-feeder': return t('The game crashed (Unreal crash report: {message}) with the Feeder deployed. Remove the Feeder and check whether it runs clean.', { message: (v.message || '').slice(0, 120) });
@@ -855,6 +866,11 @@ function helpSteps(diag) {
     case 'vulkan-layer-missing': return [t('Install ReShade with add-on support for this exe, choosing Vulkan'), t('Or switch the emulator to OpenGL and pick OpenGL in Edit'), t('Press Install here again')];
     case 'vulkan-layer-no-addon': return [t('Reinstall ReShade with "Enable loading of add-ons"'), t('Press Install here again')];
     case 'vulkan-layer-not-loaded': return [t('Run ReShade\'s installer for this exe, choosing Vulkan'), t('Turn NVIDIA Smooth Motion off for it'), t('Launch again')];
+    case 'vulkan-layer-app-not-listed': return [t('Run ReShade\'s installer for this exe, choosing Vulkan'), t('Keep "Enable loading of add-ons" ticked'), launch];
+    case 'opti-proxy-name': return fixIt(t('Press Fix it (moves OptiScaler to {to})', v));
+    case 'opti-not-routed': return fixIt(t('Press Fix it (restores the NGX redirect keys)'));
+    case 'opti-not-loaded': return [t('Rename OptiScaler in the game folder to a DLL this exe imports (winmm.dll or version.dll)'), launch, ...report];
+    case 'feed-vulkan-interop': return [t('Launch through the Feeder\'s layer\\run-with-feed-layer.bat'), ...report];
     case 'ok': return [t('Tune it in Edit, or with Alt+Home in the game')];
     case 'ok-exit-crash': return [t('Nothing to do -- it only crashes when quitting')];
     case 'dgvoodoo-crash': return [t('Press Fix it (puts the game back as it was)')];
@@ -911,6 +927,12 @@ function helpShort(diag) {
     case 'vulkan-layer-missing': return t('ReShade\'s Vulkan layer is not installed');
     case 'vulkan-layer-no-addon': return t('ReShade\'s Vulkan layer has no add-on support');
     case 'vulkan-layer-not-loaded': return t('ReShade\'s Vulkan layer did not load here');
+    case 'vulkan-layer-app-not-listed': return t('{exe} is not on ReShade\'s Vulkan app list', v);
+    case 'opti-proxy-name': return t('OptiScaler is under a name this game never loads ({from})', v);
+    case 'opti-not-loaded': return t('The game never loaded OptiScaler ({file})', v);
+    case 'opti-not-fork': return t('A stock OptiScaler, not the DLSS-NR fork');
+    case 'opti-not-routed': return t('The driver answered instead of OptiScaler');
+    case 'feed-vulkan-interop': return t('Vulkan interop extensions missing -- the Feeder stopped');
     case 'fix-failed': return t('Fix did not help -- no known fix');
     case 'dlss-no-nr': case 'init-no-feature': case 'no-hook': default: return t('Not working -- no known fix');
   }
