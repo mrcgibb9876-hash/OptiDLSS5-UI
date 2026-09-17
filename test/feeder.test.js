@@ -573,6 +573,40 @@ test('the Feeder\'s own verdict on the neural consumer becomes the verdict: not 
   assert.deepEqual(d.vars, { hook: 'not-installed' });
 });
 
+// The gist the app posts its logs to, and the attachment host a player drags a zip to, both answer 403
+// to anything but a repository-scoped path -- so a scripted triage can read an issue and never its
+// logs. The decisive lines go in the body instead.
+test('the report digest carries what the logs decided, and says nothing it does not know', async () => {
+  const dir = scratchDir('digest');
+  write(dir, 'dlss5-feed.log', [
+    '[feed] OptiScaler: not present',
+    '[feed] first frame fed',
+    '[feed] frame 18000 delivered',
+    '[feed] frame interval 17.2 ms (58.1 fps)',
+  ].join('\n') + '\n');
+  const run = await runlog.analyzeRun(dir);
+  const digest = runlog.reportDigest(run, {
+    mvProvider: { id: 'vort', displayName: 'VORT', shaderPresent: true },
+    vulkanFeeder: { layerRegistered: true, layerAddon: true, appListed: false, feederLogPresent: true },
+  });
+
+  assert.match(digest, /verdict: opti-not-loaded/);
+  assert.match(digest, /optiscaler: not present in the process at all/);
+  assert.match(digest, /feeder frames: 18000/);
+  assert.match(digest, /fps: 58/);
+  assert.match(digest, /this exe is NOT on its app list/);
+  assert.match(digest, /mv provider: VORT$/m, 'a healthy provider is named and not complained about');
+  // Nothing it has no evidence for.
+  assert.doesNotMatch(digest, /motion vectors|depth:|driver:|smooth motion|unreal crash/);
+  assert.match(digest, /^<details>/, 'folded, so it does not bury the report');
+
+  // A folder nothing has run in says so in one line rather than printing empty fields.
+  const fresh = await runlog.analyzeRun(scratchDir('digest-fresh'));
+  const quiet = runlog.reportDigest(fresh);
+  assert.match(quiet, /ran: no/);
+  assert.doesNotMatch(quiet, /feeder frames|neural passes|exit:/);
+});
+
 // Dolphin on DX12 (support bundle, 2026-09-15): DLSS created, the model crashed in the Feeder's first
 // evaluate, the Feeder stopped. It used to read as dlss-no-nr, "not a known case".
 test('a model crash in the Feeder\'s evaluate is named, and an emulator is pointed at Direct3D 11', async () => {

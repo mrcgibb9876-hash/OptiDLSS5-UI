@@ -436,6 +436,90 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   };
 }
 
+// The run, as text, for the issue body -- the half of a report that used to be readable only by
+// opening the attachment.
+//
+// A report reaches this project in two pieces: a body (what the app knows about the game) and the
+// logs (a gist, or a zip the player drags in). Everything that decides a diagnosis is in the second
+// piece, and neither the gist nor the attachment host is reachable from a scripted triage: both
+// answer 403 to anything but a repository-scoped path. So the two SWTOR bundles and the Duke one
+// (2026-09-16/17) could only be read by a human downloading them by hand, and until someone did,
+// the issue said "no-hook (unknown)" and nothing else.
+//
+// This puts the decisive lines in the body itself: what analyzeRun concluded, and the sentences the
+// Feeder wrote about its own run, quoted rather than paraphrased. Only what is true is printed, so a
+// healthy run is four lines and a broken one says why. Plain `key: value` inside a fence, because
+// this is read by a person and by a script, and a script should not have to parse prose.
+//
+// Redaction is the caller's: ghreport.sendReport redacts the whole body, this included.
+function reportDigest(run, { mvProvider = null, vulkanFeeder = null } = {}) {
+  const lines = [];
+  const add = (key, value) => { if (value !== null && value !== undefined && value !== '' && value !== false) lines.push(`${key}: ${value}`); };
+
+  if (!run || !run.ran) {
+    add('verdict', (run && run.verdict) || 'no-log');
+    add('ran', 'no -- nothing has been logged in this folder yet');
+  } else {
+    add('verdict', run.verdict + (run.detail ? ` (${run.detail})` : ''));
+    add('at', run.at);
+    add('render api', run.runtimeApi);
+    add('neural passes', run.nrFrames || run.nrDispatch || null);
+    add('feeder frames', run.feedFrames || null);
+    add('fps', run.fps);
+    add('dlss features created', run.dlssCreated || null);
+
+    // The neural consumer, in the Feeder's own words (see the DetectOptiScaler block above).
+    if (run.feedOptiRouted) add('optiscaler', 'NGX routed through it');
+    if (run.feedOptiMissing) add('optiscaler', 'not present in the process at all');
+    if (run.feedOptiWrongName) add('optiscaler', `${run.feedOptiWrongName} is an OptiScaler build this game never loaded`);
+    if (run.feedOptiNotRouted) add('optiscaler', 'loaded, but the DRIVER answered the NGX probe');
+    if (run.feedOptiNotFork) add('optiscaler', 'a stock build, not the DLSS-NR fork');
+    if (run.feedVulkanInteropMissing) add('vulkan interop', 'the extensions are missing on this device');
+
+    if (run.feedMvProblem) add('motion vectors', run.feedMvProblem);
+    else if (run.feedNoMotion) add('motion vectors', 'every probe read (almost) none');
+    if (run.feedDepthFlatMoving) add('depth', 'flat while the scene moved (wrong buffer)');
+    else if (run.feedDepthFlat) add('depth', 'flat');
+
+    // The fault stack rides in run.detail on this verdict, printed beside it above.
+    if (run.feedEvaluateCrash) add('neural model', 'crashed in its evaluate, and the feed stopped');
+    if (run.feedInvalidRedist) add('d3d12', 'every device create refused with INVALID_REDIST');
+    if (run.srBackendFallback) add('upscaler', `DLSS could not be created${run.srCreateResult ? ` (${run.srCreateResult})` : ''}, fell back to ${run.srBackendFallback.to}`);
+    if (run.upscaleSkipped) add('upscaler', `${run.upscaleSkipped} dispatches skipped (root signature)`);
+    if (run.dlssRuntimeMissing) add('nvngx_dlss.dll', 'not beside the exe -- OptiScaler disabled DLSS');
+    if (run.feedDriverOutdated !== null && run.feedDriverOutdated !== undefined) {
+      add('driver', `reports feature 18 out of date${run.feedDriverOutdated ? `, needs ${run.feedDriverOutdated} or newer` : ''}`);
+    }
+    add('driver version', run.driverVersion);
+    if (run.feedSmoothMotion) add('smooth motion', 'active in this process');
+    if (run.wrapperCrash) add('wrapper crash', `${run.wrapperCrash}, as the game started`);
+    if (run.crash && run.crash.message) add('unreal crash', String(run.crash.message).slice(0, 200));
+    if (run.optiLogMissing) add('OptiScaler.log', 'absent -- the Feeder log is the whole run');
+    if (!run.cleanExit) add('exit', 'no DLL_PROCESS_DETACH -- the process did not unload cleanly');
+  }
+
+  // State the body never carried, and both halves of a Feeder deploy that can look complete and feed
+  // nothing: which motion-vector shader is set up, and whether ReShade's Vulkan layer is on this exe.
+  if (mvProvider && mvProvider.id) {
+    const bad = [
+      mvProvider.broken && 'cannot work',
+      mvProvider.shaderPresent === false && 'shader missing',
+      (mvProvider.valueMismatch || mvProvider.techniqueMismatch) && 'preset and shader disagree',
+    ].filter(Boolean);
+    add('mv provider', `${mvProvider.displayName || mvProvider.id}${bad.length ? ` -- ${bad.join(', ')}` : ''}`);
+  }
+  if (vulkanFeeder) {
+    add('reshade vulkan layer', [
+      vulkanFeeder.layerRegistered ? 'registered' : 'NOT registered',
+      vulkanFeeder.layerRegistered && (vulkanFeeder.layerAddon ? 'add-on build' : 'NO add-on support'),
+      vulkanFeeder.appListed === false ? 'this exe is NOT on its app list' : vulkanFeeder.appListed === true ? 'this exe is listed' : null,
+      vulkanFeeder.feederLogPresent ? 'feeder logged' : 'feeder wrote no log',
+    ].filter(Boolean).join(', '));
+  }
+
+  return ['<details><summary>Run digest (read from the logs by the app)</summary>', '', '```', ...lines, '```', '', '</details>'].join('\n');
+}
+
 const BUNDLE_FILES = ['OptiScaler.log', 'OptiScaler.ini', 'ReShade.log', 'ReShade.ini', 'ReShadePreset.ini', 'dlss5-feed.log', 'dlss5-feed.cfg', '.optiscaler-manager-install.json', '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.dlss5ui-api.json', '.dlss5ui-lossless.json', '.dlss5ui-legacy.json'];
 
 function folderListing(dir) {
@@ -516,4 +600,4 @@ async function collectSupportBundle(dir, { zipPath, extra = {}, execFileAsync, o
   return { zipPath, files: copied, run };
 }
 
-module.exports = { analyzeRun, collectSupportBundle, gatherSupportFiles, unrealCrashNear, nrTiming };
+module.exports = { analyzeRun, collectSupportBundle, gatherSupportFiles, reportDigest, unrealCrashNear, nrTiming };

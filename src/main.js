@@ -2503,7 +2503,7 @@ ipcMain.handle('report:send', async (_evt, { exePath, detected, title, body } = 
       backends: detectInstalledBackends(dir),
       foreign: foreignToolchains(dir),
     };
-    const { files } = await runlog.gatherSupportFiles(dir, { extra, optiDir: optiScalerDirFor(dir) });
+    const { files, run } = await runlog.gatherSupportFiles(dir, { extra, optiDir: optiScalerDirFor(dir) });
     const confirm = await dialog.showMessageBox({
       type: 'question',
       buttons: ['Send', 'Cancel'],
@@ -2515,7 +2515,15 @@ ipcMain.handle('report:send', async (_evt, { exePath, detected, title, body } = 
     });
     if (confirm.response !== 0) return { ok: true, cancelled: true };
     const withText = files.map((f) => ({ name: f.name, text: f.text !== undefined ? f.text : fs.readFileSync(f.source, 'utf8') }));
-    const out = await ghreport.sendReport({ token, title, body, files: withText });
+    // The logs go to a gist, and a gist is not reachable from anything but a browser signed in as a
+    // person: a scripted triage gets 403 there and at the attachment host alike. So the lines that
+    // decide the diagnosis go in the body too, where they can actually be read (runlog.reportDigest).
+    const helpCtx = await helpContext(exePath, detected).catch(() => null);
+    const digest = runlog.reportDigest(run, {
+      mvProvider: helpCtx ? helpCtx.mvProvider : null,
+      vulkanFeeder: helpCtx ? helpCtx.vulkanFeeder : null,
+    });
+    const out = await ghreport.sendReport({ token, title, body: `${body}\n\n${digest}`, files: withText });
     return { ok: true, ...out };
   } catch (error) {
     if (error && error.signedOut) { clearReportToken(); return { ok: false, signedOut: true }; }
