@@ -71,6 +71,16 @@ redistribution, so the manager only links to the release page and fetches the mo
   `C:\ProgramData\ReShade\ReShadeApps.ini` (its setup writes it). A registered add-on layer that
   skips the game looks exactly like "the layer did not load". The Feeder's DXVK route also wants
   `dxvk.allowFse = False` in `dxvk.conf`; feeder.js writes it on deploy and takes it back on Remove.
-- The GitHub attachment host (`github.com/user-attachments/...`) is **blocked from these sessions**,
-  so a support zip on an issue cannot be opened here. Read what the earlier commit messages recorded
-  from it, or ask for the lines.
+- **A user's logs cannot be read from a session, by any route.** `github.com/user-attachments/...`
+  (a dragged-in zip) and `api.github.com/gists/...` (what "Send game failure" posts) both answer
+  403, repo-scoped paths only; `gist.githubusercontent.com` is refused by the egress policy. So
+  triage works from the **issue body**, which since v1.80.0 carries a folded "Run digest" block --
+  `runlog.reportDigest`, the verdict and the Feeder's own sentences as `key: value` lines. Reports
+  from before v1.80.0 have only the header lines; say so rather than guessing at the rest.
+- **A daily triage Routine** (`trig_017NQfzzUVqQoQbBq9hiwyur`, 07:00 UTC, fresh session per fire)
+  reads issues updated in the last 30 hours, diagnoses them from that digest against
+  `src/gamehelp.js`, and either opens a **draft** PR with a test or posts one diagnosis comment. It
+  is forbidden from merging, releasing and pushing to master: the engine cannot be validated on a
+  runner (no GPU, no game), and the manager updates itself through electron-updater, so a wrong
+  automatic release installs itself on everyone. Set up 2026-09-17 at the user's request, after
+  they chose "triage and draft PRs" over full automation.
