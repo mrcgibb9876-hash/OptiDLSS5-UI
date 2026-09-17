@@ -2523,7 +2523,7 @@ ipcMain.handle('report:send', async (_evt, { exePath, detected, title, body } = 
       mvProvider: helpCtx ? helpCtx.mvProvider : null,
       vulkanFeeder: helpCtx ? helpCtx.vulkanFeeder : null,
     });
-    const out = await ghreport.sendReport({ token, title, body: `${body}\n\n${digest}`, files: withText });
+    const out = await ghreport.sendReport({ token, title, body: runlog.withDigest(body, digest), files: withText });
     return { ok: true, ...out };
   } catch (error) {
     if (error && error.signedOut) { clearReportToken(); return { ok: false, signedOut: true }; }
@@ -2600,7 +2600,10 @@ ipcMain.handle('game:help', async (_evt, { exePath, detected, fixesTried = [] } 
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const ctx = await helpContext(exePath, detected, fixesTried);
     const diag = gamehelp.diagnose(ctx);
-    return { ok: true, ...diag, run: ctx.run, route: { route: ctx.route.route, label: ctx.route.label, reason: ctx.route.reason }, foreign: ctx.foreign };
+    // The digest rides with the diagnosis so the renderer can put it in a report body it opens in the
+    // browser itself ("Report on GitHub"), not only in the one report:send posts.
+    const digest = runlog.reportDigest(ctx.run, { mvProvider: ctx.mvProvider, vulkanFeeder: ctx.vulkanFeeder });
+    return { ok: true, ...diag, run: ctx.run, route: { route: ctx.route.route, label: ctx.route.label, reason: ctx.route.reason }, foreign: ctx.foreign, digest };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }

@@ -607,6 +607,27 @@ test('the report digest carries what the logs decided, and says nothing it does 
   assert.doesNotMatch(quiet, /feeder frames|neural passes|exit:/);
 });
 
+// #50 (2026-09-17): a v1.80.0 report came in with the header lines and no digest. It had gone through
+// "Report on GitHub", whose body the renderer builds and opens in the browser, and only the signed-in
+// send path appended the digest. Now the renderer appends the digest it got with Game Help on both
+// paths, and the send path adds it only to a body that lacks it -- never twice.
+test('the digest goes into a body once, whichever report path built it', async () => {
+  const run = await runlog.analyzeRun(scratchDir('digest-once'));
+  const digest = runlog.reportDigest(run);
+  assert.ok(digest.startsWith(runlog.DIGEST_MARKER), 'the marker is how a body with a digest is recognised');
+
+  const header = '**Game:** Swtor\n**Exe:** swtor.exe\n**App:** v1.80.0';
+  const sent = runlog.withDigest(header, digest);
+  assert.equal(sent, `${header}\n\n${digest}`, 'a body from an older renderer gets the digest');
+
+  // The renderer put it ahead of the Logs line, and the send path leaves that body alone.
+  const fromRenderer = `${header}\n\n${digest}\n\n**Logs:** press Ctrl+V on the next line to attach the zip.\n`;
+  assert.equal(runlog.withDigest(fromRenderer, digest), fromRenderer);
+  assert.equal((runlog.withDigest(fromRenderer, digest).match(/Run digest/g) || []).length, 1);
+
+  assert.equal(runlog.withDigest(header, ''), header, 'no digest, nothing appended');
+});
+
 // Dolphin on DX12 (support bundle, 2026-09-15): DLSS created, the model crashed in the Feeder's first
 // evaluate, the Feeder stopped. It used to read as dlss-no-nr, "not a known case".
 test('a model crash in the Feeder\'s evaluate is named, and an emulator is pointed at Direct3D 11', async () => {

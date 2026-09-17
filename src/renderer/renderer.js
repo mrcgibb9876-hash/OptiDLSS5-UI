@@ -1189,6 +1189,11 @@ async function buildGameReport(game, diag, { manual = false } = {}) {
     `**GPU:** ${gpuLabel()}`,
     `**App:** ${appVersion ? 'v' + appVersion : '?'}`,
     `**Engine:** ${settings.installedVersion || '?'}`,
+    // The run digest (main.js game:help, runlog.reportDigest): the log lines that decide the diagnosis,
+    // folded. The zip and the gist cannot be read by a scripted triage, so this is what it works from;
+    // a report opened in the browser used to leave it out. Ahead of the Logs line, which stays last
+    // because the player pastes the zip after it.
+    ...(diag.digest ? ['', diag.digest] : []),
     ...(manual ? ['', '**Logs:** press Ctrl+V on the next line to attach the zip (the app copied it). If nothing appears, drag it in from the folder that opened.', ''] : []),
   ].join('\n');
   return { title, body };
