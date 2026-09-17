@@ -452,9 +452,48 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
 // this is read by a person and by a script, and a script should not have to parse prose.
 //
 // Redaction is the caller's: ghreport.sendReport redacts the whole body, this included.
-function reportDigest(run, { mvProvider = null, vulkanFeeder = null } = {}) {
+function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = null, route = null } = {}) {
   const lines = [];
   const add = (key, value) => { if (value !== null && value !== undefined && value !== '' && value !== false) lines.push(`${key}: ${value}`); };
+
+  // Why this game is on the API it is on. Two reports of the SAME swtor.exe read DX9 on one machine
+  // and DX11 on another (#44 and #50, 2026-09-17), and neither body said why, so the question could
+  // only be guessed at. Detection already writes the sentence -- a DXVK wrapper beside the exe, a
+  // D3D11 device in OptiScaler.log, a choice made in Edit -- it was simply never reported. The API
+  // decides the route, and the route decides everything else, so this belongs at the top.
+  if (detected) {
+    if (detected.apiOverride) {
+      add('api', `${detected.apiOverride} -- SET BY HAND in Edit (detection said ${detected.detectedApi || 'nothing'})`);
+    } else {
+      add('api', detected.api ? `${detected.api}${detected.reason ? ` -- ${detected.reason}` : ''}` : 'not detected');
+    }
+    if ((detected.apis || []).length > 1) add('apis seen', detected.apis.join(', '));
+    add('bitness', detected.bitness ? `${detected.bitness}-bit` : null);
+    add('engine', detected.engine);
+    // The files beside the exe that change the answer above, and that no header line mentions.
+    if (detected.vulkanWrapper) add('wrapper', `${detected.vulkanWrapper.file} beside the exe is ${detected.vulkanWrapper.kind}, so the game reaches the GPU through Vulkan`);
+    if (detected.reshadeProxy) add('reshade', `loaded locally as ${detected.reshadeProxy} (not the Vulkan layer)`);
+    if (detected.optiScalerProxy && detected.optiScalerProxy.file) {
+      add('other optiscaler', `${detected.optiScalerProxy.file}${detected.optiScalerProxy.matchesOurBuild === false ? ', NOT the build this app installed' : ''}`);
+    }
+    if (detected.antiCheat) add('anti-cheat', detected.antiCheat);
+  }
+  // dgVoodoo2 turns DirectX 8/9 into D3D11 inside the game, which is itself a reason a DX9 game can
+  // report DX11 -- and it is the wrapper this app's own legacy route places (legacy.js). route.legacy
+  // is the PLAN (what the route calls for); dgVoodooDeployed is whether it is actually in the folder,
+  // and only the second one may be stated as fact.
+  if (route) {
+    add('route', route.route);
+    const plan = route.legacy;
+    if (plan && plan.dgVoodoo) {
+      add('dgvoodoo2', route.dgVoodooDeployed
+        ? `${plan.dgVoodoo.arch} ${plan.dgVoodoo.dll} is in the folder -- DirectX 9 is being presented to the game as D3D11`
+        : `this route wants ${plan.dgVoodoo.arch} ${plan.dgVoodoo.dll}, not deployed yet`);
+    } else if (route.dgVoodooDeployed) {
+      add('dgvoodoo2', 'deployed in this folder');
+    }
+    if (plan && plan.host32) add('32-bit route', 'the DLSS work runs in the Feeder\'s 64-bit helper in host64\\');
+  }
 
   if (!run || !run.ran) {
     add('verdict', (run && run.verdict) || 'no-log');
@@ -462,7 +501,7 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null } = {}) {
   } else {
     add('verdict', run.verdict + (run.detail ? ` (${run.detail})` : ''));
     add('at', run.at);
-    add('render api', run.runtimeApi);
+    add('runtime api', run.runtimeApi ? `${run.runtimeApi} -- what OptiScaler actually saw in the process` : null);
     add('neural passes', run.nrFrames || run.nrDispatch || null);
     add('feeder frames', run.feedFrames || null);
     add('fps', run.fps);
