@@ -628,6 +628,50 @@ test('the digest goes into a body once, whichever report path built it', async (
   assert.equal(runlog.withDigest(header, ''), header, 'no digest, nothing appended');
 });
 
+// The same swtor.exe read DX9 on one machine and DX11 on another (#44 and #50, 2026-09-17) and no
+// report said why. Detection already knows; the digest now carries it, including the case where a
+// person set the API by hand, and it must never call a planned dgVoodoo2 a deployed one.
+test('the digest says why the game is on the API it is on', async () => {
+  const run = await runlog.analyzeRun(scratchDir('digest-api'));
+
+  const dxvk = runlog.reportDigest(run, {
+    detected: {
+      api: 'vulkan', apis: ['vulkan', 'dx9'], bitness: 64, apiOverride: null,
+      reason: 'Vulkan -- d3d9.dll beside the executable is DXVK, which presents the game\'s Direct3D through Vulkan',
+      vulkanWrapper: { file: 'd3d9.dll', kind: 'DXVK' },
+    },
+    route: { route: 'feeder', legacy: null, dgVoodooDeployed: false },
+  });
+  assert.match(dxvk, /api: vulkan -- Vulkan -- d3d9\.dll beside the executable is DXVK/);
+  assert.match(dxvk, /wrapper: d3d9\.dll beside the exe is DXVK/);
+  assert.match(dxvk, /apis seen: vulkan, dx9/);
+  assert.match(dxvk, /bitness: 64-bit/);
+  assert.doesNotMatch(dxvk, /dgvoodoo2/);
+
+  // A choice made in Edit outranks detection, and the digest has to say so -- otherwise the reading
+  // looks like something the app worked out.
+  const byHand = runlog.reportDigest(run, {
+    detected: { api: 'dx11', apis: ['dx11', 'dx9'], apiOverride: 'dx11', detectedApi: 'dx9', reason: 'DX9 -- imports d3d9.dll' },
+    route: { route: 'optiscaler' },
+  });
+  assert.match(byHand, /api: dx11 -- SET BY HAND in Edit \(detection said dx9\)/);
+
+  // The plan is not the fact.
+  const planned = runlog.reportDigest(run, {
+    detected: { api: 'dx9', bitness: 64 },
+    route: { route: 'feeder32', legacy: { dgVoodoo: { arch: 'x64', dll: 'D3D9.dll' } }, dgVoodooDeployed: false },
+  });
+  assert.match(planned, /this route wants x64 D3D9\.dll, not deployed yet/);
+  const there = runlog.reportDigest(run, {
+    detected: { api: 'dx9', bitness: 64 },
+    route: { route: 'feeder32', legacy: { dgVoodoo: { arch: 'x64', dll: 'D3D9.dll' } }, dgVoodooDeployed: true },
+  });
+  assert.match(there, /is in the folder -- DirectX 9 is being presented to the game as D3D11/);
+
+  // Nothing invented when detection was not passed at all.
+  assert.doesNotMatch(runlog.reportDigest(run), /^api:|^route:|^bitness:/m);
+});
+
 // Dolphin on DX12 (support bundle, 2026-09-15): DLSS created, the model crashed in the Feeder's first
 // evaluate, the Feeder stopped. It used to read as dlss-no-nr, "not a known case".
 test('a model crash in the Feeder\'s evaluate is named, and an emulator is pointed at Direct3D 11', async () => {

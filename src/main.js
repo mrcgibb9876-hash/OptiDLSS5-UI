@@ -2522,6 +2522,8 @@ ipcMain.handle('report:send', async (_evt, { exePath, detected, title, body } = 
     const digest = runlog.reportDigest(run, {
       mvProvider: helpCtx ? helpCtx.mvProvider : null,
       vulkanFeeder: helpCtx ? helpCtx.vulkanFeeder : null,
+      detected: helpCtx ? helpCtx.detected : effective,
+      route: helpCtx ? helpCtx.route : null,
     });
     const out = await ghreport.sendReport({ token, title, body: runlog.withDigest(body, digest), files: withText });
     return { ok: true, ...out };
@@ -2602,7 +2604,10 @@ ipcMain.handle('game:help', async (_evt, { exePath, detected, fixesTried = [] } 
     const diag = gamehelp.diagnose(ctx);
     // The digest rides with the diagnosis so the renderer can put it in a report body it opens in the
     // browser itself ("Report on GitHub"), not only in the one report:send posts.
-    const digest = runlog.reportDigest(ctx.run, { mvProvider: ctx.mvProvider, vulkanFeeder: ctx.vulkanFeeder });
+    const digest = runlog.reportDigest(ctx.run, {
+      mvProvider: ctx.mvProvider, vulkanFeeder: ctx.vulkanFeeder,
+      detected: ctx.detected, route: ctx.route,
+    });
     return { ok: true, ...diag, run: ctx.run, route: { route: ctx.route.route, label: ctx.route.label, reason: ctx.route.reason }, foreign: ctx.foreign, digest };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
