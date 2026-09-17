@@ -77,12 +77,17 @@ redistribution, so the manager only links to the release page and fetches the mo
   triage works from the **issue body**, which since v1.80.0 carries a folded "Run digest" block --
   `runlog.reportDigest`, the verdict and the Feeder's own sentences as `key: value` lines. Reports
   from before v1.80.0 have only the header lines; say so rather than guessing at the rest.
-- **A daily triage Routine** (`trig_014oKuLCuUn3CwLDnqEqxUR8`, 07:00 UTC) reads issues updated in
-  the last 30 hours, diagnoses them from that digest against `src/gamehelp.js`, and either opens a
-  **draft** PR with a test or posts one diagnosis comment. It is forbidden from merging, releasing
-  and pushing to master: the engine cannot be validated on a runner (no GPU, no game), and the
-  manager updates itself through electron-updater, so a wrong automatic release installs itself on
-  everyone. Set up 2026-09-17, after the user chose "triage and draft PRs" over full automation.
+- **A daily triage Routine** (`trig_01Rzks92LWzZgHpmzGrn91tM`, 07:00 UTC, bound to
+  `session_01RQaLiUKYFXVtsJ1rjiHUCw`) reads issues updated in the last 30 hours, diagnoses them
+  from that digest against `src/gamehelp.js`, and either opens a **draft** PR with a test or posts
+  one diagnosis comment. It is forbidden from merging, releasing and pushing to master: the engine
+  cannot be validated on a runner (no GPU, no game), and the manager updates itself through
+  electron-updater, so a wrong automatic release installs itself on everyone. Set up 2026-09-17,
+  after the user chose "triage and draft PRs" over full automation. Its prompt is kept in
+  `docs/routines/daily-triage.md`. An earlier copy (`trig_014oKuLCuUn3CwLDnqEqxUR8`, bound to
+  the SWTOR session) is disabled, not deleted. A session-bound Routine dies with its session,
+  which the user does not want; the way out is a Routine created from the claude.ai Routines UI
+  with both repositories attached, and that file is the prompt to paste there.
 - **A Routine that spawns a fresh session cannot reach GitHub here**, so that one is bound to an
   existing session instead. A trigger-fired session gets Bash/Read/Write/Edit/Glob/Grep/Agent and
   no MCP tools at all: `git clone` works, every `api.github.com` call is refused with "GitHub access
@@ -90,5 +95,6 @@ redistribution, so the manager only links to the release page and fetches the mo
   `add_repo` is not there to call. `create_trigger`'s `connectors` parameter is rejected for this
   organisation ("not available"), and this session's GitHub tooling comes from the environment
   rather than from a passable connector grant, so it cannot be handed on. Proven by firing one
-  (2026-09-17). A fresh-session Routine that needs GitHub has to be created from the claude.ai
-  Routines UI, where the repository and its access can be attached.
+  (2026-09-17), and the `connectors` rejection re-confirmed the same day. A fresh-session
+  Routine that needs GitHub has to be created from the claude.ai Routines UI, where the
+  repository and its access can be attached.
