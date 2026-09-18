@@ -538,6 +538,14 @@ select:focus { outline: 1px solid var(--accent); }
 .status-line { font-size: 12px; margin-top: 6px; }
 .status-ok { color: var(--accent-text); }
 .status-bad { color: var(--danger); }
+/* A route's short explanation (route-explain.js): on the card folded under "How this route works",
+   in Edit under the route line and the translation layer select. */
+.route-explain { font-size: 12px; line-height: 1.45; color: var(--text-dim); margin-top: 6px; }
+.route-explain-row + .route-explain-row { margin-top: 4px; }
+.route-explain-row strong { color: var(--text); font-weight: 600; }
+.card-explain { font-size: 12px; }
+.card-explain > summary { cursor: pointer; color: var(--text-dim); }
+.card-explain > .route-explain { margin-top: 4px; }
 
 .modal-wide { width: 620px; }
 

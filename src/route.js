@@ -49,6 +49,7 @@ const presentroute = require('./presentroute');
 const legacy = require('./legacy');
 const translation = require('./translation');
 const rtxmfg = require('./rtxmfg');
+const routeExplain = require('./route-explain');
 
 // A user's per-game API choice laid over the detection result: the chosen API becomes the
 // primary, joins the list of APIs the game runs on (so keepGamesOwnDlss writes its upscaler key
@@ -250,6 +251,9 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts
       verified: verified.verification(exePath),
       complete: steps.length > 0 && !next,
       nextStep: next ? next.label : null,
+      // The short "How this route works" text for the card and Edit (route-explain.js).
+      explain: routeExplain.explainRoute({ route, emulator: extra.emulator || null, legacy: extra.legacy || null }, api),
+      layerExplain: extra.legacy ? { ...routeExplain.LAYERS } : null,
     };
   };
 

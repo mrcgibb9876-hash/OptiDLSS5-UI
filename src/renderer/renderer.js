@@ -427,6 +427,7 @@ async function renderGrid() {
       <div class="card-body">
         <div class="card-title">${escapeHtml(game.name)}</div>
         <div class="card-path card-recommend" title="${escapeHtml(t('Which install path suits this game'))}">${escapeHtml(t('Checking graphics API…'))}</div>
+        <details class="card-explain hidden"><summary>${escapeHtml(t('How this route works'))}</summary><div class="route-explain"></div></details>
         <div class="card-problem hidden"><span class="card-problem-text"></span></div>
         <div class="card-actions">
           <button class="btn btn-primary btn-card-primary"></button>
@@ -781,6 +782,12 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   }
 
   line.innerHTML = chips.join(' ');
+
+  // What the route does, what it cannot do, and where the panel is (route-explain.js), folded away.
+  const explainBox = card.querySelector('.card-explain');
+  const explainHtml = routeExplainHtml(route.explain);
+  explainBox.classList.toggle('hidden', !explainHtml);
+  explainBox.querySelector('.route-explain').innerHTML = explainHtml;
 
   // The DXVK <-> dgVoodoo2 swap, in the overflow as well as in Game Help and Edit (layerSwapFor).
   const swapBtn = card.querySelector('.btn-swap-layer');
@@ -2789,6 +2796,12 @@ async function loadLayerSection(game) {
     select.appendChild(opt);
   }
   select.value = swap.current;
+  // Each choice in a sentence (route-explain.js LAYERS), so the pick is informed before it is made.
+  const layerText = route.layerExplain || {};
+  $('#game-layer-explain').innerHTML = choices
+    .filter(([value]) => layerText[value])
+    .map(([value, label]) => `<div class="route-explain-row"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(t(layerText[value]))}</div>`)
+    .join('');
   status.className = 'status-line';
   status.textContent = route.dxvkDeployed
     ? t('DXVK is in front of this game.')
@@ -2877,14 +2890,29 @@ $('#game-api-select').addEventListener('change', async (e) => {
   renderGrid();
 });
 
+// A route's short explanation (route-explain.js) as three labelled lines: English templates from
+// main, translated here. '' when the route has none.
+function routeExplainHtml(explain) {
+  if (!explain || !explain.does) return '';
+  const rows = [[t('What it does'), explain.does], [t('Limits'), explain.limits], [t('Panel'), explain.panel]];
+  return rows.filter(([, text]) => text)
+    .map(([label, text]) => `<div class="route-explain-row"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(t(text, explain.vars || undefined))}</div>`)
+    .join('');
+}
+
 // The same route the card tags, spelled out: which stack this game gets and what is still to do.
 async function loadRouteStatus(game) {
   const el = $('#game-route-status');
+  const explainEl = $('#game-route-explain');
   if (!game || !game.exePath) {
     el.classList.add('hidden');
+    explainEl.classList.add('hidden');
     return;
   }
   const route = await window.api.gameRoute(game.exePath, game.detectedPath);
+  const explainHtml = routeExplainHtml(route.explain);
+  explainEl.innerHTML = explainHtml;
+  explainEl.classList.toggle('hidden', !explainHtml);
   el.classList.remove('hidden');
   el.className = `status-line ${route.route === 'unsupported' ? 'status-bad' : route.complete ? 'status-ok' : ''}`.trim();
   const progress = route.complete ? t('All set.') : route.nextStep ? t('Next: {step}.', { step: t(route.nextStep) }) : '';
