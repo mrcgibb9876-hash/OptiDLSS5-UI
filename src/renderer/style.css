@@ -179,6 +179,15 @@ body {
   font-size: 13px;
 }
 .settings-banner a { color: var(--warn); font-weight: 600; }
+/* The driver warning carries two buttons beside its text; the other banners are text, or text and
+   one button, and sat fine on the default block layout. */
+.banner-warn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.banner-warn > span { flex: 1 1 320px; }
 .hidden { display: none !important; }
 
 .game-grid {

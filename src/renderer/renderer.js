@@ -17,6 +17,48 @@ function gpuLabel() {
 
 const $ = (sel) => document.querySelector(sel);
 
+// The driver warning, on the app's front page rather than inside one game's Game Help.
+//
+// The app already knew about this, but only after the fact: the Feeder's log carries the driver's
+// own "feature 18 as OutOfDate ... updated to 616.56 or newer" line, runlog.js reads it, and Game
+// Help shows it for that one game once it has been run. A machine below the floor cannot run the
+// neural pass in ANY game, so waiting for a run to find out is the wrong order -- the user installs
+// to game after game and every one of them quietly does nothing.
+//
+// Dismissal is remembered against the driver version it was shown for, so it comes back if the
+// driver changes and stays gone otherwise. A banner that cannot be dismissed is one people learn
+// to read past.
+function driverBannerDismissed(branch) {
+  try { return localStorage.getItem('driver-warning-dismissed') === branch; } catch { return false; }
+}
+
+function refreshDriverBanner() {
+  const banner = $('#driver-banner');
+  const text = $('#driver-banner-text');
+  const d = gpu && gpu.driver;
+  if (!d || !d.checked || !d.outdated || driverBannerDismissed(d.branch)) {
+    banner.classList.add('hidden');
+    return;
+  }
+  banner.classList.remove('hidden');
+  text.textContent = t(
+    'NVIDIA driver {current} is too old for DLSS 5. Neural Rendering needs {minimum} or newer -- below that the driver reports the feature as out of date and the pass never runs, in any game.',
+    { current: d.branch, minimum: d.minimum },
+  );
+}
+
+$('#btn-driver-download').addEventListener('click', () => {
+  window.api.openExternal('https://www.nvidia.com/Download/index.aspx');
+});
+
+$('#btn-driver-dismiss').addEventListener('click', () => {
+  const branch = gpu && gpu.driver && gpu.driver.branch;
+  try { if (branch) localStorage.setItem('driver-warning-dismissed', branch); } catch {}
+  $('#driver-banner').classList.add('hidden');
+});
+
+
+
 const grid = $('#game-grid');
 const emptyState = $('#empty-state');
 const settingsBanner = $('#settings-banner');
@@ -4174,6 +4216,7 @@ window.addEventListener('focus', () => {
   try { gpu = (await window.api.gpuInfo()) || gpu; } catch {}
   // Vendor colours: the default green is NVIDIA's; an AMD card gets AMD red (style.css, body.vendor-amd).
   document.body.classList.toggle('vendor-amd', gpu.vendor === 'amd');
+  refreshDriverBanner();
   await refreshBannerVisibility();
   await renderGrid();
   await ensureBundledEngine();
