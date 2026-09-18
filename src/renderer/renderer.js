@@ -17,6 +17,48 @@ function gpuLabel() {
 
 const $ = (sel) => document.querySelector(sel);
 
+// The driver warning, on the app's front page rather than inside one game's Game Help.
+//
+// The app already knew about this, but only after the fact: the Feeder's log carries the driver's
+// own "feature 18 as OutOfDate ... updated to 616.56 or newer" line, runlog.js reads it, and Game
+// Help shows it for that one game once it has been run. A machine below the floor cannot run the
+// neural pass in ANY game, so waiting for a run to find out is the wrong order -- the user installs
+// to game after game and every one of them quietly does nothing.
+//
+// Dismissal is remembered against the driver version it was shown for, so it comes back if the
+// driver changes and stays gone otherwise. A banner that cannot be dismissed is one people learn
+// to read past.
+function driverBannerDismissed(branch) {
+  try { return localStorage.getItem('driver-warning-dismissed') === branch; } catch { return false; }
+}
+
+function refreshDriverBanner() {
+  const banner = $('#driver-banner');
+  const text = $('#driver-banner-text');
+  const d = gpu && gpu.driver;
+  if (!d || !d.checked || !d.outdated || driverBannerDismissed(d.branch)) {
+    banner.classList.add('hidden');
+    return;
+  }
+  banner.classList.remove('hidden');
+  text.textContent = t(
+    'NVIDIA driver {current} is too old for DLSS 5. Neural Rendering needs {minimum} or newer -- below that the driver reports the feature as out of date and the pass never runs, in any game.',
+    { current: d.branch, minimum: d.minimum },
+  );
+}
+
+$('#btn-driver-download').addEventListener('click', () => {
+  window.api.openExternal('https://www.nvidia.com/Download/index.aspx');
+});
+
+$('#btn-driver-dismiss').addEventListener('click', () => {
+  const branch = gpu && gpu.driver && gpu.driver.branch;
+  try { if (branch) localStorage.setItem('driver-warning-dismissed', branch); } catch {}
+  $('#driver-banner').classList.add('hidden');
+});
+
+
+
 const grid = $('#game-grid');
 const emptyState = $('#empty-state');
 const settingsBanner = $('#settings-banner');
@@ -130,11 +172,6 @@ async function refreshBannerVisibility() {
 
 // ── Which games are actually running ──────────────────────────────────────────────────────────
 //
-// A game that is up can be tuned while it is up: the manager writes its OptiScaler.ini and the
-// engine re-reads it mid-frame, so a slider moves the picture without leaving the game. The card
-// says so, because otherwise nobody would think to try -- the whole reason this exists is a user
-// whose 32-bit game worked perfectly and offered him no way to change anything.
-//
 // One process listing for the whole library, every few seconds, and only while this window has
 // focus: nobody needs a card to light up while they are looking at something else, and the poll
 // is the sort of background work this app has already had to take back out once.
@@ -142,29 +179,92 @@ const cardsByExe = new Map();
 let runningGames = new Set();
 let runningPollTimer = null;
 
+// Running is a STATE of the card now, not a row of its own: the chip on the art says it. The card
+// used to carry a live line, a last-run line and a Tune button all at once, which is three things
+// saying one thing -- and Tune opened a second copy of the in-game panel, which is gone.
 function applyRunningState(card, isRunning) {
-  const live = card.querySelector('.card-live');
-  const tune = card.querySelector('.btn-tune');
-  const lastRun = card.querySelector('.card-lastrun');
-  const dot = card.querySelector('.card-live-dot');
-  if (!live || !tune) return;
-  live.classList.toggle('hidden', !isRunning);
-  tune.classList.toggle('hidden', !isRunning);
-  // The last run is history the moment there is a current one.
-  if (lastRun) lastRun.classList.toggle('hidden', isRunning || !lastRun.textContent);
-  if (!isRunning) return;
+  card.dataset.running = isRunning ? '1' : '';
+  refreshCardState(card);
+}
 
-  // Only the 32-bit route is tunable live: that is the one place OptiScaler has no window of its
-  // own, and the only place the engine watches its ini for changes. Anywhere else a change here is
-  // real but waits for the next launch, and the panel is on a keypress -- so say that instead.
-  const liveTuning = card.dataset.liveTuning === '1';
-  if (dot) dot.classList.toggle('hidden', !liveTuning);
-  card.querySelector('.card-live-text').textContent = liveTuning
-    ? t('Running -- DLSS 5 tuning reaches this game as you change it')
-    : t('Running -- changes here apply next launch; Insert opens the panel in-game');
-  live.title = liveTuning
-    ? t('This game is up, and OptiScaler re-reads its settings while it runs. Open Tune DLSS 5, move something, and the next frame in the game is already different -- which on the 32-bit route is the only way to reach the settings at all, because OptiScaler is in a helper process with no window.')
-    : t('This game is up. OptiScaler is inside it and its own panel opens on Insert, so that is the quickest way to try something now. Changes made here are written to the ini and taken on the next launch: the engine only watches the file on the 32-bit route, where there is no panel to reach.');
+// The chip and the primary button, from whatever the card currently knows. Called by every source
+// that changes the answer -- the run poll, the route, the diagnosis -- so the two never disagree.
+//
+// One chip and one primary action replace nine stacked rows and seven buttons. The rule is simply
+// what the user should do next, in priority order: a missing exe is unusable, a game that is up
+// wants none of this touched, a problem worth fixing outranks launching, an uninstalled game wants
+// Install, and everything else wants Launch.
+function refreshCardState(card) {
+  const state = card._state || {};
+  const chip = card.querySelector('.card-badge');
+  const primary = card.querySelector('.btn-card-primary');
+  const launch = card.querySelector('.btn-launch');
+  if (!chip || !primary) return;
+  const running = card.dataset.running === '1';
+
+  let tone = 'badge-none';
+  let label = t('Not installed');
+  if (state.exeMissing) { tone = 'badge-missing'; label = t('Exe missing'); }
+  else if (running) { tone = 'badge-installed'; label = `\u25cf ${t('Running')}`; }
+  else if (state.problem && state.problem.bad) { tone = 'badge-attention'; label = t('Needs attention'); }
+  else if (state.working) { tone = 'badge-installed'; label = t('Working'); }
+  else if (state.installed) { tone = 'badge-partial'; label = t('Set up'); }
+  else if (state.leftovers) { tone = 'badge-partial'; label = t('Leftovers'); }
+  chip.className = `card-badge ${tone}`;
+  chip.textContent = label;
+
+  // One row, and while the game is up it says the one thing worth saying then: how to reach the
+  // panel. A problem still outranks it -- there is no point naming a hotkey for a pass that is
+  // not running.
+  const problemEl = card.querySelector('.card-problem');
+  const shown = (state.problem && state.problem.bad) ? state.problem
+    : running && state.panelHint ? { bad: false, text: state.panelHint.text, title: state.panelHint.title }
+    : state.problem;
+  if (problemEl) {
+    problemEl.classList.toggle('hidden', !shown);
+    problemEl.classList.toggle('card-problem-bad', !!(shown && shown.bad));
+    if (shown) {
+      const textEl = problemEl.querySelector('.card-problem-text');
+      textEl.textContent = shown.text;
+      textEl.title = shown.title || shown.text;
+    }
+  }
+
+  // The primary delegates to a real button rather than duplicating its work, so there is still one
+  // implementation of Install, Tune and Launch and one place their confirmations live.
+  const delegate = (sel) => () => card.querySelector(sel)?.click();
+  let text = t('Launch');
+  let cls = 'btn btn-card-primary';
+  let onClick = delegate('.btn-launch');
+  let hideLaunch = true;
+
+  if (state.exeMissing) {
+    text = t('Settings');
+    onClick = delegate('.btn-edit');
+  } else if (running) {
+    // Ahead of Fix it deliberately: a fix moves DLLs the running game is holding open, so it would
+    // fail on the file it most needs to replace. The panel is live over the frame anyway.
+    text = t('Settings');
+    onClick = delegate('.btn-edit');
+  } else if (state.problem && state.problem.action) {
+    text = state.problem.action.label;
+    cls = state.problem.bad ? 'btn btn-card-primary btn-attention' : 'btn btn-card-primary';
+    onClick = state.problem.action.run;
+    hideLaunch = false;
+  } else if (state.leftovers) {
+    text = t('Remove leftovers');
+    cls = 'btn btn-card-primary btn-danger';
+    onClick = delegate('.btn-install');
+  } else if (!state.installed) {
+    text = state.installLabel || t('Install');
+    cls = state.unsupported ? 'btn btn-card-primary' : 'btn btn-card-primary btn-primary';
+    onClick = delegate('.btn-install');
+  }
+
+  primary.className = cls;
+  primary.textContent = text;
+  primary.onclick = onClick;
+  if (launch) launch.classList.toggle('hidden', hideLaunch);
 }
 
 async function pollRunningGames() {
@@ -226,20 +326,18 @@ async function renderGrid() {
     card.className = 'card';
 
     const backends = status.backends || { optiscaler: false };
-    let badgeClass = 'badge-none';
-    let badgeText = t('Not installed');
-    if (status.exeMissing) {
-      badgeClass = 'badge-missing';
-      badgeText = t('Exe missing');
-    } else if (backends.optiscaler) {
-      badgeClass = 'badge-installed';
-      badgeText = 'OptiScaler';
-    } else if (status.hasIni || (status.hasNr && gpu.vendor !== 'amd')) {
-      // On an AMD card a lone nvngx_dlssnr.dll is the DLSS-NR-on-AMD layout, not a half-done
-      // OptiScaler install -- the route chip carries that state; this badge stays "Not installed".
-      badgeClass = 'badge-partial';
-      badgeText = status.hasNr ? t('Missing OptiScaler files') : t('Missing NR file');
-    }
+    // What the chip and the primary button are computed from. Filled in further by
+    // applyRecommendation once the route and the diagnosis come back; refreshCardState renders it.
+    // On an AMD card a lone nvngx_dlssnr.dll is the DLSS-NR-on-AMD layout, not a half-done
+    // OptiScaler install, so it does not count as leftovers here.
+    const initialState = {
+      exeMissing: !!status.exeMissing,
+      installed: !!backends.optiscaler,
+      leftovers: !backends.optiscaler && ((backends.leftovers || []).length > 0 || status.hasIni || (status.hasNr && gpu.vendor !== 'amd')),
+      working: false,
+      problem: null,
+      installLabel: t('Install'),
+    };
 
     card.innerHTML = `
       <div class="card-flipper">
@@ -247,29 +345,24 @@ async function renderGrid() {
       <div class="card-banner-wrap">
         <img class="card-banner hidden" alt="${escapeHtml(game.name)}" />
         <span class="card-banner-fallback hidden"></span>
-        <span class="card-badge ${badgeClass}">${badgeText}</span>
+        <span class="card-badge badge-none"></span>
       </div>
       <div class="card-body">
         <div class="card-title">${escapeHtml(game.name)}</div>
         <div class="card-path card-recommend" title="${escapeHtml(t('Which install path suits this game'))}">${escapeHtml(t('Checking graphics API…'))}</div>
-        <div class="card-warning card-route-next hidden"></div>
-        <div class="card-path card-panel-note hidden"></div>
-        <div class="card-warning card-detect-warning hidden"></div>
-        <div class="card-path card-lastrun hidden"></div>
-        <div class="card-live hidden"><span class="card-live-dot"></span><span class="card-live-text"></span></div>
-        <div class="card-help hidden"><span class="card-help-text"></span><button class="btn btn-small btn-primary btn-card-fix hidden"></button></div>
-        ${(status.warnings || []).map((w) => `<div class="card-warning" title="${escapeHtml(t(w.message, w.vars))}">⚠ ${escapeHtml(t('Another DLSS 5 tool is in the folder'))}</div>`).join('')}
-        ${(status.foreign || []).length ? `<button class="btn btn-danger btn-small btn-remove-foreign" style="margin: 2px 0 6px;">${escapeHtml(t('Remove the other DLSS 5 toolchain…'))}</button>` : ''}
+        <div class="card-problem hidden"><span class="card-problem-text"></span></div>
         <div class="card-actions">
-          <button class="btn ${backends.optiscaler || (backends.leftovers || []).length ? 'btn-danger' : 'btn-primary'} btn-install">${escapeHtml(backends.optiscaler ? t('Remove OptiScaler') : (backends.leftovers || []).length ? t('Remove leftovers') : t('Install OptiScaler'))}</button>
+          <button class="btn btn-primary btn-card-primary"></button>
           <button class="btn btn-launch" title="${escapeHtml(t('Runs the game from its own folder -- for an Unreal game, the -Win64-Shipping.exe that OptiScaler is installed beside.'))}">&#9654; ${escapeHtml(t('Launch'))}</button>
+          <button class="btn btn-ghost btn-card-menu" aria-label="${escapeHtml(t('More actions'))}" aria-expanded="false">&#8943;</button>
         </div>
-        <div class="card-actions-row2">
-          <button class="btn btn-primary btn-tune hidden">${escapeHtml(t('Tune DLSS 5'))}</button>
-          <button class="btn btn-ghost btn-open">${escapeHtml(t('Open Folder'))}</button>
-          <button class="btn btn-ghost btn-edit">${escapeHtml(t('Edit'))}</button>
+        <div class="card-menu hidden">
+          <button class="btn btn-ghost btn-edit">${escapeHtml(t('Settings'))}</button>
           <button class="btn btn-ghost btn-help has-tip" data-tip="${escapeHtml(t('Checks this game\'s setup and its last run, applies the fix when the app has one, tells you plainly when DLSS 5 is not available here, and can save a bundle to share or ask an AI.'))}">${escapeHtml(t('Game Help'))}</button>
-          <button class="btn btn-ghost btn-danger btn-remove">${escapeHtml(t('Remove'))}</button>
+          <button class="btn btn-ghost btn-open">${escapeHtml(t('Open folder'))}</button>
+          <button class="btn btn-ghost btn-danger btn-install">${escapeHtml(backends.optiscaler ? t('Uninstall OptiScaler') : (backends.leftovers || []).length ? t('Remove leftovers') : t('Install OptiScaler'))}</button>
+          ${(status.foreign || []).length ? `<button class="btn btn-ghost btn-danger btn-remove-foreign">${escapeHtml(t('Remove the other DLSS 5 toolchain…'))}</button>` : ''}
+          <button class="btn btn-ghost btn-danger btn-remove">${escapeHtml(t('Remove from list'))}</button>
         </div>
       </div>
       </div>
@@ -431,7 +524,22 @@ async function renderGrid() {
           ? t('Launched {name} without {antiCheat} ({exe}) -- online play will not work while it is modded.', { name: game.name, antiCheat: res.antiCheat || t('anti-cheat'), exe })
           : t('Launched {name} ({exe}).', { name: game.name, exe }));
     });
-    card.querySelector('.btn-tune').addEventListener('click', () => openGameModal(game, { focus: 'dlssnr' }));
+
+    // The overflow. Everything that is not the one next step lives behind it, which is what takes
+    // the card from seven buttons to two. Closes on a click anywhere else so it cannot be left open
+    // over the grid.
+    card._state = initialState;
+    const menu = card.querySelector('.card-menu');
+    const menuBtn = card.querySelector('.btn-card-menu');
+    menuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = menu.classList.toggle('hidden');
+      menuBtn.setAttribute('aria-expanded', open ? 'false' : 'true');
+      for (const other of grid.querySelectorAll('.card-menu')) if (other !== menu) other.classList.add('hidden');
+    });
+    menu.addEventListener('click', () => { menu.classList.add('hidden'); menuBtn.setAttribute('aria-expanded', 'false'); });
+    refreshCardState(card);
+
     cardsByExe.set(game.exePath, card);
     applyRunningState(card, runningGames.has(game.exePath));
     card.querySelector('.btn-open').addEventListener('click', () => window.api.openFolder(game.exePath));
@@ -572,9 +680,6 @@ async function applyRecommendation(game, card, backends, generation = renderGene
     chips.push(`<span class="engine-badge api-badge ${badgeClass}" title="${title}">${escapeHtml(shown)}</span>`);
   }
 
-  // Read back by applyRunningState, which runs from the poll and has no route of its own.
-  card.dataset.liveTuning = route.route === 'feeder32' ? '1' : '';
-
   const routeClass = route.route === 'unsupported' ? 'route-badge-unsupported'
     : route.route === 'unknown' ? 'route-badge-unknown'
     : route.complete ? 'route-badge-done'
@@ -595,108 +700,114 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   line.innerHTML = chips.join(' ');
 
   // What detection found beside the exe that the person should know before installing: none
-  // of these block anything, all of them have bitten real installs.
+  // of these block anything, all of them have bitten real installs. The card shows a few words
+  // each; the full sentence is the hover text.
   const detectWarnings = [];
-  if (detected.antiCheat) detectWarnings.push(t('Anti-cheat present ({file}) -- OptiScaler is for single-player games; using it in a game that goes online risks a ban.', { file: detected.antiCheat }));
-  // On the 32-bit route the ReShade beside the game is this app's own (legacy.js), not a conflict.
-  if (detected.reshadeProxy && route.route !== 'feeder32') detectWarnings.push(t('ReShade is already installed here as {file}. Install replaces it with OptiScaler -- pick Launch mode: Injector in Edit to keep both.', { file: detected.reshadeProxy }));
-  if (detected.oldShaderCompiler) detectWarnings.push(t('{file} v{version} beside the exe predates Shader Model 5.1, so OptiScaler\'s shaders can silently fail to compile -- rename it and Windows\' own copy loads instead.', { file: detected.oldShaderCompiler.file, version: detected.oldShaderCompiler.version }));
-  // The card shows a few words each; the full sentence is the hover text.
   const detectShort = [];
-  if (detected.antiCheat) detectShort.push(t('Anti-cheat: single-player only'));
-  if (detected.reshadeProxy && route.route !== 'feeder32') detectShort.push(t('ReShade already here ({file})', { file: detected.reshadeProxy }));
-  if (detected.oldShaderCompiler) detectShort.push(t('Old shader compiler ({file})', { file: detected.oldShaderCompiler.file }));
-  const warnEl = card.querySelector('.card-detect-warning');
-  if (warnEl) {
-    warnEl.classList.toggle('hidden', detectWarnings.length === 0);
-    warnEl.textContent = detectShort.map((w) => `\u26a0 ${w}`).join('  ');
-    warnEl.title = detectWarnings.join('\n');
+  if (detected.antiCheat) {
+    detectWarnings.push(t('Anti-cheat present ({file}) -- OptiScaler is for single-player games; using it in a game that goes online risks a ban.', { file: detected.antiCheat }));
+    detectShort.push(t('Anti-cheat: single-player only'));
+  }
+  // On the 32-bit route the ReShade beside the game is this app's own (legacy.js), not a conflict.
+  if (detected.reshadeProxy && route.route !== 'feeder32') {
+    detectWarnings.push(t('ReShade is already installed here as {file}. Install replaces it with OptiScaler -- pick Launch mode: Injector in Edit to keep both.', { file: detected.reshadeProxy }));
+    detectShort.push(t('ReShade already here ({file})', { file: detected.reshadeProxy }));
+  }
+  if (detected.oldShaderCompiler) {
+    detectWarnings.push(t('{file} v{version} beside the exe predates Shader Model 5.1, so OptiScaler\'s shaders can silently fail to compile -- rename it and Windows\' own copy loads instead.', { file: detected.oldShaderCompiler.file, version: detected.oldShaderCompiler.version }));
+    detectShort.push(t('Old shader compiler ({file})', { file: detected.oldShaderCompiler.file }));
+  }
+
+  // The verdict game:help already worked out, rather than a second analysis of the same logs.
+  const run = diag && diag.ok ? diag.run : await window.api.lastRun(game.exePath);
+  if (!current()) return;
+  const ran = run && run.ran;
+  const runBad = ran && ['duplicate-dlss', 'shutdown-fault', 'ue-crash', 'feed-stopped',
+    'feed-no-motion', 'feed-depth-flat', 'feed-agility-redist', 'no-dlss'].includes(run.verdict);
+
+  // A run that worked is evidence, not a warning, so it belongs on the route line beside the
+  // route it proves -- which is what lets the "Working" chip mean something.
+  if (ran && run.verdict === 'nr-ran') {
+    const when = new Date(run.at);
+    const stamp = isNaN(when) ? '' : when.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const ev = document.createElement('span');
+    ev.className = 'card-evidence';
+    ev.textContent = ` ${describeRun(run)}`;
+    ev.title = t('Last run {when}: {verdict}', { when: stamp, verdict: describeRun(run) });
+    line.appendChild(ev);
+  }
+
+  // One row, one state. The last run, Game Help's verdict, the route's unfinished step and what
+  // detection found beside the exe were five stacked lines that a game in trouble showed at once,
+  // three of them saying the same thing in different words. They compete for the single row here
+  // in the order of what the person should deal with first, and the winner also decides the chip
+  // and the primary button through refreshCardState.
+  let problem = null;
+  const claim = (p) => { if (!problem) problem = p; };
+
+  if (diag && diag.ok && ['fix', 'step', 'unavailable', 'unknown'].includes(diag.status)) {
+    const bad = diag.status === 'unavailable' || diag.status === 'unknown';
+    let action;
+    if (diag.status === 'fix') {
+      // Applied straight from the card. No dialog opens: the toast names what changed.
+      action = { label: t('Fix it'), run: () => applyHelpFix(game, diag, { modal: false }) };
+    } else if (diag.code === 'pd-plugin-missing') {
+      // The one file the app cannot fetch: its own popup, which finds the download afterwards.
+      action = { label: t('Get plugin'), run: () => openPdPluginModal() };
+    } else {
+      action = { label: diag.status === 'step' ? t('Show me') : t('Help'), run: () => openHelp(game) };
+    }
+    claim({ bad, text: helpShort(diag), title: helpWords(diag), action });
+  }
+
+  // A bad run that the rule table had nothing to say about still has to reach the card.
+  if (runBad) {
+    claim({ bad: true, text: describeRun(run), title: describeRun(run), action: { label: t('Help'), run: () => openHelp(game) } });
   }
 
   // OptiScaler is in but the rest of its route is not (a Feeder game installed before the
-  // one-click flow existed, or Luma UE still waiting on its licence confirmation): say so on
-  // the card, where the "OptiScaler" badge would otherwise read as finished.
-  // What the last run's logs say, in one line -- the card answers "did it work" itself.
-  const lastRunEl = card.querySelector('.card-lastrun');
-  if (lastRunEl) {
-    // The verdict game:help already worked out, rather than a second analysis of the same logs.
-    const run = diag && diag.ok ? diag.run : await window.api.lastRun(game.exePath);
-    if (!current()) return;
-    if (run && run.ran) {
-      lastRunEl.classList.remove('hidden');
-      lastRunEl.classList.toggle('status-ok', run.verdict === 'nr-ran');
-      lastRunEl.classList.toggle('status-bad', ['duplicate-dlss', 'shutdown-fault', 'ue-crash', 'feed-stopped',
-        'feed-no-motion', 'feed-depth-flat', 'feed-agility-redist'].includes(run.verdict));
-      const when = new Date(run.at);
-      const stamp = isNaN(when) ? '' : when.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-      lastRunEl.textContent = t('Last run {when}: {verdict}', { when: stamp, verdict: describeRun(run) });
-      lastRunEl.title = lastRunEl.textContent;
-    } else {
-      lastRunEl.classList.add('hidden');
-    }
+  // one-click flow existed, or Luma UE still waiting on its licence confirmation).
+  if (route.optiInstalled && !route.complete && route.nextStep) {
+    const step = t('Next: {step}', { step: t(route.nextStep) });
+    claim({ bad: true, text: step, title: step, action: { label: t('Show me'), run: () => openHelp(game) } });
   }
 
-  // Game Help on the card itself: one line saying what is wrong, and one button that fixes it.
-  // Nobody reads a README; the card has to do the telling.
-  const helpEl = card.querySelector('.card-help');
-  if (helpEl) {
-    const show = diag && diag.ok && ['fix', 'step', 'unavailable', 'unknown'].includes(diag.status);
-    helpEl.classList.toggle('hidden', !show);
-    if (show) {
-      helpEl.classList.toggle('status-bad', diag.status === 'unavailable' || diag.status === 'unknown');
-      const text = helpEl.querySelector('.card-help-text');
-      text.textContent = helpShort(diag);
-      text.title = helpWords(diag);
-      const btn = helpEl.querySelector('.btn-card-fix');
-      btn.classList.remove('hidden');
-      if (diag.status === 'fix') {
-        btn.textContent = t('Fix it');
-        btn.onclick = () => openHelp(game, { autoFix: true });
-      } else if (diag.code === 'pd-plugin-missing') {
-        // The one file the app cannot fetch: its own popup, which finds the download afterwards.
-        btn.textContent = t('Get plugin');
-        btn.onclick = () => openPdPluginModal();
-      } else {
-        btn.textContent = diag.status === 'step' ? t('Show me') : t('Help');
-        btn.onclick = () => openHelp(game);
+  if (detectShort.length) {
+    // Advisory, not broken: these keep the chip out of "Needs attention", because a game whose
+    // only finding is "this has anti-cheat" is not a game with something to fix.
+    claim({ bad: false, text: detectShort.map((w) => `\u26a0 ${w}`).join('  '), title: detectWarnings.join('\n') });
+  }
+
+  // How to reach the settings while the game is up, which is the one thing the card can usefully
+  // say then -- and the only place the DLSS 5 controls live now that Settings no longer copies
+  // them. The 32-bit route needs its own sentence: "press the hotkey" is what every other route
+  // says and here it is not enough.
+  card._state.panelHint = route.route === 'feeder32' && route.complete
+    ? {
+        text: t('Menus are in the helper: Home \u2192 Add-ons \u2192 DLSS 5 Feed \u2192 show the panel \u2192 Insert'),
+        title: t('Expect nothing on screen in the game: no OptiScaler splash when it loads, and no menu on any key. A 32-bit game cannot run DLSS in its own process, so the neural pass runs in the 64-bit helper beside the game -- and OptiScaler runs there with it, in a process with no window to draw on. Press "Show the DLSS 5 panel in-game" in the add-on first; Insert then opens OptiScaler\'s menu inside it. Needs windowed or borderless. Game Help spells it out.'),
       }
-    }
-  }
+    : route.optiInstalled
+      ? {
+          text: t('{hotkey} opens the DLSS 5 panel', { hotkey: settings.panelHotkey || DEFAULT_PANEL_HOTKEY }),
+          title: t('The pop-out panel, over the game, with every DLSS 5 control live on the frame you are looking at -- which is why they are no longer copied into Settings. OptiScaler\'s own menu is on Alt+Home inside the game. Both need the game windowed or borderless; Windows will not draw over exclusive fullscreen.'),
+        }
+      : null;
 
-  // The 32-bit route's panel, said on the card itself once the route is complete. The full
-  // sequence is in Game Help and in this line's own tooltip; the card carries the short form,
-  // because "press Alt+Home" is what every other route says and here it is not enough.
-  const panelEl = card.querySelector('.card-panel-note');
-  if (panelEl) {
-    const showPanelNote = route.route === 'feeder32' && route.complete;
-    panelEl.classList.toggle('hidden', !showPanelNote);
-    if (showPanelNote) {
-      panelEl.textContent = t('Menus are in the helper: Home \u2192 Add-ons \u2192 DLSS 5 Feed \u2192 show the panel \u2192 Insert');
-      panelEl.title = t('Expect nothing on screen in the game: no OptiScaler splash when it loads, and no menu on any key. A 32-bit game cannot run DLSS in its own process, so the neural pass runs in the 64-bit helper beside the game -- and OptiScaler runs there with it, in a process with no window to draw on. Press "Show the DLSS 5 panel in-game" in the add-on first; Insert then opens OptiScaler\'s menu inside it. Needs windowed or borderless. Game Help spells it out.');
-    }
-  }
+  card._state.problem = problem;
+  card._state.working = !!(ran && run.verdict === 'nr-ran') || !!(route.complete && !(problem && problem.bad));
+  card._state.installed = !!route.optiInstalled || card._state.installed;
+  // The menu entry and the primary button say the same thing, because on an uninstalled game the
+  // primary IS Install and pressing it is pressing that entry.
+  if (canRecommendInstall && route.route === 'feeder' && !route.feederDeployed) install.textContent = t('Install OptiScaler + Feeder');
+  else if (canRecommendInstall && route.route === 'lumaue') install.textContent = t('Install OptiScaler (then Luma UE)');
+  if (canRecommendInstall) card._state.installLabel = install.textContent;
+  // Nothing here can drive DLSS 5: Install stays available but stops being the green thing to press.
+  card._state.unsupported = detected.recommend === 'unsupported' || route.route === 'unsupported';
+  refreshCardState(card);
 
   // The route is only known now, and the poll may already have decided this card was running.
   if (runningGames.has(game.exePath)) applyRunningState(card, true);
-
-  const nextEl = card.querySelector('.card-route-next');
-  if (nextEl) {
-    const showNext = route.optiInstalled && !route.complete && route.nextStep;
-    nextEl.classList.toggle('hidden', !showNext);
-    if (showNext) nextEl.textContent = `\u26a0 ${t('Next: {step}', { step: t(route.nextStep) })}`;
-  }
-
-  if (canRecommendInstall && route.route === 'feeder' && !route.feederDeployed) {
-    install.textContent = t('Install OptiScaler + Feeder');
-  } else if (canRecommendInstall && route.route === 'lumaue') {
-    install.textContent = t('Install OptiScaler (then Luma UE)');
-  }
-
-  if (detected.recommend === 'unsupported' || route.route === 'unsupported') {
-    install.classList.remove('btn-primary');
-  } else if (canRecommendInstall) {
-    install.classList.add('btn-primary');
-  }
 }
 const API_LABEL = { dx12: 'DX12', dx11: 'DX11', vulkan: 'Vulkan', opengl: 'OpenGL' };
 
@@ -754,7 +865,7 @@ function helpWords(diag) {
     case 'needs-run': return t('No run to judge yet. Launch the game, reach actual gameplay (not a menu), play a minute, then quit. Come back here and it is checked.');
     case 'needs-run-after-fix': return t('"{fix}" was applied. The old log still says what it said, so launch the game, reach gameplay, play a minute, quit, and this is checked again.', { fix: helpFixLabel(v.fix) });
     case 'ok': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}{api}.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '', api: v.api ? ' (' + v.api + ')' : '' });
-    case 'ok-panel-in-helper': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}. A 32-bit game cannot run DLSS itself, so the neural pass and OptiScaler run in the 64-bit helper beside the game. Press Alt+Home in the game for the DLSS 5 panel: the helper draws it, the game shows it over itself, and its controls take clicks there -- the same key as every other game. Settings also apply live from Edit here while the game runs, if you would rather change them outside.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '' });
+    case 'ok-panel-in-helper': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}. A 32-bit game cannot run DLSS itself, so the neural pass and OptiScaler run in the 64-bit helper beside the game. Press Alt+Home in the game for the DLSS 5 panel: the helper draws it, the game shows it over itself, and its controls take clicks there -- the same key as every other game.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '' });
     case 'ok-exit-crash': return t('Neural Rendering ran ({count} passes). The game crashed only on the way out, inside NVIDIA\'s shutdown, which does not affect play.', v);
     case 'd3d11-native': return t('DLSS was created on the native D3D11 path, so the Neural Rendering pass never ran. Dx11Upscaler must be dlss_12. Reconfigure writes it.');
     case 'nr-disabled': return t('DLSS ran but Neural Rendering is switched off in OptiScaler.ini. Reconfigure turns it on.');
@@ -1048,11 +1159,10 @@ async function refreshHelp() {
 
 function stopHelpPoll() { if (helpPoll) { clearInterval(helpPoll); helpPoll = null; } $('#help-waiting').classList.add('hidden'); }
 
-async function openHelp(game, { autoFix = false } = {}) {
+async function openHelp(game) {
   helpGame = game;
   helpFixesTried = helpTriedFor(game);
   helpTriedByGame.set(game.exePath, helpFixesTried);
-  helpAutoFix = autoFix;
   $('#help-title').textContent = t('Game Help -- {name}', { name: game.name });
   $('#help-headline').textContent = t('Checking…');
   $('#help-steps').classList.add('hidden');
@@ -1064,10 +1174,7 @@ async function openHelp(game, { autoFix = false } = {}) {
   helpModal.classList.remove('hidden');
   const diag = await refreshHelp();
   helpLastRunAt = diag && diag.run && diag.run.at ? diag.run.at : null;
-  // "Fix it" on the card: the fix runs at once; the modal only reports.
-  if (helpAutoFix && diag && diag.status === 'fix') { helpAutoFix = false; $('#help-apply').click(); }
 }
-let helpAutoFix = false;
 
 $('#help-more').addEventListener('click', () => {
   $('#help-more-row').classList.toggle('hidden');
@@ -1078,47 +1185,57 @@ function closeHelp() { stopHelpPoll(); helpModal.classList.add('hidden'); helpGa
 $('#help-close').addEventListener('click', closeHelp);
 helpModal.addEventListener('click', (e) => { if (e.target === helpModal) closeHelp(); });
 
-$('#help-apply').addEventListener('click', async () => {
-  if (!helpDiag || !helpDiag.fix || !helpGame) return;
-  const id = helpDiag.fix.id;
-  const game = helpGame;
+// The one implementation of "apply the fix Game Help found". The modal's button calls it, and so
+// does Fix it on the card -- which used to open the modal and press this button through a
+// synthetic, un-awaited click, so the fix ran behind a dialog that had already re-diagnosed the
+// game and was reporting "now run it" before the fix had finished. With modal:false there is no
+// dialog: the toast says the one thing that changed and the grid re-render shows it.
+async function applyHelpFix(game, diag, { modal = true } = {}) {
+  if (!game || !diag || !diag.fix) return false;
+  const id = diag.fix.id;
   // Recorded with the run it was judged against: until a newer run exists, the same rule reads
   // "needs a run", not "the fix failed" (gamehelp.js).
+  const runAt = diag.run && diag.run.at ? diag.run.at : null;
   const tried = helpTriedFor(game);
-  const markTried = () => { tried.push({ id, runAt: helpLastRunAt }); helpTriedByGame.set(game.exePath, tried); };
+  const markTried = () => { tried.push({ id, runAt }); helpTriedByGame.set(game.exePath, tried); };
+  const busy = (on) => { if (modal) $('#help-apply').disabled = on; };
+
   if (id === 'install') {
-    closeHelp();
+    if (modal) closeHelp();
     await installGame(game);
     markTried();
     await renderGrid();
-    openHelp(game);
-    return;
+    if (modal) openHelp(game);
+    return true;
   }
   // Luma replaces the Feeder: the deploy removes the Feeder itself, after the licence is confirmed here.
   if (id === 'switch-to-luma') {
     const readiness = await window.api.lumaUeReadiness(game.exePath);
-    if (!(readiness.ok && readiness.supported)) { toast(t('Could not deploy Luma UE: {error}', { error: readiness.reason || readiness.error || '?' })); return; }
-    if (!window.confirm(t('This game gets its DLSS call from Luma. Download and set up Luma now?') + '\n\n' + (readiness.licenseSummary || ''))) return;
-    $('#help-apply').disabled = true;
+    if (!(readiness.ok && readiness.supported)) { toast(t('Could not deploy Luma UE: {error}', { error: readiness.reason || readiness.error || '?' })); return false; }
+    if (!window.confirm(t('This game gets its DLSS call from Luma. Download and set up Luma now?') + '\n\n' + (readiness.licenseSummary || ''))) return false;
+    busy(true);
     const res = await window.api.lumaUeDeploy(game.exePath, { licenseConfirmed: true });
-    $('#help-apply').disabled = false;
+    busy(false);
     toast(res.ok ? t('Luma is set up with DLSS switched on.') : t('Could not deploy Luma UE: {error}', { error: res.error }));
     if (res.ok) markTried();
     renderGrid();
-    await refreshHelp();
-    return;
+    if (modal) await refreshHelp();
+    return !!res.ok;
   }
-  $('#help-apply').disabled = true;
+  busy(true);
   const res = await window.api.gameHelpApply(game.exePath, id);
-  $('#help-apply').disabled = false;
-  if (!res.ok) { toast(t('The fix failed: {error}', { error: res.error })); return; }
+  busy(false);
+  if (!res.ok) { toast(t('The fix failed: {error}', { error: res.error })); return false; }
   toast(res.done ? t('Done: {text}', { text: res.text }) : t('Not done: {text}', { text: res.text }));
   if (res.done) markTried();
   renderGrid();
   // A fix that changes files changes the finding at once; one that changes settings only shows
   // on the next run, and the finding then says so and offers Launch.
-  await refreshHelp();
-});
+  if (modal) await refreshHelp();
+  return !!res.done;
+}
+
+$('#help-apply').addEventListener('click', () => applyHelpFix(helpGame, helpDiag, { modal: true }));
 
 $('#help-launch').addEventListener('click', async () => {
   if (!helpGame) return;
@@ -1671,7 +1788,7 @@ $('#btn-browse-launcher').addEventListener('click', async () => {
   await loadLauncherChoice(game, picked);
 });
 
-async function openGameModal(game, { focus = null } = {}) {
+async function openGameModal(game) {
   editingGameId = game ? game.id : null;
   $('#game-modal-title').textContent = game ? t('Edit Game') : t('Add Game');
   $('#game-exe').value = game ? game.exePath : '';
@@ -1699,14 +1816,7 @@ async function openGameModal(game, { focus = null } = {}) {
   await loadLosslessSection(game);
   await loadAmdNrSection(game);
   await loadLumaUeSection(game);
-  // Arrived from the card's Tune DLSS 5 button: put the settings in view rather than leaving
-  // someone to scroll a long dialog looking for them.
   refreshEditGroups();
-  if (focus === 'dlssnr') {
-    const section = $('#game-dlssnr-section');
-    $('#edit-group-dlss5').open = true;
-    if (section && !section.classList.contains('hidden')) section.scrollIntoView({ block: 'start', behavior: 'smooth' });
-  }
 }
 
 // The Edit dialog's groups (Game / DLSS 5 / Frame Generation / Advanced) hide themselves when none of
@@ -1761,10 +1871,10 @@ function dlssNrDependencyMet(field) {
 }
 
 async function loadDlssNrSection(game) {
-  const section = $('#game-dlssnr-section');
-  const status = $('#game-dlssnr-status');
-  const helperNote = $('#game-dlssnr-helper-note');
-  const host = $('#game-dlssnr-fields');
+  const section = $('#game-display-section');
+  const status = $('#game-display-status');
+  const helperNote = $('#game-display-helper-note');
+  const host = $('#game-display-fields');
   if (!game || !game.exePath) { section.classList.add('hidden'); return; }
 
   const res = await window.api.dlssNrGet(game.exePath);
@@ -1873,18 +1983,18 @@ function showNumber(field, value) {
   return String(Number(Number(value).toFixed(4)));
 }
 
+// The whole [DlssNr] table used to be laid out here, a second copy of the in-game panel that a
+// player could set a value in while the panel had the same file open. Alt+Shift+Home is the panel,
+// live, over the frame it changes -- so only the Display group survives here, because the window a
+// game opens in is decided before there is a frame to see.
+const EDITABLE_GROUPS = ['Display'];
+
 function renderDlssNrFields(game) {
   renderDlssNrEmulator(game);
-  const host = $('#game-dlssnr-fields');
+  const host = $('#game-display-fields');
   host.innerHTML = '';
-  const groups = [...new Set(dlssNrFields.map((f) => f.group))];
-  for (const groupName of groups) {
-    const head = document.createElement('div');
-    head.className = 'field-label dlssnr-group';
-    head.textContent = t(groupName);
-    host.appendChild(head);
-
-    for (const field of dlssNrFields.filter((f) => f.group === groupName)) {
+  {
+    for (const field of dlssNrFields.filter((f) => EDITABLE_GROUPS.includes(f.group))) {
       const row = document.createElement('div');
       row.className = 'dlssnr-row';
       const heldReason = dlssNrForced[field.key] || null;
@@ -1980,7 +2090,7 @@ function renderDlssNrFields(game) {
 }
 
 async function applyDlssNr(game, key, value) {
-  const status = $('#game-dlssnr-status');
+  const status = $('#game-display-status');
   const res = await window.api.dlssNrSet(game.exePath, { [key]: value });
   if (!res || !res.ok) {
     status.textContent = t('Could not save: {error}', { error: (res && res.error) || t('unknown') });
@@ -1993,16 +2103,18 @@ async function applyDlssNr(game, key, value) {
   renderDlssNrFields(game);
 }
 
-$('#btn-dlssnr-reset').addEventListener('click', async () => {
+$('#btn-display-reset').addEventListener('click', async () => {
   const game = games.find((g) => g.id === editingGameId);
   if (!game) return;
   const all = {};
-  for (const f of dlssNrFields) all[f.key] = null;
+  // Only the keys this dialog shows: the rest belong to the in-game panel, and a Reset here that
+  // silently threw away someone's tuning would be the worst kind of surprise.
+  for (const f of dlssNrFields.filter((x) => EDITABLE_GROUPS.includes(x.group))) all[f.key] = null;
   const res = await window.api.dlssNrSet(game.exePath, all);
-  const status = $('#game-dlssnr-status');
+  const status = $('#game-display-status');
   if (!res || !res.ok) { status.textContent = t('Could not save: {error}', { error: (res && res.error) || t('unknown') }); return; }
   dlssNrFields = res.fields;
-  status.textContent = t('Everything back to default. Applies the next time the game starts.');
+  status.textContent = t('Back to default. Applies the next time the game starts.');
   renderDlssNrFields(game);
 });
 
@@ -4077,6 +4189,17 @@ $('#btn-add-scanned').addEventListener('click', async () => {
   closeScanModal();
 });
 
+// A card's overflow menu closes on a click anywhere that is not itself. Delegated once rather than
+// per card, so twenty cards do not mean twenty listeners on the document.
+document.addEventListener('click', (e) => {
+  const inside = e.target.closest && e.target.closest('.card-actions, .card-menu');
+  for (const menu of document.querySelectorAll('.card-menu:not(.hidden)')) {
+    if (inside && menu.closest('.card') === inside.closest('.card')) continue;
+    menu.classList.add('hidden');
+    menu.closest('.card')?.querySelector('.btn-card-menu')?.setAttribute('aria-expanded', 'false');
+  }
+});
+
 // Field hints show one line (style.css); a click opens the rest. Delegated, because Edit builds
 // many of its hints on the fly. A click on a link inside a hint is the link, not the toggle.
 document.addEventListener('click', (e) => {
@@ -4107,6 +4230,7 @@ window.addEventListener('focus', () => {
   try { gpu = (await window.api.gpuInfo()) || gpu; } catch {}
   // Vendor colours: the default green is NVIDIA's; an AMD card gets AMD red (style.css, body.vendor-amd).
   document.body.classList.toggle('vendor-amd', gpu.vendor === 'amd');
+  refreshDriverBanner();
   await refreshBannerVisibility();
   await renderGrid();
   await ensureBundledEngine();
