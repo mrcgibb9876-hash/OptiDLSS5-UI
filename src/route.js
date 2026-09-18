@@ -47,6 +47,7 @@ const verified = require('./verified');
 const reengine = require('./reengine');
 const presentroute = require('./presentroute');
 const legacy = require('./legacy');
+const translation = require('./translation');
 const rtxmfg = require('./rtxmfg');
 
 // A user's per-game API choice laid over the detection result: the chosen API becomes the
@@ -62,6 +63,13 @@ const ROUTE_TEXT = {
   labelHost32: 'OptiScaler + Feeder (32-bit)',
   labelDx9: 'OptiScaler + Feeder (DX9)',
   stepDgVoodoo: 'Put dgVoodoo2 in front of the game',
+  // After Game Help's "Try DXVK instead" (Assassin's Creed II, 2026-09-18).
+  stepDxvk: 'DXVK is in front of the game (in place of dgVoodoo2)',
+  stepDxvkChosen: 'Put DXVK in front of the game (chosen instead of dgVoodoo2)',
+  dxvkMiddle:
+    '{dx} has no Feeder path of its own; DXVK turns it into Vulkan here (swapped in for dgVoodoo2 from Game Help), ' +
+    'and ReShade runs as its 32-bit Vulkan layer. Run the game borderless or windowed: in exclusive fullscreen ' +
+    'the Feeder starts its helper without a window, and the in-game panel is not available. ',
   stepFeeder32: 'Deploy the 32-bit Feeder and its 64-bit helper with OptiScaler',
   // How to reach OptiScaler on this route, in the add-on's own words. Photographed on a live
   // install 2026-09-14: "OptiScaler has its own menu with every neural-rendering control ... It
@@ -195,6 +203,13 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts
   // The experimental legacy routes (legacy.js): a 32-bit game's OptiScaler lives in host64\, and
   // DX8/DX9 need dgVoodoo2 in front of the game.
   const legacyStatus = legacy.status(dir);
+  // DXVK this app swapped in for dgVoodoo2 (Game Help's "Try DXVK instead"). It does dgVoodoo2's job
+  // on these routes, so the dgVoodoo2 step counts as done while it is in -- otherwise the route read
+  // as unfinished, Game Help's first rule was "Install", and Install put dgVoodoo2 straight back over
+  // the swap (Assassin's Creed II, 2026-09-18). One file read: the manifest is the record.
+  const tlManifest = translation.readManifest(dir);
+  const dxvkDeployed = !!(tlManifest && tlManifest.layer === 'dxvk');
+  const wrapperPreference = translation.readPreference(dir);
   const optiInstalled = optiScalerInstalled(dir) || (detected.bitness === 32 && legacyStatus.hostOptiScaler);
   // shipsNativeDlss: the game's own Streamline/DLSS files (beside the exe or in an Unreal
   // plugin tree) -- evidence no deploy of ours can fake, so it wins over the markers. Otherwise
@@ -214,7 +229,7 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts
   const finish = (route, label, reason, steps, reasonVars = null, extra = {}) => {
     const next = steps.find((s) => !s.done) || null;
     return {
-      experimental: false, emulator: null, legacy: null, dgVoodooDeployed: legacyStatus.dgVoodoo,
+      experimental: false, emulator: null, legacy: null, dgVoodooDeployed: legacyStatus.dgVoodoo, dxvkDeployed, wrapperPreference,
       ...extra,
       route, label, reason, reasonVars, steps, gpuVendor,
       optiInstalled, feederDeployed, lumaDeployed, feederMisdeployed, shipsDlss,
@@ -278,11 +293,18 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts
       return finish('unsupported', 'Not supported', `32-bit executable: ${plan.reason}.`, []);
     }
     const steps = [];
-    if (plan.dgVoodoo) steps.push({ key: 'dgvoodoo', label: ROUTE_TEXT.stepDgVoodoo, done: legacyStatus.dgVoodoo });
+    const viaDxvk = !!plan.dgVoodoo && dxvkDeployed;
+    // DXVK chosen before anything was installed (translation.js readPreference): Install places it.
+    const dxvkChosen = !!plan.dgVoodoo && !dxvkDeployed && !legacyStatus.dgVoodoo && wrapperPreference === 'dxvk';
+    if (viaDxvk) steps.push({ key: 'dxvk', label: ROUTE_TEXT.stepDxvk, done: true });
+    else if (dxvkChosen) steps.push({ key: 'dxvk', label: ROUTE_TEXT.stepDxvkChosen, done: false });
+    else if (plan.dgVoodoo) steps.push({ key: 'dgvoodoo', label: ROUTE_TEXT.stepDgVoodoo, done: legacyStatus.dgVoodoo });
     steps.push({ key: 'feeder32', label: ROUTE_TEXT.stepFeeder32, done: legacyStatus.host32 && legacyStatus.feeder32 && legacyStatus.hostOptiScaler });
-    const middle = plan.dgVoodoo
-      ? '{dx} has no Feeder path of its own, so dgVoodoo2 turns it into DirectX 11 first. '
-      : plan.api === 'opengl' ? 'On OpenGL, ReShade goes in as the game\'s opengl32.dll. ' : '';
+    const middle = viaDxvk || dxvkChosen
+      ? ROUTE_TEXT.dxvkMiddle
+      : plan.dgVoodoo
+        ? '{dx} has no Feeder path of its own, so dgVoodoo2 turns it into DirectX 11 first. '
+        : plan.api === 'opengl' ? 'On OpenGL, ReShade goes in as the game\'s opengl32.dll. ' : '';
     const text = ROUTE_TEXT.host32Lead + middle + ROUTE_TEXT.host32Panel;
     return finish('feeder32', ROUTE_TEXT.labelHost32, text, steps,
       { dx: plan.api === 'dx8' ? 'DirectX 8' : 'DirectX 9' }, { experimental: true, legacy: plan });

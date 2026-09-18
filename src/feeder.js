@@ -566,16 +566,25 @@ function reshadeAppsListing(manifestPath, exePath) {
   return { appsPath, apps, listed };
 }
 
-async function vulkanLayerStatus({ execFileAsync, regQuery = null, exePath = null } = {}) {
+// bitness 32: the layer a 32-bit game loads. ReShade's setup registers ReShade32.json under
+// HKLM\Software\Wow6432Node\Khronos\Vulkan\ImplicitLayers on a 64-bit Windows (setup/MainWindow.xaml.cs,
+// v6.8.0), because that is the view a 32-bit Vulkan loader reads -- a 64-bit layer registration does
+// nothing for it. Needed for a 32-bit DirectX 9 game swapped to DXVK (Assassin's Creed II, 2026-09-18).
+async function vulkanLayerStatus({ execFileAsync, regQuery = null, exePath = null, bitness = 64 } = {}) {
   const out = { registered: false, manifestPath: null, dllPath: null, addon: false, hive: null, appsPath: null, appListed: null };
+  const is32 = Number(bitness) === 32;
+  const keyFor = (hive) => (is32 && hive === 'HKLM'
+    ? `${hive}\\SOFTWARE\\WOW6432Node\\Khronos\\Vulkan\\ImplicitLayers`
+    : `${hive}\\SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers`);
   const query = regQuery || (execFileAsync
-    ? async (hive) => (await execFileAsync('reg.exe', ['query', `${hive}\\SOFTWARE\\Khronos\\Vulkan\\ImplicitLayers`], { windowsHide: true })).stdout
+    ? async (hive) => (await execFileAsync('reg.exe', ['query', keyFor(hive)], { windowsHide: true })).stdout
     : null);
   if (!query) return out;
+  const manifestRe = is32 ? /reshade32\.json\s+REG_DWORD/i : /reshade64\.json\s+REG_DWORD/i;
   for (const hive of ['HKLM', 'HKCU']) {
     let stdout = '';
     try { stdout = await query(hive); } catch { continue; }
-    const line = (stdout || '').split(/\r?\n/).map((l) => l.trim()).find((l) => /reshade64\.json\s+REG_DWORD/i.test(l));
+    const line = (stdout || '').split(/\r?\n/).map((l) => l.trim()).find((l) => manifestRe.test(l));
     if (!line) continue;
     const manifestPath = line.replace(/\s+REG_DWORD.*$/i, '').trim();
     out.registered = true;
@@ -583,7 +592,7 @@ async function vulkanLayerStatus({ execFileAsync, regQuery = null, exePath = nul
     out.manifestPath = manifestPath;
     try {
       const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-      const lib = manifest && manifest.layer && manifest.layer.library_path ? String(manifest.layer.library_path) : '.\\ReShade64.dll';
+      const lib = manifest && manifest.layer && manifest.layer.library_path ? String(manifest.layer.library_path) : (is32 ? '.\\ReShade32.dll' : '.\\ReShade64.dll');
       out.dllPath = path.isAbsolute(lib) ? lib : path.resolve(path.dirname(manifestPath), lib);
       out.addon = isAddonReShadeDll(out.dllPath);
     } catch {}

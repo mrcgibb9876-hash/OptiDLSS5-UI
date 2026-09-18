@@ -81,7 +81,31 @@ function diagnose(ctx) {
   }
   // The experimental legacy routes: dgVoodoo2 or the 32-bit helper still to place. Install does both.
   if (route.route === 'feeder32' && !route.complete) return fix('not-installed', 'install');
-  if (route.legacy && route.legacy.dgVoodoo && !route.dgVoodooDeployed) return fix('dgvoodoo-missing', 'install');
+  // DXVK in dgVoodoo2's place counts as the wrapper being there: offering Install here would put
+  // dgVoodoo2 back over the swap the player just chose.
+  if (route.legacy && route.legacy.dgVoodoo && !route.dgVoodooDeployed && !route.dxvkDeployed) return fix('dgvoodoo-missing', 'install');
+  // A 32-bit game swapped to DXVK presents through Vulkan, so ReShade -- and the Feeder add-on riding
+  // on it -- only loads as ReShade's 32-bit Vulkan layer. The swap installs that layer; if it is not
+  // there, or not switched on for this exe, or the folder's ReShade.ini the layer needs to start at
+  // all is gone, nothing below can work and the run logs cannot say why: the add-on simply never
+  // loads. Assassin's Creed II (2026-09-18) is the game this route was built for. Re-running the swap
+  // is what installs the layer, so that is the fix.
+  const dxvk32 = route.route === 'feeder32' && route.dxvkDeployed ? ctx.dxvkHost32 : null;
+  if (dxvk32) {
+    if (!dxvk32.layerRegistered || !dxvk32.layerAddon || dxvk32.appListed === false) {
+      return fix('dxvk-layer-missing', 'swap-to-dxvk', {
+        exe: dxvk32.exe || '', why: !dxvk32.layerRegistered ? 'missing' : !dxvk32.layerAddon ? 'no-addon' : 'not-listed',
+      });
+    }
+    if (!dxvk32.reshadeIni) return out('step', 'dxvk-reshade-ini-missing');
+    // A proxy ReShade back beside the exe would load a second ReShade next to the layer's.
+    if (dxvk32.proxyBack) return out('step', 'dxvk-two-reshades', { file: dxvk32.proxyBack });
+    // The game has run since the swap (ReShade's layer wrote its log) and the add-on has not: its
+    // log is missing or older than the swap. The stale log from the dgVoodoo2 days would otherwise
+    // pass for a run of the new route.
+    if (dxvk32.ranSinceSwap && !dxvk32.feedLogSinceSwap) return out('step', 'dxvk-addon-not-loaded', { exe: dxvk32.exe || '' });
+    if (!dxvk32.ranSinceSwap && !dxvk32.feedLogSinceSwap) return out('needs-run', 'dxvk-needs-run');
+  }
   // Install offers Luma itself (with its licence in the question), so a missing Luma is a one-button fix.
   if (route.route === 'lumaue' && !route.lumaDeployed) return fix('luma-missing', 'install');
   // A Feeder doing a job Luma-Framework's own mod for this game does better (lumacatalog.js).
@@ -152,6 +176,14 @@ function diagnose(ctx) {
       // does reach it was written only in the route chip's tooltip. A user with a working feed on
       // Castlevania: Lords of Shadow tried Insert and Alt+Tab and concluded the menu was missing
       // (2026-09-14) -- which is a fair reading of an app that never said otherwise.
+      // Under DXVK nothing holds the game borderless any more -- that was dgVoodoo.conf's job
+      // (legacy.js DG_WINDOWED) -- and the 32-bit add-on starts its helper with no window when the
+      // game is exclusive fullscreen at that moment, so the Alt+Home panel has nothing to show. The
+      // add-on logs it; a working feed with no panel is worth saying out loud, since it reads as
+      // "the panel is broken".
+      if (route.route === 'feeder32' && dxvk32 && dxvk32.feedExclusive) {
+        return out('step', 'dxvk-panel-fullscreen', { count: run.nrFrames || run.nrDispatch });
+      }
       if (route.route === 'feeder32') {
         return out('ok', 'ok-panel-in-helper', { count: run.nrFrames || run.nrDispatch, fps: run.fps || 0, api: (run.runtimeApi || '').toUpperCase() });
       }
@@ -201,6 +233,12 @@ function diagnose(ctx) {
       if (route.dgVoodooDeployed && route.legacy && ['dx8', 'dx9', 'dx10', 'dx11'].includes(route.legacy.api)
           && !tried.has('swap-to-dxvk')) {
         return fix('dgvoodoo-no-dlss', 'swap-to-dxvk', { api: route.legacy.api });
+      }
+      // And the way back. The swap to DXVK is a bet, stated as one in its own dialog, so a DXVK run
+      // with no DLSS in it offers dgVoodoo2 again rather than leaving the game on the layer that
+      // did not help. Without this the swap was one-way (the 2.2.3 review, 2026-09-18).
+      if (route.dxvkDeployed && route.legacy && route.legacy.dgVoodoo && !tried.has('swap-to-dgvoodoo')) {
+        return fix('dxvk-no-dlss', 'swap-to-dgvoodoo', { api: route.legacy.api });
       }
       if (route.route === 'feeder' && route.feederDeployed) return out('unknown', 'no-hook');
       if (route.route === 'lumaue') return out('step', 'luma-missing');
@@ -299,6 +337,14 @@ function diagnose(ctx) {
     // crashing, putting the game back is what is left. A wrapper that is not ours is named and
     // left alone.
     case 'wrapper-crash': {
+      // A crash inside the DXVK this app swapped in: dgVoodoo2 is the other layer, once.
+      const inDxvk = route.dxvkDeployed && route.legacy && route.legacy.dgVoodoo &&
+        /^(d3d8|d3d9)\.dll$/i.test(String(run.detail || ''));
+      if (inDxvk) {
+        return tried.has('swap-to-dgvoodoo')
+          ? fix('dxvk-crash', 'remove-all', { dll: run.detail || '' })
+          : fix('dxvk-crash-swap', 'swap-to-dgvoodoo', { dll: run.detail || '', api: route.legacy.api });
+      }
       const ours = route.dgVoodooDeployed && route.legacy && route.legacy.dgVoodoo &&
         String(route.legacy.dgVoodoo.dll || '').toLowerCase() === String(run.detail || '').toLowerCase();
       if (!ours) return out('unknown', 'wrapper-crash', { dll: run.detail || '' });
@@ -317,6 +363,6 @@ function diagnose(ctx) {
 
 // The fixes in the order Game Help would try them, for the AI tier's tool list and the tests.
 // 'switch-to-luma' is applied by the renderer, which asks for Luma's licence first; main.js declines it.
-const FIX_IDS = ['remove-foreign', 'remove-feeder', 'remove-luma', 'redeploy-feeder', 'feeder-depth-profile', 'disable-agility-redist', 'reconfigure', 'remove-all', 'install', 'switch-to-luma', 'swap-to-dxvk', 'nr-model-only'];
+const FIX_IDS = ['remove-foreign', 'remove-feeder', 'remove-luma', 'redeploy-feeder', 'feeder-depth-profile', 'disable-agility-redist', 'reconfigure', 'remove-all', 'install', 'switch-to-luma', 'swap-to-dxvk', 'swap-to-dgvoodoo', 'nr-model-only'];
 
 module.exports = { diagnose, FIX_IDS };

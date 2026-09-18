@@ -34,7 +34,9 @@ const rtxmfg = require('./rtxmfg');
 // FromSoftware title) -- a stored detection from before this said antiCheat: null for them.
 // 7: DX8 told apart from DX9, emulators recognised, 32-bit and DX8/DX9 games offered the
 // experimental Feeder routes (legacy.js) instead of "unsupported".
-const DETECT_VERSION = 12;
+// 13: a DXVK this app deployed (translation.js manifest) no longer turns the game into a Vulkan
+// game -- the swap made Assassin's Creed II "32-bit Vulkan, unsupported" (2026-09-18).
+const DETECT_VERSION = 13;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
@@ -415,6 +417,18 @@ function apiFromFileName(exePath) {
 // reported the route complete (2026-09-13).
 const HOOK_DLLS = ['dxgi.dll', 'd3d12.dll', 'd3d11.dll', 'd3d9.dll', 'opengl32.dll', 'dinput8.dll', 'winmm.dll', 'version.dll'];
 const HOOK_NEEDLES = ['DXVK', 'vkd3d', 'vkGetInstanceProcAddr', 'ReShade', 'OptiScaler'].map((t) => makeNeedle(t, t, { exactCase: true }));
+
+// 'dxvk' when this app's translation manifest says it put DXVK in front of the game, else null.
+// The manifest only -- a record, not a reading of the folder -- and read lazily so detection does
+// not load translation.js for the games that have no wrapper at all.
+function ourTranslationLayer(dir) {
+  try {
+    const m = require('./translation').readManifest(dir);
+    return m && m.layer === 'dxvk' && !m.fromLegacyMarker ? 'dxvk' : null;
+  } catch {
+    return null;
+  }
+}
 
 async function inspectHookDlls(dir) {
   const out = { vulkanWrapper: null, reshadeProxy: null, optiScalerProxy: null };
@@ -1127,7 +1141,16 @@ async function detectGame(dir, exePath) {
   if (engine.id === 'unreal') found = unrealStaticApi(dir, found, engine);
 
   const [bitness, hooks] = await Promise.all([peBitness(exePath), inspectHookDlls(dir)]);
-  if (hooks.vulkanWrapper && found.api && found.api !== 'vulkan') {
+  // A DXVK this app put in front of the game (translation.js's manifest) is not evidence about the
+  // game: it is the route the app chose for it, and the route has to be planned from the game's own
+  // API, not from the wrapper's. Forcing 'vulkan' here turned Assassin's Creed II (32-bit DX9) into
+  // "32-bit Vulkan, unsupported" the moment the DXVK swap finished (2026-09-18), which hid the route,
+  // Game Help's buttons and with them any way back to dgVoodoo2. A DXVK the player placed by hand
+  // still reads as Vulkan, as before. 32-bit only: there the Vulkan answer is a dead end ("32-bit
+  // Vulkan is not supported"), while a 64-bit game under DXVK really is served by the 64-bit
+  // Feeder's Vulkan path, which needs to be told Vulkan.
+  const ourWrapper = hooks.vulkanWrapper && bitness === 32 ? ourTranslationLayer(dir) : null;
+  if (hooks.vulkanWrapper && !ourWrapper && found.api && found.api !== 'vulkan') {
     found = {
       ...found, api: 'vulkan', apis: [...new Set(['vulkan', ...(found.apis || [])])], uncertain: false,
       reason: `Vulkan -- ${hooks.vulkanWrapper.file} beside the executable is ${hooks.vulkanWrapper.kind}, which presents the game's Direct3D through Vulkan`,
@@ -1216,6 +1239,9 @@ async function detectGame(dir, exePath) {
     experimental,
     emulator: null,
     vulkanWrapper: hooks.vulkanWrapper,
+    // 'dxvk' when that wrapper is one this app deployed (see ourTranslationLayer): the game's API
+    // above is then its own, and the wrapper is part of the route rather than of the game.
+    translatedBy: ourWrapper,
     reshadeProxy: hooks.reshadeProxy,
     // An OptiScaler loading under a proxy name that is not the build this app installed.
     optiScalerProxy: hooks.optiScalerProxy,
@@ -1329,6 +1355,7 @@ async function folderEvidence(dir, exePath) {
   const logStat = optiScalerLogStat(dir);
   return {
     vulkanWrapper: hooks.vulkanWrapper,
+    translatedBy: hooks.vulkanWrapper ? ourTranslationLayer(dir) : null,
     reshadeProxy: hooks.reshadeProxy,
     optiScalerProxy: hooks.optiScalerProxy,
     antiCheat: antiCheatPresent(dir, exePath),
@@ -1345,7 +1372,9 @@ async function folderEvidence(dir, exePath) {
 async function detectFromStored(dir, exePath, stored) {
   const evidence = await folderEvidence(dir, exePath);
   let out = { ...stored, ...evidence };
-  if (evidence.vulkanWrapper && out.api && out.api !== 'vulkan') {
+  if (!(stored.bitness === 32 && evidence.translatedBy)) evidence.translatedBy = null;
+  out.translatedBy = evidence.translatedBy;
+  if (evidence.vulkanWrapper && !evidence.translatedBy && out.api && out.api !== 'vulkan') {
     out = {
       ...out, api: 'vulkan', apis: [...new Set(['vulkan', ...(out.apis || [])])], uncertain: false,
       reason: `Vulkan -- ${evidence.vulkanWrapper.file} beside the executable is ${evidence.vulkanWrapper.kind}, which presents the game's Direct3D through Vulkan`,

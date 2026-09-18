@@ -301,7 +301,12 @@ test('DXVK will not take a name OptiScaler is loading under', async () => {
 
   const out = await translation.deployDxvk(dir, { sourceDir, api: 'dx11', bitness: 64 });
 
-  assert.deepEqual(out.deployed, ['d3d11.dll'], 'the file with no conflict still goes in');
+  // All or nothing: d3d11.dll without DXVK's dxgi.dll is not a working DXVK, and placing it anyway
+  // is how a refused deploy came back "ok" (the 2.2.3 swap review, 2026-09-18).
+  assert.equal(out.ok, false);
+  assert.deepEqual(out.deployed, [], 'nothing goes in when one name is refused');
+  assert.ok(!fs.existsSync(path.join(dir, 'd3d11.dll')));
+  assert.ok(!fs.existsSync(path.join(dir, translation.MANIFEST)), 'and no manifest claims a layer that is not there');
   assert.equal(out.refused.length, 1);
   assert.equal(out.refused[0].file, 'dxgi.dll');
   assert.match(out.refused[0].reason, /OptiScaler/);
