@@ -185,7 +185,14 @@ function diagnose(ctx) {
         return out('step', 'dxvk-panel-fullscreen', { count: run.nrFrames || run.nrDispatch });
       }
       if (route.route === 'feeder32') {
-        return out('ok', 'ok-panel-in-helper', { count: run.nrFrames || run.nrDispatch, fps: run.fps || 0, api: (run.runtimeApi || '').toUpperCase() });
+        // otherMv: a working run on a provider other than LumeniteFX, so the answer can say where to
+        // go if the picture jumps or smears in motion -- Assassin's Creed II (2026-09-18) ran with
+        // the whole screen, UI included, jumping on VORT, and the Feeder recommends LumeniteFX.
+        const lmv = ctx.legacyMv;
+        return out('ok', 'ok-panel-in-helper', {
+          count: run.nrFrames || run.nrDispatch, fps: run.fps || 0, api: (run.runtimeApi || '').toUpperCase(),
+          otherMv: lmv && lmv.id && lmv.id !== 'lumenite-kernel' ? (lmv.displayName || lmv.id) : '',
+        });
       }
       return out('ok', 'ok', { count: run.nrFrames || run.nrDispatch, fps: run.fps || 0, api: (run.runtimeApi || '').toUpperCase() });
     case 'shutdown-fault':
@@ -253,6 +260,15 @@ function diagnose(ctx) {
       // No motion vectors: the provider is missing, disabled, mismatched, or -- for anything
       // deployed before v1.57.0 -- a shader (DRME) that cannot compile on ReShade 6.8 at all.
       // One re-deploy rewrites the provider, its shader, both definition levels and the preset.
+      // Not on the 32-bit route: redeploy-feeder is the 64-bit stack and refuses there. Its provider
+      // is switched from the card's Motion vectors entry instead (legacy:setMvProvider), and
+      // LumeniteFX is the one the Feeder recommends (Assassin's Creed II, 2026-09-18).
+      if (route.route === 'feeder32') {
+        const lmv = ctx.legacyMv || {};
+        return out('step', 'feed-no-motion-legacy', {
+          detail: run.detail || '', provider: lmv.displayName || lmv.id || '', onLumenite: lmv.id === 'lumenite-kernel' ? 1 : 0,
+        });
+      }
       return fix('feed-no-motion', 'redeploy-feeder', { detail: run.detail || '' });
     case 'feed-depth-flat':
       // Depth read flat while the vectors said the scene was moving: ReShade's Generic Depth is

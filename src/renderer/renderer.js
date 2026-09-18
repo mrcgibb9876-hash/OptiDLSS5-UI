@@ -368,6 +368,7 @@ async function renderGrid() {
           <button class="btn btn-ghost btn-edit">${escapeHtml(t('Settings'))}</button>
           <button class="btn btn-ghost btn-help has-tip" data-tip="${escapeHtml(t('Checks this game\'s setup and its last run, applies the fix when the app has one, tells you plainly when DLSS 5 is not available here, and can save a bundle to share or ask an AI.'))}">${escapeHtml(t('Game Help'))}</button>
           <button class="btn btn-ghost btn-swap-layer hidden"></button>
+          <button class="btn btn-ghost btn-mv-provider hidden"></button>
           <button class="btn btn-ghost btn-open">${escapeHtml(t('Open folder'))}</button>
           <button class="btn btn-ghost btn-danger btn-install">${escapeHtml(backends.optiscaler ? t('Uninstall OptiScaler') : leftoverFiles.length ? t('Remove leftovers') : t('Install OptiScaler'))}</button>
           ${(status.foreign || []).length ? `<button class="btn btn-ghost btn-danger btn-remove-foreign">${escapeHtml(t('Remove the other DLSS 5 toolchain…'))}</button>` : ''}
@@ -554,6 +555,7 @@ async function renderGrid() {
     card.querySelector('.btn-open').addEventListener('click', () => window.api.openFolder(game.exePath));
     card.querySelector('.btn-swap-layer').addEventListener('click', (e) => applyLayerSwap(game, e.currentTarget.dataset.fix));
     card.querySelector('.btn-edit').addEventListener('click', () => openGameModal(game));
+    card.querySelector('.btn-mv-provider').addEventListener('click', () => openGameModal(game, { focus: 'legacy-mv' }));
     card.querySelector('.btn-remove').addEventListener('click', () => removeGame(game));
     card.querySelector('.btn-flip-cancel').addEventListener('click', () => card.classList.remove('flipped'));
     card.querySelector('.btn-flip-confirm').addEventListener('click', () => {
@@ -712,6 +714,13 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   const swap = layerSwapFor(route);
   swapBtn.classList.toggle('hidden', !swap);
   if (swap) { swapBtn.textContent = swap.label; swapBtn.dataset.fix = swap.id; }
+
+  // The 32-bit route's motion-vector provider, one click from the card: Assassin's Creed II
+  // (2026-09-18) jumped on VORT, and the switch to LumeniteFX lived only in Edit.
+  const mvBtn = card.querySelector('.btn-mv-provider');
+  const lmv = route.route === 'feeder32' ? route.legacyMv : null;
+  mvBtn.classList.toggle('hidden', !lmv);
+  if (lmv) mvBtn.textContent = t('Motion vectors: {provider} — change…', { provider: shortMvName(lmv.displayName) || t('unknown') });
 
   // What detection found beside the exe that the person should know before installing: none
   // of these block anything, all of them have bitten real installs. The card shows a few words
@@ -908,7 +917,9 @@ function helpWords(diag) {
     case 'needs-run': return t('No run to judge yet. Launch the game, reach actual gameplay (not a menu), play a minute, then quit. Come back here and it is checked.');
     case 'needs-run-after-fix': return t('"{fix}" was applied. The old log still says what it said, so launch the game, reach gameplay, play a minute, quit, and this is checked again.', { fix: helpFixLabel(v.fix) });
     case 'ok': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}{api}.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '', api: v.api ? ' (' + v.api + ')' : '' });
-    case 'ok-panel-in-helper': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}. A 32-bit game cannot run DLSS itself, so the neural pass and OptiScaler run in the 64-bit helper beside the game. Press Alt+Home in the game for the DLSS 5 panel: the helper draws it, the game shows it over itself, and its controls take clicks there -- the same key as every other game.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '' });
+    case 'ok-panel-in-helper': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}. A 32-bit game cannot run DLSS itself, so the neural pass and OptiScaler run in the 64-bit helper beside the game. Press Alt+Home in the game for the DLSS 5 panel: the helper draws it, the game shows it over itself, and its controls take clicks there -- the same key as every other game.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '' })
+      // Assassin's Creed II (2026-09-18): the picture, UI included, jumped on VORT.
+      + (v.otherMv ? ' ' + t('If the picture jumps or smears when things move, try LumeniteFX for motion vectors instead of {provider}: card menu > Motion vectors > change.', { provider: v.otherMv }) : '');
     case 'ok-exit-crash': return t('Neural Rendering ran ({count} passes). The game crashed only on the way out, inside NVIDIA\'s shutdown, which does not affect play.', v);
     case 'd3d11-native': return t('DLSS was created on the native D3D11 path, so the Neural Rendering pass never ran. Dx11Upscaler must be dlss_12. Reconfigure writes it.');
     case 'nr-disabled': return t('DLSS ran but Neural Rendering is switched off in OptiScaler.ini. Reconfigure turns it on.');
@@ -965,6 +976,10 @@ function helpWords(diag) {
     case 'wrapper-crash': return t('The game crashed as it started, inside {dll} in its own folder -- a DirectX wrapper this app did not place. No rule covers this. Save the bundle to share, or ask the AI.', v);
     case 'feeder-mv-broken': return t('The Feeder is deployed here, but its motion-vector shader is {why} ({provider}). DLSS is then fed no motion at all: sharp standing still, smearing the moment you move. Re-deploying writes the provider, its shader and the preset from one answer -- the default is VORT now, which compiles on the ReShade this app installs.', v);
     case 'feed-no-motion': return t('The Feeder ran and DLSS got no motion vectors. The Feeder\'s own log says: {detail} Re-deploying rewrites the provider, its shader, both DLSS5_MV_PROVIDER levels and the preset together.', v);
+    // The 32-bit route: the provider is switched in place (legacy:setMvProvider), not redeployed.
+    case 'feed-no-motion-legacy': return (v.onLumenite
+      ? t('The Feeder ran and DLSS got no motion vectors from LumeniteFX. The Feeder\'s own log says: {detail} Pick VORT under the card\'s Motion vectors entry to rule the shader out.', v)
+      : t('The Feeder ran and DLSS got no motion vectors from {provider}. The Feeder\'s own log says: {detail} Try LumeniteFX, the provider the Feeder recommends: card menu > Motion vectors > change. It asks you to confirm its licence first.', v));
     case 'feed-depth-flat': return t('The Feeder ran, but depth read flat while the scene was moving: ReShade\'s Generic Depth is bound to the wrong buffer, so DLSS and the neural pass reconstruct from nothing. This is the usual Unity failure. The fix switches this game to the one Unity depth profile a contributor has verified end to end; if that is not it either, ReShade\'s own Add-ons > Generic Depth page lists the real buffers the running game has.');
     case 'feed-agility-redist': return t('Direct3D 12 refused every device create in this game\'s process with D3D12_ERROR_INVALID_REDIST -- the Feeder\'s own included -- so DLSS never started. The exe points Direct3D 12 at its own D3D12 folder (Unity games commonly do) and that redist cannot be loaded. The game itself never notices, because on D3D11 it creates no D3D12 device of its own. The fix moves that folder aside so Windows\' own Direct3D 12 runtime is used: reversible, and the game will tell you if it genuinely needed it.');
     case 'feed-agility-redist-elsewhere': return t('Direct3D 12 refused every device create in this game\'s process with D3D12_ERROR_INVALID_REDIST, so the Feeder could not open its device. There is no D3D12 folder beside the exe, so something else in the process is redirecting Direct3D 12 at a redist it cannot load -- a launcher, a mod loader, or an absolute path inside the exe. Verify the game\'s files through its launcher; nothing this app can do works around it.');
@@ -1016,6 +1031,7 @@ function helpSteps(diag) {
     case 'nr-disabled': case 'dlss-runtime-missing': case 'feed-stopped':
       return fixIt(t('Press Fix it'));
     case 'feeder-mv-broken': case 'feed-no-motion': return fixIt(t('Press Fix it (redeploys the Feeder)'));
+    case 'feed-no-motion-legacy': return [v.onLumenite ? t('Card menu > Motion vectors > change: pick VORT') : t('Card menu > Motion vectors > change: pick LumeniteFX'), launch];
     case 'feed-depth-flat': return fixIt(t('Press Fix it (switches the depth profile)'));
     case 'feed-agility-redist': return fixIt(t('Press Fix it (moves the D3D12 folder aside)'));
     case 'feed-agility-redist-elsewhere': return [t("Verify the game's files in its launcher"), launch];
@@ -1031,7 +1047,8 @@ function helpSteps(diag) {
     case 'needs-run': case 'needs-run-after-fix': return [t('Launch the game'), t('Play a minute of actual gameplay, then quit'), t('Come back here')];
     // The pop-out line only when that panel can actually answer its hotkey (see popoutHotkeyUsable).
     case 'ok-panel-in-helper': return [t('Press Alt+Home in the game for the DLSS 5 panel'), t('Its controls take clicks there, as in any other game'),
-      ...(popoutHotkeyUsable() ? [t('Or press {hotkey} for the pop-out panel', { hotkey: settings.panelHotkey || DEFAULT_PANEL_HOTKEY })] : [])];
+      ...(popoutHotkeyUsable() ? [t('Or press {hotkey} for the pop-out panel', { hotkey: settings.panelHotkey || DEFAULT_PANEL_HOTKEY })] : []),
+      ...(v.otherMv ? [t('Picture jumps or smears in motion? Card menu > Motion vectors > change: pick LumeniteFX')] : [])];
     case 'vulkan-layer-missing': return [t('Install ReShade with add-on support for this exe, choosing Vulkan'), t('Or switch the emulator to OpenGL and pick OpenGL in Edit'), t('Press Install here again')];
     case 'vulkan-layer-no-addon': return [t('Reinstall ReShade with "Enable loading of add-ons"'), t('Press Install here again')];
     case 'vulkan-layer-not-loaded': return [t('Run ReShade\'s installer for this exe, choosing Vulkan'), t('Turn NVIDIA Smooth Motion off for it'), t('Launch again')];
@@ -1101,7 +1118,7 @@ function helpShort(diag) {
     case 'dgvoodoo-crash': return t('dgVoodoo2 crashes this game');
     case 'wrapper-crash': return t('Crashed in {dll} -- no known fix', v);
     case 'feeder-mv-broken': return t('Motion-vector shader cannot work');
-    case 'feed-no-motion': return t('DLSS got no motion vectors');
+    case 'feed-no-motion': case 'feed-no-motion-legacy': return t('DLSS got no motion vectors');
     case 'feed-depth-flat': return t('Depth is flat -- wrong buffer');
     case 'feed-agility-redist': case 'feed-agility-redist-elsewhere': return t('D3D12 refused every device (redist)');
     case 'upscale-skipped': return t('Black screen: every frame dropped');
@@ -1612,14 +1629,25 @@ async function installGame(game) {
   // OptiScaler is installed there, not beside the game -- so the rest of this function does not apply.
   if (route.route === 'feeder32') {
     toast(t('Installing the experimental 32-bit route (Feeder, its 64-bit helper, OptiScaler)…'));
-    const providers = await window.api.feederMvProviders();
-    const provider = providers.find((p) => p.default && p.autoFetchable) || providers.find((p) => p.autoFetchable);
+    const providers = await ensureFeederProviders();
+    let provider = providers.find((p) => p.default && p.autoFetchable) || providers.find((p) => p.autoFetchable);
+    // A re-install keeps the provider the player switched to (card menu > Motion vectors) rather
+    // than quietly putting VORT back; LumeniteFX asks for its licence again, since it is fetched
+    // again, and falls back to the default if that is declined.
+    let licenseConfirmed = false;
+    const lmv = await window.api.legacyMvProvider(game.exePath);
+    const kept = lmv && lmv.host32 && lmv.id ? feederProvidersById[lmv.id] : null;
+    if (kept && kept.selectable !== false && kept.id !== (provider && provider.id)) {
+      if (kept.bringYourOwn ? lmv.immersePresent : kept.autoFetchable) provider = kept;
+      else if (!kept.bringYourOwn && await confirmMvProviderLicense(kept.id)) { provider = kept; licenseConfirmed = true; }
+    }
     const res32 = await window.api.legacyInstallHost32({
       exePath: game.exePath,
       detected: game.detectedPath,
       releaseFolder,
       nrDllPath: settings.nrDllPath,
       mvProviderId: provider ? provider.id : null,
+      licenseConfirmed,
     });
     toast(!res32.ok
       ? t('Install failed: {error}', { error: res32.error })
@@ -1944,7 +1972,9 @@ $('#btn-browse-launcher').addEventListener('click', async () => {
   await loadLauncherChoice(game, picked);
 });
 
-async function openGameModal(game) {
+// opts.focus: 'legacy-mv' opens straight at the 32-bit route's motion-vector picker (the card's
+// "Motion vectors" entry).
+async function openGameModal(game, opts = {}) {
   editingGameId = game ? game.id : null;
   $('#game-modal-title').textContent = game ? t('Edit Game') : t('Add Game');
   $('#game-exe').value = game ? game.exePath : '';
@@ -1968,12 +1998,18 @@ async function openGameModal(game) {
   await loadFrameGenSection(game);
   await loadInjectorSection(game);
   await loadFeederSection(game);
+  await loadLegacyMvSection(game);
   await loadOptiFgSection(game);
   await loadDlssNrSection(game);
   await loadLosslessSection(game);
   await loadAmdNrSection(game);
   await loadLumaUeSection(game);
   refreshEditGroups();
+  if (opts.focus === 'legacy-mv' && !$('#game-legacy-mv-section').classList.contains('hidden')) {
+    $('#edit-group-advanced').open = true;
+    $('#game-legacy-mv-section').scrollIntoView({ block: 'center' });
+    $('#game-legacy-mv-provider').focus();
+  }
 }
 
 // The Edit dialog's groups (Game / DLSS 5 / Frame Generation / Advanced) hide themselves when none of
@@ -2814,6 +2850,98 @@ $('#btn-injector-launch-now').addEventListener('click', async () => {
 let feederProvidersLoaded = false;
 let feederProvidersById = {};
 
+// The provider table (feeder.js MV_PROVIDERS), fetched once and shared by the 64-bit Feeder picker
+// and the 32-bit route's.
+async function ensureFeederProviders() {
+  if (!feederProvidersLoaded) {
+    for (const p of await window.api.feederMvProviders()) feederProvidersById[p.id] = p;
+    feederProvidersLoaded = true;
+  }
+  return Object.values(feederProvidersById);
+}
+
+// immersePresent: false greys out iMMERSE, which is bring-your-own and refused without the
+// player's copy in the folder (only the 32-bit picker knows that up front).
+function fillMvProviderSelect(select, providers, { immersePresent = null } = {}) {
+  select.innerHTML = '';
+  for (const p of providers) {
+    // A provider the app knows about but cannot use is left out of the picker rather than
+    // offered and then refused: DRME is in the table only so an existing deploy that used it is
+    // still recognised and cleaned up (feeder.js).
+    if (p.selectable === false) continue;
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = p.bringYourOwn ? `${p.displayName} — ${t('your own install')}`
+      : p.autoFetchable ? p.displayName : `${p.displayName} — ${p.license}`;
+    if (p.bringYourOwn && immersePresent === false) opt.disabled = true;
+    if (p.default) opt.selected = true;
+    select.appendChild(opt);
+  }
+}
+
+// "VORT (vortigern11)" -> "VORT": the card's menu line has room for the name only.
+function shortMvName(displayName) {
+  return displayName ? String(displayName).split(' (')[0] : '';
+}
+
+// The per-action licence question for a provider that has one (LumeniteFX), asked by the main
+// process with the licence text itself -- never implied by the dropdown. True for a provider that
+// needs no question.
+async function confirmMvProviderLicense(providerId) {
+  await ensureFeederProviders();
+  const provider = feederProvidersById[providerId];
+  if (!provider || provider.autoFetchable || provider.bringYourOwn) return true;
+  return !!(await window.api.feederConfirmProviderLicense(providerId));
+}
+
+// The 32-bit route's motion-vector picker (index.html #game-legacy-mv-section), shown once the
+// route is installed, with the provider the game is on selected.
+async function loadLegacyMvSection(game) {
+  const section = $('#game-legacy-mv-section');
+  const status = game && game.exePath ? await window.api.legacyMvProvider(game.exePath) : null;
+  if (!status || !status.ok || !status.host32) {
+    section.classList.add('hidden');
+    return null;
+  }
+  section.classList.remove('hidden');
+  const select = $('#game-legacy-mv-provider');
+  fillMvProviderSelect(select, await ensureFeederProviders(), { immersePresent: !!status.immersePresent });
+  const current = status.id ? feederProvidersById[status.id] : null;
+  if (current && current.selectable !== false) select.value = status.id;
+  $('#game-legacy-mv-status').textContent = current
+    ? t('In use: {provider} (DLSS5_MV_PROVIDER={value}).', { provider: current.displayName, value: current.mvProviderValue })
+    : t('No motion-vector provider found in this game\'s ReShade preset.');
+  return status;
+}
+
+// Switches the 32-bit game's provider in place (main.js legacy:setMvProvider), after the licence
+// question when the provider has one. Refreshes this section and the card, whose menu names it.
+async function applyLegacyMvProvider(game, providerId) {
+  const statusEl = $('#game-legacy-mv-status');
+  const btn = $('#btn-legacy-mv-apply');
+  const provider = feederProvidersById[providerId];
+  const licenseConfirmed = await confirmMvProviderLicense(providerId);
+  if (!licenseConfirmed) {
+    statusEl.textContent = t('Cancelled -- licence not confirmed. Nothing was changed.');
+    return;
+  }
+  btn.disabled = true;
+  statusEl.textContent = t('Switching the motion-vector shader…');
+  const res = await window.api.legacySetMvProvider(game.exePath, providerId, { licenseConfirmed });
+  btn.disabled = false;
+  toast(res.ok
+    ? t('Motion vectors now come from {provider}. Launch the game to see the difference.', { provider: provider ? provider.displayName : providerId })
+    : t('Could not switch the motion-vector shader: {error}', { error: res.error }));
+  await loadLegacyMvSection(game);
+  if (res.ok) renderGrid();
+}
+
+$('#btn-legacy-mv-apply').addEventListener('click', () => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  if (game) applyLegacyMvProvider(game, $('#game-legacy-mv-provider').value);
+});
+
 // Populates and shows the "Neural Rendering source: DLSS5 Feeder" control -- only for a game
 // with no native DLSS (feeder:readiness reports needed:false otherwise, and this stays
 // hidden). Unlike Frame Gen and Launch mode, this has one action (Deploy, which doubles as
@@ -2831,6 +2959,14 @@ async function loadFeederSection(game) {
   const updateBtn = $('#btn-feeder-update');
   const removeBtn = $('#btn-feeder-remove');
   if (!readiness.needed) {
+    section.classList.add('hidden');
+    return;
+  }
+  // An installed 32-bit route game: this is the 64-bit stack, which feeder:deploy refuses there, and
+  // it would only list 64-bit files as missing. Its provider has its own picker
+  // (#game-legacy-mv-section) -- Assassin's Creed II, 2026-09-18.
+  const lmv = await window.api.legacyMvProvider(game.exePath);
+  if (lmv && lmv.host32) {
     section.classList.add('hidden');
     return;
   }
@@ -2876,23 +3012,7 @@ async function loadFeederSection(game) {
   notesEl.classList.toggle('hidden', notesEl.childElementCount === 0);
 
   const select = $('#game-feeder-mv-provider');
-  if (!feederProvidersLoaded) {
-    const providers = await window.api.feederMvProviders();
-    for (const p of providers) {
-      feederProvidersById[p.id] = p;
-      // A provider the app knows about but cannot use is left out of the picker rather than
-      // offered and then refused: DRME is in the table only so an existing deploy that used it is
-      // still recognised and cleaned up (feeder.js).
-      if (p.selectable === false) continue;
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = p.bringYourOwn ? `${p.displayName} — ${t('your own install')}`
-        : p.autoFetchable ? p.displayName : `${p.displayName} — ${p.license}`;
-      if (p.default) opt.selected = true;
-      select.appendChild(opt);
-    }
-    feederProvidersLoaded = true;
-  }
+  if (!select.options.length) fillMvProviderSelect(select, await ensureFeederProviders());
   // The provider this game is actually on, not just the default -- someone opening Edit after a
   // deploy should see what is deployed.
   if (readiness.mvProvider && readiness.mvProvider.id && feederProvidersById[readiness.mvProvider.id]
@@ -2975,15 +3095,10 @@ async function loadFeederSection(game) {
 // re-fetches and overwrites everything rather than skipping what's already present.
 async function deployFeederStack(game, providerId, force) {
   const status = $('#game-feeder-status');
-  const provider = feederProvidersById[providerId];
-
-  let licenseConfirmed = true;
-  if (provider && !provider.autoFetchable) {
-    licenseConfirmed = await window.api.feederConfirmProviderLicense(providerId);
-    if (!licenseConfirmed) {
-      status.textContent = t('Cancelled -- licence not confirmed.');
-      return;
-    }
+  const licenseConfirmed = await confirmMvProviderLicense(providerId);
+  if (!licenseConfirmed) {
+    status.textContent = t('Cancelled -- licence not confirmed.');
+    return;
   }
 
   status.textContent = force ? t('Updating…') : t('Deploying…');

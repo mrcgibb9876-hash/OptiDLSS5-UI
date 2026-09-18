@@ -49,7 +49,8 @@ const crypto = require('node:crypto');
 const { openZip, findEntry, extractEntry } = require('./zip');
 const os = require('node:os');
 const { setIniKey, getIniKey } = require('./ini-merge');
-const { configureFeedCfg } = require('./feeder');
+const feeder = require('./feeder');
+const { configureFeedCfg } = feeder;
 const translation = require('./translation');
 
 const MARKER = '.dlss5ui-legacy.json';
@@ -463,7 +464,8 @@ async function deployDgVoodoo(dir, plan, source) {
 //   reshadeSetup   path to ReShade's add-on setup exe (a zip with ReShade32.dll and ReShade64.dll)
 //   releaseFolder  the OptiScaler_DLSSNR release folder
 //   nrDllPath      nvngx_dlssnr.dll
-//   deployShaders(dir)          headers, motion-vector provider, ReShade.ini and preset beside the exe
+//   deployShaders(dir)          headers, motion-vector provider, ReShade.ini and preset beside the exe:
+//                               deployLegacyShaders' result, or a plain list of the files it created
 //   deployNvngxDlss(hostDir)    nvngx_dlss.dll into the helper folder
 async function deployHost32(dir, plan, deps) {
   if (!plan || !plan.host32) throw new Error('this game does not take the 32-bit helper route');
@@ -504,8 +506,15 @@ async function deployHost32(dir, plan, deps) {
     const p = path.join(dir, f);
     if (!fs.existsSync(p)) marker.files.includes(f) || marker.files.push(f);
   }
-  const shaderFiles = (await deps.deployShaders(dir)) || [];
-  for (const f of shaderFiles) if (!marker.files.includes(f)) marker.files.push(f);
+  // Which provider was here before, read before deployShaders rewrites the preset: a re-install that
+  // changes it has to take the old one's files back out, the same as legacy:setMvProvider does.
+  const outgoingMv = currentMvProvider(dir);
+  const shaders = await deps.deployShaders(dir);
+  if (Array.isArray(shaders) || !shaders) {
+    for (const f of shaders || []) if (!marker.files.includes(f)) marker.files.push(f);
+  } else {
+    await adoptMvProvider(dir, marker, shaders, outgoingMv.id);
+  }
 
   // The 64-bit helper.
   await fsp.mkdir(hostDir, { recursive: true });
@@ -570,6 +579,152 @@ async function deployHost32(dir, plan, deps) {
   marker.placedAt = new Date().toISOString();
   writeMarker(dir, marker);
   return { deployed: true, hostDir, reshadeName: plan.reshadeName };
+}
+
+// ---------------------------------------------------------------------------------------------
+// The motion-vector provider on the 32-bit route
+//
+// This route was hard-wired to VORT, the only provider that needed no question asked. On Assassin's
+// Creed II (2026-09-18, DXVK + ReShade's 32-bit Vulkan layer) the whole screen, UI included, jumped
+// with VORT, and the Feeder's README recommends LumeniteFX. So any provider the 64-bit Edit picker
+// offers can be used here too: VORT fetched as ever, LumeniteFX live from its official repo only
+// with the licence confirmed in the same dialog (feeder.js deployLumeniteFx refuses otherwise), and
+// iMMERSE only when the player's own copy is already there. The shaders go beside the exe either
+// way: the 32-bit ReShade reads the game folder whether it came in as the dxgi.dll proxy or as the
+// Vulkan layer (the layer takes the exe's folder as its base, see parkReShadeProxy below).
+//
+// What the provider wrote is journaled as marker.mvProvider = { id, files } and in marker.files, so
+// a later switch takes exactly those back out and Remove still cleans everything.
+
+// A game-relative path a provider's deploy would have written, for an install made before the
+// marker recorded mvProvider (every 32-bit install up to 2026-09-18 -- VORT, with its includes,
+// textures and licence in folders of their own).
+function providerOwnsPath(provider, rel) {
+  if (!provider || !rel.startsWith('reshade-shaders/')) return false;
+  const r = rel.slice('reshade-shaders/'.length);
+  for (const item of provider.layout || []) {
+    if (item.fromDir ? (r.startsWith(`${item.to}/`) && (!item.match || item.match.test(r))) : r === item.to) return true;
+  }
+  return (provider.files || []).some((f) => r === `Shaders/${f}`);
+}
+
+// Which provider this game is set up for: the marker's record, else what the preset compiles
+// DLSS5_Feed for (the per-effect section wins, as it does in ReShade).
+function currentMvProvider(dir) {
+  const marker = readMarker(dir);
+  const recorded = marker && marker.mvProvider && feeder.MV_PROVIDERS[marker.mvProvider.id];
+  if (recorded) return { id: recorded.id, source: 'marker' };
+  let preset = '';
+  try { preset = fs.readFileSync(path.join(dir, 'ReShadePreset.ini'), 'utf8'); } catch {}
+  for (const section of ['DLSS5_Feed.fx', '']) {
+    const hit = /DLSS5_MV_PROVIDER\s*=\s*(\d+)/i.exec(getIniKey(preset, section, 'PreprocessorDefinitions') || '');
+    if (!hit) continue;
+    const byValue = Object.values(feeder.MV_PROVIDERS).find((p) => p.mvProviderValue === Number(hit[1]));
+    if (byValue) return { id: byValue.id, source: 'preset' };
+  }
+  return { id: null, source: null };
+}
+
+// The files the provider `id` has here that this app placed: the recorded list, or for an older
+// marker, the marker's own files that belong to that provider.
+function mvProviderFiles(marker, id) {
+  if (!marker || !id) return [];
+  if (marker.mvProvider && marker.mvProvider.id === id && Array.isArray(marker.mvProvider.files)) return marker.mvProvider.files;
+  const provider = feeder.MV_PROVIDERS[id];
+  return (marker.files || []).filter((rel) => providerOwnsPath(provider, rel));
+}
+
+function listShaderTree(dir) {
+  const out = [];
+  const walk = (d, rel) => {
+    let entries = [];
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) walk(path.join(d, e.name), r);
+      else out.push(`reshade-shaders/${r}`);
+    }
+  };
+  walk(path.join(dir, 'reshade-shaders'), '');
+  return out;
+}
+
+// Headers, the provider's shaders, ReShade.ini and the preset beside a 32-bit game, reusing the
+// 64-bit Feeder's own steps. Every refusal happens before anything is written, so saying no to the
+// licence leaves the game on the provider it had. fetchImpl is for tests only.
+//
+// Returns { created, written, mvProvider: { id } }: created is every file new under reshade-shaders\
+// (the journal takes those), written is what the provider step itself wrote, game-relative.
+async function deployLegacyShaders(dir, providerId, { cacheDir = null, ghHeaders = {}, licenseConfirmed = false, fetchImpl = null } = {}) {
+  const provider = feeder.MV_PROVIDERS[providerId];
+  if (!provider) throw new Error(`Unknown motion-vector provider: ${providerId}`);
+  if (provider.selectable === false) throw new Error(`${provider.displayName} cannot be used: ${provider.unsupportedReason}`);
+  if (provider.bringYourOwn && !feeder.mvProviderPresent(dir, providerId)) {
+    throw new Error(`${provider.displayName}: ${provider.techniqueFile} is not in this game's reshade-shaders\\Shaders folder. ` +
+      'Install it there yourself (this app cannot redistribute it), or pick VORT or LumeniteFX.');
+  }
+  if (!provider.autoFetchable && !provider.bringYourOwn && !licenseConfirmed) {
+    throw new Error(`${provider.displayName} needs its licence confirmed before it can be fetched -- nothing was changed.`);
+  }
+  const fetchOpt = fetchImpl ? { fetchImpl } : {};
+  const before = new Set(listShaderTree(dir).map((f) => f.toLowerCase()));
+  await feeder.deployReShadeCommonHeaders(dir, ghHeaders, { cacheDir, ...fetchOpt });
+  let wrote = [];
+  if (provider.bringYourOwn) wrote = [];
+  else if (provider.autoFetchable) wrote = (await feeder.deployMvProvider(dir, providerId, cacheDir, ghHeaders)).files || [];
+  else wrote = (await feeder.deployLumeniteFx(dir, ghHeaders, { licenseConfirmed, ...fetchOpt })).files || [];
+  feeder.configureReShadeIni(dir, {});
+  feeder.configurePreset(dir, providerId);
+  return {
+    created: listShaderTree(dir).filter((f) => !before.has(f.toLowerCase())),
+    written: wrote.map((r) => `reshade-shaders/${r}`),
+    mvProvider: { id: providerId },
+  };
+}
+
+// Journals a deployLegacyShaders result into `marker` (not written here) and takes the outgoing
+// provider's files back out. Compared without case: on Windows VORT's Shaders\Includes and
+// LumeniteFX's Shaders\include are one folder, so a listing can spell a new file either way.
+async function adoptMvProvider(dir, marker, res, outgoingId) {
+  const low = (s) => s.toLowerCase();
+  const ours = new Set(marker.files.map(low));
+  for (const f of res.created || []) {
+    if (!ours.has(low(f))) { marker.files.push(f); ours.add(low(f)); }
+  }
+  const incoming = (res.written || []).filter((f) => ours.has(low(f)));
+  const keep = new Set((res.written || []).map(low));
+  const removed = [];
+  const outgoing = outgoingId ? feeder.MV_PROVIDERS[outgoingId] : null;
+  // Never a bring-your-own provider's files: those are the player's own iMMERSE install.
+  if (outgoing && outgoingId !== res.mvProvider.id && !outgoing.bringYourOwn) {
+    for (const rel of mvProviderFiles(marker, outgoingId)) {
+      if (keep.has(low(rel)) || !ours.has(low(rel))) continue;
+      await fsp.rm(path.join(dir, ...rel.split('/')), { force: true });
+      marker.files = marker.files.filter((f) => low(f) !== low(rel));
+      removed.push(rel);
+    }
+    // Folders the old provider brought (VORT's Includes, Textures, Licenses) once nothing is left in
+    // them; reshade-shaders itself still holds DLSS5_Feed.fx.
+    pruneEmptyDirs(path.join(dir, 'reshade-shaders'));
+  }
+  marker.mvProvider = { id: res.mvProvider.id, files: incoming, at: new Date().toISOString() };
+  return removed;
+}
+
+// Switches an installed 32-bit game to another provider without reinstalling anything else.
+// opts: { cacheDir, ghHeaders, licenseConfirmed, fetchImpl } as for deployLegacyShaders.
+async function setMvProvider(dir, providerId, opts = {}) {
+  const marker = readMarker(dir);
+  if (!marker || !marker.host32) throw new Error('the 32-bit route is not installed in this game -- press Install first');
+  const outgoing = currentMvProvider(dir);
+  const res = await deployLegacyShaders(dir, providerId, opts);
+  const next = emptyMarker(marker);
+  const removed = await adoptMvProvider(dir, next, res, outgoing.id);
+  writeMarker(dir, next);
+  return {
+    from: outgoing.id, to: providerId, removed, added: next.mvProvider.files,
+    mvProviderValue: feeder.MV_PROVIDERS[providerId].mvProviderValue,
+  };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -840,4 +995,5 @@ module.exports = {
   MARKER, HOST_DIR, DGVOODOO, PARK_SUFFIX, planFor, status, readMarker, ensureDgVoodoo, importDgVoodooZip, cachedDgVoodoo,
   isDgVoodooZip, configureDgVoodoo, ensureDgVoodooWindowed, ensureCastKey, deployDgVoodoo, deployHost32, removalPlan, removeLegacy,
   parkReShadeProxy, unparkReShadeProxy, setUpVulkanLayer32, vulkanLayerRecord, unlistVulkanLayerApp,
+  currentMvProvider, deployLegacyShaders, setMvProvider,
 };
