@@ -124,3 +124,29 @@ test('the pop-out hotkey is only named when the pop-out panel can answer it', ()
     assert.ok(before.includes('popoutHotkeyUsable()'), `hotkey named without a popoutHotkeyUsable() check near: ${js.slice(m.index - 120, m.index)}`);
   }
 });
+
+test('Game Help does not apply one game\'s route lookup to another game\'s dialog', () => {
+  // 2026-09-18: openHelp awaited gameRoute and then toggled the Run without OptiScaler / Try DXVK
+  // buttons with no check that the dialog was still on the same game.
+  const body = js.slice(js.indexOf('async function openHelp(game)'), js.indexOf("$('#help-dxvk').addEventListener"));
+  assert.ok(body.length > 0, 'could not find openHelp');
+  const routeAt = body.indexOf('await window.api.gameRoute(');
+  assert.ok(routeAt > 0);
+  assert.ok(body.slice(routeAt, routeAt + 300).includes('if (helpGame !== game) return;'), 'no helpGame check after gameRoute');
+  const firstAwait = body.indexOf('await ');
+  const hideNative = body.indexOf("$('#help-native').classList.add('hidden')");
+  const hideDxvk = body.indexOf("$('#help-dxvk').classList.add('hidden')");
+  assert.ok(hideNative > 0 && hideNative < firstAwait, 'Run without OptiScaler is not hidden before the first await');
+  assert.ok(hideDxvk > 0 && hideDxvk < firstAwait, 'Try DXVK is not hidden before the first await');
+});
+
+test('the card\'s Fix it cannot run the same fix twice at once', () => {
+  // 2026-09-18: modal:false makes applyHelpFix's busy() a no-op, so a double-click on the card ran
+  // gameHelpApply twice concurrently.
+  const at = js.indexOf("label: t('Fix it')");
+  assert.ok(at > 0);
+  const block = js.slice(at, at + 600);
+  assert.match(block, /if \(cardFixesInFlight\.has\(game\.exePath\)\) return;/);
+  assert.match(block, /btn\.disabled = true/);
+  assert.match(block, /finally \{\s*cardFixesInFlight\.delete\(game\.exePath\)/);
+});

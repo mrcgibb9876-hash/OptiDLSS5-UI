@@ -299,6 +299,9 @@ window.addEventListener('blur', stopRunningPoll);
 // The newest run wins; older ones stop at their next await.
 let renderGeneration = 0;
 
+// Exe paths whose card "Fix it" is still running (applyRecommendation).
+const cardFixesInFlight = new Set();
+
 async function renderGrid() {
   if (!bannerSearchVersionLoaded) {
     try { bannerSearchVersion = (await window.api.steamSearchVersion()) || 1; } catch {}
@@ -758,7 +761,25 @@ async function applyRecommendation(game, card, backends, generation = renderGene
     let action;
     if (diag.status === 'fix') {
       // Applied straight from the card. No dialog opens: the toast names what changed.
-      action = { label: t('Fix it'), run: () => applyHelpFix(game, diag, { modal: false }) };
+      // With modal:false applyHelpFix's busy() has no button to disable, so a double-click ran the
+      // same fix twice at once -- two DLL swaps racing in one folder (review of 2026-09-18). The
+      // in-flight set is keyed by exe rather than held on the card because the fix re-renders the
+      // grid, which builds a fresh card for the same game.
+      action = {
+        label: t('Fix it'),
+        run: async () => {
+          if (cardFixesInFlight.has(game.exePath)) return;
+          cardFixesInFlight.add(game.exePath);
+          const btn = card.querySelector('.btn-card-primary');
+          if (btn) btn.disabled = true;
+          try {
+            await applyHelpFix(game, diag, { modal: false });
+          } finally {
+            cardFixesInFlight.delete(game.exePath);
+            if (btn) btn.disabled = false;
+          }
+        },
+      };
     } else if (diag.code === 'pd-plugin-missing') {
       // The one file the app cannot fetch: its own popup, which finds the download afterwards.
       action = { label: t('Get plugin'), run: () => openPdPluginModal() };
@@ -1203,8 +1224,14 @@ async function openHelp(game) {
   $('#help-status').textContent = '';
   $('#help-ai-out').classList.add('hidden');
   $('#help-ai-out').textContent = '';
+  // Hidden until this game's route says otherwise: they are only set after two awaits below, and
+  // until then they still showed the previous game's answer (review of 2026-09-18).
+  $('#help-native').classList.add('hidden');
+  $('#help-dxvk').classList.add('hidden');
   helpModal.classList.remove('hidden');
   const diag = await refreshHelp();
+  // Closed, or reopened on another game, while that ran: what follows belongs to that one now.
+  if (helpGame !== game) return;
   helpLastRunAt = diag && diag.run && diag.run.at ? diag.run.at : null;
 
   // The model-only route, reachable by hand as well as when a verdict offers it. A game that dies
@@ -1213,6 +1240,8 @@ async function openHelp(game) {
   // Two routes that are worth choosing, not only worth being offered after a failure.
   try {
     const r = await window.api.gameRoute(game.exePath, game.detectedPath || null);
+    // Same race: without this a slow route lookup for game A lit its buttons on game B's dialog.
+    if (helpGame !== game) return;
     $('#help-native').classList.toggle('hidden', !(r && r.shipsDlss && r.optiInstalled));
     // The DXVK swap was reachable only from a 'wrapper-crash' verdict: the game had to crash INSIDE
     // the dgVoodoo2 DLL this app deployed, and be classified as that. A game that merely renders
@@ -1223,6 +1252,7 @@ async function openHelp(game) {
     const dxvkOk = !!(r && r.legacy && r.legacy.supported && dxvkApis.includes(r.legacy.api));
     $('#help-dxvk').classList.toggle('hidden', !dxvkOk);
   } catch {
+    if (helpGame !== game) return;
     $('#help-native').classList.add('hidden');
     $('#help-dxvk').classList.add('hidden');
   }
