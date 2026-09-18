@@ -99,12 +99,24 @@ function compareDriverBranch(a, b) {
   return am !== bm ? am - bm : an - bn;
 }
 
-// Is this machine's driver too old for DLSS 5? Only ever answered for NVIDIA, and only when the
-// version actually parses -- a silent unknown beats a false alarm on the app's front page.
-function driverStatus({ vendor, driverVersion } = {}) {
-  if (vendor !== 'nvidia') return { checked: false, outdated: false, branch: null, minimum: MIN_NVIDIA_DRIVER };
-  const branch = nvidiaDriverBranch(driverVersion);
-  if (!branch) return { checked: false, outdated: false, branch: null, minimum: MIN_NVIDIA_DRIVER };
+// Is this machine's driver too old for DLSS 5? Only ever answered for an NVIDIA driver, and only when
+// the version actually parses -- a silent unknown beats a false alarm on the app's front page.
+//
+// `adapters` is every adapter the machine has (Win32_VideoController's rows and Chromium's devices),
+// because the primary one is not always the NVIDIA one. An Optimus laptop draws this app's window on
+// the Intel iGPU, Chromium marks that adapter active, and `vendor` comes back 'intel' -- so until the
+// review of 2026-09-18 the too-old-driver banner could never show on exactly the laptops whose games
+// run on the NVIDIA card anyway (an RTX 4060 Laptop behind an iGPU, issue #50's machine shape).
+function driverStatus({ vendor, driverVersion, adapters = [] } = {}) {
+  const none = { checked: false, outdated: false, branch: null, minimum: MIN_NVIDIA_DRIVER };
+  let version = vendor === 'nvidia' ? driverVersion : null;
+  if (!nvidiaDriverBranch(version)) {
+    const isNvidia = (a) => !!a && (a.vendor === 'nvidia' || vendorFromId(a.vendorId) === 'nvidia');
+    const other = (Array.isArray(adapters) ? adapters : []).find((a) => isNvidia(a) && nvidiaDriverBranch(a.driverVersion));
+    version = other ? other.driverVersion : null;
+  }
+  const branch = nvidiaDriverBranch(version);
+  if (!branch) return none;
   return {
     checked: true,
     outdated: compareDriverBranch(branch, MIN_NVIDIA_DRIVER) < 0,
@@ -134,7 +146,13 @@ async function detectGpu(app, execFileAsync) {
     name: described ? described.name : null,
     driverVersion: described ? described.driverVersion : (primary && primary.driverVersion) || null,
     devices: devices.map((d) => ({ vendor: vendorFromId(d.vendorId), vendorId: d.vendorId, deviceId: d.deviceId, active: !!d.active })),
-    driver: driverStatus({ vendor, driverVersion: described ? described.driverVersion : (primary && primary.driverVersion) || null }),
+    // Every adapter, not just the primary: see driverStatus for the Optimus case. Win32_VideoController's
+    // rows come first; Chromium's own driverVersion is the fallback there, as it is for the primary.
+    driver: driverStatus({
+      vendor,
+      driverVersion: described ? described.driverVersion : (primary && primary.driverVersion) || null,
+      adapters: [...adapters, ...devices],
+    }),
   };
 }
 

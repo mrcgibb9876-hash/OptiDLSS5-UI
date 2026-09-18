@@ -94,6 +94,30 @@ test('detectGpu carries the verdict, so the front page does not recompute it', a
   assert.equal(quiet.driver.outdated, false);
 });
 
+test('an Optimus laptop, whose window draws on the Intel iGPU, still gets the NVIDIA verdict', async () => {
+  // Chromium marks the iGPU active, so the primary vendor is 'intel' -- the NVIDIA card the games run
+  // on is only in the device list. Review of 2026-09-18: the banner never showed on such a laptop.
+  const s = gpu.driverStatus({
+    vendor: 'intel',
+    driverVersion: '31.0.101.5186',
+    adapters: [{ vendorId: 0x8086, driverVersion: '31.0.101.5186' }, { vendorId: 0x10de, driverVersion: '32.0.16.1088' }],
+  });
+  assert.deepEqual(s, { checked: true, outdated: true, branch: '610.88', minimum: '616.56' });
+  // An AMD or Intel machine with no NVIDIA adapter anywhere stays silent.
+  assert.equal(gpu.driverStatus({ vendor: 'amd', driverVersion: '32.0.12033.1030', adapters: [{ vendorId: 0x1002, driverVersion: '32.0.12033.1030' }] }).checked, false);
+
+  // Through detectGpu, from Chromium's own device list.
+  const info = await gpu.detectGpu({
+    getGPUInfo: async () => ({ gpuDevice: [
+      { vendorId: 0x8086, deviceId: 0x46a6, active: true, driverVersion: '31.0.101.5186' },
+      { vendorId: 0x10de, deviceId: 0x28a0, active: false, driverVersion: '32.0.16.1088' },
+    ] }),
+  }, async () => ({ stdout: '' }));
+  assert.equal(info.vendor, 'intel');
+  assert.equal(info.driver.outdated, true);
+  assert.equal(info.driver.branch, '610.88');
+});
+
 test('the warning is wired into the front page and can be dismissed', () => {
   // The renderer is a plain script, so this is the only thing standing between a typo here and a
   // banner that never appears -- or worse, a listener bound to null that kills the whole window.
