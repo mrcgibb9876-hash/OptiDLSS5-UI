@@ -421,7 +421,18 @@ async function feederReadiness(dir, api, { execFileAsync = null, exePath = null 
 // now and then: a 5xx, a 429 or a dropped connection is retried a few times with a growing
 // pause before it becomes the error the user sees. A 4xx is final at once.
 const RETRY_PAUSES_MS = [1000, 3000, 6000];
+// Only ever talk to the hosts the Feeder actually ships DLLs/shaders/setup exes from. Without
+// this, a MITM that can spoof DNS/routing (or a compromised redirect) could point fetchWithRetry
+// at an attacker-controlled host and have its response accepted as a genuine GitHub release --
+// pinning the allowed hosts and requiring https closes that off at the network layer.
+const ALLOWED_FETCH_HOSTS = new Set([
+  'github.com', 'api.github.com', 'raw.githubusercontent.com', 'objects.githubusercontent.com', 'reshade.me',
+]);
 async function fetchWithRetry(url, init = {}, { fetchImpl = fetch, pauses = RETRY_PAUSES_MS } = {}) {
+  const parsed = new URL(url);
+  if (parsed.protocol !== 'https:' || !ALLOWED_FETCH_HOSTS.has(parsed.hostname)) {
+    throw new Error(`Refusing to fetch untrusted URL: ${url}`);
+  }
   let lastError = null;
   for (let attempt = 0; attempt <= pauses.length; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, pauses[attempt - 1]));
