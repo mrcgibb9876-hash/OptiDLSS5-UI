@@ -126,6 +126,20 @@ function chooseExe(gameDir, gameName) {
         alternatives: candidates.slice(1, 8).map((c) => c.exe)
     };
 }
+// An exe someone picked by hand in Add Game / Edit (main.js pick:exe). The library scan never
+// proposes gamelaunchhelper.exe (NOT_A_GAME_EXE), but Browse took it as picked: a Game Pass /
+// Microsoft Store folder shows it as the obvious exe, and the card was then built on the Store's
+// stub -- named "Gamelaunchhelper", OptiScaler installed beside a process that never renders, and
+// "nothing has been logged in this folder yet" (#65, 2026-09-18). So the helper is replaced by the
+// exe this folder's own scan would pick, MicrosoftGame.config first. Anything else only gets the
+// launcher-stub swap it always had.
+function resolvePickedExe(picked) {
+    if (picked && /^gamelaunchhelper\.exe$/i.test(path.basename(picked))) {
+        const chosen = chooseExe(path.dirname(picked), '');
+        if (chosen && chosen.exePath && !/^gamelaunchhelper\.exe$/i.test(path.basename(chosen.exePath))) return chosen.exePath;
+    }
+    return resolveUnrealShippingExe(picked);
+}
 function scanForGames({ extraFolders = [], scanDrives = false, excludedRoots = [], knownExePaths = [] } = {}) {
     const { games, roots } = discover(extraFolders, scanDrives, excludedRoots);
 
@@ -167,4 +181,4 @@ function scanForGames({ extraFolders = [], scanDrives = false, excludedRoots = [
     return { games: found, roots };
 }
 
-module.exports = { scanForGames, chooseExe, walkExes };
+module.exports = { scanForGames, chooseExe, walkExes, resolvePickedExe };

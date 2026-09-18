@@ -1008,8 +1008,9 @@ ipcMain.handle('pick:exe', async () => {
   // swap is now reported rather than silently applied. Someone who browses to a particular exe and
   // gets a different path back reads that as the app overruling them, which is the "I change it in
   // Edit and it defaults back" report. Edit shows what happened and offers the original.
+  // The Store's gamelaunchhelper.exe is swapped the same way, for the exe it starts (#65).
   const picked = res.filePaths[0];
-  const resolved = resolveUnrealShippingExe(picked);
+  const resolved = discover.resolvePickedExe(picked);
   return { path: resolved, picked, swapped: resolved.toLowerCase() !== picked.toLowerCase() };
 });
 
