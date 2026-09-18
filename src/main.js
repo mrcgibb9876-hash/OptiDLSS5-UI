@@ -2738,8 +2738,23 @@ async function applyHelpFix(exePath, fixId) {
     // purges the layer in the way itself (canDeploy -> purgeTranslationLayer), handing back
     // whatever that layer displaced, so this does not have to unwind anything by hand.
     case 'swap-to-dxvk': {
-      const plan = legacyPlanFor(dir, exePath, {});
-      if (!plan || !plan.supported) return { done: false, text: 'this game has no translation-layer route' };
+      // The game's REAL detection, not {}. effectiveDetection({}) returns an object with no bitness
+      // and no api, so legacy.planFor falls straight through to "not a legacy game" -- which meant
+      // this swap answered "this game has no translation-layer route" on every game it was ever
+      // offered for, from the crash verdict as well as from the button. Assassin's Creed II, a
+      // 32-bit DirectX 9 game whose plan is plainly supported, is what showed it (2026-09-18).
+      // Every other legacyPlanFor caller passes the detection the renderer already has.
+      const detectedForPlan = await detectFor(dir, exePath);
+      const plan = legacyPlanFor(dir, exePath, detectedForPlan);
+      if (!plan || !plan.supported) {
+        return {
+          done: false,
+          text: `this game has no translation-layer route (${plan && plan.reason ? plan.reason : 'unsupported'})`,
+        };
+      }
+      if (!['dx8', 'dx9', 'dx10', 'dx11'].includes(plan.api)) {
+        return { done: false, text: `DXVK has no file set for ${plan.api || 'an unknown API'}` };
+      }
       // The wording cannot assume a crash any more: this is reachable from Game Help's More row as a
       // choice, not only from a 'wrapper-crash' verdict, so it has to read correctly for a game that
       // is merely misbehaving -- or that has dgVoodoo2 nowhere near it yet.
