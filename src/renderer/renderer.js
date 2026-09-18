@@ -191,10 +191,13 @@ function applyRunningState(card, isRunning) {
 // re-render does not lose it. vulkan: the Feeder update's warning that ReShade's Vulkan layer will
 // not load in this game (main.js updateFeederIfStale, warned rather than thrown since 2026-09-18) --
 // the sync used to swallow it, so the game just ran without DLSS 5 and nothing said why.
+// update: the game's exe changed since the last sync (main.js gameupdate.js, 2026-09-18) -- either
+// just rechecked, or with files of ours deleted by the update, which needs a reinstall.
 const syncNotices = new Map();
 function syncNoticeFor(exePath) {
   const n = syncNotices.get(exePath);
-  return (n && n.vulkan) || null;
+  if (!n) return null;
+  return (n.update && n.update.bad && n.update) || n.vulkan || n.update || null;
 }
 // A sync notice that is a real problem stands in for a diagnosis that is not one; a harmless one
 // only fills a row that would otherwise be empty.
@@ -213,6 +216,24 @@ function noteSyncResult(game, res) {
     n.vulkan = { bad: true, text: t('ReShade\'s Vulkan layer will not load in this game'), title: warning };
   } else if (fu) {
     delete n.vulkan; // the Feeder re-deployed cleanly, so the layer is fine now
+  }
+  const gu = res && res.gameUpdated;
+  if (gu && gu.needsReinstall) {
+    n.update = {
+      bad: true,
+      text: t('Game updated and its update removed DLSS 5 files — reinstall'),
+      title: t('Removed since the last check: {list}. Game updates and Steam\'s file verification delete files they do not know; reinstall to put them back.', { list: (gu.missing || []).join(', ') }),
+    };
+  } else if (gu && gu.rechecked) {
+    n.update = {
+      bad: false,
+      text: t('Game updated — rechecked'),
+      title: gu.buildFrom && gu.buildTo
+        ? t('Steam build {from} → {to}. Detection and the install were checked again.', { from: gu.buildFrom, to: gu.buildTo })
+        : t('The game\'s exe changed since the last check. Detection and the install were checked again.'),
+    };
+  } else if (res && res.ok && n.update && n.update.bad) {
+    delete n.update; // the files are back: reinstalled
   }
   syncNotices.set(game.exePath, n);
   const card = cardsByExe.get(game.exePath);
@@ -4161,6 +4182,8 @@ async function runAutoSyncStaleGames() {
   const nrRefreshed = [];
   const failed = [];
   const layerWarned = [];
+  const gameRechecked = [];
+  const gameBroken = [];
 
   // A build with no valid folder yet is skipped rather than fetched here -- Install does that.
   const validByEngine = {};
@@ -4177,6 +4200,7 @@ async function runAutoSyncStaleGames() {
       continue;
     }
     if (noteSyncResult(game, res)) layerWarned.push(game.name);
+    if (res.gameUpdated) (res.gameUpdated.needsReinstall ? gameBroken : gameRechecked).push(game.name);
     if (res.updated) updated.push(game.name);
     if (res.nrUpdated) nrRefreshed.push(game.name);
     if (res.autoConfigured && res.autoConfigured.length > 0) {
@@ -4205,6 +4229,13 @@ async function runAutoSyncStaleGames() {
   if (layerWarned.length > 0) {
     toast(t('Feeder updated, but ReShade\'s Vulkan layer will not load in: {list}. Hover the card for what to do.', { list: layerWarned.join(', ') }));
   }
+  if (gameBroken.length > 0) {
+    toast(t('A game update removed DLSS 5 files from: {list}. Reinstall to put them back.', { list: gameBroken.join(', ') }));
+  } else if (gameRechecked.length > 0) {
+    toast(t('Game updated — rechecked: {list}', { list: gameRechecked.join(', ') }));
+  }
+  // A new exe can mean a new route: the cards re-read detection (main.js dropped the cached answer).
+  if (gameBroken.length > 0 || gameRechecked.length > 0) renderGrid();
 }
 // Numeric per segment; a suffix like "-hotfix" or "10a" counts as its leading number, so a
 // suffixed tag is never mistaken for an older one.

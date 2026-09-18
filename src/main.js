@@ -37,6 +37,7 @@ const engines = require('./engines');
 const pdplugin = require('./pdplugin');
 const rtxmfg = require('./rtxmfg');
 const legacy = require('./legacy');
+const gameupdate = require('./gameupdate');
 const translation = require('./translation');
 const elevate = require('./elevate');
 const panelwindow = require('./panelwindow');
@@ -4706,7 +4707,7 @@ async function findActiveOptiScalerFile(dir) {
   return null;
 }
 
-ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDllPath }) => {
+async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
   try {
     // OPTIDLSS5_NO_SYNC=1: a second copy of the app (screenshots, a demo, a source checkout pointed at a
     // real library) that must not touch game folders the installed app already manages.
@@ -4822,6 +4823,32 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDl
     return { ok: true, updated: true, nrUpdated, feederUpdated, file: path.basename(active.file), api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
   } catch (err) {
     return { ok: false, error: err.message };
+  }
+}
+
+// The sync, plus noticing that the game itself updated since the last one (gameupdate.js): the exe
+// fingerprint is compared before the sync -- so a changed exe drops the cached detection and the
+// sync's own auto-configure re-checks the route against the new build -- and recorded after it.
+// Not for a game kept as is, or with sync switched off: those folders are not ours to judge.
+ipcMain.handle('game:sync-if-stale', async (evt, payload = {}) => {
+  const exePath = payload && payload.exePath;
+  let watch = null;
+  try {
+    if (process.env.OPTIDLSS5_NO_SYNC !== '1' && exePath && fs.existsSync(exePath) && !keptAsIs(gameDir(exePath))) {
+      watch = gameupdate.inspect(gameupdate.storeFile(userDataDir()), exePath, gameDir(exePath));
+      if (watch.changed) invalidateDetection(gameDir(exePath));
+    }
+  } catch { watch = null; }
+  const res = await syncGameIfStale(evt, payload || {});
+  if (!watch || !res || !res.ok) return res;
+  try {
+    const dir = gameDir(exePath);
+    // The proxy OptiScaler runs under is ours too, and the file a Steam verify is likeliest to delete.
+    const active = fs.existsSync(path.join(dir, 'OptiScaler.ini')) ? await findActiveOptiScalerFile(dir).catch(() => null) : null;
+    const gameUpdated = gameupdate.commit(gameupdate.storeFile(userDataDir()), exePath, dir, watch, { extra: active ? [path.basename(active.file)] : [] });
+    return gameUpdated ? { ...res, gameUpdated } : res;
+  } catch {
+    return res;
   }
 });
 
