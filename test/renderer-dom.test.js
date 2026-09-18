@@ -71,6 +71,18 @@ test('the pop-out panel still renders every group', () => {
   assert.ok(!panel.includes('EDITABLE_GROUPS'), 'the pop-out panel must not filter groups');
 });
 
+test('the card shows the run as numbers, and keeps the sentence for the tooltip', () => {
+  // At the card's 300px the full "Neural Rendering ran (1240 passes, 71 fps, DX12)" wrapped across
+  // the chip line mid-phrase, and a longer game name made it worse. The chip beside it already says
+  // the pass ran, so the card takes the numbers alone. renderer.js cannot be required here -- it
+  // touches document at module scope -- so this guards the wiring rather than the output.
+  const block = js.slice(js.indexOf("ev.className = 'card-evidence'"), js.indexOf('line.appendChild(ev)'));
+  assert.ok(block.includes('runEvidenceShort(run)'), 'the card text comes from the short form');
+  assert.ok(!/ev\.textContent\s*=\s*`?\s*\$?\{?\s*describeRun/.test(block), 'not the full sentence');
+  assert.ok(block.includes('describeRun(run)'), 'and the full sentence is still the hover text');
+  assert.match(js, /function runEvidenceShort\(run\)/);
+});
+
 test('the DLSS 5 field table is not offered in two places at once', () => {
   // The in-game panel and Settings both write the same OptiScaler.ini, and the panel saves the
   // whole file whenever it changes something -- so a second copy of those controls in Settings
