@@ -67,6 +67,23 @@ const rows = [
   ['Feeder technique missing: Install again', base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'init-no-feature', detail: 'feeder-technique-missing' } }), { status: 'fix', fix: 'install' }],
   ['two DLSS DLLs crashed it: remove the Feeder', base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'duplicate-dlss' } }), { status: 'fix', fix: 'remove-feeder' }],
   ['UE crash with unverified Luma: remove Luma', base({ route: { route: 'lumaue', lumaDeployed: true }, run: { ran: true, verdict: 'ue-crash', detail: 'Assertion failed' } }), { status: 'fix', fix: 'remove-luma' }],
+  // The wrapper crash. dgVoodoo2 failing used to end the road, because it was the only way to put
+  // DirectX 8/9 in front of a modern pipeline. translation.js owns DXVK too now, so the other layer
+  // is offered first and "put the game back" is what is left once that has been tried and the
+  // wrapper is still crashing. These run everywhere; the end-to-end version in feeder.test.js
+  // parses a real Feeder log and is Windows-only.
+  ['dgVoodoo2 crashed it: try the other layer first',
+    base({ route: { route: 'feeder32', complete: true, dgVoodooDeployed: true, legacy: { api: 'dx9', dgVoodoo: { arch: 'x86', dll: 'D3D9.dll' } } }, detected: { bitness: 32, api: 'dx9' }, run: { ran: true, verdict: 'wrapper-crash', detail: 'd3d9.dll', at: 'T1' } }),
+    { status: 'fix', code: 'wrapper-crash-swap', fix: 'swap-to-dxvk' }],
+  ['the swap was tried and it still crashes: put the game back',
+    base({ route: { route: 'feeder32', complete: true, dgVoodooDeployed: true, legacy: { api: 'dx9', dgVoodoo: { arch: 'x86', dll: 'D3D9.dll' } } }, detected: { bitness: 32, api: 'dx9' }, run: { ran: true, verdict: 'wrapper-crash', detail: 'd3d9.dll', at: 'T2' }, fixesTried: ['swap-to-dxvk'] }),
+    { status: 'fix', code: 'dgvoodoo-crash', fix: 'remove-all' }],
+  ['an API DXVK has no file set for: straight to putting the game back',
+    base({ route: { route: 'feeder32', complete: true, dgVoodooDeployed: true, legacy: { api: 'opengl', dgVoodoo: { arch: 'x86', dll: 'D3D9.dll' } } }, detected: { bitness: 32, api: 'opengl' }, run: { ran: true, verdict: 'wrapper-crash', detail: 'd3d9.dll', at: 'T3' } }),
+    { status: 'fix', code: 'dgvoodoo-crash', fix: 'remove-all' }],
+  ['a wrapper this app did not place: named, never swapped or removed',
+    base({ route: { route: 'feeder32', complete: true, dgVoodooDeployed: false, legacy: { api: 'dx9', dgVoodoo: null } }, detected: { bitness: 32, api: 'dx9' }, run: { ran: true, verdict: 'wrapper-crash', detail: 'd3d9.dll', at: 'T4' } }),
+    { status: 'unknown', code: 'wrapper-crash' }],
   ['UE crash on a verified Luma game: unknown, bundle', base({ route: { route: 'lumaue', lumaDeployed: true, verified: { route: 'lumaue' } }, run: { ran: true, verdict: 'ue-crash', detail: 'x' } }), { status: 'unknown', code: 'ue-crash' }],
   ['Feeder gave up: reconfigure', base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'feed-stopped' } }), { status: 'fix', fix: 'reconfigure' }],
   ['a fix already tried and the verdict unchanged: unknown, not the same fix again', base({ run: { ran: true, verdict: 'dlss-no-nr', detail: 'd3d11-native' }, fixesTried: ['reconfigure'] }), { status: 'unknown', code: 'fix-failed' }],

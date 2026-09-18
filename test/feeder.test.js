@@ -1020,7 +1020,7 @@ test('a release published without the zip is skipped, and nothing usable is an e
     /Unexpected answer/);
 });
 
-test('a game that crashes inside dgVoodoo2 as it starts is a run, and Game Help offers Remove', async () => {
+test('a game that crashes inside dgVoodoo2 as it starts is a run, and Game Help offers the other layer', async () => {
   // The Feeder's own log from Castlevania: Lords of Shadow 2 (32-bit DX9, 2026-09-14). The helper
   // never started, so there is no OptiScaler.log anywhere -- which used to read as "not run yet".
   const game = scratchDir('wrapper-crash');
@@ -1038,13 +1038,36 @@ test('a game that crashes inside dgVoodoo2 as it starts is a run, and Game Help 
   assert.equal(run.detail, 'd3d9.dll');
   assert.ok(run.at);
 
-  const legacyRoute = { route: 'feeder32', complete: true, optiInstalled: true, dgVoodooDeployed: true, legacy: { dgVoodoo: { arch: 'x86', dll: 'D3D9.dll' } } };
+  // legacy carries the plan legacy.planFor builds, api included -- that field is what decides
+  // whether DXVK has a file set for this game, so a fixture without it would pass for the wrong
+  // reason and cover nothing.
+  const legacyRoute = { route: 'feeder32', complete: true, optiInstalled: true, dgVoodooDeployed: true, legacy: { api: 'dx9', dgVoodoo: { arch: 'x86', dll: 'D3D9.dll' } } };
+
+  // dgVoodoo2 crashing is no longer the end of the road: DXVK presents the same DirectX 9 by a
+  // different route, so that is offered before giving up on the game.
   const diag = diagnose({ detected: { bitness: 32, api: 'dx9' }, route: legacyRoute, run });
-  assert.equal(diag.code, 'dgvoodoo-crash');
-  assert.equal(diag.fix.id, 'remove-all');
+  assert.equal(diag.code, 'wrapper-crash-swap');
+  assert.equal(diag.fix.id, 'swap-to-dxvk');
+
+  // Applied and the game run again, still crashing in the wrapper: the swap is spent, and putting
+  // the game back is what is left. (A bare id means "judged against a newer run than the one it
+  // was applied to" -- gamehelp.js's tried vs pending.)
+  const spent = diagnose({ detected: { bitness: 32, api: 'dx9' }, route: legacyRoute, run, fixesTried: ['swap-to-dxvk'] });
+  assert.equal(spent.code, 'dgvoodoo-crash');
+  assert.equal(spent.fix.id, 'remove-all');
+
+  // Applied but not run since: neither fix is offered again, because the old log still says what
+  // it said.
+  const pending = diagnose({ detected: { bitness: 32, api: 'dx9' }, route: legacyRoute, run, fixesTried: [{ id: 'swap-to-dxvk', runAt: run.at }] });
+  assert.equal(pending.status, 'needs-run');
+
+  // An API DXVK ships no file set for goes straight to putting the game back.
+  const openglRoute = { ...legacyRoute, legacy: { api: 'opengl', dgVoodoo: { arch: 'x86', dll: 'D3D9.dll' } } };
+  const noSwap = diagnose({ detected: { bitness: 32, api: 'opengl' }, route: openglRoute, run });
+  assert.equal(noSwap.fix.id, 'remove-all');
 
   // The same crash in a wrapper this app did not place: named, not removed.
-  const other = diagnose({ detected: { bitness: 32, api: 'dx11' }, route: { ...legacyRoute, dgVoodooDeployed: false, legacy: { dgVoodoo: null } }, run });
+  const other = diagnose({ detected: { bitness: 32, api: 'dx11' }, route: { ...legacyRoute, dgVoodooDeployed: false, legacy: { api: 'dx11', dgVoodoo: null } }, run });
   assert.equal(other.code, 'wrapper-crash');
   assert.equal(other.fix, null);
 

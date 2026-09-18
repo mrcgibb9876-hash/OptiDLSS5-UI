@@ -35,6 +35,7 @@ const engines = require('./engines');
 const pdplugin = require('./pdplugin');
 const rtxmfg = require('./rtxmfg');
 const legacy = require('./legacy');
+const translation = require('./translation');
 const panelwindow = require('./panelwindow');
 let electronAutoUpdater = null;
 try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
@@ -339,6 +340,7 @@ ipcMain.handle('injector:launch', async (_evt, { exePath, releaseFolder } = {}) 
 const feederCacheDir = () => path.join(userDataDir(), 'feeder-cache');
 const lumaUeCacheDir = () => path.join(userDataDir(), 'lumaue-cache');
 const pdPluginCacheDir = () => path.join(userDataDir(), 'pd-plugin');
+const dxvkCacheDir = () => path.join(userDataDir(), 'dxvk-cache');
 
 function pdPluginDownloadsDirs() {
   const dirs = [];
@@ -2722,6 +2724,39 @@ async function applyHelpFix(exePath, fixId) {
     // The card's Remove, for a route that cannot run on this game at all (dgVoodoo2 crashing it at
     // startup). Everything this app placed goes and anything it set aside comes back -- asked first,
     // since it undoes the whole install rather than one setting.
+    // The other translation layer, offered when the game crashed inside the one it has. deployDxvk
+    // purges the layer in the way itself (canDeploy -> purgeTranslationLayer), handing back
+    // whatever that layer displaced, so this does not have to unwind anything by hand.
+    case 'swap-to-dxvk': {
+      const plan = legacyPlanFor(dir, exePath, {});
+      if (!plan || !plan.supported) return { done: false, text: 'this game has no translation-layer route' };
+      const answer = await dialog.showMessageBox({
+        type: 'question',
+        buttons: ['Try DXVK', 'Cancel'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+        title: 'Try the other compatibility layer',
+        message: 'Swap dgVoodoo2 for DXVK in this game?',
+        detail: 'The game crashed inside dgVoodoo2 as it started. DXVK does the same job by a different route, '
+          + 'and is worth trying before giving up on it.\n\nWhatever dgVoodoo2 displaced is handed back first, '
+          + 'so this can be undone. Run the game afterwards and check here again.',
+      });
+      if (answer.response !== 0) return { done: false, text: 'cancelled by the user' };
+      let sourceDir;
+      try {
+        sourceDir = await translation.ensureDxvk(dxvkCacheDir(), { headers: GITHUB_HEADERS });
+      } catch (error) {
+        return { done: false, text: `could not fetch DXVK: ${error && error.message ? error.message : error}` };
+      }
+      const r = await translation.deployDxvk(dir, { sourceDir, api: plan.api, bitness: plan.host32 ? 32 : 64 });
+      invalidateDetection(dir);
+      if (!r.ok) {
+        const why = (r.refused || []).map((x) => `${x.file} (${x.reason})`).join(', ');
+        return { done: false, text: `DXVK was not deployed: ${why || 'refused'}` };
+      }
+      return { done: true, text: `DXVK is in place of dgVoodoo2 (${(r.deployed || []).length} file(s)) -- run the game and check again` };
+    }
     case 'remove-all': {
       const answer = await dialog.showMessageBox({
         type: 'question',

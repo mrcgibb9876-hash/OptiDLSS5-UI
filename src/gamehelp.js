@@ -239,15 +239,33 @@ function diagnose(ctx) {
     case 'feed-vulkan-interop':
       return out('step', 'feed-vulkan-interop', { hook: run.detail || '' });
     // The game died inside a DirectX 8/9 wrapper in its own folder as it started. When that wrapper
-    // is the dgVoodoo2 this app placed, there is no setting to try: on Castlevania: Lords of Shadow 2
-    // (2026-09-14) VRAM, output API, windowed mode, adapter, GPU preference, CPU affinity and the
-    // previous dgVoodoo2 release all hung or crashed the same way, while the game ran clean without
-    // it. DirectX 8/9 has no Feeder path without dgVoodoo2, so the honest fix is putting the game
-    // back as it was. A wrapper that is not ours is named and left alone.
+    // is the dgVoodoo2 this app placed, no dgVoodoo2 SETTING is worth trying: on Castlevania: Lords
+    // of Shadow 2 (2026-09-14) VRAM, output API, windowed mode, adapter, GPU preference, CPU
+    // affinity and the previous dgVoodoo2 release all hung or crashed the same way, while the game
+    // ran clean without it.
+    //
+    // What has changed since is that dgVoodoo2 is no longer the only way to present DirectX 8/9 to
+    // a modern pipeline. translation.js owns DXVK too, so the first answer is the other layer
+    // rather than giving up -- and the evidence for it is better than a hunch: on #50 the same
+    // SWTOR install crashed at d3d9!00065af0 under dgVoodoo2 on one machine while running through
+    // DXVK's d3d9.dll on the reporter's other one.
+    //
+    // It is still offered, never applied on its own. The two layers take different paths (D3D11
+    // against Vulkan) so the swap can make a nearly-working game worse, and nothing here can tell
+    // whether it helped until the game is run again. If it has been tried and the wrapper is still
+    // crashing, putting the game back is what is left. A wrapper that is not ours is named and
+    // left alone.
     case 'wrapper-crash': {
       const ours = route.dgVoodooDeployed && route.legacy && route.legacy.dgVoodoo &&
         String(route.legacy.dgVoodoo.dll || '').toLowerCase() === String(run.detail || '').toLowerCase();
-      return ours ? fix('dgvoodoo-crash', 'remove-all', { dll: run.detail || '' }) : out('unknown', 'wrapper-crash', { dll: run.detail || '' });
+      if (!ours) return out('unknown', 'wrapper-crash', { dll: run.detail || '' });
+      // The APIs DXVK ships a file set for (translation.js DXVK_FILES_FOR_API). Inlined rather than
+      // imported: this table stays a pure function of its context, with no module of its own to load.
+      const dxvkServes = ['dx8', 'dx9', 'dx10', 'dx11'].includes(route.legacy.api);
+      if (dxvkServes && !tried.has('swap-to-dxvk')) {
+        return fix('wrapper-crash-swap', 'swap-to-dxvk', { dll: run.detail || '', api: route.legacy.api });
+      }
+      return fix('dgvoodoo-crash', 'remove-all', { dll: run.detail || '' });
     }
     default:
       return out('unknown', 'unknown', { verdict: run.verdict });
@@ -256,6 +274,6 @@ function diagnose(ctx) {
 
 // The fixes in the order Game Help would try them, for the AI tier's tool list and the tests.
 // 'switch-to-luma' is applied by the renderer, which asks for Luma's licence first; main.js declines it.
-const FIX_IDS = ['remove-foreign', 'remove-feeder', 'remove-luma', 'redeploy-feeder', 'feeder-depth-profile', 'disable-agility-redist', 'reconfigure', 'remove-all', 'install', 'switch-to-luma'];
+const FIX_IDS = ['remove-foreign', 'remove-feeder', 'remove-luma', 'redeploy-feeder', 'feeder-depth-profile', 'disable-agility-redist', 'reconfigure', 'remove-all', 'install', 'switch-to-luma', 'swap-to-dxvk'];
 
 module.exports = { diagnose, FIX_IDS };
