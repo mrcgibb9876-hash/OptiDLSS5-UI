@@ -31,6 +31,7 @@ const runlog = require('./runlog');
 const library = require('./library');
 const lumacatalog = require('./lumacatalog');
 const ghreport = require('./ghreport');
+const reportinfo = require('./reportinfo');
 const gamehelp = require('./gamehelp');
 const aihelp = require('./aihelp');
 const engines = require('./engines');
@@ -2647,10 +2648,14 @@ ipcMain.handle('game:supportBundle', async (_evt, { exePath, detected }) => {
     });
     if (res.canceled || !res.filePath) return { ok: true, cancelled: true };
     const effective = effectiveDetection(dir, exePath, detected || {});
+    const gpuInfo = (await getGpuInfo()) || {};
     const extra = {
       appVersion: app.getVersion(),
+      // The same machine and version facts "Send game failure" puts in its header (reportinfo.js).
+      versions: { app: app.getVersion(), bundled: (bundledEngine() || {}).tag || null, setting: readJson(settingsFile(), {}).installedVersion || null },
+      system: { gpu: gpuInfo.name || null, vendor: gpuInfo.vendor || null, driver: gpuInfo.driverVersion || null, vram: await reportinfo.readVram(execFileAsync) },
       detection: effective,
-      route: recommendRoute(dir, exePath, effective, ((await getGpuInfo()) || {}).vendor || 'unknown', { lumaMod: lumaModFor(exePath, effective) }),
+      route: recommendRoute(dir, exePath, effective, gpuInfo.vendor || 'unknown', { lumaMod: lumaModFor(exePath, effective) }),
       backends: detectInstalledBackends(dir),
       foreign: foreignToolchains(dir),
     };
@@ -2707,32 +2712,38 @@ ipcMain.handle('report:signin', async () => {
 
 // Gathers the support bundle's files, shows the player exactly what will be posted, and on yes creates the
 // gist and the issue. title/body come from the renderer (the same text the old "Report on GitHub" filled in).
-ipcMain.handle('report:send', async (_evt, { exePath, detected, title, body } = {}) => {
+// Two steps, so the player sees exactly what leaves the PC before it does:
+//   report:prepare gathers everything, adds the machine and version header (reportinfo.js), redacts and
+//     cuts it (ghreport.prepareReport), keeps that object here under an id, and hands the renderer a copy
+//     to show in the preview;
+//   report:send posts the kept object by id -- not anything the renderer sends back -- so what was
+//     previewed is what is sent.
+const preparedReports = new Map();
+ipcMain.handle('report:prepare', async (_evt, { exePath, detected, title, body, game, finding } = {}) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
-    const token = readReportToken();
-    if (!token) return { ok: false, signedOut: true };
     const dir = gameDir(exePath);
+    const optiDir = optiScalerDirFor(dir);
     const effective = effectiveDetection(dir, exePath, detected || {});
+    const gpuInfo = (await getGpuInfo()) || {};
+    const route = recommendRoute(dir, exePath, effective, gpuInfo.vendor || 'unknown', { lumaMod: lumaModFor(exePath, effective) });
+    const vram = await reportinfo.readVram(execFileAsync);
+    const versions = { app: app.getVersion(), bundled: (bundledEngine() || {}).tag || null, setting: readJson(settingsFile(), {}).installedVersion || null };
     const extra = {
-      appVersion: app.getVersion(),
+      appVersion: versions.app,
+      versions,
+      system: { gpu: gpuInfo.name || null, vendor: gpuInfo.vendor || null, driver: gpuInfo.driverVersion || null, vram },
       detection: effective,
-      route: recommendRoute(dir, exePath, effective, ((await getGpuInfo()) || {}).vendor || 'unknown', { lumaMod: lumaModFor(exePath, effective) }),
+      route,
       backends: detectInstalledBackends(dir),
       foreign: foreignToolchains(dir),
     };
-    const { files, run } = await runlog.gatherSupportFiles(dir, { extra, optiDir: optiScalerDirFor(dir) });
-    const confirm = await dialog.showMessageBox({
-      type: 'question',
-      buttons: ['Send', 'Cancel'],
-      defaultId: 0,
-      cancelId: 1,
-      title: 'Send game failure',
-      message: 'Post this game\'s logs to GitHub as a public issue?',
-      detail: `Sent: ${files.map((f) => f.name).join(', ')}.\n\nYour Windows user name is hidden in paths. Game saves, other files and anything outside the game folder are not included. The issue and the logs are public on GitHub.`,
+    const { files, run } = await runlog.gatherSupportFiles(dir, { extra, optiDir });
+    const withText = files.map((f) => {
+      let text = f.text;
+      if (text === undefined) { try { text = fs.readFileSync(f.source, 'utf8'); } catch { text = ''; } }
+      return { name: f.name, text };
     });
-    if (confirm.response !== 0) return { ok: true, cancelled: true };
-    const withText = files.map((f) => ({ name: f.name, text: f.text !== undefined ? f.text : fs.readFileSync(f.source, 'utf8') }));
     // The logs go to a gist, and a gist is not reachable from anything but a browser signed in as a
     // person: a scripted triage gets 403 there and at the attachment host alike. So the lines that
     // decide the diagnosis go in the body too, where they can actually be read (runlog.reportDigest).
@@ -2743,7 +2754,37 @@ ipcMain.handle('report:send', async (_evt, { exePath, detected, title, body } = 
       detected: helpCtx ? helpCtx.detected : effective,
       route: helpCtx ? helpCtx.route : null, feeder: helpCtx ? helpCtx.feederReady : null,
     });
-    const out = await ghreport.sendReport({ token, title, body: runlog.withDigest(body, digest), files: withText });
+    // Aftermath dumps from around the failed run: the newest OptiScaler.log is when it was.
+    let around = null;
+    for (const d of [dir, optiDir]) {
+      try { around = Math.max(around || 0, fs.statSync(path.join(d, 'OptiScaler.log')).mtimeMs); } catch {}
+    }
+    const aftermath = reportinfo.findAftermath({ dirs: [dir, optiDir], around });
+    const assembled = reportinfo.assemble({
+      base: { title, body: runlog.withDigest(body, digest) },
+      game: { name: game || path.basename(exePath, path.extname(exePath)), exe: path.basename(exePath) },
+      finding, route, detection: effective, gpu: gpuInfo, vram, versions, files: withText, aftermath,
+    });
+    const prepared = ghreport.prepareReport(assembled);
+    const id = crypto.randomUUID();
+    preparedReports.clear(); // one preview at a time; an abandoned one is not kept around
+    preparedReports.set(id, prepared);
+    return { ok: true, id, ...prepared, repo: ghreport.REPO };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+ipcMain.handle('report:discard', (_evt, { id } = {}) => { preparedReports.delete(id); return { ok: true }; });
+
+ipcMain.handle('report:send', async (_evt, { id } = {}) => {
+  try {
+    const prepared = preparedReports.get(id);
+    if (!prepared) throw new Error('This report preview is no longer open -- press Send game failure again');
+    const token = readReportToken();
+    if (!token) return { ok: false, signedOut: true };
+    const out = await ghreport.postReport({ token, prepared });
+    preparedReports.delete(id);
     return { ok: true, ...out };
   } catch (error) {
     if (error && error.signedOut) { clearReportToken(); return { ok: false, signedOut: true }; }

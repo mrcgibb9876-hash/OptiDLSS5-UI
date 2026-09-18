@@ -572,6 +572,12 @@ body:not(.show-advanced) #game-modal .advanced-only { display: none !important; 
 .help-send-status { margin: 10px 0 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font-size: 13px; line-height: 1.5; }
 .help-send-code { display: inline-block; margin-left: 6px; font-size: 18px; letter-spacing: 0.12em; font-family: Consolas, monospace; user-select: all; }
 .help-ai-out { margin: 12px 0 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font: 12px/1.5 inherit; font-family: inherit; white-space: pre-wrap; max-height: 260px; overflow-y: auto; }
+.report-preview-label { margin: 12px 0 4px; font-size: 12px; font-weight: 600; color: var(--text-dim, inherit); }
+.report-preview-text { margin: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font: 12px/1.45 Consolas, monospace; white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow-y: auto; }
+.report-preview-body { max-height: 260px; }
+.report-preview-files details { margin: 4px 0; }
+.report-preview-files summary { cursor: pointer; font-size: 13px; }
+.report-preview-files pre { max-height: 240px; }
 
 .scan-checkbox-row {
   display: flex;

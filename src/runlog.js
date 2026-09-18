@@ -618,7 +618,7 @@ function withDigest(body, digest) {
   return `${text.trimEnd()}\n\n${digest}`;
 }
 
-const BUNDLE_FILES = ['OptiScaler.log', 'OptiScaler.ini', 'ReShade.log', 'ReShade.ini', 'ReShadePreset.ini', 'dlss5-feed.log', 'dlss5-feed.cfg', '.optiscaler-manager-install.json', '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.dlss5ui-api.json', '.dlss5ui-lossless.json', '.dlss5ui-legacy.json'];
+const BUNDLE_FILES = ['OptiScaler.log', 'OptiScaler.ini', 'ReShade.log', 'ReShade.ini', 'ReShadePreset.ini', 'dlss5-feed.log', 'dlss5-feed.cfg', '.optiscaler-manager-install.json', '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.dlss5ui-api.json', '.dlss5ui-lossless.json', '.dlss5ui-legacy.json', '.dlss5ui-translation.json', '.dlss5ui-engine.json', '.dlss5ui-framegen.json'];
 
 function folderListing(dir) {
   try {

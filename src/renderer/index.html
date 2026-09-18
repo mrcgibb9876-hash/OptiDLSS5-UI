@@ -411,6 +411,24 @@
     </div>
   </div>
 
+  <div id="report-preview-modal" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <h2 data-i18n>Check what will be sent</h2>
+      <p class="field-hint" data-i18n>This is everything that leaves your PC, exactly as it will appear on GitHub. The issue and the logs are public. Your Windows user name, home folder and PC name are already hidden; game saves and other files are not included.</p>
+      <div class="report-preview-label" data-i18n>Issue title</div>
+      <pre id="report-preview-title" class="report-preview-text"></pre>
+      <div class="report-preview-label" data-i18n>Issue text</div>
+      <pre id="report-preview-body" class="report-preview-text report-preview-body"></pre>
+      <div class="report-preview-label" data-i18n>Log files (one secret gist, linked from the issue)</div>
+      <div id="report-preview-files" class="report-preview-files"></div>
+      <div id="report-preview-skipped" class="status-line hidden"></div>
+      <div class="modal-actions">
+        <button id="report-preview-send" class="btn btn-danger" data-i18n>Send to GitHub</button>
+        <button id="report-preview-cancel" class="btn btn-ghost" data-i18n>Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div id="settings-modal" class="modal-overlay hidden">
     <div class="modal">
       <h2 data-i18n>Settings</h2>
