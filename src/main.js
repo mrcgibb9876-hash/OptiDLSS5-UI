@@ -4771,12 +4771,12 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDl
 
     const releaseDll = releaseFolder ? path.join(releaseFolder, 'OptiScaler.dll') : null;
     if (!releaseDll || !fs.existsSync(releaseDll)) {
-      return { ok: true, updated: autoConfigured.length > 0 || nrUpdated, nrUpdated, reason: 'no release set', api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
+      return { ok: true, updated: autoConfigured.length > 0 || nrUpdated, nrUpdated, feederUpdated, reason: 'no release set', api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
     }
 
     if (!hasDlssNrSection(releaseFolder)) {
       return {
-        ok: true, updated: autoConfigured.length > 0 || nrUpdated, nrUpdated,
+        ok: true, updated: autoConfigured.length > 0 || nrUpdated, nrUpdated, feederUpdated,
         reason: 'release folder is not the DLSS-NR fork (no [DlssNr] section) -- refusing to sync', api, autoConfigured, streamline, reEngine, reframework
       };
     }
@@ -4788,7 +4788,7 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDl
     const active = await findActiveOptiScalerFile(dir);
     if (!active) {
       return {
-        ok: true, updated: autoConfigured.length > 0 || nrUpdated || !!(proxyMigrated && !proxyMigrated.skipped), nrUpdated,
+        ok: true, updated: autoConfigured.length > 0 || nrUpdated || !!(proxyMigrated && !proxyMigrated.skipped), nrUpdated, feederUpdated,
         reason: 'could not identify the active OptiScaler file (ambiguous proxy candidates)', api, autoConfigured, streamline, reEngine, reframework
       };
     }
@@ -4809,7 +4809,7 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDl
     }
 
     if (sha256File(releaseDll) === sha256File(active.file)) {
-      return { ok: true, updated: autoConfigured.length > 0 || nrUpdated || companionsUpdated || !!(proxyMigrated && !proxyMigrated.skipped), nrUpdated, proxyMigrated, reason: 'up to date', api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
+      return { ok: true, updated: autoConfigured.length > 0 || nrUpdated || companionsUpdated || !!(proxyMigrated && !proxyMigrated.skipped), nrUpdated, feederUpdated, proxyMigrated, reason: 'up to date', api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
     }
 
     await fsp.copyFile(releaseDll, active.file);
@@ -4819,7 +4819,7 @@ ipcMain.handle('game:sync-if-stale', async (_evt, { exePath, releaseFolder, nrDl
     // without this the cached folder evidence kept the old proxy's size (see game:detect-path-if-stale).
     invalidateDetection(dir);
 
-    return { ok: true, updated: true, nrUpdated, file: path.basename(active.file), api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
+    return { ok: true, updated: true, nrUpdated, feederUpdated, file: path.basename(active.file), api, autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix };
   } catch (err) {
     return { ok: false, error: err.message };
   }

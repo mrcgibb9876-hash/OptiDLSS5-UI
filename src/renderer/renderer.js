@@ -187,6 +187,42 @@ function applyRunningState(card, isRunning) {
   refreshCardState(card);
 }
 
+// What a background sync found that the card should say, by exe path, kept for the session so a
+// re-render does not lose it. vulkan: the Feeder update's warning that ReShade's Vulkan layer will
+// not load in this game (main.js updateFeederIfStale, warned rather than thrown since 2026-09-18) --
+// the sync used to swallow it, so the game just ran without DLSS 5 and nothing said why.
+const syncNotices = new Map();
+function syncNoticeFor(exePath) {
+  const n = syncNotices.get(exePath);
+  return (n && n.vulkan) || null;
+}
+// A sync notice that is a real problem stands in for a diagnosis that is not one; a harmless one
+// only fills a row that would otherwise be empty.
+function withSyncNotice(state) {
+  const notice = state.syncNotice;
+  if (!notice || (state.problem && state.problem.bad)) return state;
+  return notice.bad || !state.problem ? { ...state, problem: notice } : state;
+}
+// Takes one game's game:sync-if-stale result; returns the Vulkan warning when this sync raised one.
+function noteSyncResult(game, res) {
+  const n = { ...(syncNotices.get(game.exePath) || {}) };
+  const fu = res && res.feederUpdated;
+  let warning = null;
+  if (fu && fu.warning) {
+    warning = String(fu.warning);
+    n.vulkan = { bad: true, text: t('ReShade\'s Vulkan layer will not load in this game'), title: warning };
+  } else if (fu) {
+    delete n.vulkan; // the Feeder re-deployed cleanly, so the layer is fine now
+  }
+  syncNotices.set(game.exePath, n);
+  const card = cardsByExe.get(game.exePath);
+  if (card && card._state) {
+    card._state.syncNotice = syncNoticeFor(game.exePath);
+    refreshCardState(card);
+  }
+  return warning;
+}
+
 // The chip and the primary button, from whatever the card currently knows. Called by every source
 // that changes the answer -- the run poll, the route, the diagnosis -- so the two never disagree.
 //
@@ -195,7 +231,7 @@ function applyRunningState(card, isRunning) {
 // wants none of this touched, a problem worth fixing outranks launching, an uninstalled game wants
 // Install, and everything else wants Launch.
 function refreshCardState(card) {
-  const state = card._state || {};
+  const state = withSyncNotice(card._state || {});
   const chip = card.querySelector('.card-badge');
   const primary = card.querySelector('.btn-card-primary');
   const launch = card.querySelector('.btn-launch');
@@ -344,6 +380,7 @@ async function renderGrid() {
       leftovers: !backends.optiscaler && (leftoverFiles.length > 0 || status.hasIni || (status.hasNr && gpu.vendor !== 'amd')),
       working: false,
       problem: null,
+      syncNotice: syncNoticeFor(game.exePath),
       installLabel: t('Install'),
     };
 
@@ -4123,6 +4160,7 @@ async function runAutoSyncStaleGames() {
   const streamlined = [];
   const nrRefreshed = [];
   const failed = [];
+  const layerWarned = [];
 
   // A build with no valid folder yet is skipped rather than fetched here -- Install does that.
   const validByEngine = {};
@@ -4138,6 +4176,7 @@ async function runAutoSyncStaleGames() {
       failed.push(`${game.name} (${res.error})`);
       continue;
     }
+    if (noteSyncResult(game, res)) layerWarned.push(game.name);
     if (res.updated) updated.push(game.name);
     if (res.nrUpdated) nrRefreshed.push(game.name);
     if (res.autoConfigured && res.autoConfigured.length > 0) {
@@ -4162,6 +4201,9 @@ async function runAutoSyncStaleGames() {
   }
   if (failed.length > 0) {
     toast(t('Could not auto-update: {list} — close the game and retry.', { list: failed.join(', ') }));
+  }
+  if (layerWarned.length > 0) {
+    toast(t('Feeder updated, but ReShade\'s Vulkan layer will not load in: {list}. Hover the card for what to do.', { list: layerWarned.join(', ') }));
   }
 }
 // Numeric per segment; a suffix like "-hotfix" or "10a" counts as its leading number, so a
