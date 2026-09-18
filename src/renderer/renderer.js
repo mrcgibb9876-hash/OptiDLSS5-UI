@@ -631,16 +631,14 @@ $('#grid-filter').addEventListener('change', () => {
   renderGrid();
 });
 
-// DLSS 5 on or off in every game at start (main.js applyNrStartDefault writes the inis).
+// DLSS 5 on in every game at start, or each game's own (main.js applyNrStartDefault writes the inis).
 $('#nr-start-default').addEventListener('change', async () => {
   settings.nrStartDefault = $('#nr-start-default').value;
   await window.api.saveSettings(settings);
   const mode = settings.nrStartDefault;
-  toast(mode === 'game'
-    ? t('Each game keeps its own DLSS 5 setting.')
-    : mode === 'on'
-      ? t('DLSS 5 will be on when every installed game starts.')
-      : t('DLSS 5 will be off when every installed game starts.'));
+  toast(mode === 'on'
+    ? t('DLSS 5 will be on when every installed game starts.')
+    : t('Each game keeps its own DLSS 5 setting.'));
 });
 async function applyRecommendation(game, card, backends, generation = renderGeneration) {
   // Every await below belongs to one render of one card. A newer render has already replaced the
@@ -4339,7 +4337,7 @@ window.addEventListener('focus', () => {
   settings = data.settings || { releaseFolder: '', nrDllPath: '', installedVersion: '' };
   applyLanguage();
   applyTheme();
-  $('#nr-start-default').value = ['game', 'on', 'off'].includes(settings.nrStartDefault) ? settings.nrStartDefault : 'game';
+  $('#nr-start-default').value = ['game', 'on'].includes(settings.nrStartDefault) ? settings.nrStartDefault : 'game';
   document.body.classList.toggle('show-advanced', !!settings.showAdvanced);
   try { gpu = (await window.api.gpuInfo()) || gpu; } catch {}
   // Vendor colours: the default green is NVIDIA's; an AMD card gets AMD red (style.css, body.vendor-amd).

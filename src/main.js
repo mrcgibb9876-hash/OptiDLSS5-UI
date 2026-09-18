@@ -190,12 +190,18 @@ function panelLanguageValue(settings) {
   return lang === 'auto' ? 'auto' : lang.toLowerCase();
 }
 
-// DLSS 5 on or off in every game when it starts ([DlssNr] Enabled), from the top bar. 'game' leaves each
+// DLSS 5 on in every game when it starts ([DlssNr] Enabled), from the top bar. 'game' leaves each
 // game's own choice alone -- what this app did before the setting existed. 'on' only reaches a folder
 // that has the model: switching the pass on with nothing to run crashed launches (see autoConfigureGame).
 // Applied to every installed game when it changes, and on every install and sync after that, so a game
 // switched in its own panel goes back to this at its next sync -- "at game start" is the promise.
-const NR_START_DEFAULTS = ['game', 'on', 'off'];
+//
+// There is no 'off' any more, and a saved 'off' reads as 'game'. Writing Enabled=false into every game
+// at sync took the DLSS 5 panel away on the Present-route games (Resident Evil 2, 2026-09-18: the engine
+// only hooked Present when the pass was on at launch, and on RE Engine that hook is what draws the
+// panel), and it made the Auto Fix ladder judge every step on a run with the pass switched off
+// (Assassin's Creed II, 2026-09-17). Turning DLSS 5 off is a per-game choice, made in the game's panel.
+const NR_START_DEFAULTS = ['game', 'on'];
 
 function nrStartDefault(settings) {
   const value = settings && settings.nrStartDefault;
@@ -208,8 +214,7 @@ function applyNrStartDefault(dir, settings = readJson(settingsFile(), {})) {
   const iniPath = path.join(dir, 'OptiScaler.ini');
   if (!fs.existsSync(iniPath)) return [];
   if (mode === 'on' && !fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'))) return [];
-  const value = mode === 'on' ? 'true' : 'false';
-  return ensureIniKey(iniPath, 'DlssNr', 'Enabled', value) ? [{ section: 'DlssNr', key: 'Enabled', value }] : [];
+  return ensureIniKey(iniPath, 'DlssNr', 'Enabled', 'true') ? [{ section: 'DlssNr', key: 'Enabled', value: 'true' }] : [];
 }
 
 function applyPanelLanguage(dir, settings = readJson(settingsFile(), {})) {
