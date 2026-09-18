@@ -557,8 +557,12 @@ function reshadeAppsListing(manifestPath, exePath) {
   const line = text.split(/\r?\n/).find((l) => /^\s*Apps\s*=/i.test(l));
   const apps = line ? line.replace(/^\s*Apps\s*=/i, '').split(',').map((s) => s.trim()).filter(Boolean) : [];
   if (!exePath) return { appsPath, apps, listed: null };
-  const want = path.resolve(exePath).replace(/[\\/]+$/, '').toLowerCase();
-  const listed = apps.some((a) => a.replace(/[\\/]+$/, '').toLowerCase() === want);
+  // Both sides normalised the same way. The entries used to be compared raw while the exe was
+  // path.resolve'd, so an entry written with forward slashes, a `.\` segment or quotes never matched,
+  // and a game that WAS on the list read as not listed -- which blocks Deploy (review of 2026-09-18).
+  const norm = (p) => path.resolve(String(p).replace(/^"(.*)"$/, '$1')).replace(/[\\/]+$/, '').toLowerCase();
+  const want = norm(exePath);
+  const listed = apps.some((a) => { try { return norm(a) === want; } catch { return false; } });
   return { appsPath, apps, listed };
 }
 
@@ -596,21 +600,27 @@ async function vulkanLayerStatus({ execFileAsync, regQuery = null, exePath = nul
 const VULKAN_LAYER_INSTRUCTION = 'Run ReShade\'s installer, pick this game\'s exe, choose Vulkan and tick "Enable loading of add-ons" -- then deploy again.';
 const VULKAN_APP_NOT_LISTED = (exePath, appsPath) => `ReShade's Vulkan layer is on this PC, but ${path.basename(exePath)} is not on its app list (${appsPath}), so the layer stays inert in this game and the Feeder never loads. ${VULKAN_LAYER_INSTRUCTION}`;
 
-async function deployReShade(dir, cacheDir, ghHeaders, { force = false, api = 'dx11', execFileAsync = null, exePath = null } = {}) {
+// layerWarnOnly: the background sync's re-deploy (main.js updateFeederIfStale). A Vulkan layer problem
+// is machine-wide and needs the user at ReShade's installer, so on a sync it is reported as a warning
+// and the rest of the update goes ahead -- throwing there aborted the whole add-on update for a reason
+// the sync can do nothing about, and the sync's catch swallowed the message too (review, 2026-09-18).
+async function deployReShade(dir, cacheDir, ghHeaders, { force = false, api = 'dx11', execFileAsync = null, exePath = null, layerWarnOnly = false, vulkanStatus = null } = {}) {
   const mode = reshadeModeForApi(api);
 
   if (mode === 'vulkan-layer') {
     // Machine-wide and shared: an add-on build already registered is used as it is (its
     // version does not matter to the Feeder). Anything else is the user's installer run --
     // the setup exe is cached so the button in the Edit dialog can open it for them.
-    const status = await vulkanLayerStatus({ execFileAsync, exePath });
+    const status = vulkanStatus || await vulkanLayerStatus({ execFileAsync, exePath });
     if (status.registered && status.addon && status.appListed !== false) return { deployed: false, reason: 'add-on Vulkan layer already registered', file: status.dllPath, mode, manifestPath: status.manifestPath };
-    const setupPath = await downloadToCache(RESHADE_SETUP_URL, cacheDir, path.basename(RESHADE_SETUP_URL), ghHeaders);
-    const err = new Error(status.registered && status.addon
+    const message = status.registered && status.addon
       ? VULKAN_APP_NOT_LISTED(exePath, status.appsPath)
       : status.registered
         ? `The ReShade Vulkan layer on this PC (${status.dllPath || status.manifestPath}) is a build without add-on support, so the Feeder would never load. ${VULKAN_LAYER_INSTRUCTION}`
-        : `ReShade is not installed as a Vulkan layer on this PC. ${VULKAN_LAYER_INSTRUCTION}`);
+        : `ReShade is not installed as a Vulkan layer on this PC. ${VULKAN_LAYER_INSTRUCTION}`;
+    if (layerWarnOnly) return { deployed: false, reason: 'Vulkan layer needs the user', warning: message, mode, manifestPath: status.manifestPath };
+    const setupPath = await downloadToCache(RESHADE_SETUP_URL, cacheDir, path.basename(RESHADE_SETUP_URL), ghHeaders);
+    const err = new Error(message);
     err.needsReShadeInstaller = true;
     err.setupPath = setupPath;
     throw err;
@@ -1082,43 +1092,76 @@ function readDxvkConf(dir) {
 
 // Sets dxvk.allowFse = False, keeping everything else in the file. Returns what was there before so
 // Remove can put it back: { added: the file did not exist, previous: the key's old value or null }.
+// What the deploy marker keeps for Remove: the first deploy's record (a re-deploy sees its own value),
+// and { untouched: true } when the conf already had the setting, so Remove does not take away a line
+// that was the player's own (restoreDxvkConf).
+function dxvkConfRecord(dxvkResult, previousMarker) {
+  if (!dxvkResult) return null;
+  if (previousMarker && previousMarker.dxvkConf) return previousMarker.dxvkConf;
+  if (dxvkResult.untouched) return { untouched: true };
+  return { added: dxvkResult.added, previous: dxvkResult.previous };
+}
+
+// The exact two lines this app writes. Restore matches these verbatim and nothing looser, so a line
+// the player wrote themselves -- even one that says the same thing -- is never taken for ours.
+const DXVK_CONF_LINE = 'dxvk.allowFse = False';
+const DXVK_CONF_COMMENT = '# DLSS5 Feeder through ReShade\'s Vulkan layer: no exclusive fullscreen (OptiDLSS5-UI)';
+
+// Sets dxvk.allowFse = False, keeping everything else in the file. Returns what was there before so
+// Remove can put it back: { added: the file did not exist, previous: the key's old value or null }.
+// A conf that already had it off is left alone and says so (untouched), so Remove leaves it alone too.
 function configureDxvkConf(dir) {
   const confPath = path.join(dir, DXVK_CONF);
   const before = readDxvkConf(dir);
-  if (before.allowFse === 'false') return { configured: false, file: DXVK_CONF, added: false, previous: 'false' };
+  if (before.allowFse === 'false') return { configured: false, untouched: true, file: DXVK_CONF, added: false, previous: 'false' };
   let text = '';
   try { text = fs.readFileSync(confPath, 'utf8'); } catch {}
   const eol = text.includes('\r\n') ? '\r\n' : '\n';
   const lines = text ? text.split(/\r?\n/) : [];
   const at = lines.findIndex((l) => /^\s*dxvk\.allowFse\s*=/i.test(l));
-  if (at !== -1) lines[at] = 'dxvk.allowFse = False';
+  if (at !== -1) lines[at] = DXVK_CONF_LINE;
   else {
     while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
     if (lines.length) lines.push('');
-    lines.push('# DLSS5 Feeder through ReShade\'s Vulkan layer: no exclusive fullscreen (OptiDLSS5-UI)');
-    lines.push('dxvk.allowFse = False');
+    lines.push(DXVK_CONF_COMMENT);
+    lines.push(DXVK_CONF_LINE);
   }
   fs.writeFileSync(confPath, lines.join(eol) + eol, 'utf8');
   return { configured: true, file: DXVK_CONF, added: !before.exists, previous: before.allowFse };
 }
 
 // The reverse, from what the deploy recorded: a file this app created goes, a key it changed goes
-// back to its old value, a key it added is taken out. A file the user has since edited past that
-// point keeps everything else it holds.
+// back to its old value in place, a key it added is taken out. A file the user has since edited past
+// that point keeps everything else it holds.
+//
+// Only ever this app's own line. The first cut removed any `dxvk.allowFse = false` it found, so a
+// player whose dxvk.conf already had exclusive fullscreen off -- a deploy that changed nothing --
+// lost their own setting on Remove (review of 2026-09-18). A record that says untouched, or the
+// older marker shape for the same case (previous 'false'), now restores nothing.
 function restoreDxvkConf(dir, record) {
-  if (!record) return false;
+  if (!record || record.untouched || record.previous === 'false') return false;
   const confPath = path.join(dir, DXVK_CONF);
   let text;
   try { text = fs.readFileSync(confPath, 'utf8'); } catch { return false; }
   const lines = text.split(/\r?\n/);
   const eol = text.includes('\r\n') ? '\r\n' : '\n';
-  const ours = (l) => /^\s*dxvk\.allowFse\s*=\s*false\s*$/i.test(l) || /OptiDLSS5-UI\)\s*$/.test(l);
-  const rest = lines.filter((l) => !ours(l));
+  const at = lines.indexOf(DXVK_CONF_LINE);
+  const commentAt = lines.indexOf(DXVK_CONF_COMMENT);
+  if (at === -1 && commentAt === -1) return false;
+  if (at !== -1) {
+    if (record.previous) lines[at] = `dxvk.allowFse = ${record.previous === 'true' ? 'True' : record.previous}`;
+    else lines[at] = null;
+  }
+  if (commentAt !== -1) {
+    lines[commentAt] = null;
+    // The blank line configureDxvkConf put before its comment goes with it.
+    if (commentAt > 0 && lines[commentAt - 1] !== null && lines[commentAt - 1].trim() === '') lines[commentAt - 1] = null;
+  }
+  const rest = lines.filter((l) => l !== null);
   if (record.added && rest.every((l) => l.trim() === '')) {
     fs.rmSync(confPath, { force: true });
     return true;
   }
-  if (record.previous && record.previous !== 'false') rest.push(`dxvk.allowFse = ${record.previous === 'true' ? 'True' : record.previous}`);
   while (rest.length && rest[rest.length - 1].trim() === '') rest.pop();
   fs.writeFileSync(confPath, rest.join(eol) + eol, 'utf8');
   return true;
@@ -1215,9 +1258,9 @@ async function feederUpdateCheck(dir, ghHeaders, { allowPrerelease = false } = {
 // force: true re-fetches and overwrites everything (used by an update). licenseConfirmed: only
 // consulted when providerId names a non-auto-fetchable provider (currently just LumeniteFX) --
 // deployLumeniteFx() itself refuses without it, this just threads it through.
-async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifest, compareVersions, ghHeaders, force = false, licenseConfirmed = false, unity = false, depthProfile = null, execFileAsync = null, allowPrerelease = false, exePath = null }) {
+async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifest, compareVersions, ghHeaders, force = false, licenseConfirmed = false, unity = false, depthProfile = null, execFileAsync = null, allowPrerelease = false, exePath = null, layerWarnOnly = false }) {
   const results = {};
-  results.reshade = await deployReShade(dir, cacheDir, ghHeaders, { force, api, execFileAsync, exePath });
+  results.reshade = await deployReShade(dir, cacheDir, ghHeaders, { force, api, execFileAsync, exePath, layerWarnOnly });
   results.reshadeMode = results.reshade.mode || reshadeModeForApi(api);
   results.commonHeaders = await deployReShadeCommonHeaders(dir, ghHeaders, { force, cacheDir });
   results.addon = await deployFeederAddon(dir, cacheDir, ghHeaders, { force, allowPrerelease });
@@ -1277,9 +1320,7 @@ async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifes
   const dxvk = dxvkWrapperFile(dir);
   results.dxvk = dxvk ? { wrapper: dxvk, ...configureDxvkConf(dir) } : null;
   // What Remove has to undo: the first deploy's record, since a re-deploy sees its own value.
-  const dxvkConf = results.dxvk
-    ? (previousMarker && previousMarker.dxvkConf) || { added: results.dxvk.added, previous: results.dxvk.previous }
-    : null;
+  const dxvkConf = dxvkConfRecord(results.dxvk, previousMarker);
 
   // The addon step only resolves the release tag when it actually deploys (fresh install, or
   // force). On a "already present, skip" run there's nothing fresh to record -- keep whatever
@@ -1433,6 +1474,7 @@ module.exports = {
   readDxvkConf,
   configureDxvkConf,
   restoreDxvkConf,
+  dxvkConfRecord,
   deployFeederStack,
   fetchWithRetry,
   fetchReShadeHeader,

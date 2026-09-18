@@ -11,13 +11,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const nativeDlss = require(path.join(__dirname, '..', 'src', 'native-dlss'));
-
-// What main.js's 'nr-model-only' does to pick its target folder.
-const targetDirFor = (dir) => {
-  const shipped = nativeDlss.shippedDlssPath(dir);
-  return shipped ? path.dirname(shipped) : dir;
-};
+// The function main.js's 'nr-model-only' now uses to pick its target folder (was a copy of it here).
+const { targetDirFor } = require(path.join(__dirname, '..', 'src', 'nrmodelonly'));
 
 const tmpGame = () => fs.mkdtempSync(path.join(os.tmpdir(), 'nrmodel-'));
 

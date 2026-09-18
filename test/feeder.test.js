@@ -127,6 +127,28 @@ test('ReShade reaches the game differently per API, and the Vulkan layer is judg
   const listed = await feeder.vulkanLayerStatus({ regQuery, exePath: exe });
   assert.equal(listed.appListed, true, 'case-insensitive, like the file system');
   assert.equal((await feeder.vulkanLayerStatus({ regQuery })).appListed, null, 'nothing to compare without an exe');
+
+  // Review of 2026-09-18: entries were compared raw while the exe was path.resolve'd, so the same
+  // file written with forward slashes, a `.` segment or quotes read as "not listed" and blocked Deploy.
+  const slashed = exe.split(path.sep).join('/');
+  const dotted = path.dirname(exe) + path.sep + '.' + path.sep + path.basename(exe);
+  for (const entry of [slashed, dotted, `"${exe}"`, exe.toLowerCase() + path.sep]) {
+    write(layerDir, 'ReShadeApps.ini', `Apps=C:\\Games\\Other\\game.exe,${entry}\r\n`);
+    assert.equal((await feeder.vulkanLayerStatus({ regQuery, exePath: exe })).appListed, true, entry);
+  }
+});
+
+test('on a sync, a Vulkan layer that skips the exe is a warning, not a throw', async () => {
+  const dir = scratchDir('vk-sync');
+  const exe = path.join(dir, 'game.exe');
+  const vulkanStatus = { registered: true, addon: true, appListed: false, appsPath: 'C:\\ProgramData\\ReShade\\ReShadeApps.ini', manifestPath: 'm' };
+  const r = await feeder.deployReShade(dir, dir, {}, { api: 'vulkan', exePath: exe, layerWarnOnly: true, vulkanStatus });
+  assert.equal(r.deployed, false);
+  assert.match(r.warning, /not on its app list/);
+  const none = await feeder.deployReShade(dir, dir, {}, { api: 'vulkan', exePath: exe, layerWarnOnly: true, vulkanStatus: { registered: false } });
+  assert.match(none.warning, /not installed as a Vulkan layer/);
+  // Without layerWarnOnly (a Deploy the user pressed) it still throws needsReShadeInstaller; that path
+  // downloads ReShade's setup first, so it is not exercised offline here.
 });
 
 // Star Wars: The Old Republic (2026-09-16): a 64-bit DirectX 9 game the player runs through DXVK's
@@ -144,7 +166,7 @@ test('a DXVK-wrapped game gets dxvk.allowFse = False on deploy, keeps the rest o
   let r = feeder.configureDxvkConf(dir);
   assert.deepEqual(r, { configured: true, file: 'dxvk.conf', added: true, previous: null });
   assert.equal(feeder.readDxvkConf(dir).allowFse, 'false');
-  assert.deepEqual(feeder.configureDxvkConf(dir), { configured: false, file: 'dxvk.conf', added: false, previous: 'false' }, 'already set: untouched');
+  assert.deepEqual(feeder.configureDxvkConf(dir), { configured: false, untouched: true, file: 'dxvk.conf', added: false, previous: 'false' }, 'already set: untouched');
   assert.equal(feeder.restoreDxvkConf(dir, r), true);
   assert.equal(fs.existsSync(path.join(dir, 'dxvk.conf')), false, 'a file this app created goes');
 
@@ -167,6 +189,35 @@ test('a DXVK-wrapped game gets dxvk.allowFse = False on deploy, keeps the rest o
   assert.deepEqual(r, { configured: true, file: 'dxvk.conf', added: false, previous: null });
   assert.equal(feeder.restoreDxvkConf(dir, r), true);
   assert.equal(fs.readFileSync(path.join(dir, 'dxvk.conf'), 'utf8'), 'dxvk.maxFrameRate = 120\n');
+});
+
+// Review of 2026-09-18: restore removed any `dxvk.allowFse = false` it found, so a player whose conf
+// already had exclusive fullscreen off -- a deploy that changed nothing -- lost their own line on Remove.
+test('Remove never takes a dxvk.allowFse line the player wrote themselves', () => {
+  const dir = scratchDir('feeder-dxvk-own');
+  const own = '# mine\ndxvk.allowFse = false\ndxvk.maxFrameRate = 60\n';
+  write(dir, 'dxvk.conf', own);
+  const r = feeder.configureDxvkConf(dir);
+  assert.equal(r.untouched, true);
+  assert.equal(feeder.restoreDxvkConf(dir, { untouched: true }), false);
+  // The marker shape from before `untouched` existed describes the same case.
+  assert.equal(feeder.restoreDxvkConf(dir, { added: false, previous: 'false' }), false);
+  assert.equal(fs.readFileSync(path.join(dir, 'dxvk.conf'), 'utf8'), own);
+
+  // A key this app added is taken out, but a second, differently written line of the player's stays.
+  write(dir, 'dxvk.conf', 'dxvk.maxFrameRate = 60\n');
+  const added = feeder.configureDxvkConf(dir);
+  fs.appendFileSync(path.join(dir, 'dxvk.conf'), 'dxvk.allowFse=false  \n');
+  assert.equal(feeder.restoreDxvkConf(dir, added), true);
+  assert.equal(fs.readFileSync(path.join(dir, 'dxvk.conf'), 'utf8'), 'dxvk.maxFrameRate = 60\ndxvk.allowFse=false  \n');
+});
+
+test('a deploy onto a conf that already had allowFse off records it as untouched', () => {
+  assert.deepEqual(feeder.dxvkConfRecord({ configured: false, untouched: true, added: false, previous: 'false' }, null), { untouched: true });
+  assert.deepEqual(feeder.dxvkConfRecord({ configured: true, added: true, previous: null }, null), { added: true, previous: null });
+  // A re-deploy keeps the first deploy's record: it sees its own value otherwise.
+  assert.deepEqual(feeder.dxvkConfRecord({ untouched: true }, { dxvkConf: { added: false, previous: 'true' } }), { added: false, previous: 'true' });
+  assert.equal(feeder.dxvkConfRecord(null, null), null);
 });
 
 test('readiness on a DXVK game says what dxvk.conf needs, and a layer that skips this exe is not "installed"', async () => {
@@ -529,6 +580,12 @@ test('the Feeder\'s own verdict on the neural consumer becomes the verdict: not 
   run = await runlog.analyzeRun(dir);
   assert.equal(run.verdict, 'opti-not-loaded');
   assert.equal(run.detail, 'winmm.dll', 'the Feeder names the file it found under a name the game skipped');
+
+  // A later probe in the same session found it routed: the healthy line describes the run, as it
+  // already did for opti-not-routed (review, 2026-09-18).
+  feedLog('[feed] OptiScaler: not present', 'NGX calls are routed through OptiScaler DLSS-NR (winmm.dll)', '[feed] first frame fed');
+  run = await runlog.analyzeRun(dir);
+  assert.notEqual(run.verdict, 'opti-not-loaded');
 
   feedLog('[feed] OptiScaler DLSS-NR loaded as winmm.dll (OptiScaler.dll 0.2.0); OptiScaler.ini: [DlssNr] Enabled=true ScanExposure=false, [Upscalers] Dx12Upscaler=dlss, [Inputs] EnableDlssInputs=false, [Hooks] HookOriginalNvngxOnly=auto (= false)',
     'winmm.dll is loaded but the DRIVER answered the NGX probe -- the NGX SDK in this add-on was not redirected, so OptiScaler sees nothing and its neural pass will not run. OptiScaler.ini: [Inputs] EnableDlssInputs must be true and [Hooks] HookOriginalNvngxOnly false',

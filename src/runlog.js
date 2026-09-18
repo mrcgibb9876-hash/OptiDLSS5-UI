@@ -380,7 +380,11 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   // The neural consumer is not in the loop, in the Feeder's own words -- each of these outranks the
   // motion and depth verdicts, since no guide helps a pass that never runs, and outranks nr-ran only
   // in name: a run with OptiScaler out of the loop has no OptiScaler.log lines to count anyway.
-  else if (feedOptiMissing || feedOptiWrongName) { verdict = 'opti-not-loaded'; detail = feedOptiWrongName; }
+  // Not when the same log also says NGX was routed through OptiScaler: the Feeder probes more than
+  // once in a session (a late-loading proxy, a device re-created on a mode change), so an early "not
+  // present" can be followed by the healthy line -- and the healthy line is the one that describes
+  // the run. opti-not-routed below already had this guard; this branch lacked it (review, 2026-09-18).
+  else if ((feedOptiMissing || feedOptiWrongName) && !feedOptiRouted) { verdict = 'opti-not-loaded'; detail = feedOptiWrongName; }
   else if (feedOptiNotFork) verdict = 'opti-not-fork';
   else if (feedOptiNotRouted && !feedOptiRouted) verdict = 'opti-not-routed';
   else if (feedMvProblem || feedNoMotion) { verdict = 'feed-no-motion'; detail = feedMvProblem; }
