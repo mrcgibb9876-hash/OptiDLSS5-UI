@@ -329,11 +329,16 @@ async function renderGrid() {
     // What the chip and the primary button are computed from. Filled in further by
     // applyRecommendation once the route and the diagnosis come back; refreshCardState renders it.
     // On an AMD card a lone nvngx_dlssnr.dll is the DLSS-NR-on-AMD layout, not a half-done
-    // OptiScaler install, so it does not count as leftovers here.
+    // OptiScaler install, so it does not count as leftovers here. main.js's detectInstalledBackends
+    // lists nvngx_dlssnr.dll among its leftovers regardless of vendor, which quietly defeated the
+    // hasNr check (review of 2026-09-18) -- and the menu's "Remove leftovers" then ran the full
+    // uninstall and deleted the AMD model. So on AMD the model file is taken out of the list, and
+    // the chip, the menu label and the Remove handler all read this one filtered list.
+    const leftoverFiles = (backends.leftovers || []).filter((n) => !(gpu.vendor === 'amd' && String(n).toLowerCase() === 'nvngx_dlssnr.dll'));
     const initialState = {
       exeMissing: !!status.exeMissing,
       installed: !!backends.optiscaler,
-      leftovers: !backends.optiscaler && ((backends.leftovers || []).length > 0 || status.hasIni || (status.hasNr && gpu.vendor !== 'amd')),
+      leftovers: !backends.optiscaler && (leftoverFiles.length > 0 || status.hasIni || (status.hasNr && gpu.vendor !== 'amd')),
       working: false,
       problem: null,
       installLabel: t('Install'),
@@ -360,7 +365,7 @@ async function renderGrid() {
           <button class="btn btn-ghost btn-edit">${escapeHtml(t('Settings'))}</button>
           <button class="btn btn-ghost btn-help has-tip" data-tip="${escapeHtml(t('Checks this game\'s setup and its last run, applies the fix when the app has one, tells you plainly when DLSS 5 is not available here, and can save a bundle to share or ask an AI.'))}">${escapeHtml(t('Game Help'))}</button>
           <button class="btn btn-ghost btn-open">${escapeHtml(t('Open folder'))}</button>
-          <button class="btn btn-ghost btn-danger btn-install">${escapeHtml(backends.optiscaler ? t('Uninstall OptiScaler') : (backends.leftovers || []).length ? t('Remove leftovers') : t('Install OptiScaler'))}</button>
+          <button class="btn btn-ghost btn-danger btn-install">${escapeHtml(backends.optiscaler ? t('Uninstall OptiScaler') : leftoverFiles.length ? t('Remove leftovers') : t('Install OptiScaler'))}</button>
           ${(status.foreign || []).length ? `<button class="btn btn-ghost btn-danger btn-remove-foreign">${escapeHtml(t('Remove the other DLSS 5 toolchain…'))}</button>` : ''}
           <button class="btn btn-ghost btn-danger btn-remove">${escapeHtml(t('Remove from list'))}</button>
         </div>
@@ -442,7 +447,7 @@ async function renderGrid() {
     }
 
     card.querySelector('.btn-install').addEventListener('click', async () => {
-      if (backends.optiscaler || (backends.leftovers || []).length) {
+      if (backends.optiscaler || leftoverFiles.length) {
         // The exact list first: Remove never surprises anyone with what it took.
         const plan = await window.api.uninstallPlan(game.exePath);
         const clip = (arr) => (arr.length > 12 ? arr.slice(0, 12).join(', ') + ' \u2026(+' + (arr.length - 12) + ')' : arr.join(', '));

@@ -103,3 +103,12 @@ test('the DLSS 5 field table is not offered in two places at once', () => {
   assert.match(js, /const EDITABLE_GROUPS = \['Display'\]/);
   assert.ok(!html.includes('game-dlssnr-fields'), 'the old DLSS NR field host is still in the markup');
 });
+
+test('an AMD card never counts its lone NR model as leftovers to remove', () => {
+  // 2026-09-18: detectInstalledBackends lists nvngx_dlssnr.dll as a leftover on every vendor, so
+  // an AMD card's DLSS-NR-on-AMD model turned into "Remove leftovers", whose handler runs the full
+  // uninstall and deletes the model. The card reads one list with that file taken out.
+  assert.doesNotMatch(js, /\(backends\.leftovers \|\| \[\]\)\.length/, 'a raw leftovers length check is back');
+  assert.match(js, /const leftoverFiles = \(backends\.leftovers \|\| \[\]\)\.filter\(/);
+  assert.match(js, /if \(backends\.optiscaler \|\| leftoverFiles\.length\)/);
+});
