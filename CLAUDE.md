@@ -49,6 +49,18 @@ redistribution, so the manager only links to the release page and fetches the mo
 
 ## Gotchas that have already cost time
 
+- **A wrapper can fail without crashing, and the rule table used to miss that.** Assassin's Creed II
+  (2026-09-18) black-screened under dgVoodoo2 with the game still **running** -- nothing faulted, so
+  `wrapper-crash` could never fire, and `no-dlss` on a legacy route fell through to "no known fix".
+  The answer was DXVK: Vulkan instead of Direct3D 11, and OptiScaler hooks that. Two things came out
+  of it -- `gamehelp.js` now offers the swap when dgVoodoo2 is ours and a run had no DLSS in it at
+  all, and Game Help's More row has a **Try DXVK instead** button, because the swap had been
+  reachable *only* from the crash verdict. A feeder32 route still has to be `complete` before any
+  run-based rule is reached (`gamehelp.js:83`), which is right: an unfinished stack explains "no
+  DLSS" better than the wrapper does.
+- **Nexus Mods is blocked by the egress proxy**, so a mod page's comments -- often the richest source
+  on a specific game -- cannot be read from a session. The OptiScaler wiki and its issues can.
+
 - **A clone goes stale fast.** This repo moved about 180 commits in the first half of September
   alone. Always `git fetch origin master` and rebase before writing a patch, and re-check that a
   problem still exists before fixing it.

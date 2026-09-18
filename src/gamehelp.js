@@ -190,6 +190,18 @@ function diagnose(ctx) {
         if (ctx.vulkanFeeder.appListed === false) return out('step', 'vulkan-layer-app-not-listed', { exe: ctx.vulkanFeeder.exe || '' });
         return out('step', 'vulkan-layer-not-loaded');
       }
+      // dgVoodoo2 is ours, the game ran, and nothing called DLSS. On a legacy route the wrapper is
+      // the layer that has to present a swapchain for OptiScaler to hook at all, so a run with no
+      // DLSS in it points at the wrapper before anything else -- and the other layer is one button.
+      //
+      // Assassin's Creed II is the case that earned this rule (confirmed 2026-09-18): black screen
+      // under dgVoodoo2 with the game still RUNNING, which is the shape that never reaches
+      // 'wrapper-crash'. Nothing faults, so the crash rule cannot fire, and this fell through to
+      // "no known fix" on a game whose next step was obvious to a person reading it.
+      if (route.dgVoodooDeployed && route.legacy && ['dx8', 'dx9', 'dx10', 'dx11'].includes(route.legacy.api)
+          && !tried.has('swap-to-dxvk')) {
+        return fix('dgvoodoo-no-dlss', 'swap-to-dxvk', { api: route.legacy.api });
+      }
       if (route.route === 'feeder' && route.feederDeployed) return out('unknown', 'no-hook');
       if (route.route === 'lumaue') return out('step', 'luma-missing');
       return out('unknown', 'no-hook');

@@ -120,6 +120,26 @@ const rows = [
   ['Luma deployed but the game ran DX12: switch the game to DX11', base({ route: { route: 'lumaue', lumaDeployed: true }, run: { ran: true, verdict: 'no-dlss', runtimeApi: 'dx12' } }), { status: 'step', code: 'luma-needs-dx11' }],
   // SWTOR (2026-09-16): the Feeder said "OptiScaler: not present" -- installed as dxgi.dll beside DXVK.
   ['Feeder found no OptiScaler and the app knows the name the game loads: reconfigure moves it', { ...base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'opti-not-loaded' } }), optiProxy: 'dxgi.dll', wantedProxy: 'winmm.dll' }, { status: 'fix', code: 'opti-proxy-name', fix: 'reconfigure' }],
+  // Assassin's Creed II, confirmed 2026-09-18: black screen under dgVoodoo2 with the game still
+  // RUNNING. Nothing faults, so 'wrapper-crash' can never fire, and this used to fall through to
+  // "no known fix" -- on a legacy route where the wrapper is the one layer that has to present a
+  // swapchain for OptiScaler to hook at all.
+  ['a legacy game that ran with no DLSS at all is offered the other wrapper',
+    base({ route: { route: 'feeder32', complete: true, dgVoodooDeployed: true, legacy: { supported: true, api: 'dx9', host32: true, dgVoodoo: { arch: 'x86', dll: 'D3D9.dll' } } }, run: { ran: true, verdict: 'no-dlss' } }),
+    { status: 'fix', code: 'dgvoodoo-no-dlss', fix: 'swap-to-dxvk' }],
+  // A missing DLSS runtime is a named file, not a guess about a layer: it still wins.
+  ['a missing nvngx_dlss.dll still outranks the wrapper swap',
+    base({ route: { route: 'feeder32', complete: true, dgVoodooDeployed: true, legacy: { supported: true, api: 'dx9' } }, run: { ran: true, verdict: 'no-dlss', dlssRuntimeMissing: true } }),
+    { status: 'fix', code: 'dlss-runtime-missing', fix: 'reconfigure' }],
+  // Not ours to swap: a wrapper this app never deployed is left alone.
+  ['a game with no dgVoodoo2 of ours keeps the old answer',
+    base({ route: { route: 'feeder', feederDeployed: true, dgVoodooDeployed: false }, run: { ran: true, verdict: 'no-dlss' } }),
+    { status: 'unknown', code: 'no-hook' }],
+  // Offered once, then it stops: having swapped to DXVK and still seeing no DLSS, offering the swap
+  // again is no answer.
+  ['the wrapper swap is not offered twice',
+    { ...base({ route: { route: 'feeder32', complete: true, dgVoodooDeployed: true, legacy: { supported: true, api: 'dx9' } }, run: { ran: true, verdict: 'no-dlss', at: 900 } }), fixesTried: [{ id: 'swap-to-dxvk', runAt: 200 }] },
+    { status: 'unknown', code: 'no-hook' }],
   ['Feeder found no OptiScaler and the name is already the best guess: a user step', { ...base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'opti-not-loaded' } }), optiProxy: 'winmm.dll', wantedProxy: null }, { status: 'step', code: 'opti-not-loaded' }],
 
   // A game with DLSS of its own does not need the proxy at all: the model beside the exe is enough
