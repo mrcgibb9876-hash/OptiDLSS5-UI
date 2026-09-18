@@ -37,6 +37,19 @@ test('every id the renderer looks up exists in index.html', () => {
   assert.deepStrictEqual([...new Set(missing)], [], 'renderer.js reaches for ids index.html does not have');
 });
 
+// "Get the driver" did nothing (2026-09-18): the renderer asked for NVIDIA's download page and
+// main.js's shell:openExternal allowlist silently dropped it. The two files cannot share a constant
+// (the renderer is a plain script), so this keeps them agreeing.
+test('the driver banner link is one shell:openExternal will open', () => {
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
+  const page = /const NVIDIA_DRIVER_PAGE = '([^']+)'/.exec(main);
+  assert.ok(page, 'main.js defines NVIDIA_DRIVER_PAGE');
+  assert.match(main, /url === NVIDIA_DRIVER_PAGE/, 'the allowlist admits NVIDIA_DRIVER_PAGE');
+  const asked = /#btn-driver-download'\)\.addEventListener\('click', \(\) => \{\s*window\.api\.openExternal\('([^']+)'\)/.exec(js);
+  assert.ok(asked, 'the driver button opens a literal URL');
+  assert.strictEqual(asked[1], page[1]);
+});
+
 test('no id appears twice in index.html', () => {
   const seen = new Set();
   const dupes = [];
