@@ -204,7 +204,7 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts
   // presented through a DXVK wrapper. Streamline files beside such an exe belong to a DLSS 5 mod, not the
   // game -- Star Wars: The Old Republic (DX9 via DXVK) was told it "ships its own DLSS" by a RenoDX
   // DLSS 5 setup's sl.* files, and got an OptiScaler install its renderer never loads (2026-09-16).
-  const legacyRenderer = nativeDlss.rendererCannotCallDlss(detected);
+  const legacyRenderer = nativeDlss.rendererCannotCallDlss(detected, dir);
   const shipsDlss = !legacyRenderer && nativeDlss.shipsNativeDlss(dir);
   const shippedDlss = shipsDlss || (!legacyRenderer && !feeder.needsFeeder(dir) && !feederDeployed && !lumaDeployed);
   // A Feeder on a game that ships DLSS: an older version of this app could not see DLSS kept

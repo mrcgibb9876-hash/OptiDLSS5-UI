@@ -34,7 +34,7 @@ const rtxmfg = require('./rtxmfg');
 // FromSoftware title) -- a stored detection from before this said antiCheat: null for them.
 // 7: DX8 told apart from DX9, emulators recognised, 32-bit and DX8/DX9 games offered the
 // experimental Feeder routes (legacy.js) instead of "unsupported".
-const DETECT_VERSION = 11;
+const DETECT_VERSION = 12;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
@@ -1138,6 +1138,10 @@ async function detectGame(dir, exePath) {
   if (runtime) {
     found = {
       ...found,
+      // What the executable's own evidence said, before the runtime overwrote it. Kept because
+      // `apis` below merges the two and no later reader can separate them again -- and with a
+      // translation layer in front of the game the runtime API is the wrapper's, not the game's.
+      exeApis: found.apis || [],
       api: runtime.api,
       apis: [...new Set([runtime.api, ...(found.apis || [])])],
       reason: `${API_LABEL[runtime.api]} -- what OptiScaler saw this game create on its last run (${runtime.evidence})`,
@@ -1220,6 +1224,16 @@ async function detectGame(dir, exePath) {
     protectedLauncher: antiCheatStub(dir),
     oldShaderCompiler: oldShaderCompiler(dir),
     runtimeApi: found.runtimeApi || null,
+    // The legacy APIs the EXECUTABLE itself links (dx8/dx9/dx10), kept apart from `api` and `apis`
+    // because a translation layer overwrites those. dgVoodoo2 presents D3D11 to a Direct3D 9 game,
+    // OptiScaler's log then reports a D3D11 device, and the block above replaces the detected API
+    // with it -- after which nothing downstream could tell that the game underneath is DX9. That is
+    // how SWTOR (issue #50) was routed as a game that ships its own DLSS and left waiting for a
+    // DLSS call a Direct3D 9 title can never make. This field survives that overwrite.
+    legacyApis: found.old || [],
+    // The modern APIs the executable itself links. Equal to `apis` unless a run of the game
+    // overrode them, which is exactly the case that needs telling apart.
+    exeApis: found.exeApis || found.apis || [],
     // What OptiScaler.log looked like when this was decided -- a later run of the game is new
     // evidence, and isDetectionStale re-runs detection when the log has changed since.
     runtimeLogMtime: logStat ? logStat.mtimeMs : null,

@@ -188,12 +188,56 @@ function shipsNativeDlss(dir) {
 // Streamline or DLSS files beside such a game belong to a mod. A game that also links D3D11 or D3D12 is
 // not called legacy -- it may have a modern path.
 const LEGACY_APIS = ['dx8', 'dx9', 'dx10'];
-function rendererCannotCallDlss(detected) {
+function rendererCannotCallDlss(detected, dir = null) {
   if (!detected) return false;
   const apis = new Set([detected.api, ...(detected.apis || [])].filter(Boolean));
-  if (apis.has('dx11') || apis.has('dx12')) return false;
+  if (apis.has('dx11') || apis.has('dx12')) return translatedLegacy(detected, dir);
   if (LEGACY_APIS.includes(detected.api)) return true;
   return !!detected.vulkanWrapper && LEGACY_APIS.some((a) => apis.has(a));
+}
+
+// The one case the check above cannot see: a translation layer has made a legacy game look modern.
+// dgVoodoo2 turns Direct3D 9 into Direct3D 11, so OptiScaler's log reports a D3D11 device,
+// detection adopts it as the game's API, and `apis` gains a dx11 the executable never linked. The
+// early return then said "not legacy" about a Direct3D 9 game.
+//
+// SWTOR, issue #50, 2026-09-17, from the player's own support bundle:
+//
+//   detection      api: dx11, apis: ["dx11"], runtimeApi: dx11
+//   the exe        links d3d9.dll and nothing newer
+//   the folder     dgVoodoo2's D3D9.dll live, this app's own marker beside it
+//   the crash      MFA: d3d9!00065af0, adapter "NVIDIA GeForce RTX 4060 Laptop (dgVoodoo DX API Layer)"
+//
+// With dx11 in the set the game was judged DLSS-capable, leftover Streamline files from another
+// mod then read as "ships its own DLSS", and the route became plain OptiScaler waiting on a call
+// that never came: verdict no-dlss, 0 dispatches.
+//
+// Deliberately narrow. It only overrides when three things agree: the executable links a legacy
+// API, it links nothing modern of its own, and the only modern API on record is the one the
+// runtime reported. A translation layer this app deployed is proof rather than inference, so it
+// settles the third point on its own; without a manifest the runtime API alone has to carry it.
+function translatedLegacy(detected, dir) {
+  const legacy = (detected.legacyApis || []).filter((a) => LEGACY_APIS.includes(a));
+  if (!legacy.length) return false;
+  // The executable's own modern APIs, recorded by detection before a run of the game overwrote
+  // them (exeApis). Filtering the runtime API back out of `apis` would not do: a game that links
+  // both d3d9.dll and d3d11.dll has a real D3D11 path of its own, and dropping dx11 because the
+  // runtime also reported it would call that game legacy and take away its modern route.
+  const own = detected.exeApis || [];
+  if (own.some((a) => a === 'dx11' || a === 'dx12')) return false;
+  if (detected.vulkanWrapper) return true;
+  if (dir && translationLayerDeployed(dir)) return true;
+  return !!detected.runtimeApi;
+}
+
+// Read lazily: native-dlss.js is required by route.js, which runs for every card on every grid
+// render, and translation.js is only needed on the legacy path.
+function translationLayerDeployed(dir) {
+  try {
+    return require('./translation').activeLayer(dir).layer !== null;
+  } catch {
+    return false;
+  }
 }
 
 function hasNativeDlss(dir) {
