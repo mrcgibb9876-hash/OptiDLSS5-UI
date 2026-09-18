@@ -114,6 +114,16 @@ function planFor(detected) {
   return { supported: false, reason: 'not a legacy game' };
 }
 
+// A 32-bit DirectX 10/11 plan, where DXVK can stand in for the game's own Direct3D rather than for
+// dgVoodoo2. It used to be refused outright, because the helper route's ReShade is this game's
+// dxgi.dll -- the name DXVK's D3D11 set needs (the 2.2.3 review, 2026-09-18). The DX9 swap has since
+// learned to park that proxy and run ReShade as its 32-bit Vulkan layer instead, which is all a
+// DX10/11 game needs too, so the refusal had nothing left to protect. EasyAIO DLSS5 3.0.1 puts the
+// full DXVK x86 set on every 32-bit route; here it is opt-in and dgVoodoo2 stays the DX8/9 default.
+function dxvkReplacesNative(plan) {
+  return !!(plan && plan.supported && plan.host32 && !plan.dgVoodoo && (plan.api === 'dx10' || plan.api === 'dx11'));
+}
+
 // ---------------------------------------------------------------------------------------------
 // Marker
 
@@ -790,6 +800,36 @@ async function unparkReShadeProxy(dir) {
   return { restored, kept };
 }
 
+// DXVK in front of a 32-bit DirectX 10/11 game on the helper route (dxvkReplacesNative), in the order
+// that route needs: the ReShade dxgi.dll proxy parked first, because DXVK's dxgi.dll takes its name,
+// then DXVK's d3d10core/d3d11/dxgi through deployDxvk (all or nothing; a game-owned file under one of
+// those names is backed up in its manifest). A refusal puts the proxy straight back, so a failed swap
+// leaves the folder as it found it. ReShade's 32-bit Vulkan layer is the caller's next step, exactly
+// as on the DX9 swap (main.js dxvkHost32LayerStep).
+//
+// deploy(): runs translation.deployDxvk and returns its { ok, deployed, backedUp, refused, text }.
+async function swapNativeToDxvk(dir, plan, deploy) {
+  if (!dxvkReplacesNative(plan)) throw new Error('DXVK replaces native Direct3D only on a 32-bit DirectX 10/11 game');
+  const parked = await parkReShadeProxy(dir);
+  const r = await deploy();
+  if (!r || !r.ok) {
+    const back = parked.parked ? await unparkReShadeProxy(dir) : null;
+    return { ...(r || {}), ok: false, parked: null, unparked: back ? back.restored : [] };
+  }
+  return { ...r, ok: true, parked: parked.parked ? parked : null };
+}
+
+// The way back from swapNativeToDxvk: DXVK purged by its own manifest (only files it can prove are
+// DXVK's or that the manifest says it placed; the game's own d3d11.dll comes back from its backup),
+// then the parked ReShade proxy back under its name so the game's Direct3D reaches the Feeder
+// again. ReShade's Vulkan layer stays registered: it is machine-wide, and a game without Vulkan in
+// it never loads it.
+async function swapDxvkToNative(dir) {
+  const purge = await translation.purgeTranslationLayer(dir, { layer: 'dxvk' });
+  const unparked = await unparkReShadeProxy(dir);
+  return { ...purge, unparked: unparked.restored, stillParked: unparked.kept };
+}
+
 const RESHADE_COMMON_DIR = () => path.join(process.env.ProgramData || 'C:\\ProgramData', 'ReShade');
 
 // ReShade's own setup, run headless and elevated, registering its Vulkan layer for this exe.
@@ -992,8 +1032,8 @@ async function removeLegacy(dir) {
 }
 
 module.exports = {
-  MARKER, HOST_DIR, DGVOODOO, PARK_SUFFIX, planFor, status, readMarker, ensureDgVoodoo, importDgVoodooZip, cachedDgVoodoo,
+  MARKER, HOST_DIR, DGVOODOO, PARK_SUFFIX, planFor, dxvkReplacesNative, status, readMarker, ensureDgVoodoo, importDgVoodooZip, cachedDgVoodoo,
   isDgVoodooZip, configureDgVoodoo, ensureDgVoodooWindowed, ensureCastKey, deployDgVoodoo, deployHost32, removalPlan, removeLegacy,
-  parkReShadeProxy, unparkReShadeProxy, setUpVulkanLayer32, vulkanLayerRecord, unlistVulkanLayerApp,
+  parkReShadeProxy, unparkReShadeProxy, swapNativeToDxvk, swapDxvkToNative, setUpVulkanLayer32, vulkanLayerRecord, unlistVulkanLayerApp,
   currentMvProvider, deployLegacyShaders, setMvProvider,
 };

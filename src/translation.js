@@ -442,6 +442,28 @@ const DXVK_FILES_FOR_API = {
   dx11: ['d3d11.dll', 'dxgi.dll'],
 };
 
+// A 32-bit DirectX 10/11 game on the helper route takes the whole D3D10/11 half of DXVK's x32 set,
+// whichever of the two it was detected as. Checked against the cached 3.1.1 unpack (x32 holds d3d8,
+// d3d9, d3d10core, d3d11, dxgi -- no d3d10.dll or d3d10_1.dll) and DXVK's README ("d3d10:
+// d3d10core.dll, d3d11.dll and dxgi.dll"; "d3d11: d3d11.dll and dxgi.dll"), 2026-09-18. A D3D10 game
+// still loads Windows' own d3d10.dll, and that resolves its imports from the exe's folder first,
+// which is where DXVK's go: SysWOW64\d3d10.dll imports d3d10core.dll and d3d11.dll, and none of
+// d3d10core/d3d11/dxgi is a KnownDLL (both read on Windows 11 26200, 2026-09-18). Windows'
+// d3d10_1.dll imports d3d10_1core.dll instead, which DXVK does not ship, so a D3D10.1 game reaches
+// DXVK only through d3d11.dll/dxgi.dll -- not proven on a game. d3d10core.dll goes in for a DX11 game too: detection
+// cannot always tell DX10 from DX11 (a game linking both reads as DX11), and a DX11 renderer that
+// also opens a D3D10 device -- Direct2D/DirectWrite interop -- would otherwise get Windows' D3D10
+// on DXVK's DXGI. EasyAIO DLSS5 3.0.1 ships the complete x86 set on every 32-bit route; d3d8/d3d9
+// stay out here because a DX10/11 game never loads them and each extra name is one more collision.
+// dgVoodoo2 stays the default for DX8/9 (DXVK_FILES_FOR_API above).
+const DXVK_FILES_32BIT_D3D1X = ['d3d10core.dll', 'd3d11.dll', 'dxgi.dll'];
+
+// The file set deployDxvk places for this API and build.
+function dxvkFilesFor(api, bitness) {
+  if (Number(bitness) === 32 && (api === 'dx10' || api === 'dx11')) return DXVK_FILES_32BIT_D3D1X;
+  return DXVK_FILES_FOR_API[api] || null;
+}
+
 const DXVK_MANIFEST_FILE = 'files.json';
 
 function sha256(buf) {
@@ -523,8 +545,11 @@ async function unpackDxvk(buf, cacheDir) {
 // It refuses rather than overwrites when a name is held by OptiScaler or ReShade. Backing those up
 // would take the file out from under their own install journals, which is how the SWTOR folder
 // ended up with OptiScaler's dxgi.dll and DXVK's buried under three different names at once.
+// The one ReShade that may make way is the 32-bit helper route's own dxgi.dll proxy, and only by
+// being parked first (legacy.js parkReShadeProxy, journaled as dxgi.dll.dlss5ui-parked): by the time
+// this runs it is no longer under that name, so nothing here has to tell it apart from anyone else's.
 async function deployDxvk(dir, { sourceDir, api, bitness }) {
-  const wanted = DXVK_FILES_FOR_API[api];
+  const wanted = dxvkFilesFor(api, bitness);
   if (!wanted) throw new Error(`DXVK has no file set for ${api || 'an unknown API'}`);
 
   const gate = canDeploy(dir, 'dxvk');
@@ -669,6 +694,8 @@ module.exports = {
   canDeploy,
   DXVK,
   DXVK_FILES_FOR_API,
+  DXVK_FILES_32BIT_D3D1X,
+  dxvkFilesFor,
   ensureDxvk,
   unpackDxvk,
   deployDxvk,

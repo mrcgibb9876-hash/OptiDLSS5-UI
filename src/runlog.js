@@ -154,11 +154,20 @@ function unrealCrashNear(dir, whenMs) {
 // D3D9.dll on the legacy route -- is the wrapper failing as the game starts, before the Feeder or
 // OptiScaler has done anything (Castlevania: Lords of Shadow 2, 2026-09-14: a null D3D11 device
 // inside Direct3DCreate9). Only a DLL in the game folder counts; System32's d3d9.dll is Windows'.
+//
+// DXVK's D3D10/11 files count too, since DXVK can stand in for a 32-bit DirectX 10/11 game's own
+// Direct3D (legacy.js dxvkReplacesNative, 2026-09-18) -- but only when the file really is DXVK:
+// dxgi.dll is also the name the helper route's ReShade proxy and OptiScaler install under, and a
+// fault in either of those is not a wrapper failing.
 function wrapperFault(feed, dir) {
+  const inGameFolder = (file) => path.resolve(path.dirname(file)).toLowerCase() === path.resolve(dir).toLowerCase();
   const m = /### EXCEPTION RECORDED ###[^\r\n]*? in ([A-Za-z]:[\\/][^\r\n;]*?[\\/](d3d8|d3d9|ddraw|d3dimm)\.dll)\s*;/i.exec(feed);
-  if (!m) return null;
-  if (path.resolve(path.dirname(m[1])).toLowerCase() !== path.resolve(dir).toLowerCase()) return null;
-  return path.basename(m[1]);
+  if (m) return inGameFolder(m[1]) ? path.basename(m[1]) : null;
+  const d = /### EXCEPTION RECORDED ###[^\r\n]*? in ([A-Za-z]:[\\/][^\r\n;]*?[\\/](d3d10core|d3d11|dxgi)\.dll)\s*;/i.exec(feed);
+  if (!d || !inGameFolder(d[1])) return null;
+  // Lazily, as detect.js does: most runs never get this far.
+  const { identifyWrapper } = require('./translation');
+  return identifyWrapper(path.join(dir, path.basename(d[1]))) === 'dxvk' ? path.basename(d[1]) : null;
 }
 
 // Every MV and depth probe the Feeder wrote, reduced to "did this run ever see real motion / real

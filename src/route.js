@@ -70,6 +70,15 @@ const ROUTE_TEXT = {
     '{dx} has no Feeder path of its own; DXVK turns it into Vulkan here (swapped in for dgVoodoo2 from Game Help), ' +
     'and ReShade runs as its 32-bit Vulkan layer. Run the game borderless or windowed: in exclusive fullscreen ' +
     'the Feeder starts its helper without a window, and the in-game panel is not available. ',
+  // A 32-bit DirectX 10/11 game with DXVK in place of its own Direct3D (legacy.js dxvkReplacesNative,
+  // 2026-09-18): the same route, a different thing DXVK replaced. No {dx} in step labels: the card
+  // translates nextStep without the route's variables.
+  stepDxvkNative: 'DXVK is in front of the game (in place of native Direct3D)',
+  stepDxvkChosenNative: 'Put DXVK in front of the game (chosen instead of native Direct3D)',
+  dxvkMiddleNative:
+    'DXVK runs this game\'s {dx} on Vulkan here (chosen instead of native {dx}), and ReShade runs as its ' +
+    '32-bit Vulkan layer. Run the game borderless or windowed: in exclusive fullscreen the Feeder starts its ' +
+    'helper without a window, and the in-game panel is not available. ',
   stepFeeder32: 'Deploy the 32-bit Feeder and its 64-bit helper with OptiScaler',
   // How to reach OptiScaler on this route, in the add-on's own words. Photographed on a live
   // install 2026-09-14: "OptiScaler has its own menu with every neural-rendering control ... It
@@ -299,18 +308,30 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts
     const viaDxvk = !!plan.dgVoodoo && dxvkDeployed;
     // DXVK chosen before anything was installed (translation.js readPreference): Install places it.
     const dxvkChosen = !!plan.dgVoodoo && !dxvkDeployed && !legacyStatus.dgVoodoo && wrapperPreference === 'dxvk';
+    // A 32-bit DirectX 10/11 game can take DXVK in place of its own Direct3D (legacy.js
+    // dxvkReplacesNative). Placed, it is this route's wrapper step, done, so Game Help reaches the
+    // DXVK layer checks instead of "Install"; chosen, it is the step Install still owes -- after the
+    // helper, since DXVK has to wait for the proxy it parks (main.js legacy:installHost32).
+    const native = legacy.dxvkReplacesNative(plan);
+    const viaDxvkNative = native && dxvkDeployed;
+    const dxvkChosenNative = native && !dxvkDeployed && wrapperPreference === 'dxvk';
     if (viaDxvk) steps.push({ key: 'dxvk', label: ROUTE_TEXT.stepDxvk, done: true });
     else if (dxvkChosen) steps.push({ key: 'dxvk', label: ROUTE_TEXT.stepDxvkChosen, done: false });
     else if (plan.dgVoodoo) steps.push({ key: 'dgvoodoo', label: ROUTE_TEXT.stepDgVoodoo, done: legacyStatus.dgVoodoo });
     steps.push({ key: 'feeder32', label: ROUTE_TEXT.stepFeeder32, done: legacyStatus.host32 && legacyStatus.feeder32 && legacyStatus.hostOptiScaler });
+    if (viaDxvkNative) steps.push({ key: 'dxvk', label: ROUTE_TEXT.stepDxvkNative, done: true });
+    else if (dxvkChosenNative) steps.push({ key: 'dxvk', label: ROUTE_TEXT.stepDxvkChosenNative, done: false });
     const middle = viaDxvk || dxvkChosen
       ? ROUTE_TEXT.dxvkMiddle
-      : plan.dgVoodoo
-        ? '{dx} has no Feeder path of its own, so dgVoodoo2 turns it into DirectX 11 first. '
-        : plan.api === 'opengl' ? 'On OpenGL, ReShade goes in as the game\'s opengl32.dll. ' : '';
+      : viaDxvkNative || dxvkChosenNative
+        ? ROUTE_TEXT.dxvkMiddleNative
+        : plan.dgVoodoo
+          ? '{dx} has no Feeder path of its own, so dgVoodoo2 turns it into DirectX 11 first. '
+          : plan.api === 'opengl' ? 'On OpenGL, ReShade goes in as the game\'s opengl32.dll. ' : '';
     const text = ROUTE_TEXT.host32Lead + middle + ROUTE_TEXT.host32Panel;
+    const DX_NAMES = { dx8: 'DirectX 8', dx9: 'DirectX 9', dx10: 'Direct3D 10', dx11: 'Direct3D 11' };
     return finish('feeder32', ROUTE_TEXT.labelHost32, text, steps,
-      { dx: plan.api === 'dx8' ? 'DirectX 8' : 'DirectX 9' }, { experimental: true, legacy: plan });
+      { dx: DX_NAMES[plan.api] || 'DirectX 9' }, { experimental: true, legacy: plan });
   }
 
   // EXPERIMENTAL -- emulators (emulators.js): the ordinary Feeder route, run inside the emulator, with
