@@ -175,11 +175,15 @@ function commit(file, exePath, dir, inspection, { extra = [] } = {}) {
   const store = readStore(file);
   const files = ourFiles(dir, extra);
   const hadOurs = !!prev && (prev.files || []).length > 0;
+  // Gone before the sync and still gone after it: the sync itself puts some back (a stale NR model
+  // or proxy is re-copied), and those need no reinstall.
+  const exists = (rel) => fs.existsSync(path.join(dir, ...rel.split('/')));
+  const gone = (missing || []).filter((rel) => !exists(rel));
 
   let flagged = null;
-  if (changed && hadOurs && missing.length > 0) flagged = missing;
+  if (changed && hadOurs && gone.length > 0) flagged = gone;
   else if (prev && Array.isArray(prev.pendingReinstall)) {
-    const still = prev.pendingReinstall.filter((rel) => !files.includes(rel));
+    const still = prev.pendingReinstall.filter((rel) => !exists(rel));
     flagged = still.length > 0 ? still : null;
   }
   // Nothing of ours left: the card is back to "Not installed" and its Install says the rest.

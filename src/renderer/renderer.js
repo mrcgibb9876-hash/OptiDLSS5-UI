@@ -223,6 +223,17 @@ function noteSyncResult(game, res) {
       bad: true,
       text: t('Game updated and its update removed DLSS 5 files — reinstall'),
       title: t('Removed since the last check: {list}. Game updates and Steam\'s file verification delete files they do not know; reinstall to put them back.', { list: (gu.missing || []).join(', ') }),
+      // The card's own Install button is Uninstall on an installed game, so this runs the install
+      // itself. The next sync confirms the files are back; until then the notice is simply dropped.
+      action: {
+        label: t('Reinstall'),
+        run: async () => {
+          await installGame(game);
+          const cur = syncNotices.get(game.exePath);
+          if (cur) delete cur.update;
+          renderGrid();
+        },
+      },
     };
   } else if (gu && gu.rechecked) {
     n.update = {
