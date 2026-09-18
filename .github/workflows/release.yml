@@ -16,7 +16,7 @@ on:
         type: boolean
         default: false
       engine_tag:
-        description: "Engine release to bundle, e.g. v2.0.0. Leave empty for the engine's latest stable release."
+        description: "Override the engine release to bundle, e.g. v2.0.0. Leave empty to bundle the engineVersion pinned in package.json."
         required: false
         default: ""
 
@@ -82,16 +82,24 @@ jobs:
         # pause for the ordinary hiccups on top of that.
         $headers = @{ 'User-Agent' = 'OptiDLSS5-UI-release'; Accept = 'application/vnd.github+json'; Authorization = "Bearer $env:GITHUB_TOKEN" }
 
-        # /releases/latest deliberately EXCLUDES pre-releases, so a manager pre-release paired with
-        # an engine pre-release would silently bundle the last STABLE engine instead -- a v2 manager
-        # carrying a v1 engine, with nothing failing to say so. Naming the tag is the way to pair
-        # the two. Empty keeps the old behaviour for an ordinary stable release.
+        # The engine is PINNED: package.json's "engineVersion" names the exact engine release this
+        # manager version was tested with, and the same commit always builds the same pair. It used
+        # to take /releases/latest, which meant the engine had to be released BEFORE the manager and
+        # a rebuild of an old tag picked up whatever engine happened to be newest that day (and
+        # /latest skips pre-releases, so a v2 manager could silently carry a v1 engine). The
+        # engine_tag input still overrides it for a one-off build; nothing falls back to "latest".
         $engineTag = "${{ inputs.engine_tag }}".Trim()
-        $uri = if ($engineTag) {
-          "https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/tags/$engineTag"
+        if (-not $engineTag) {
+          $engineTag = ((Get-Content package.json -Raw | ConvertFrom-Json).engineVersion + '').Trim()
+          Write-Output "Engine pinned in package.json: $engineTag"
         } else {
-          'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest'
+          Write-Output "Engine overridden by the engine_tag input: $engineTag"
         }
+        if ($engineTag -notmatch '^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
+          Write-Error "package.json engineVersion (or the engine_tag input) must be an exact engine tag like v1.0.41, got '$engineTag'."
+          exit 1
+        }
+        $uri = "https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/tags/$engineTag"
         Write-Output "Engine release: $uri"
 
         $asset = $null
@@ -104,17 +112,17 @@ jobs:
             Write-Output "attempt $attempt failed: $($_.Exception.Message)"
           }
           if ($asset) { break }
-          Write-Output "attempt $($attempt): no .zip asset on the latest release yet ($($release.tag_name)); waiting"
+          Write-Output "attempt $($attempt): no .zip asset on engine $engineTag yet ($($release.tag_name)); waiting"
           Start-Sleep -Seconds (10 * $attempt)
         }
 
         if (-not $asset) {
-          Write-Error "No .zip asset found on OptiScaler_DLSSNR release $(if ($engineTag) { $engineTag } else { 'latest' }) ($($release.tag_name)) after 5 attempts."
+          Write-Error "No .zip asset found on OptiScaler_DLSSNR release $engineTag ($($release.tag_name)) after 5 attempts."
           exit 1
         }
 
         # Said out loud so a mismatched pair is visible in the log rather than only in the artefact.
-        if ($engineTag -and $release.tag_name -ne $engineTag) {
+        if ($release.tag_name -ne $engineTag) {
           Write-Error "Asked for engine $engineTag but got $($release.tag_name)."
           exit 1
         }
