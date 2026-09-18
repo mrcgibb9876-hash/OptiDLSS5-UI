@@ -327,8 +327,12 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* A run that worked, said beside the route it proves rather than on a line of its own. */
-.card-evidence { font-size: 11px; color: var(--text-dim); }
+/* A run that worked, said beside the route it proves rather than on a line of its own.
+   nowrap so it moves to the next line whole rather than breaking inside itself: unwrapped, the
+   card split it as "1240 passes .." / "71 fps .. DX12", and shortening the text only moved the
+   break. It cannot overflow -- measured in the card's real 274px of inner width, the longest run
+   this can describe (999999 passes . 240 fps . VULKAN) is 190px. */
+.card-evidence { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
 
 /* The one row. Whatever the card has to say -- a fix waiting, an unfinished route, the 32-bit
    key sequence -- says it here, in one of two tones. It wraps: these sentences are the point of
