@@ -509,10 +509,14 @@ async function updateFeederIfStale(dir, exePath) {
     depthProfile: feeder.feederDepthProfile(dir),
     execFileAsync,
     exePath,
+    // A Vulkan layer that skips this exe needs the user at ReShade's installer; on a sync that is a
+    // warning carried back, not a throw that aborts the add-on update (feeder.js deployReShade).
+    layerWarnOnly: true,
   });
 
   const to = (results.addon && results.addon.version) || latest;
-  return { from: current, to };
+  const warning = (results.reshade && results.reshade.warning) || null;
+  return warning ? { from: current, to, warning } : { from: current, to };
 }
 
 ipcMain.handle('feeder:checkUpdate', async (_evt, exePath) => {
