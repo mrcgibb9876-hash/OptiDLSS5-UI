@@ -732,7 +732,10 @@ async function applyRecommendation(game, card, backends, generation = renderGene
     const stamp = isNaN(when) ? '' : when.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     const ev = document.createElement('span');
     ev.className = 'card-evidence';
-    ev.textContent = ` ${describeRun(run)}`;
+    ev.textContent = ` ${runEvidenceShort(run)}`;
+    // The sentence is the hover text; the card gets the numbers alone. At the card's 300px the full
+    // "Neural Rendering ran (1240 passes, 71 fps, DX12)" broke across the chip line mid-phrase, and
+    // a longer game name made it worse -- and the chip beside it already says the pass ran.
     ev.title = t('Last run {when}: {verdict}', { when: stamp, verdict: describeRun(run) });
     line.appendChild(ev);
   }
@@ -1713,6 +1716,16 @@ $('#pdplugin-browse').addEventListener('click', async () => {
 // Says what was actually done rather than what was started. The old flow could only report that a
 // terminal had opened, which is why the badge and the folder could disagree.
 // One sentence per runlog.js verdict, with the numbers that matter.
+// The same run as describeRun, with the words taken out: what the card shows beside the route,
+// where the chip has already said it worked and only the numbers add anything.
+function runEvidenceShort(run) {
+  if (!run || !run.ran || run.verdict !== 'nr-ran') return '';
+  const parts = [t('{count} passes', { count: run.nrFrames || run.nrDispatch })];
+  if (run.fps) parts.push(t('{fps} fps', { fps: run.fps }));
+  if (run.runtimeApi) parts.push(run.runtimeApi.toUpperCase());
+  return parts.join(' \u00b7 ');
+}
+
 function describeRun(run) {
   if (!run || !run.ran) return t('not run yet');
   const api = run.runtimeApi ? run.runtimeApi.toUpperCase() : null;
