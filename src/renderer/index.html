@@ -255,6 +255,18 @@
           <span id="game-feeder-status" class="status-line"></span>
         </div>
 
+        <!-- The 32-bit route's motion-vector provider (legacy.js). Not advanced-only: the card's
+             "Motion vectors" entry opens it, and Game Help points there when motion looks wrong. -->
+        <div id="game-legacy-mv-section" class="hidden">
+          <label class="field-label" data-i18n>Motion vectors (32-bit route)</label>
+          <p class="field-hint" data-i18n>The DLSS5 Feeder estimates motion with a ReShade shader beside the game. If the picture jumps or smears when things move, try another one: LumeniteFX is the one the Feeder recommends (its licence is shown before anything is fetched); VORT is the default; iMMERSE only when your own copy is already in the game folder. Applying swaps the shader files and the preset only -- nothing else is reinstalled.</p>
+          <div class="field-row">
+            <select id="game-legacy-mv-provider"></select>
+            <button id="btn-legacy-mv-apply" class="btn btn-ghost" data-i18n>Apply</button>
+          </div>
+          <span id="game-legacy-mv-status" class="status-line"></span>
+        </div>
+
         <div id="game-injector-section" class="advanced-only hidden">
           <label class="field-label" data-i18n>Launch mode</label>
           <p class="field-hint" data-i18n>Injector loads OptiScaler without renaming a file on disk, so ReShade keeps its own dxgi.dll -- both run. Single-player only; refuses a game shipping a known anti-cheat.</p>

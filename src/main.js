@@ -891,35 +891,18 @@ ipcMain.handle('legacy:dgvoodoo', async (_evt, { exePath, detected } = {}) => {
   }
 });
 
-// The shaders beside a 32-bit game, reusing the 64-bit Feeder's own steps. Returns what it created.
-async function deployLegacyShaders(dir, mvProviderId) {
-  const shaderRoot = path.join(dir, 'reshade-shaders');
-  const list = () => {
-    const out = [];
-    const walk = (d, rel) => {
-      let entries = [];
-      try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
-      for (const e of entries) {
-        const r = rel ? `${rel}/${e.name}` : e.name;
-        if (e.isDirectory()) walk(path.join(d, e.name), r);
-        else out.push(`reshade-shaders/${r}`);
-      }
-    };
-    walk(shaderRoot, '');
-    return out;
-  };
-  const before = new Set(list());
-  const provider = feeder.MV_PROVIDERS[mvProviderId];
-  if (!provider || !provider.autoFetchable) throw new Error('the 32-bit route uses the default motion-vector provider only for now');
-  await feeder.deployReShadeCommonHeaders(dir, GITHUB_HEADERS, { cacheDir: feederCacheDir() });
-  await feeder.deployMvProvider(dir, mvProviderId, feederCacheDir(), GITHUB_HEADERS);
-  feeder.configureReShadeIni(dir, {});
-  feeder.configurePreset(dir, mvProviderId);
-  return list().filter((f) => !before.has(f));
+// The shaders beside a 32-bit game (legacy.js deployLegacyShaders). Any selectable provider now, not
+// only VORT: Assassin's Creed II (2026-09-18) jumped with VORT and the Feeder recommends LumeniteFX.
+// licenseConfirmed is only ever true after the renderer showed feeder:confirmProviderLicense's
+// dialog; deployLumeniteFx refuses without it regardless.
+function deployLegacyShaders(dir, mvProviderId, licenseConfirmed) {
+  return legacy.deployLegacyShaders(dir, mvProviderId || feeder.defaultMvProviderId(), {
+    cacheDir: feederCacheDir(), ghHeaders: GITHUB_HEADERS, licenseConfirmed: !!licenseConfirmed,
+  });
 }
 
 // The whole 32-bit helper route for one game (dgVoodoo2, when needed, is legacy:dgvoodoo first).
-ipcMain.handle('legacy:installHost32', async (_evt, { exePath, detected, releaseFolder, nrDllPath, mvProviderId } = {}) => {
+ipcMain.handle('legacy:installHost32', async (_evt, { exePath, detected, releaseFolder, nrDllPath, mvProviderId, licenseConfirmed } = {}) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
@@ -930,6 +913,11 @@ ipcMain.handle('legacy:installHost32', async (_evt, { exePath, detected, release
     const root = releaseFolder && findReleaseRoot(releaseFolder);
     if (!root || !hasDlssNrSection(root)) throw new Error('OptiScaler release folder not set, or not the DLSS-NR build');
     if (!nrDllPath || !fs.existsSync(nrDllPath)) throw new Error('DLSS NR model file not found -- check Settings');
+    // A provider behind a licence is refused before anything is downloaded or placed.
+    const chosenMv = feeder.MV_PROVIDERS[mvProviderId || feeder.defaultMvProviderId()];
+    if (chosenMv && !chosenMv.autoFetchable && !chosenMv.bringYourOwn && !licenseConfirmed) {
+      throw new Error(`${chosenMv.displayName} needs its licence confirmed before it can be fetched`);
+    }
     const asset = await feeder.resolveFeederAsset(GITHUB_HEADERS);
     const feederZip = await feeder.downloadToCache(asset.url, feederCacheDir(), asset.name, GITHUB_HEADERS);
     const reshadeSetup = await feeder.downloadToCache(feeder.RESHADE_SETUP_URL, feederCacheDir(), path.basename(feeder.RESHADE_SETUP_URL), GITHUB_HEADERS);
@@ -938,7 +926,7 @@ ipcMain.handle('legacy:installHost32', async (_evt, { exePath, detected, release
       reshadeSetup,
       releaseFolder: root,
       nrDllPath,
-      deployShaders: (d) => deployLegacyShaders(d, mvProviderId),
+      deployShaders: (d) => deployLegacyShaders(d, mvProviderId, licenseConfirmed),
       deployNvngxDlss: (hostDir) => feeder.deployNvngxDlss(hostDir, getRhiManifest, compareStreamlineVersions, feederCacheDir(), GITHUB_HEADERS),
     });
     try { applyPanelLanguage(path.join(dir, legacy.HOST_DIR)); } catch {}
@@ -949,6 +937,45 @@ ipcMain.handle('legacy:installHost32', async (_evt, { exePath, detected, release
     let dxvkLayer = null;
     if (dxvkInstead) dxvkLayer = await dxvkHost32LayerStep(dir, exePath);
     return { ok: true, ...res, feederVersion: asset.tag, api: plan.api, dxvkLayer };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// The motion-vector provider a 32-bit route game is on, for Edit's picker and the card's menu entry.
+// File reads only (marker, preset), so it is cheap enough for every card.
+function legacyMvSummary(dir) {
+  const marker = legacy.readMarker(dir);
+  if (!marker || !marker.host32) return null;
+  const cur = legacy.currentMvProvider(dir);
+  const provider = cur.id ? feeder.MV_PROVIDERS[cur.id] : null;
+  return {
+    id: cur.id,
+    displayName: provider ? provider.displayName : null,
+    mvProviderValue: provider ? provider.mvProviderValue : null,
+    // iMMERSE is bring-your-own: offered only when the player's copy is already in the folder.
+    immersePresent: feeder.mvProviderPresent(dir, 'immerse-launchpad'),
+  };
+}
+
+ipcMain.handle('legacy:mvProvider', async (_evt, { exePath } = {}) => {
+  if (!exePath || !fs.existsSync(exePath)) return { ok: false, error: 'Game .exe not found' };
+  const summary = legacyMvSummary(gameDir(exePath));
+  return summary ? { ok: true, host32: true, ...summary } : { ok: true, host32: false };
+});
+
+// Switches the provider on an installed 32-bit game without reinstalling: the old provider's files
+// out, the new one's in, preset techniques and DLSS5_MV_PROVIDER rewritten, all journaled for Remove
+// (legacy.js setMvProvider). licenseConfirmed as for feeder:deploy -- only true after the renderer's
+// licence dialog, and deployLumeniteFx refuses without it regardless.
+ipcMain.handle('legacy:setMvProvider', async (_evt, { exePath, mvProviderId, licenseConfirmed } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const res = await legacy.setMvProvider(dir, mvProviderId, {
+      cacheDir: feederCacheDir(), ghHeaders: GITHUB_HEADERS, licenseConfirmed: !!licenseConfirmed,
+    });
+    return { ok: true, ...res, current: legacyMvSummary(dir) };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -1924,6 +1951,8 @@ ipcMain.handle('game:route', async (_evt, { exePath, detected }) => {
     effectiveApi: effective.api || null,
     detectedApi: (detected && detected.api) || null,
     detectedApis: (detected && detected.apis) || [],
+    // The card's "Motion vectors: <provider> -- change…" entry on an installed 32-bit route game.
+    legacyMv: legacyMvSummary(dir),
   };
 });
 
@@ -2735,6 +2764,8 @@ async function helpContext(exePath, detected, fixesTried = []) {
   try { wantedProxy = optiProxy ? await wantedProxyFor(dir, exePath) : null; } catch {}
   return {
     dir, exePath, detected: effective, route, run, fixesTried, vulkanFeeder, dxvkHost32, optiProxy, wantedProxy,
+    // The 32-bit route's motion-vector provider, so a working run on VORT can point at LumeniteFX.
+    legacyMv: route.route === 'feeder32' ? legacyMvSummary(dir) : null,
     foreign: foreignToolchains(dir),
     backends: detectInstalledBackends(dir),
     lumaKnownBad: route.lumaDeployed ? lumaue.lumaUeKnownBad(exePath) : null,

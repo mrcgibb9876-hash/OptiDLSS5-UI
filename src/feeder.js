@@ -813,7 +813,9 @@ async function deployMvProvider(dir, providerId, cacheDir, ghHeaders) {
 // file individually and live from LUMENITEFX_REPO_RAW (the official repo, not a cache/mirror)
 // on every call -- see the licence note on MV_PROVIDERS['lumenite-kernel'] for why that's not
 // just tidiness, it's the actual condition the licence sets for redistribution.
-async function deployLumeniteFx(dir, ghHeaders, { licenseConfirmed = false } = {}) {
+// fetchImpl is for tests, which must never reach the network; the app passes nothing, so every
+// real call is a live fetch from the official repo, as the licence requires.
+async function deployLumeniteFx(dir, ghHeaders, { licenseConfirmed = false, fetchImpl = fetch } = {}) {
   if (!licenseConfirmed) {
     throw new Error('LumeniteFX requires explicit licence confirmation before it can be fetched -- ' +
       'see MV_PROVIDERS["lumenite-kernel"].licenseSummary. Refusing.');
@@ -826,7 +828,7 @@ async function deployLumeniteFx(dir, ghHeaders, { licenseConfirmed = false } = {
   const files = [LUMENITEFX_KERNEL_FILE, ...LUMENITEFX_KERNEL_INCLUDES];
   const deployed = [];
   for (const relPath of files) {
-    const res = await fetch(LUMENITEFX_REPO_RAW + relPath, { headers: { 'User-Agent': ghHeaders['User-Agent'] } });
+    const res = await fetchImpl(LUMENITEFX_REPO_RAW + relPath, { headers: { 'User-Agent': ghHeaders['User-Agent'] } });
     if (!res.ok) throw new Error(`Could not fetch ${relPath} from LumeniteFX's official repo: HTTP ${res.status}`);
     const dest = path.join(shaderDir, ...relPath.split('/'));
     await fsp.writeFile(dest, await res.text(), 'utf8');
