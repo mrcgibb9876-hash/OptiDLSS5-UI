@@ -242,6 +242,18 @@ function diagnose(ctx) {
       if (ctx.wantedProxy && ctx.optiProxy && ctx.wantedProxy.toLowerCase() !== ctx.optiProxy.toLowerCase()) {
         return fix('opti-proxy-name', 'reconfigure', { from, to: ctx.wantedProxy });
       }
+      // A game with DLSS of its own does not need the proxy to reach Neural Rendering at all: the
+      // model file beside the exe is enough, and the game's own Streamline loads it. So when the
+      // proxy is the thing that did not load, the route that never wanted one is a better answer
+      // than guessing at another DLL name to rename it to.
+      //
+      // This is the difference between this app and RHI on a game like Assassin's Creed Black Flag
+      // Resynced: RHI never proxies, it swaps the DLLs the game already loads. The trade is real
+      // and stated in the dialog -- no proxy means no in-game panel and no DLSS 5 controls -- so it
+      // is offered on a failure rather than taken automatically.
+      if (route.shipsDlss && !tried.has('nr-model-only')) {
+        return fix('nr-model-only', 'nr-model-only', { file: from });
+      }
       return out('step', 'opti-not-loaded', { file: from });
     }
     // Loaded, and a stock OptiScaler rather than the DLSS-NR fork: Install puts the fork back.
@@ -293,6 +305,6 @@ function diagnose(ctx) {
 
 // The fixes in the order Game Help would try them, for the AI tier's tool list and the tests.
 // 'switch-to-luma' is applied by the renderer, which asks for Luma's licence first; main.js declines it.
-const FIX_IDS = ['remove-foreign', 'remove-feeder', 'remove-luma', 'redeploy-feeder', 'feeder-depth-profile', 'disable-agility-redist', 'reconfigure', 'remove-all', 'install', 'switch-to-luma', 'swap-to-dxvk'];
+const FIX_IDS = ['remove-foreign', 'remove-feeder', 'remove-luma', 'redeploy-feeder', 'feeder-depth-profile', 'disable-agility-redist', 'reconfigure', 'remove-all', 'install', 'switch-to-luma', 'swap-to-dxvk', 'nr-model-only'];
 
 module.exports = { diagnose, FIX_IDS };
