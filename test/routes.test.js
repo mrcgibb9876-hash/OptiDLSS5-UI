@@ -370,6 +370,30 @@ test('a workshop uploader never outscores the game, and a game named after its o
   assert.equal(path.basename(discover.chooseExe(fs2, 'Farming Simulator').exePath), 'FarmingSimulator.exe');
 });
 
+// #65 (2026-09-18): a Game Pass folder browsed to by hand. Browse took gamelaunchhelper.exe as
+// picked, and the card was built on the Store's stub -- which never renders, so no log ever came.
+test('a hand-picked gamelaunchhelper.exe becomes the exe the Store folder declares', () => {
+  const dir = scratchDir('gdk');
+  write(dir, 'gamelaunchhelper.exe', 'x'.repeat(4096));
+  write(dir, 'MicrosoftGame.config', '<Game><ExecutableList><Executable Name="gamelaunchhelper.exe" Id="Game" /><Executable Name="Binaries\\TheGame.exe" Id="Real" /></ExecutableList></Game>');
+  write(dir, 'Binaries/TheGame.exe', 'x'.repeat(4096));
+  assert.equal(discover.resolvePickedExe(path.join(dir, 'gamelaunchhelper.exe')), path.join(dir, 'Binaries', 'TheGame.exe'));
+
+  // No manifest entry past the helper: the folder's own scan decides, and the helper is never it.
+  const bare = scratchDir('gdk-bare');
+  write(bare, 'gamelaunchhelper.exe', 'x'.repeat(8192));
+  write(bare, 'Game.exe', 'x'.repeat(4096));
+  assert.equal(discover.resolvePickedExe(path.join(bare, 'gamelaunchhelper.exe')), path.join(bare, 'Game.exe'));
+
+  // Nothing else there: kept as picked rather than lost.
+  const alone = scratchDir('gdk-alone');
+  write(alone, 'gamelaunchhelper.exe', 'x');
+  assert.equal(discover.resolvePickedExe(path.join(alone, 'gamelaunchhelper.exe')), path.join(alone, 'gamelaunchhelper.exe'));
+
+  // Any other exe is untouched.
+  assert.equal(discover.resolvePickedExe(path.join(bare, 'Game.exe')), path.join(bare, 'Game.exe'));
+});
+
 // A game with both DX12 and DX11 defaults to DX12 (2026-09-15) -- unless OptiScaler's log proves it actually
 // ran DX11 last time. What changed on 2026-09-16 is that this is a default rather than the final word: a DX11
 // choice made in Edit used to be dropped on the way through, so the setting appeared to do nothing and fell
