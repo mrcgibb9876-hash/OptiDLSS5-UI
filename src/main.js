@@ -804,6 +804,37 @@ function legacyPlanFor(dir, exePath, detected) {
   return legacy.planFor(effectiveDetection(dir, exePath, detected || {}));
 }
 
+// Whether Install should put DXVK in front of this game: picked by hand, or PROVEN for this game by the
+// known-good catalog (layerdefault.js). Asked of the route, so the card, Edit and Install cannot
+// disagree. Callers ask BEFORE they place anything: once the helper or dgVoodoo2 is in, "what is
+// installed" wins over the catalog.
+async function dxvkWanted(dir, exePath, detected) {
+  if (translation.dxvkBlockedFor(exePath)) return false;
+  if (translation.readPreference(dir) === 'dxvk') return true;
+  const route = await layerRouteFor(dir, exePath, detected);
+  return !!(route && route.wrapperPreference === 'dxvk');
+}
+
+async function layerRouteFor(dir, exePath, detected) {
+  try {
+    const effective = effectiveDetection(dir, exePath, detected || {});
+    let vendor = 'unknown';
+    try { vendor = ((await getGpuInfo()) || {}).vendor || 'unknown'; } catch {}
+    return recommendRoute(dir, exePath, effective, vendor, { lumaMod: lumaModFor(exePath, effective) });
+  } catch {
+    return null;
+  }
+}
+
+// Going back to the standard layer before anything is placed. With no proof the DXVK choice is simply
+// forgotten, as it always was; where the catalog proves DXVK for this game, the standard layer is
+// recorded as the pick instead -- with nothing recorded, the proven DXVK would just come back.
+async function pickStandardLayer(dir, exePath, detected, standard) {
+  const route = await layerRouteFor(dir, exePath, detected);
+  const lc = route && route.layerChoice;
+  translation.writePreference(dir, lc && lc.proven && lc.proven.via === 'dxvk' ? standard : null);
+}
+
 // The plan the DXVK <-> dgVoodoo2 swaps work from: the game's own API, never the one a wrapper this
 // app deployed made it look like. Detection already keeps a 32-bit game's own API under our DXVK
 // (detect.js ourTranslationLayer); this also covers a detection stored before that rule, or a
@@ -851,13 +882,15 @@ async function deployDxvkNative32(dir, plan) {
 
 // "Use native Direct3D 11": DXVK out of a 32-bit DirectX 10/11 game, whatever it displaced handed
 // back, and the parked ReShade proxy back as dxgi.dll (legacy.swapDxvkToNative). Game Help's answer
-// shape, { done, text }. A DXVK only chosen, not placed, is forgotten.
-async function swapBackToNative(dir, plan) {
+// shape, { done, text }. A DXVK only chosen, not placed -- by hand or proven by the catalog -- is
+// forgotten, or, where the catalog proves it, answered by recording native as the pick
+// (pickStandardLayer).
+async function swapBackToNative(dir, plan, exePath, detected) {
   const nativeName = plan.api === 'dx10' ? 'Direct3D 10' : 'Direct3D 11';
   const layerNow = translation.activeLayer(dir);
   if (!(layerNow.ours && layerNow.layer === 'dxvk')) {
-    if (translation.readPreference(dir) === 'dxvk') {
-      translation.writePreference(dir, null);
+    if (await dxvkWanted(dir, exePath, detected)) {
+      await pickStandardLayer(dir, exePath, detected, 'native');
       return { done: true, text: `native ${nativeName} it is again: Install leaves the game's own Direct3D in place` };
     }
     return { done: false, text: 'DXVK is not a layer this app put in front of this game, so there is nothing to swap back from' };
@@ -875,6 +908,8 @@ async function swapBackToNative(dir, plan) {
       + '\n\nRun the game afterwards and check here again.',
   });
   if (answer.response !== 0) return { done: false, text: 'cancelled by the user' };
+  // Nothing to record here: the helper stays installed on the game's own Direct3D, and what is installed
+  // wins over the catalog's proof (layerdefault.js).
   translation.writePreference(dir, null);
   const r = await legacy.swapDxvkToNative(dir);
   invalidateDetection(dir);
@@ -919,9 +954,9 @@ ipcMain.handle('legacy:dgvoodoo', async (_evt, { exePath, detected } = {}) => {
     // DXVK swapped in from Game Help does this job here; Install must not quietly swap it back.
     const tl = translation.readManifest(dir);
     if (tl && tl.layer === 'dxvk') return { ok: true, already: true, via: 'dxvk' };
-    // DXVK chosen before anything was installed (card menu, Edit or Game Help): it goes in here,
-    // where dgVoodoo2 would have.
-    if (translation.readPreference(dir) === 'dxvk' && !translation.dxvkBlockedFor(exePath)) {
+    // DXVK chosen before anything was installed (card menu, Edit or Game Help), or proven for this
+    // game by the known-good catalog (layerdefault.js): it goes in here, where dgVoodoo2 would have.
+    if (await dxvkWanted(dir, exePath, detected)) {
       const r = await deployDxvkFor(dir, plan);
       if (!r.ok) throw new Error(r.text);
       translation.writePreference(dir, null);
@@ -972,6 +1007,9 @@ ipcMain.handle('legacy:installHost32', async (_evt, { exePath, detected, release
     if (!plan.supported || !plan.host32) throw new Error(`this game does not take the 32-bit route (${plan.reason || 'not 32-bit'})`);
     let dxvkInstead = (translation.readManifest(dir) || {}).layer === 'dxvk';
     if (plan.dgVoodoo && !legacy.status(dir).dgVoodoo && !dxvkInstead) throw new Error('dgVoodoo2 has to be in place first');
+    // Asked now, before the helper goes in: once it is, the route reads the game as installed on its
+    // own Direct3D, and a DXVK proven by the catalog would no longer be the answer.
+    const dxvkForNative = !dxvkInstead && legacy.dxvkReplacesNative(plan) && await dxvkWanted(dir, exePath, detected);
     const root = releaseFolder && findReleaseRoot(releaseFolder);
     if (!root || !hasDlssNrSection(root)) throw new Error('OptiScaler release folder not set, or not the DLSS-NR build');
     if (!nrDllPath || !fs.existsSync(nrDllPath)) throw new Error('DLSS NR model file not found -- check Settings');
@@ -1001,8 +1039,7 @@ ipcMain.handle('legacy:installHost32', async (_evt, { exePath, detected, release
     // to take the place of, so it goes in here, after the ReShade proxy it has to park exists.
     // Placing it first would have deployHost32 back DXVK's dxgi.dll up as "the game's own" and put
     // ReShade over it.
-    if (!dxvkInstead && legacy.dxvkReplacesNative(plan) && translation.readPreference(dir) === 'dxvk'
-        && !translation.dxvkBlockedFor(exePath)) {
+    if (dxvkForNative) {
       const r = await deployDxvkNative32(dir, plan);
       if (r.ok) {
         translation.writePreference(dir, null);
@@ -2869,7 +2906,7 @@ async function helpContext(exePath, detected, fixesTried = []) {
     try {
       catalog.learnFromRun({
         exePath, name: path.basename(exePath, path.extname(exePath)), run,
-        setup: { route: route.route, via: routescore.pickVia(route), api: run.runtimeApi || effective.api || null },
+        setup: { route: route.route, via: routescore.placedVia(route), api: run.runtimeApi || effective.api || null },
       });
     } catch {}
   }
@@ -3234,15 +3271,16 @@ async function applyHelpFix(exePath, fixId) {
       const plan = wrapperPlanFor(dir, exePath, detectedForPlan);
       // A 32-bit DirectX 10/11 game's way back is its own Direct3D, not dgVoodoo2 -- an older card or
       // the AI tier asking for this there gets that instead of a refusal.
-      if (legacy.dxvkReplacesNative(plan)) return swapBackToNative(dir, plan);
+      if (legacy.dxvkReplacesNative(plan)) return swapBackToNative(dir, plan, exePath, detectedForPlan);
       if (!plan || !plan.supported || !plan.dgVoodoo) {
         return { done: false, text: `this game has no dgVoodoo2 route (${plan && plan.reason ? plan.reason : plan && plan.api ? plan.api : 'unsupported'})` };
       }
       const layerNow = translation.activeLayer(dir);
       if (!(layerNow.ours && layerNow.layer === 'dxvk')) {
-        // DXVK only chosen, not placed yet: going back is forgetting the choice.
-        if (translation.readPreference(dir) === 'dxvk') {
-          translation.writePreference(dir, null);
+        // DXVK only chosen (by hand, or proven by the catalog), not placed yet: going back forgets the
+        // choice, or records dgVoodoo2 where a proven DXVK would otherwise come back (pickStandardLayer).
+        if (await dxvkWanted(dir, exePath, detectedForPlan)) {
+          await pickStandardLayer(dir, exePath, detectedForPlan, 'dgvoodoo');
           return { done: true, text: 'dgVoodoo2 it is again: Install puts dgVoodoo2 in front of this game' };
         }
         return { done: false, text: 'DXVK is not a layer this app put in front of this game, so there is nothing to swap back from' };
@@ -3267,6 +3305,7 @@ async function applyHelpFix(exePath, fixId) {
         return { done: false, text: `could not fetch dgVoodoo2: ${error && error.message ? error.message : error}` };
       }
       const hadParked = !!((legacy.readMarker(dir) || {}).parked || []).length;
+      // dgVoodoo2 goes back in, and what is installed wins over the catalog's proof: nothing to record.
       translation.writePreference(dir, null);
       await legacy.deployDgVoodoo(dir, plan, source);
       invalidateDetection(dir);
@@ -3281,7 +3320,7 @@ async function applyHelpFix(exePath, fixId) {
       if (!legacy.dxvkReplacesNative(plan)) {
         return { done: false, text: `native Direct3D is the way back only on a 32-bit DirectX 10/11 game (${plan && plan.reason ? plan.reason : plan && plan.api ? plan.api : 'unsupported'})` };
       }
-      return swapBackToNative(dir, plan);
+      return swapBackToNative(dir, plan, exePath, detectedForPlan);
     }
     // The route RHI takes on a game that ships its own DLSS: no proxy at all, just the model beside
     // the exe for the game's own Streamline to load. It is the fallback for the case the proxy route

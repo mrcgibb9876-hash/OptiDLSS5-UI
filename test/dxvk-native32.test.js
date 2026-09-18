@@ -281,6 +281,51 @@ test('DXVK chosen before Install goes in after the helper, over the proxy it par
   assert.equal(read(game, `dxgi.dll${legacy.PARK_SUFFIX}`), 'ReShade 32-bit build');
 });
 
+// DXVK PROVEN for this game by the known-good catalog (layerdefault.js), nothing picked by hand: Install
+// does exactly what it does for a hand pick. The layer is asked for before the helper goes in -- after,
+// the game reads as installed on its own Direct3D and the proof would no longer apply.
+test('DXVK proven for this game by the catalog goes in at Install with nothing picked by hand', { skip: !onWindows }, async (t) => {
+  const catalog = require(path.join(REPO, 'src', 'catalog'));
+  const base = scratchDir('native32-proven');
+  const comps = fakeComponents(base);
+  const game = path.join(base, 'game');
+  const exe = exeWith(game, 'Game.exe', { marker: 'D3D11CreateDevice' });
+  const { invoke, userData } = loadMain({ dialogResponse: 0 });
+  await translation.unpackDxvk(fakeDxvkTarGz(), path.join(userData, 'dxvk-cache'));
+  const cache = path.join(userData, 'feeder-cache');
+  fs.mkdirSync(cache, { recursive: true });
+  fs.copyFileSync(comps.reshadeSetup, path.join(cache, path.basename(feeder.RESHADE_SETUP_URL)));
+  fs.copyFileSync(comps.feederZip, path.join(cache, 'DLSS5-Feeder-test.zip'));
+  const local = write(base, 'known-good.local.json', JSON.stringify({ version: 1, entries: [{
+    exe: 'game.exe', status: 'works', setup: { route: 'feeder32', via: 'dxvk', api: 'dx11' },
+    reports: { works: 1, fails: 0 }, dead_ends: [], sources: ['test fixture'],
+  }] }));
+  catalog.configure({ localFile: local });
+  const layer = stubVulkanLayer(base);
+  const saved = { asset: feeder.resolveFeederAsset, shaders: legacy.deployLegacyShaders, nvngx: feeder.deployNvngxDlss };
+  feeder.resolveFeederAsset = async () => ({ url: 'https://example.invalid/feeder.zip', name: 'DLSS5-Feeder-test.zip', tag: 'test' });
+  legacy.deployLegacyShaders = shaders;
+  feeder.deployNvngxDlss = async () => {};
+  t.after(() => {
+    catalog.configure({ localFile: null });
+    layer.restore();
+    Object.assign(feeder, { resolveFeederAsset: saved.asset, deployNvngxDlss: saved.nvngx });
+    legacy.deployLegacyShaders = saved.shaders;
+  });
+
+  assert.equal(translation.readPreference(game), null, 'nothing picked by hand');
+  const d = await detect.detectGame(game, exe);
+  const pending = route.recommendRoute(game, exe, d, 'nvidia');
+  assert.deepEqual(pending.steps.map((s) => [s.key, s.done]), [['feeder32', false], ['dxvk', false]], 'the proof is the step Install owes');
+  const res = await invoke('legacy:installHost32', {
+    exePath: exe, detected: d, releaseFolder: fakeReleaseFolder(base), nrDllPath: fakeNrModel(base), mvProviderId: 'vort',
+  });
+  assert.equal(res.ok, true, res.error);
+  assert.equal(res.dxvkLayer && res.dxvkLayer.ok, true, JSON.stringify(res.dxvkLayer));
+  for (const n of ['d3d10core.dll', 'd3d11.dll', 'dxgi.dll']) assert.equal(translation.identifyWrapper(path.join(game, n)), 'dxvk', n);
+  assert.equal(read(game, `dxgi.dll${legacy.PARK_SUFFIX}`), 'ReShade 32-bit build');
+});
+
 // ── What is refused ────────────────────────────────────────────────────────────────────────────────
 
 test('the early Assassin\'s Creed games are still refused, DirectX 10 exe included', { skip: !onWindows }, async () => {

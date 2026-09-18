@@ -1113,4 +1113,11 @@ window.I18N.register('pt-BR', {
   "{files} disappeared right after being placed, and Windows Defender has no record of it -- another antivirus probably took it. Allow the file in that antivirus (or exclude this game's folder), then press Install again.": "{files} sumiu logo depois de ser colocado, e o Windows Defender não tem registro disso -- provavelmente outro antivírus o removeu. Permita o arquivo nesse antivírus (ou exclua a pasta deste jogo) e pressione Instalar de novo.",
   "{files} disappeared right after being placed -- that is what antivirus quarantine looks like. Check Windows Security > Protection history (or your antivirus), allow the file, then press Install again.": "{files} sumiu logo depois de ser colocado -- é assim que uma quarentena de antivírus aparece. Verifique Segurança do Windows > Histórico de proteção (ou seu antivírus), permita o arquivo e pressione Instalar de novo.",
   "Open Windows Security's protection history now?": "Abrir agora o histórico de proteção da Segurança do Windows?",
+  // Proven translation layer (layerdefault.js).
+  "Proven layer: {layer}": "Camada comprovada: {layer}",
+  "{layer} is proven on this game, so Install puts it in front of the game instead of the usual layer.": "{layer} está comprovada neste jogo, então o Install a coloca na frente do jogo no lugar da camada habitual.",
+  "{layer} is the layer this game was proven on.": "{layer} é a camada com que este jogo foi comprovado.",
+  "native Direct3D": "Direct3D nativo",
+  "Proven layer": "Camada comprovada",
+  "DXVK is proven on this game, so Install puts it in front of the game. Pick the other layer here to keep the usual one.": "O DXVK está comprovado neste jogo, então o Install o coloca na frente do jogo. Escolha a outra camada aqui para manter a habitual.",
 });

@@ -1186,4 +1186,11 @@ window.I18N.register("fr", {
   "{files} disappeared right after being placed, and Windows Defender has no record of it -- another antivirus probably took it. Allow the file in that antivirus (or exclude this game's folder), then press Install again.": "{files} a disparu juste après sa mise en place, et Windows Defender n'en a aucune trace -- un autre antivirus l'a probablement retiré. Autorisez le fichier dans cet antivirus (ou excluez le dossier de ce jeu), puis appuyez de nouveau sur Installer.",
   "{files} disappeared right after being placed -- that is what antivirus quarantine looks like. Check Windows Security > Protection history (or your antivirus), allow the file, then press Install again.": "{files} a disparu juste après sa mise en place -- c'est à cela que ressemble une quarantaine antivirus. Consultez Sécurité Windows > Historique de protection (ou votre antivirus), autorisez le fichier, puis appuyez de nouveau sur Installer.",
   "Open Windows Security's protection history now?": "Ouvrir maintenant l'historique de protection de Sécurité Windows ?",
+  // Proven translation layer (layerdefault.js).
+  "Proven layer: {layer}": "Couche éprouvée : {layer}",
+  "{layer} is proven on this game, so Install puts it in front of the game instead of the usual layer.": "{layer} a fait ses preuves sur ce jeu, donc Install la place devant le jeu au lieu de la couche habituelle.",
+  "{layer} is the layer this game was proven on.": "{layer} est la couche avec laquelle ce jeu a été confirmé.",
+  "native Direct3D": "Direct3D natif",
+  "Proven layer": "Couche éprouvée",
+  "DXVK is proven on this game, so Install puts it in front of the game. Pick the other layer here to keep the usual one.": "DXVK a fait ses preuves sur ce jeu, donc Install le place devant le jeu. Choisissez l'autre couche ici pour garder l'habituelle.",
 });

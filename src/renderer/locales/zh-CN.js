@@ -1112,4 +1112,11 @@ window.I18N.register("zh-CN", {
   "{files} disappeared right after being placed, and Windows Defender has no record of it -- another antivirus probably took it. Allow the file in that antivirus (or exclude this game's folder), then press Install again.": "{files} 在放置后立即消失，而 Windows Defender 中没有相关记录 -- 可能是其他杀毒软件移除了它。请在该杀毒软件中允许此文件（或排除此游戏的文件夹），然后再次点击“安装”。",
   "{files} disappeared right after being placed -- that is what antivirus quarantine looks like. Check Windows Security > Protection history (or your antivirus), allow the file, then press Install again.": "{files} 在放置后立即消失 -- 这正是杀毒软件隔离的表现。请查看“Windows 安全中心”>“保护历史记录”（或你的杀毒软件），允许此文件，然后再次点击“安装”。",
   "Open Windows Security's protection history now?": "现在打开 Windows 安全中心的保护历史记录？",
+  // Proven translation layer (layerdefault.js).
+  "Proven layer: {layer}": "已验证的转换层：{layer}",
+  "{layer} is proven on this game, so Install puts it in front of the game instead of the usual layer.": "{layer} 已在此游戏上验证，因此 Install 会用它代替常规转换层放在游戏前面。",
+  "{layer} is the layer this game was proven on.": "{layer} 是此游戏经验证可用的转换层。",
+  "native Direct3D": "原生 Direct3D",
+  "Proven layer": "已验证的转换层",
+  "DXVK is proven on this game, so Install puts it in front of the game. Pick the other layer here to keep the usual one.": "DXVK 已在此游戏上验证，因此 Install 会把它放在游戏前面。若要保留常规转换层，请在此选择另一个。",
 });

@@ -790,6 +790,17 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   if (route.catalogDefault) {
     chips.push(`<span class="engine-badge engine-badge-known" title="${escapeHtml(t('The app\'s rules would pick another route; this one is proven on this game, so it is the default.'))}">${escapeHtml(t('Proven route'))}</span>`);
   }
+  // The translation layer the known-good catalog proves for this game (layerdefault.js). When it is not
+  // the route's usual one and nothing was picked or installed, it is what Install puts in.
+  const layerChoice = route.layerChoice || null;
+  if (layerChoice && layerChoice.proven) {
+    const layer = layerName(layerChoice.proven.via);
+    const applied = layerChoice.from === 'proven' && layerChoice.layer !== layerChoice.standard;
+    const tip = applied
+      ? t('{layer} is proven on this game, so Install puts it in front of the game instead of the usual layer.', { layer })
+      : t('{layer} is the layer this game was proven on.', { layer });
+    chips.push(`<span class="engine-badge engine-badge-known" title="${escapeHtml(tip)}">${escapeHtml(t('Proven layer: {layer}', { layer }))}</span>`);
+  }
 
   line.innerHTML = chips.join(' ');
 
@@ -2935,6 +2946,14 @@ $('#btn-amdnr-run-setup').addEventListener('click', async () => {
 // of dgVoodoo2 on a DirectX 8/9 game, and instead of the game's own Direct3D on a 32-bit DirectX
 // 10/11 game (legacy.js dxvkReplacesNative, 2026-09-18) -- 'native' marks the second, whose other
 // side is "Direct3D 11 (native)" rather than dgVoodoo2.
+// A translation layer's display name (route.layerChoice, catalog setup.via).
+function layerName(via) {
+  if (via === 'dxvk') return t('DXVK (Vulkan)');
+  if (via === 'dgvoodoo') return t('dgVoodoo2 (Direct3D 11)');
+  if (via === 'native') return t('native Direct3D');
+  return String(via || '');
+}
+
 function layerSwapFor(route) {
   if (!(route && route.legacy && route.legacy.supported)) return null;
   const plan = route.legacy;
@@ -2977,10 +2996,13 @@ async function loadLayerSection(game) {
   const choices = swap.native
     ? [['native', t('{d3d} (native)', { d3d: swap.d3d })], ['dxvk', t('DXVK (Vulkan)')]]
     : [['dgvoodoo', t('dgVoodoo2 (Direct3D 11)')], ['dxvk', t('DXVK (Vulkan)')]];
+  // The layer the known-good catalog proves for this game (layerdefault.js) says so in the list.
+  const layerChoice = route.layerChoice || null;
+  const provenVia = layerChoice && layerChoice.proven ? layerChoice.proven.via : null;
   for (const [value, label] of choices) {
     const opt = document.createElement('option');
     opt.value = value;
-    opt.textContent = label;
+    opt.textContent = value === provenVia ? `${label} — ${t('Proven layer')}` : label;
     select.appendChild(opt);
   }
   select.value = swap.current;
@@ -2993,6 +3015,8 @@ async function loadLayerSection(game) {
   status.className = 'status-line';
   status.textContent = route.dxvkDeployed
     ? t('DXVK is in front of this game.')
+    : route.wrapperPreference === 'dxvk' && layerChoice && layerChoice.from === 'proven'
+      ? t('DXVK is proven on this game, so Install puts it in front of the game. Pick the other layer here to keep the usual one.')
     : route.wrapperPreference === 'dxvk'
       ? t('DXVK is chosen: Install puts it in front of the game.')
       : route.dgVoodooDeployed ? t('dgVoodoo2 is in front of this game.')

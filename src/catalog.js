@@ -208,6 +208,27 @@ function featureDeadEnd(entry, feature) {
   return (entry.dead_ends || []).find((d) => d.feature === feature) || null;
 }
 
+// The translation layer (setup.via: dgvoodoo, dxvk or native) PROVEN for this game on this route, or
+// null. Proven means a "works" entry whose run used exactly this route and layer; a dead end on the
+// route (or on that layer of it, whatever API it names) cancels it, and DXVK never counts where it is
+// blocked (translation.js DXVK_BLOCKED, the Ezio-era Assassin's Creed games). This is the only thing
+// that may move a game's default layer away from dgVoodoo2 / its own Direct3D (layerdefault.js) -- per
+// game, never across the board. { via, source }, source being the entry's newest source line.
+function provenLayer(entry, { route, dxvkBlocked = false } = {}) {
+  if (!entry || entry.status !== 'works' || !(((entry.reports || {}).works || 0) > 0)) return null;
+  const setup = entry.setup || {};
+  if (!route || setup.route !== route || !VIAS.has(setup.via)) return null;
+  if (setup.via === 'dxvk' && dxvkBlocked) return null;
+  if (layerDeadEnd(entry, route, setup.via)) return null;
+  return { via: setup.via, source: (entry.sources || [])[0] || null };
+}
+
+// A dead end for this layer on this route (or for the whole route), whatever API it was recorded on.
+function layerDeadEnd(entry, route, via) {
+  if (!entry) return null;
+  return (entry.dead_ends || []).find((d) => d.route === route && (d.via == null || d.via === via)) || null;
+}
+
 // ── the card's badge ────────────────────────────────────────────────────────────────────────────
 // { kind: 'good' | 'issue', text, vars, title } or null. Text is an English template for the
 // renderer's t(); the title is the entry's notes, which stay English like every catalog field.
@@ -312,6 +333,10 @@ function validateEntry(e) {
   const setup = e.setup || {};
   if (setup.route != null && !ROUTES.has(setup.route)) problems.push(`setup.route "${setup.route}" is not a route`);
   if (setup.via != null && !VIAS.has(setup.via)) problems.push(`setup.via "${setup.via}" is not a wrapper`);
+  // A layer only exists on the Feeder routes (layerdefault.js), and "native" -- the game's own
+  // Direct3D -- only on the 32-bit route: a proven layer anywhere else could never be applied.
+  if (setup.via != null && !(setup.route === 'feeder32' || setup.route === 'feeder')) problems.push(`setup.via "${setup.via}" on route "${setup.route}", which has no translation layer`);
+  if (setup.via === 'native' && setup.route !== 'feeder32') problems.push('setup.via "native" is only a choice on the feeder32 route');
   if (e.status === 'works' && !setup.route) problems.push('a "works" entry needs setup.route');
   if (e.status === 'works' && !((e.reports || {}).works > 0)) problems.push('a "works" entry needs reports.works > 0');
   for (const [i, d] of (e.dead_ends || []).entries()) {
@@ -365,5 +390,5 @@ function addReport(entries, incoming) {
 module.exports = {
   SHIPPED_FILE, DEAD_END_VERDICTS, ROUTES, FG_KINDS, runWorked,
   entriesHash, verifyCatalog, configure, loadShipped, lookup, needsFacts, entryMatches, mergeEntries,
-  deadEndsFor, featureDeadEnd, badgeFor, learnFromRun, exeKey, validateEntry, entryFromDigest, addReport,
+  deadEndsFor, featureDeadEnd, provenLayer, layerDeadEnd, badgeFor, learnFromRun, exeKey, validateEntry, entryFromDigest, addReport,
 };

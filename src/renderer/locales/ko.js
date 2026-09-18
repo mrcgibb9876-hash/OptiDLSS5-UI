@@ -1112,4 +1112,11 @@ window.I18N.register("ko", {
   "{files} disappeared right after being placed, and Windows Defender has no record of it -- another antivirus probably took it. Allow the file in that antivirus (or exclude this game's folder), then press Install again.": "{files}이(가) 배치 직후 사라졌지만 Windows Defender에는 기록이 없습니다 -- 다른 백신이 가져갔을 가능성이 큽니다. 해당 백신에서 파일을 허용하거나(또는 이 게임 폴더를 예외로 추가하고) 다시 설치를 누르세요.",
   "{files} disappeared right after being placed -- that is what antivirus quarantine looks like. Check Windows Security > Protection history (or your antivirus), allow the file, then press Install again.": "{files}이(가) 배치 직후 사라졌습니다 -- 백신 격리가 이런 모습입니다. Windows 보안 > 보호 기록(또는 사용 중인 백신)을 확인해 파일을 허용한 뒤 다시 설치를 누르세요.",
   "Open Windows Security's protection history now?": "지금 Windows 보안의 보호 기록을 열까요?",
+  // Proven translation layer (layerdefault.js).
+  "Proven layer: {layer}": "검증된 레이어: {layer}",
+  "{layer} is proven on this game, so Install puts it in front of the game instead of the usual layer.": "{layer}은(는) 이 게임에서 검증되었으므로 Install이 기본 레이어 대신 이것을 게임 앞에 둡니다.",
+  "{layer} is the layer this game was proven on.": "{layer}은(는) 이 게임이 검증된 레이어입니다.",
+  "native Direct3D": "네이티브 Direct3D",
+  "Proven layer": "검증된 레이어",
+  "DXVK is proven on this game, so Install puts it in front of the game. Pick the other layer here to keep the usual one.": "DXVK가 이 게임에서 검증되었으므로 Install이 게임 앞에 둡니다. 기본 레이어를 유지하려면 여기서 다른 레이어를 고르세요.",
 });

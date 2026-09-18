@@ -51,6 +51,7 @@ const translation = require('./translation');
 const rtxmfg = require('./rtxmfg');
 const routeExplain = require('./route-explain');
 const catalog = require('./catalog');
+const layerdefault = require('./layerdefault');
 const routescore = require('./routescore');
 
 // A user's per-game API choice laid over the detection result: the chosen API becomes the
@@ -255,6 +256,18 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
   // A DXVK choice recorded before the game was on the blocked list is not acted on: Install puts
   // dgVoodoo2 in, and the card offers nothing to swap to.
   const wrapperPreference = dxvkBlocked && translation.readPreference(dir) === 'dxvk' ? null : translation.readPreference(dir);
+  // The layer Install uses on the two routes that have one (layerdefault.js): a hand pick, what is
+  // installed, the catalog's PROVEN layer for this very game, or the standard one. The catalog is not
+  // consulted with an API set in Edit: its evidence is for the API the game was detected as.
+  const layerFor = (routeId, plan, installedStandard) => layerdefault.resolve({
+    route: routeId, plan, handPick: wrapperPreference, dxvkBlocked: !!dxvkBlocked,
+    entry: detected.apiOverride ? null : kg,
+    installed: dxvkDeployed ? 'dxvk' : legacyStatus.dgVoodoo ? 'dgvoodoo'
+      : installedStandard ? layerdefault.standardLayer(routeId, plan) : null,
+  });
+  // What the route reports as the choice: 'dxvk' whenever DXVK is the answer -- picked or proven -- so
+  // the steps, the card, Edit and Install all read it the one way they already do.
+  const effectivePreference = (choice) => (choice ? (choice.layer === choice.standard && choice.from !== 'hand' ? null : choice.layer) : wrapperPreference);
   const optiInstalled = optiScalerInstalled(dir) || (detected.bitness === 32 && legacyStatus.hostOptiScaler);
   // shipsNativeDlss: the game's own Streamline/DLSS files (beside the exe or in an Unreal
   // plugin tree) -- evidence no deploy of ours can fake, so it wins over the markers. Otherwise
@@ -274,7 +287,7 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
   const finish = (route, label, reason, steps, reasonVars = null, extra = {}) => {
     const next = steps.find((s) => !s.done) || null;
     return {
-      experimental: false, emulator: null, legacy: null, dgVoodooDeployed: legacyStatus.dgVoodoo, dxvkDeployed, wrapperPreference, dxvkBlocked,
+      experimental: false, emulator: null, legacy: null, dgVoodooDeployed: legacyStatus.dgVoodoo, dxvkDeployed, wrapperPreference, dxvkBlocked, layerChoice: null,
       ...extra,
       route, label, reason, reasonVars, steps, gpuVendor,
       optiInstalled, feederDeployed, lumaDeployed, feederMisdeployed, shipsDlss,
@@ -341,9 +354,12 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
     if (!plan.supported) {
       return finish('unsupported', 'Not supported', `32-bit executable: ${plan.reason}.`, []);
     }
+    const layerChoice = layerFor('feeder32', plan, legacyStatus.host32 || legacyStatus.feeder32 || legacyStatus.hostOptiScaler);
+    const wrapperPreference = effectivePreference(layerChoice);
     const steps = [];
     const viaDxvk = !!plan.dgVoodoo && dxvkDeployed;
-    // DXVK chosen before anything was installed (translation.js readPreference): Install places it.
+    // DXVK chosen before anything was installed (translation.js readPreference), or proven for this
+    // game by the catalog (layerdefault.js): Install places it.
     const dxvkChosen = !!plan.dgVoodoo && !dxvkDeployed && !legacyStatus.dgVoodoo && wrapperPreference === 'dxvk';
     // A 32-bit DirectX 10/11 game can take DXVK in place of its own Direct3D (legacy.js
     // dxvkReplacesNative). Placed, it is this route's wrapper step, done, so Game Help reaches the
@@ -368,7 +384,7 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
     const text = ROUTE_TEXT.host32Lead + middle + ROUTE_TEXT.host32Panel;
     const DX_NAMES = { dx8: 'DirectX 8', dx9: 'DirectX 9', dx10: 'Direct3D 10', dx11: 'Direct3D 11' };
     return finish('feeder32', ROUTE_TEXT.labelHost32, text, steps,
-      { dx: DX_NAMES[plan.api] || 'DirectX 9' }, { experimental: true, legacy: plan });
+      { dx: DX_NAMES[plan.api] || 'DirectX 9' }, { experimental: true, legacy: plan, wrapperPreference, layerChoice });
   }
 
   // EXPERIMENTAL -- emulators (emulators.js): the ordinary Feeder route, run inside the emulator, with
@@ -389,12 +405,20 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
   // from there it is the ordinary 64-bit Feeder route.
   if (api === 'dx9') {
     const plan = legacy.planFor({ bitness: 64, api });
+    const layerChoice = layerFor('feeder', plan, feederDeployed || optiInstalled);
+    const wrapperPreference = effectivePreference(layerChoice);
+    // DXVK in dgVoodoo2's place, placed or still to place (main.js legacy:dgvoodoo puts it in).
+    const layerStep = dxvkDeployed
+      ? { key: 'dxvk', label: ROUTE_TEXT.stepDxvk, done: true }
+      : wrapperPreference === 'dxvk' && !legacyStatus.dgVoodoo
+        ? { key: 'dxvk', label: ROUTE_TEXT.stepDxvkChosen, done: false }
+        : { key: 'dgvoodoo', label: ROUTE_TEXT.stepDgVoodoo, done: legacyStatus.dgVoodoo };
     return finish('feeder', ROUTE_TEXT.labelDx9, ROUTE_TEXT.dx9,
       [
-        { key: 'dgvoodoo', label: ROUTE_TEXT.stepDgVoodoo, done: legacyStatus.dgVoodoo },
+        layerStep,
         { key: 'feeder', label: 'Deploy the DLSS5 Feeder', done: feederDeployed },
         { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
-      ], null, { experimental: true, legacy: plan });
+      ], null, { experimental: true, legacy: plan, wrapperPreference, layerChoice });
   }
 
   // Resident Evil 2/3/4/7/Village: RE Engine, no DLSS of their own. Not the Feeder -- praydog's

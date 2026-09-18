@@ -87,9 +87,24 @@ function main(argv) {
   const out = build(doc);
   write(out);
   console.log(`wrote ${FILE}: ${out.entries.length} entries, sha256 ${out.sha256.slice(0, 12)}`);
+  // The entries that decide a game's translation layer (layerdefault.js). One that proves a layer other
+  // than the route's standard one CHANGES what Install puts in front of that game -- said here, so it is
+  // never a side effect nobody saw.
+  for (const line of provenLayerLines(out.entries)) console.log(line);
   return 0;
+}
+
+function provenLayerLines(entries) {
+  const lines = [];
+  for (const e of entries) {
+    const setup = e.setup || {};
+    const proven = catalog.provenLayer(e, { route: setup.route });
+    if (proven) lines.push(`proven layer: ${e.exe} ${setup.route}:${proven.via}${proven.via === 'dxvk' ? '  <- Install now defaults to DXVK for this game' : ''}`);
+    for (const d of e.dead_ends || []) if (d.via) lines.push(`dead-end layer: ${e.exe} ${d.route}:${d.via}`);
+  }
+  return lines;
 }
 
 if (require.main === module) process.exitCode = main(process.argv);
 
-module.exports = { build, problemsIn, main };
+module.exports = { build, problemsIn, main, provenLayerLines };

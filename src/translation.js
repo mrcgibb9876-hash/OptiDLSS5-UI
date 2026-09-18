@@ -628,6 +628,10 @@ async function deployDxvk(dir, { sourceDir, api, bitness }) {
 // records the choice here instead, and Install places DXVK where it would have placed dgVoodoo2.
 // Remove deletes it with the other markers.
 const PREFERENCE = '.dlss5ui-wrapper-choice.json';
+// What a choice may name: a layer this app places, or 'native' -- a 32-bit DirectX 10/11 game's own
+// Direct3D. The standard layer is recorded too when it is picked BACK after the catalog made another
+// one the default (layerdefault.js): with nothing recorded, that proven default would simply return.
+const PREFERENCE_VALUES = new Set(['dxvk', 'dgvoodoo', 'native']);
 
 // Games DXVK is never offered for. Not a rendering fault DXVK can fix: on Windows, the Ezio-era
 // Assassin's Creed games hand the translator a camera matrix that jumps every few frames -- the whole
@@ -658,7 +662,7 @@ function dxvkBlockedFor(exePath) {
 function readPreference(dir) {
   try {
     const p = JSON.parse(fs.readFileSync(path.join(dir, PREFERENCE), 'utf8'));
-    return p && LAYERS[p.layer] ? p.layer : null;
+    return p && PREFERENCE_VALUES.has(p.layer) ? p.layer : null;
   } catch {
     return null;
   }
@@ -667,7 +671,7 @@ function readPreference(dir) {
 function writePreference(dir, layer) {
   const file = path.join(dir, PREFERENCE);
   if (!layer) { fs.rmSync(file, { force: true }); return null; }
-  if (!LAYERS[layer]) throw new Error(`unknown translation layer: ${layer}`);
+  if (!PREFERENCE_VALUES.has(layer)) throw new Error(`unknown translation layer: ${layer}`);
   fs.writeFileSync(file, JSON.stringify({ layer, chosenAt: new Date().toISOString() }, null, 2), 'utf8');
   return layer;
 }

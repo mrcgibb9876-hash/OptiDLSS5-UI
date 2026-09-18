@@ -1112,4 +1112,11 @@ window.I18N.register("ru", {
   "{files} disappeared right after being placed, and Windows Defender has no record of it -- another antivirus probably took it. Allow the file in that antivirus (or exclude this game's folder), then press Install again.": "{files} исчез сразу после размещения, а в Windows Defender нет записи об этом -- вероятно, его забрал другой антивирус. Разрешите файл в этом антивирусе (или добавьте папку игры в исключения) и снова нажмите «Установить».",
   "{files} disappeared right after being placed -- that is what antivirus quarantine looks like. Check Windows Security > Protection history (or your antivirus), allow the file, then press Install again.": "{files} исчез сразу после размещения -- так выглядит карантин антивируса. Проверьте «Безопасность Windows» > «Журнал защиты» (или ваш антивирус), разрешите файл и снова нажмите «Установить».",
   "Open Windows Security's protection history now?": "Открыть журнал защиты «Безопасности Windows» сейчас?",
+  // Proven translation layer (layerdefault.js).
+  "Proven layer: {layer}": "Проверенный слой: {layer}",
+  "{layer} is proven on this game, so Install puts it in front of the game instead of the usual layer.": "{layer} проверен в этой игре, поэтому Install ставит его перед игрой вместо обычного слоя.",
+  "{layer} is the layer this game was proven on.": "{layer} — слой, на котором эта игра подтверждена.",
+  "native Direct3D": "родной Direct3D",
+  "Proven layer": "Проверенный слой",
+  "DXVK is proven on this game, so Install puts it in front of the game. Pick the other layer here to keep the usual one.": "DXVK проверен в этой игре, поэтому Install ставит его перед игрой. Выберите здесь другой слой, чтобы оставить обычный.",
 });

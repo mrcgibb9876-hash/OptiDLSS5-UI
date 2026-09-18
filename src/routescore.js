@@ -97,7 +97,19 @@ function pickVia(r) {
     if (plan.api === 'dx10' || plan.api === 'dx11') return 'native';
     return null;
   }
-  if (r.route === 'feeder' && plan && plan.dgVoodoo) return r.dxvkDeployed ? 'dxvk' : 'dgvoodoo';
+  if (r.route === 'feeder' && plan && plan.dgVoodoo) return r.dxvkDeployed || dxvkStep ? 'dxvk' : 'dgvoodoo';
+  return null;
+}
+
+// The layer actually IN the folder, from the install's own records (the translation-layer manifest and
+// the legacy marker), never a choice still to be placed: what catalog.learnFromRun records as the layer
+// a run used. pickVia also counts a DXVK only chosen -- by hand or proven -- which a run never ran on.
+function placedVia(r) {
+  const plan = r.legacy || null;
+  if (!plan || !(r.route === 'feeder32' || (r.route === 'feeder' && plan.dgVoodoo))) return null;
+  if (r.dxvkDeployed) return 'dxvk';
+  if (plan.dgVoodoo) return r.dgVoodooDeployed ? 'dgvoodoo' : null;
+  if (r.route === 'feeder32' && (plan.api === 'dx10' || plan.api === 'dx11')) return 'native';
   return null;
 }
 
@@ -255,4 +267,4 @@ function scoreRoutes(r, evidence = {}) {
   };
 }
 
-module.exports = { WEIGHTS, scoreRoutes, candidatesFor, pickVia };
+module.exports = { WEIGHTS, scoreRoutes, candidatesFor, pickVia, placedVia };
