@@ -468,7 +468,7 @@ test('the swap is offered only in dgVoodoo2\'s place, and a choice made before I
 
   // 32-bit DirectX 9 with nothing installed: the choice is written down, nothing deployed.
   const dx9 = path.join(base, 'dx9');
-  const exe9 = exeWith(dx9, 'AssassinsCreedIIGame.exe', { bits: 32, marker: 'Direct3DCreate9' });
+  const exe9 = exeWith(dx9, 'OldDx9Game.exe', { bits: 32, marker: 'Direct3DCreate9' });
   const chosen = await invoke('game:help-apply', { exePath: exe9, fixId: 'swap-to-dxvk' });
   assert.equal(chosen.done, true, chosen.text);
   assert.match(chosen.text, /Install puts it in front of the game/);

@@ -859,7 +859,7 @@ ipcMain.handle('legacy:dgvoodoo', async (_evt, { exePath, detected } = {}) => {
     if (tl && tl.layer === 'dxvk') return { ok: true, already: true, via: 'dxvk' };
     // DXVK chosen before anything was installed (card menu, Edit or Game Help): it goes in here,
     // where dgVoodoo2 would have.
-    if (translation.readPreference(dir) === 'dxvk') {
+    if (translation.readPreference(dir) === 'dxvk' && !translation.dxvkBlockedFor(exePath)) {
       const r = await deployDxvkFor(dir, plan);
       if (!r.ok) throw new Error(r.text);
       translation.writePreference(dir, null);
@@ -2930,6 +2930,9 @@ async function applyHelpFix(exePath, fixId) {
     // purges the layer in the way itself (canDeploy -> purgeTranslationLayer), handing back
     // whatever that layer displaced, so this does not have to unwind anything by hand.
     case 'swap-to-dxvk': {
+      // The AI tier and an old card can still ask for it; the list is enforced here, not only in the UI.
+      const blocked = translation.dxvkBlockedFor(exePath);
+      if (blocked) return { done: false, text: blocked.why };
       // The game's REAL detection, not {}. effectiveDetection({}) returns an object with no bitness
       // and no api, so legacy.planFor falls straight through to "not a legacy game" -- which meant
       // this swap answered "this game has no translation-layer route" on every game it was ever

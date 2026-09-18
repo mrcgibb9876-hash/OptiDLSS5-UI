@@ -209,7 +209,10 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts
   // the swap (Assassin's Creed II, 2026-09-18). One file read: the manifest is the record.
   const tlManifest = translation.readManifest(dir);
   const dxvkDeployed = !!(tlManifest && tlManifest.layer === 'dxvk');
-  const wrapperPreference = translation.readPreference(dir);
+  const dxvkBlocked = translation.dxvkBlockedFor(exePath);
+  // A DXVK choice recorded before the game was on the blocked list is not acted on: Install puts
+  // dgVoodoo2 in, and the card offers nothing to swap to.
+  const wrapperPreference = dxvkBlocked && translation.readPreference(dir) === 'dxvk' ? null : translation.readPreference(dir);
   const optiInstalled = optiScalerInstalled(dir) || (detected.bitness === 32 && legacyStatus.hostOptiScaler);
   // shipsNativeDlss: the game's own Streamline/DLSS files (beside the exe or in an Unreal
   // plugin tree) -- evidence no deploy of ours can fake, so it wins over the markers. Otherwise
@@ -229,7 +232,7 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts
   const finish = (route, label, reason, steps, reasonVars = null, extra = {}) => {
     const next = steps.find((s) => !s.done) || null;
     return {
-      experimental: false, emulator: null, legacy: null, dgVoodooDeployed: legacyStatus.dgVoodoo, dxvkDeployed, wrapperPreference,
+      experimental: false, emulator: null, legacy: null, dgVoodooDeployed: legacyStatus.dgVoodoo, dxvkDeployed, wrapperPreference, dxvkBlocked,
       ...extra,
       route, label, reason, reasonVars, steps, gpuVendor,
       optiInstalled, feederDeployed, lumaDeployed, feederMisdeployed, shipsDlss,

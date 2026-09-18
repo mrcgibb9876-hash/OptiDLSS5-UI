@@ -604,6 +604,32 @@ async function deployDxvk(dir, { sourceDir, api, bitness }) {
 // Remove deletes it with the other markers.
 const PREFERENCE = '.dlss5ui-wrapper-choice.json';
 
+// Games DXVK is never offered for. Not a rendering fault DXVK can fix: on Windows, the Ezio-era
+// Assassin's Creed games hand the translator a camera matrix that jumps every few frames -- the whole
+// 3D scene shakes up/down and side to side and skinned meshes stretch, even standing still, while the
+// 2D UI does not. DXVK issue #2249 (open since 2021): a DXVK developer reproduced it on Windows 11 and
+// confirmed "the game passes us a camera matrix that does those weird jumps"; wined3d and D3D9On12
+// trigger it too, and only dgVoodoo2 was seen not to. Reproduced here on Assassin's Creed II
+// (2026-09-18) with DXVK alone -- no ReShade, no Feeder, no effects, at 240 Hz and at 60 Hz.
+// Keyed on the exe name. A game already swapped to DXVK keeps the way back.
+const DXVK_BLOCKED = {
+  'assassinscreed_dx9.exe': "Assassin's Creed",
+  'assassinscreed_dx10.exe': "Assassin's Creed",
+  'assassinscreediigame.exe': "Assassin's Creed II",
+  'acbsp.exe': "Assassin's Creed Brotherhood",
+  'acbmp.exe': "Assassin's Creed Brotherhood",
+  'acrsp.exe': "Assassin's Creed Revelations",
+  'acrmp.exe': "Assassin's Creed Revelations",
+};
+const DXVK_BLOCKED_WHY = 'DXVK makes the camera shake on Windows in this game (DXVK issue #2249: the game passes a jumping '
+  + 'camera matrix under every D3D9 translator except dgVoodoo2), so it is not offered here.';
+
+// null when DXVK may be offered for this exe, otherwise { game, why }.
+function dxvkBlockedFor(exePath) {
+  const key = path.basename(String(exePath || '')).toLowerCase();
+  return Object.prototype.hasOwnProperty.call(DXVK_BLOCKED, key) ? { game: DXVK_BLOCKED[key], why: DXVK_BLOCKED_WHY } : null;
+}
+
 function readPreference(dir) {
   try {
     const p = JSON.parse(fs.readFileSync(path.join(dir, PREFERENCE), 'utf8'));
@@ -624,6 +650,8 @@ function writePreference(dir, layer) {
 module.exports = {
   MANIFEST,
   PREFERENCE,
+  DXVK_BLOCKED,
+  dxvkBlockedFor,
   readPreference,
   writePreference,
   stripDgVoodooFromLegacyMarker,

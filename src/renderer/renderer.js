@@ -934,6 +934,7 @@ function helpWords(diag) {
     case 'vulkan-layer-not-loaded': return t('ReShade\'s Vulkan layer with add-on support is installed, but it did not load in this program: the DLSS5 Feeder wrote no log at all. Run ReShade\'s installer once more for this exact exe and choose Vulkan (the layer only runs for programs it was set up for), check NVIDIA Smooth Motion is off for it, then launch again.');
     case 'vulkan-layer-app-not-listed': return t('ReShade\'s Vulkan layer with add-on support is installed, but {exe} is not on its app list (ReShadeApps.ini next to the layer), so the layer stays inert in this game: no overlay, no DLSS5 Feeder, no log. ReShade\'s own installer adds it -- run it, pick this exact exe, choose Vulkan and keep "Enable loading of add-ons" ticked -- then launch again.', v);
     case 'opti-proxy-name': return t('The DLSS5 Feeder ran and reported OptiScaler as not present: it is installed here as {from}, and nothing in this game loads a DLL of that name (a DirectX 9, Vulkan or OpenGL game never loads a dxgi.dll from its folder), so the Feeder fed plain DLAA with no neural pass. This game loads {to}. Reconfigure moves OptiScaler to that name.', v);
+    case 'dxvk-blocked-game': return t('{game} is on DXVK, and on Windows DXVK makes this game\'s camera shake: the game passes a jumping camera matrix to every Direct3D 9 translator except dgVoodoo2 (DXVK issue #2249). Nothing in DXVK, ReShade or the Feeder can fix that, so the fix is to go back to dgVoodoo2.', v);
     case 'dgvoodoo-no-dlss': return t('The game ran and nothing called DLSS. On this route dgVoodoo2 is the layer that has to present a swapchain for OptiScaler to hook, so when a run has no DLSS in it at all -- including a game that runs but shows a black screen -- the wrapper is the first suspect, not the last. DXVK does the same job through Vulkan instead of Direct3D 11. Neither is better everywhere, and nothing here can tell which way it went until you run the game again.', v);
     case 'dxvk-no-dlss': return t('The game ran under DXVK and nothing called DLSS. DXVK was the other layer to try, and it did no better here, so dgVoodoo2 is worth having back -- or, if dgVoodoo2 could not draw this game either, Remove puts the folder back as it was. Nothing here can tell which layer suits a game until it is run.', v);
     case 'dxvk-crash-swap': return t('The game crashed as it started, inside DXVK\'s {dll}. dgVoodoo2 does the same job through Direct3D 11 instead of Vulkan; Fix it puts it back in DXVK\'s place, with whatever DXVK displaced handed back first.', v);
@@ -1055,6 +1056,7 @@ function helpSteps(diag) {
     case 'vulkan-layer-app-not-listed': return [t('Run ReShade\'s installer for this exe, choosing Vulkan'), t('Keep "Enable loading of add-ons" ticked'), launch];
     case 'opti-proxy-name': return fixIt(t('Press Fix it (moves OptiScaler to {to})', v));
     case 'opti-not-routed': return fixIt(t('Press Fix it (restores the NGX redirect keys)'));
+    case 'dxvk-blocked-game': return [t('Press Fix it -- dgVoodoo2 goes back in where DXVK was'), launch];
     case 'dgvoodoo-no-dlss': return [t('Press Fix it -- DXVK goes in where dgVoodoo2 was'), launch, ...report];
     case 'dxvk-no-dlss': return [t('Press Fix it -- dgVoodoo2 goes back in where DXVK is'), launch, ...report];
     case 'dxvk-crash-swap': return [t('Press Fix it to swap DXVK back for dgVoodoo2'), launch];
@@ -1130,6 +1132,7 @@ function helpShort(diag) {
     case 'vulkan-layer-app-not-listed': return t('{exe} is not on ReShade\'s Vulkan app list', v);
     case 'opti-proxy-name': return t('OptiScaler is under a name this game never loads ({from})', v);
     case 'nr-model-only': return t('OptiScaler never loaded -- this game has its own DLSS');
+    case 'dxvk-blocked-game': return t('DXVK shakes this game -- go back to dgVoodoo2');
     case 'dgvoodoo-no-dlss': return t('Nothing called DLSS -- dgVoodoo2 is the likely reason');
     case 'dxvk-no-dlss': return t('Nothing called DLSS under DXVK either -- try dgVoodoo2 again');
     case 'dxvk-crash-swap': return t('DXVK crashes this game -- dgVoodoo2 is worth another try');
@@ -2411,6 +2414,9 @@ $('#btn-amdnr-run-setup').addEventListener('click', async () => {
 function layerSwapFor(route) {
   if (!(route && route.legacy && route.legacy.supported && route.legacy.dgVoodoo)) return null;
   const onDxvk = !!route.dxvkDeployed || route.wrapperPreference === 'dxvk';
+  // The early Assassin's Creed games shake under DXVK on Windows (translation.js DXVK_BLOCKED): only the
+  // way back is offered there.
+  if (route.dxvkBlocked && !onDxvk) return null;
   return onDxvk
     ? { id: 'swap-to-dgvoodoo', label: t('Switch back to dgVoodoo2'), current: 'dxvk' }
     : { id: 'swap-to-dxvk', label: t('Try DXVK instead of dgVoodoo2'), current: 'dgvoodoo' };

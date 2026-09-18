@@ -90,6 +90,9 @@ function diagnose(ctx) {
   // all is gone, nothing below can work and the run logs cannot say why: the add-on simply never
   // loads. Assassin's Creed II (2026-09-18) is the game this route was built for. Re-running the swap
   // is what installs the layer, so that is the fix.
+  // One of the games DXVK shakes (translation.js DXVK_BLOCKED) that is on DXVK anyway -- swapped before
+  // the list existed. The fix is the way back, ahead of any layer diagnosis for a route it should leave.
+  if (route.dxvkBlocked && route.dxvkDeployed) return fix('dxvk-blocked-game', 'swap-to-dgvoodoo', { game: route.dxvkBlocked.game });
   const dxvk32 = route.route === 'feeder32' && route.dxvkDeployed ? ctx.dxvkHost32 : null;
   if (dxvk32) {
     if (!dxvk32.layerRegistered || !dxvk32.layerAddon || dxvk32.appListed === false) {
@@ -238,7 +241,7 @@ function diagnose(ctx) {
       // 'wrapper-crash'. Nothing faults, so the crash rule cannot fire, and this fell through to
       // "no known fix" on a game whose next step was obvious to a person reading it.
       if (route.dgVoodooDeployed && route.legacy && ['dx8', 'dx9', 'dx10', 'dx11'].includes(route.legacy.api)
-          && !tried.has('swap-to-dxvk')) {
+          && !tried.has('swap-to-dxvk') && !route.dxvkBlocked) {
         return fix('dgvoodoo-no-dlss', 'swap-to-dxvk', { api: route.legacy.api });
       }
       // And the way back. The swap to DXVK is a bet, stated as one in its own dialog, so a DXVK run
@@ -367,7 +370,7 @@ function diagnose(ctx) {
       // The APIs DXVK ships a file set for (translation.js DXVK_FILES_FOR_API). Inlined rather than
       // imported: this table stays a pure function of its context, with no module of its own to load.
       const dxvkServes = ['dx8', 'dx9', 'dx10', 'dx11'].includes(route.legacy.api);
-      if (dxvkServes && !tried.has('swap-to-dxvk')) {
+      if (dxvkServes && !tried.has('swap-to-dxvk') && !route.dxvkBlocked) {
         return fix('wrapper-crash-swap', 'swap-to-dxvk', { dll: run.detail || '', api: route.legacy.api });
       }
       return fix('dgvoodoo-crash', 'remove-all', { dll: run.detail || '' });
