@@ -17,6 +17,7 @@ const base = (over = {}) => ({
   reframeworkPresent: over.reframeworkPresent === undefined ? null : over.reframeworkPresent,
   nrEnabledInIni: over.nrEnabledInIni === undefined ? true : over.nrEnabledInIni,
   fixesTried: over.fixesTried || [],
+  frameGen: over.frameGen || [],
   vulkanFeeder: over.vulkanFeeder || null,
 });
 
@@ -67,6 +68,26 @@ const rows = [
   ['Feeder technique missing: Install again', base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'init-no-feature', detail: 'feeder-technique-missing' } }), { status: 'fix', fix: 'install' }],
   ['two DLSS DLLs crashed it: remove the Feeder', base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'duplicate-dlss' } }), { status: 'fix', fix: 'remove-feeder' }],
   ['UE crash with unverified Luma: remove Luma', base({ route: { route: 'lumaue', lumaDeployed: true }, run: { ran: true, verdict: 'ue-crash', detail: 'Assertion failed' } }), { status: 'fix', fix: 'remove-luma' }],
+  // Two frame generators. Smooth Motion is the driver's own, invisible to everything here except
+  // the Feeder's log line, so this is reported and never acted on. It has to reach a WORKING run --
+  // a game that "works" while quietly running two generators is the whole point -- without ever
+  // outranking a hard stop or a real failure.
+  ['Smooth Motion alongside a configured generator: say so, even on a good run',
+    base({ run: { ran: true, verdict: 'nr-ran', nrDispatch: 400, feedSmoothMotion: true }, frameGen: ['Lossless Scaling'] }),
+    { status: 'step', code: 'smooth-motion-stacked' }],
+  ['Smooth Motion with no generator of ours: nothing to say',
+    base({ run: { ran: true, verdict: 'nr-ran', nrDispatch: 400, feedSmoothMotion: true } }),
+    { status: 'ok', code: 'ok' }],
+  ['a generator of ours with no Smooth Motion: nothing to say',
+    base({ frameGen: ['Lossless Scaling'] }),
+    { status: 'ok', code: 'ok' }],
+  ['anti-cheat still outranks it',
+    base({ detected: { antiCheat: 'EasyAntiCheat.exe' }, run: { ran: true, verdict: 'nr-ran', feedSmoothMotion: true }, frameGen: ['Lossless Scaling'] }),
+    { status: 'unavailable', code: 'anticheat' }],
+  ['another DLSS 5 toolchain still outranks it',
+    base({ run: { ran: true, verdict: 'nr-ran', feedSmoothMotion: true }, frameGen: ['Lossless Scaling'], foreign: [{ tool: 'X' }] }),
+    { status: 'fix', code: 'foreign' }],
+
   // The wrapper crash. dgVoodoo2 failing used to end the road, because it was the only way to put
   // DirectX 8/9 in front of a modern pipeline. translation.js owns DXVK too now, so the other layer
   // is offered first and "put the game back" is what is left once that has been tried and the
