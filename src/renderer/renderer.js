@@ -65,9 +65,13 @@ const settingsBanner = $('#settings-banner');
 
 // One floating tip for every [data-tip] element. Positioned above the element, centred on it,
 // flipped below when there is no room above, and kept inside the viewport either way.
+// The text goes through t() here, so a data-tip written in English in index.html shows in the
+// chosen language (and follows a language change); one the renderer already translated when it
+// built the element comes back unchanged, since a translation is not itself a key.
 let tipEl = null;
 function showTip(target) {
-  const text = target.getAttribute('data-tip');
+  const raw = target.getAttribute('data-tip');
+  const text = raw && t(raw);
   if (!text) return;
   if (!tipEl) {
     tipEl = document.createElement('div');
