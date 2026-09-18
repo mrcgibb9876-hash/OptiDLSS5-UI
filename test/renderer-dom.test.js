@@ -60,6 +60,17 @@ test('every card class the renderer queries is in the card template', () => {
   assert.deepStrictEqual([...new Set(missing)], [], 'card classes the template does not define');
 });
 
+test('the pop-out panel still renders every group', () => {
+  // The Settings dialog was narrowed to the Display group; the pop-out panel must NOT be, because
+  // it is the only full route to these controls on the 32-bit route -- OptiScaler runs in the
+  // 64-bit helper there, so the in-game panel is a mirror the game may not let you click. Both
+  // renderers read the same dlssnr.js field list, so narrowing one and then "tidying" the other to
+  // match would take that route's settings away without a single test going red.
+  const panel = fs.readFileSync(path.join(root, 'panel.js'), 'utf8');
+  assert.match(panel, /for \(const group of \[\.\.\.new Set\(fields\.map\(\(f\) => f\.group\)\)\]\)/);
+  assert.ok(!panel.includes('EDITABLE_GROUPS'), 'the pop-out panel must not filter groups');
+});
+
 test('the DLSS 5 field table is not offered in two places at once', () => {
   // The in-game panel and Settings both write the same OptiScaler.ini, and the panel saves the
   // whole file whenever it changes something -- so a second copy of those controls in Settings
