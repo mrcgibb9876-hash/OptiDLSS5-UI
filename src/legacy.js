@@ -62,7 +62,7 @@ const PARK_SUFFIX = '.dlss5ui-parked';
 const DGVOODOO = {
   version: '2.87.4',
   url: 'https://github.com/dege-diosg/dgVoodoo2/releases/download/v2.87.4/dgVoodoo2_87_4.zip',
-  sha256: '74aeb464d829db80e3f4aa8fae235e6e3b38fc01188776c5c2376bb0dea0956e',
+  sha256: require('./integrity').pinFor('https://github.com/dege-diosg/dgVoodoo2/releases/download/v2.87.4/dgVoodoo2_87_4.zip'),
   fileName: 'dgVoodoo2_87_4.zip',
   cacheName: 'dgVoodoo2_87_4',
   userCacheName: 'dgVoodoo2-user',

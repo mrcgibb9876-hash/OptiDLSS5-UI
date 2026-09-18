@@ -14,13 +14,25 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { scratchDir, write, loadMain } = require('./helpers');
+const { scratchDir, write, loadMain, pinFixture } = require('./helpers');
 const legacy = require('../src/legacy');
 const feeder = require('../src/feeder');
 const { diagnose } = require('../src/gamehelp');
 
 const onWindows = process.platform === 'win32';
-const LUMENITE_RAW = 'https://raw.githubusercontent.com/umar-afzaal/LumeniteFX/mainline/Shaders/';
+const LUMENITE_RAW = require('../src/integrity').URLS.lumeniteRaw;
+const integrity = require('../src/integrity');
+
+// A stub answer, with its URL pinned to exactly this content (the real files are pinned in
+// integrity.js); every pin is put back after the test file.
+const pinned = new Map();
+function answer(url, text) {
+  if (!pinned.has(url)) pinned.set(url, integrity.PINS[url]);
+  integrity.PINS[url] = integrity.sha256(Buffer.from(text));
+  const b = Buffer.from(text);
+  return { ok: true, status: 200, text: async () => text, arrayBuffer: async () => b.buffer.slice(b.byteOffset, b.byteOffset + b.length) };
+}
+test.after(() => { for (const [url, prev] of pinned) { if (prev === undefined) delete integrity.PINS[url]; else integrity.PINS[url] = prev; } });
 
 // Answers the ReShade headers and LumeniteFX's files; anything else fails the test loudly.
 function stubFetch() {
@@ -28,8 +40,8 @@ function stubFetch() {
   const fetchImpl = async (url) => {
     urls.push(url);
     const name = url.split('/').pop();
-    if (/ReShade(UI)?\.fxh$/.test(name)) return { ok: true, status: 200, text: async () => `#pragma once\n// ${name}\n` };
-    if (url.startsWith(LUMENITE_RAW)) return { ok: true, status: 200, text: async () => `// lumenite ${name}\n` };
+    if (/ReShade(UI)?\.fxh$/.test(name)) return answer(url, `#pragma once\n// ${name}\n`);
+    if (url.startsWith(LUMENITE_RAW)) return answer(url, `// lumenite ${name}\n`);
     throw new Error(`unexpected fetch in a test: ${url}`);
   };
   return { fetchImpl, urls };
@@ -156,8 +168,9 @@ test('setMvProvider: LumeniteFX -> VORT takes LumeniteFX\'s files out and brings
   execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
     'Compress-Archive -Path $env:SRC -DestinationPath $env:DEST -Force'],
   { env: { ...process.env, SRC: src, DEST: path.join(cache, 'vort.zip') } });
+  const unpin = pinFixture({ [integrity.URLS.vortZip]: path.join(cache, 'vort.zip') });
 
-  const res = await legacy.setMvProvider(game, 'vort', { cacheDir: cache, fetchImpl });
+  const res = await legacy.setMvProvider(game, 'vort', { cacheDir: cache, fetchImpl }).finally(unpin);
   assert.equal(res.from, 'lumenite-kernel');
   assert.ok(!exists(game, 'reshade-shaders/Shaders/lumenite_Kernel.fx'));
   for (const f of ['lumenite_Compute.fxh', 'lumenite_Helpers.fxh', 'lumenite_Projections.fxh']) {

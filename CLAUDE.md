@@ -20,6 +20,27 @@ if the pinned tag has no `.zip` asset or resolves to a different tag. It never f
 "latest". A draft engine release is not visible to the workflow, so publish it (or mark it a
 pre-release) before pinning to it.
 
+The running app's engine updater (`update:check` in `main.js`, `engines.js`) follows the same pin: it
+offers `engineVersion`, and only *reports* a newer "latest" as untested with this app version.
+
+## Downloads are checked (src/integrity.js)
+
+Every file the app downloads and places is checked against a sha256 before use:
+
+- **Fixed URLs** (the ReShade installer, VORT, the ReShade headers, LumeniteFX, dgVoodoo2, DXVK)
+  are pinned in `PINS`. The text files are fetched from a pinned **commit**, not a branch.
+- **GitHub release assets** are checked against the `digest` GitHub publishes for them.
+
+Bumping any pinned download means re-hashing it in `integrity.js`. `test/integrity.test.js` fails if a
+fixed URL loses its pin. Tests that serve or cache a stand-in for a pinned URL use `pinFixture()` from
+`test/helpers.js`.
+
+## Issue triage
+
+`.github/workflows/triage.yml` labels new reports (`game-help`, `route:<id>`, `crash`) and closes a
+`needs-info` issue once our last question has gone 14 days unanswered. It never closes
+`fixed-in-next-release`. The logic is in `tools/triage/triage.js`, tested in `test/triage.test.js`.
+
 ## Keep the library fast
 
 `test/perf-library.test.js` syncs a 50-game fake library three times and fails if a pass exceeds its

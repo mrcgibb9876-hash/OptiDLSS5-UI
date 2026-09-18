@@ -247,15 +247,24 @@ test('update:check and update:install per engine, with the sha256 asset checked'
   const zipBytes = fs.readFileSync(zipPath);
   const goodSha = crypto.createHash('sha256').update(zipBytes).digest('hex');
 
+  const PIN = require('../package.json').engineVersion;
+  assert.ok(PIN, 'package.json pins an engine version');
   const seen = [];
   let shaText = `${goodSha} *OptiScaler-DLSSNR-v0.7.7.zip`;
   const realFetch = global.fetch;
   global.fetch = async (url) => {
     seen.push(String(url));
-    if (/releases\/latest$/.test(url)) {
-      return { ok: true, status: 200, json: async () => ({ tag_name: 'v0.7.7', name: 'v0.7.7', published_at: 'x', assets: [
+    // The pinned release (package.json engineVersion) is what is offered; "latest" is newer and only
+    // reported as untested with this app version.
+    if (url.endsWith(`/releases/tags/${encodeURIComponent(PIN)}`)) {
+      return { ok: true, status: 200, json: async () => ({ tag_name: PIN, name: PIN, published_at: 'x', assets: [
         { name: 'OptiScaler-DLSSNR-v0.7.7.zip.sha256', browser_download_url: 'https://dl/zip.sha256' },
-        { name: 'OptiScaler-DLSSNR-v0.7.7.zip', browser_download_url: 'https://dl/zip' },
+        { name: 'OptiScaler-DLSSNR-v0.7.7.zip', browser_download_url: 'https://dl/zip', digest: `sha256:${goodSha}` },
+      ] }) };
+    }
+    if (/releases\/latest$/.test(url)) {
+      return { ok: true, status: 200, json: async () => ({ tag_name: 'v99.0.0', name: 'v99.0.0', published_at: 'x', assets: [
+        { name: 'OptiScaler-DLSSNR-v99.0.0.zip', browser_download_url: 'https://dl/newer-zip' },
       ] }) };
     }
     if (String(url) === 'https://dl/zip') return { ok: true, status: 200, arrayBuffer: async () => zipBytes.buffer.slice(zipBytes.byteOffset, zipBytes.byteOffset + zipBytes.byteLength) };
@@ -269,6 +278,16 @@ test('update:check and update:install per engine, with the sha256 asset checked'
     assert.match(seen[0], /mrcgibb9876-hash\/OptiScaler_DLSSNR/);
     assert.equal(check.downloadUrl, 'https://dl/zip');
     assert.equal(check.sha256Url, 'https://dl/zip.sha256');
+    assert.equal(check.tag, PIN, 'the pinned engine is offered, not "latest"');
+    assert.equal(check.pinned, true);
+    assert.equal(check.newerUntested, 'v99.0.0');
+    assert.equal(check.sha256, goodSha, 'the asset digest is passed on');
+
+    // GitHub's published digest is checked too: a wrong one refuses before anything is extracted.
+    const badDigest = await invoke('update:install', { downloadUrl: check.downloadUrl, tag: check.tag, sha256: 'ab'.repeat(32) });
+    assert.equal(badDigest.ok, false);
+    assert.match(badDigest.error, /published checksum/);
+    assert.ok(!fs.existsSync(path.join(userData, 'OptiScalerRelease')), 'nothing extracted after a digest failure');
 
     shaText = 'deadbeef'.repeat(8) + ' *OptiScaler-DLSSNR-v0.7.7.zip';
     const bad = await invoke('update:install', { downloadUrl: check.downloadUrl, tag: check.tag, sha256Url: check.sha256Url });

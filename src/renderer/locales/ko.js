@@ -274,6 +274,7 @@ window.I18N.register("ko", {
   "Deployed the Streamline SDK (needed for DLSS Frame Gen) to: {list}": "Streamline SDK(DLSS Frame Gen에 필요)를 배포함: {list}",
   "Could not auto-update: {list} — close the game and retry.": "자동 업데이트 실패: {list} — 게임을 닫고 다시 시도하세요.",
   "Could not set up the bundled OptiScaler engine: {error}": "번들된 OptiScaler 엔진을 설정하지 못했습니다: {error}",
+  "{engine} {tag} is out, but this app version was not tested with it -- it comes with the next app update.": "{engine} {tag}이(가) 나왔지만 이 앱 버전에서는 테스트되지 않았습니다 -- 다음 앱 업데이트와 함께 제공됩니다.",
   "OptiScaler engine {tag} set up from the installer -- nothing to download.": "설치 프로그램에서 OptiScaler 엔진 {tag}을 설정했습니다 -- 받을 것이 없습니다.",
   "Fetching the DLSS NR model file (about 165 MB)…": "DLSS NR 모델 파일 받는 중(약 165 MB)…",
   "Could not fetch the DLSS NR model automatically: {error}": "DLSS NR 모델을 자동으로 받지 못했습니다: {error}",

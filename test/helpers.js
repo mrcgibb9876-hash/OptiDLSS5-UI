@@ -109,4 +109,21 @@ function listing(dir) {
   return out.sort();
 }
 
-module.exports = { REPO, scratchDir, write, fakeExe, fakeReleaseFolder, fakeNrModel, loadMain, listing };
+// Downloads are checked against integrity.js's pins; a test that serves or caches a stand-in for a
+// pinned URL pins the stand-in for its duration. Returns the undo.
+function pinFixture(entries) {
+  const integrity = require(path.join(REPO, 'src', 'integrity'));
+  const saved = new Map();
+  for (const [url, content] of Object.entries(entries)) {
+    saved.set(url, Object.prototype.hasOwnProperty.call(integrity.PINS, url) ? integrity.PINS[url] : undefined);
+    const buf = Buffer.isBuffer(content) ? content : (fs.existsSync(String(content)) ? fs.readFileSync(content) : Buffer.from(String(content)));
+    integrity.PINS[url] = integrity.sha256(buf);
+  }
+  return () => {
+    for (const [url, prev] of saved) {
+      if (prev === undefined) delete integrity.PINS[url]; else integrity.PINS[url] = prev;
+    }
+  };
+}
+
+module.exports = { REPO, scratchDir, write, fakeExe, fakeReleaseFolder, fakeNrModel, loadMain, listing, pinFixture };

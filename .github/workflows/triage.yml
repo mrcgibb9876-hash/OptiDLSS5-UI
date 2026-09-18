@@ -1,0 +1,70 @@
+name: Triage issues
+
+# Labels app reports as they arrive, and closes needs-info issues nobody answered for two weeks.
+# The decisions live in tools/triage/triage.js (unit-tested); this file only talks to GitHub.
+
+on:
+  issues:
+    types: [opened]
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  label:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools/triage
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const triage = require(`${process.env.GITHUB_WORKSPACE}/tools/triage/triage.js`);
+            const issue = context.payload.issue;
+            const report = triage.parseReport(issue.body, issue.title);
+            const labels = triage.labelsFor(report);
+            if (!labels.length) { core.info('Not an app report; no labels.'); return; }
+            for (const name of labels.filter((l) => l.startsWith('route:'))) {
+              try {
+                await github.rest.issues.getLabel({ ...context.repo, name });
+              } catch (e) {
+                if (e.status !== 404) throw e;
+                await github.rest.issues.createLabel({ ...context.repo, name, color: '5319e7', description: 'Install route the report came from' });
+              }
+            }
+            await github.rest.issues.addLabels({ ...context.repo, issue_number: issue.number, labels });
+            core.info(`#${issue.number}: ${labels.join(', ')} (${report.source})`);
+
+  stale:
+    if: github.event_name != 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: tools/triage
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const triage = require(`${process.env.GITHUB_WORKSPACE}/tools/triage/triage.js`);
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              ...context.repo, state: 'open', labels: 'needs-info', per_page: 100,
+            });
+            for (const issue of issues.filter((i) => !i.pull_request)) {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                ...context.repo, issue_number: issue.number, per_page: 100,
+              });
+              const decision = triage.staleDecision(
+                { labels: issue.labels, user: issue.user.login, createdAt: issue.created_at },
+                comments.map((c) => ({ user: c.user.login, authorAssociation: c.author_association, createdAt: c.created_at })),
+              );
+              core.info(`#${issue.number}: ${decision.close ? 'close' : 'keep'} (${decision.reason})`);
+              if (!decision.close) continue;
+              await github.rest.issues.createComment({ ...context.repo, issue_number: issue.number, body: triage.STALE_COMMENT });
+              await github.rest.issues.update({ ...context.repo, issue_number: issue.number, state: 'closed', state_reason: 'not_planned' });
+            }
