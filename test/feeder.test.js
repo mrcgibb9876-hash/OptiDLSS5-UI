@@ -14,9 +14,26 @@ const { diagnose } = require(path.join(__dirname, '..', 'src', 'gamehelp'));
 const { agilityRedistRisk } = require(path.join(__dirname, '..', 'src', 'detect'));
 const onWindows = process.platform === 'win32';
 
+const integrity = require(path.join(__dirname, '..', 'src', 'integrity'));
+
 const HEADER = '#pragma once\n#include "ReShadeUI.fxh"\n';
-const okResponse = (text) => ({ ok: true, status: 200, text: async () => text });
-const failResponse = (status) => ({ ok: false, status, text: async () => 'Service Unavailable' });
+const bytes = (text) => { const b = Buffer.from(text); return b.buffer.slice(b.byteOffset, b.byteOffset + b.length); };
+const okResponse = (text) => ({ ok: true, status: 200, text: async () => text, arrayBuffer: async () => bytes(text) });
+const failResponse = (status) => ({ ok: false, status, text: async () => 'Service Unavailable', arrayBuffer: async () => bytes('Service Unavailable') });
+
+// The real headers are pinned (integrity.js); these tests serve a stand-in, so pin the stand-in
+// for the duration of each test that fetches headers.
+function withHeaderPins(content, fn) {
+  const saved = { ...integrity.PINS };
+  for (const name of ['ReShade.fxh', 'ReShadeUI.fxh']) {
+    integrity.PINS[integrity.URLS.reshadeShadersRaw + name] = integrity.sha256(Buffer.from(content));
+    integrity.PINS[integrity.URLS.reshadeShadersMirror + name] = integrity.sha256(Buffer.from(content));
+  }
+  return Promise.resolve().then(fn).finally(() => {
+    for (const k of Object.keys(integrity.PINS)) delete integrity.PINS[k];
+    Object.assign(integrity.PINS, saved);
+  });
+}
 
 test('a 503 is retried and then succeeds; a 404 is final at once', async () => {
   let calls = 0;
@@ -32,7 +49,7 @@ test('a 503 is retried and then succeeds; a 404 is final at once', async () => {
   assert.equal(gone, 1);
 });
 
-test('a ReShade header comes from the mirror when GitHub keeps failing, and an error page is not accepted', async () => {
+test('a ReShade header comes from the mirror when GitHub keeps failing, and an error page is not accepted', () => withHeaderPins(HEADER, async () => {
   const seen = [];
   const fetchImpl = async (url) => {
     seen.push(url);
@@ -44,10 +61,20 @@ test('a ReShade header comes from the mirror when GitHub keeps failing, and an e
   assert.ok(seen.some((u) => u.includes('cdn.jsdelivr.net')), 'mirror was tried');
 
   const htmlOnly = async () => okResponse('<html><body>Cloudflare</body></html>');
-  await assert.rejects(() => feeder.fetchReShadeHeader('ReShade.fxh', { 'User-Agent': 't' }, { fetchImpl: htmlOnly, pauses: [] }), /did not return a shader header|Could not fetch/);
-});
+  await assert.rejects(() => feeder.fetchReShadeHeader('ReShade.fxh', { 'User-Agent': 't' }, { fetchImpl: htmlOnly, pauses: [] }), /did not match its published checksum|did not return a shader header|Could not fetch/);
+}));
 
-test('the headers are fetched once per machine: the second deploy reads the cache, no network', async () => {
+test('a ReShade header that does not match its pin is refused, and the mirror is not tried for it', () => withHeaderPins(HEADER, async () => {
+  const seen = [];
+  const fetchImpl = async (url) => { seen.push(url); return okResponse('#pragma once\n// tampered\n'); };
+  await assert.rejects(
+    () => feeder.fetchReShadeHeader('ReShade.fxh', { 'User-Agent': 't' }, { fetchImpl, pauses: [] }),
+    (e) => e.code === 'checksum-mismatch' && /Windows Defender/.test(e.message),
+  );
+  assert.equal(seen.length, 1);
+}));
+
+test('the headers are fetched once per machine: the second deploy reads the cache, no network', () => withHeaderPins(HEADER, async () => {
   const cacheDir = path.join(scratchDir('feeder-cache'), 'cache');
   const gameA = scratchDir('feeder-game-a');
   const gameB = scratchDir('feeder-game-b');
@@ -60,7 +87,14 @@ test('the headers are fetched once per machine: the second deploy reads the cach
   assert.deepEqual(second.files, ['ReShade.fxh', 'ReShadeUI.fxh']);
   assert.equal(fetches, 2, 'served from the cache');
   assert.equal(fs.readFileSync(path.join(gameB, 'reshade-shaders', 'Shaders', 'ReShade.fxh'), 'utf8'), HEADER);
-});
+
+  // A cached header damaged on disk is fetched again rather than deployed.
+  fs.writeFileSync(path.join(cacheDir, 'reshade-headers', 'ReShade.fxh'), 'garbage');
+  const gameC = scratchDir('feeder-game-c');
+  await feeder.deployReShadeCommonHeaders(gameC, { 'User-Agent': 't' }, { cacheDir, fetchImpl, pauses: [] });
+  assert.equal(fetches, 3);
+  assert.equal(fs.readFileSync(path.join(gameC, 'reshade-shaders', 'Shaders', 'ReShade.fxh'), 'utf8'), HEADER);
+}));
 
 test('a Unity game gets copy-before-clears and reversed depth, without losing what the ini already said', () => {
   const dir = scratchDir('feeder-unity');

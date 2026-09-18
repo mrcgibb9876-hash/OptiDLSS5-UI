@@ -17,7 +17,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
 const { execFileSync } = require('node:child_process');
-const { REPO, scratchDir, write, fakeReleaseFolder, fakeNrModel, loadMain, listing } = require('./helpers');
+const { REPO, scratchDir, write, fakeReleaseFolder, fakeNrModel, loadMain, listing, pinFixture } = require('./helpers');
 const translation = require(path.join(REPO, 'src', 'translation'));
 const legacy = require(path.join(REPO, 'src', 'legacy'));
 const feeder = require(path.join(REPO, 'src', 'feeder'));
@@ -161,9 +161,10 @@ test('a 32-bit DirectX 11 game swaps to DXVK and back, and the journal puts ever
   const { invoke, userData } = loadMain({ dialogResponse: 0 });
   await translation.unpackDxvk(fakeDxvkTarGz(), path.join(userData, 'dxvk-cache'));
   write(path.join(userData, 'feeder-cache'), path.basename(feeder.RESHADE_SETUP_URL), 'setup');
+  const unpin = pinFixture({ [feeder.RESHADE_SETUP_URL]: 'setup' });
   const layer = stubVulkanLayer(base);
   const dialogs = captureDialogs();
-  t.after(() => { layer.restore(); dialogs.restore(); });
+  t.after(() => { layer.restore(); dialogs.restore(); unpin(); });
   const installed = listing(game);
   assert.equal(translation.identifyWrapper(path.join(game, 'dxgi.dll')), 'reshade', 'Install put ReShade in as dxgi.dll');
 
@@ -244,6 +245,7 @@ test('DXVK chosen before Install goes in after the helper, over the proxy it par
   fs.mkdirSync(cache, { recursive: true });
   fs.copyFileSync(comps.reshadeSetup, path.join(cache, path.basename(feeder.RESHADE_SETUP_URL)));
   fs.copyFileSync(comps.feederZip, path.join(cache, 'DLSS5-Feeder-test.zip'));
+  t.after(pinFixture({ [feeder.RESHADE_SETUP_URL]: comps.reshadeSetup }));
   const layer = stubVulkanLayer(base);
   const saved = { asset: feeder.resolveFeederAsset, shaders: legacy.deployLegacyShaders, nvngx: feeder.deployNvngxDlss };
   feeder.resolveFeederAsset = async () => ({ url: 'https://example.invalid/feeder.zip', name: 'DLSS5-Feeder-test.zip', tag: 'test' });
@@ -296,6 +298,7 @@ test('DXVK proven for this game by the catalog goes in at Install with nothing p
   fs.mkdirSync(cache, { recursive: true });
   fs.copyFileSync(comps.reshadeSetup, path.join(cache, path.basename(feeder.RESHADE_SETUP_URL)));
   fs.copyFileSync(comps.feederZip, path.join(cache, 'DLSS5-Feeder-test.zip'));
+  t.after(pinFixture({ [feeder.RESHADE_SETUP_URL]: comps.reshadeSetup }));
   const local = write(base, 'known-good.local.json', JSON.stringify({ version: 1, entries: [{
     exe: 'game.exe', status: 'works', setup: { route: 'feeder32', via: 'dxvk', api: 'dx11' },
     reports: { works: 1, fails: 0 }, dead_ends: [], sources: ['test fixture'],

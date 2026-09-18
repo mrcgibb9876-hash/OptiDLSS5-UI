@@ -45,6 +45,7 @@ const fsp = require('node:fs/promises');
 const { openZip, findEntry, findEntries, extractEntryTo } = require('./zip');
 const { setIniKey, getIniKey } = require('./ini-merge');
 const feeder = require('./feeder');
+const integrity = require('./integrity');
 const verified = require('./verified');
 const { readFileVersion } = require('./detect');
 
@@ -279,20 +280,9 @@ function lumaUeReadiness(dir, exePath, detected = null, lumaMod = null) {
   };
 }
 
-// --- download + cache, same shape as feeder.js's downloadToCache -----------------------------
+// --- download + cache: feeder.js's downloadToCache, which checks the release asset's sha256 ---
 
-async function downloadToCache(url, cacheDir, fileName, ghHeaders) {
-  const dest = path.join(cacheDir, fileName);
-  if (fs.existsSync(dest)) return dest;
-  const res = await fetch(url, { headers: ghHeaders });
-  if (!res.ok) throw new Error(`Download failed: HTTP ${res.status} for ${url}`);
-  const buf = Buffer.from(await res.arrayBuffer());
-  await fsp.mkdir(cacheDir, { recursive: true });
-  const tmp = dest + '.part';
-  await fsp.writeFile(tmp, buf);
-  await fsp.rename(tmp, dest);
-  return dest;
-}
+const downloadToCache = (url, cacheDir, fileName, ghHeaders, opts) => feeder.downloadToCache(url, cacheDir, fileName, ghHeaders, opts);
 
 async function resolveLumaAsset(ghHeaders, profile = LUMA_PROFILES.ue) {
   const res = await fetch(LUMA_RELEASES_API, { headers: ghHeaders });
@@ -301,7 +291,7 @@ async function resolveLumaAsset(ghHeaders, profile = LUMA_PROFILES.ue) {
   const asset = (release.assets || []).find((a) => profile.asset.test(a.name));
   if (!asset) throw new Error(`No ${profile.assetName} asset in the latest Luma-Framework release`);
   // Luma publishes a rolling "latest-<n>" tag; the cache file is named per tag so an update is fetched.
-  return { url: asset.browser_download_url, name: `${String(release.tag_name || 'latest').replace(/[^\w.-]/g, '')}-${asset.name}`, tag: release.tag_name };
+  return { url: asset.browser_download_url, name: `${String(release.tag_name || 'latest').replace(/[^\w.-]/g, '')}-${asset.name}`, tag: release.tag_name, digest: integrity.digestFromAsset(asset) };
 }
 
 // --- deploy -------------------------------------------------------------------------------
@@ -326,7 +316,7 @@ async function deployLumaUeStack(dir, { cacheDir, getRhiManifest, compareVersion
   }
 
   const asset = await resolveLumaAsset(ghHeaders, profile);
-  const zipPath = await downloadToCache(asset.url, cacheDir, asset.name, ghHeaders);
+  const zipPath = await downloadToCache(asset.url, cacheDir, asset.name, ghHeaders, { sha256: asset.digest });
   const zip = openZip(zipPath);
 
   const shaderEntries = findEntries(zip, new RegExp('^' + LUMA_SHADER_PREFIX.replace('/', '\\/')));

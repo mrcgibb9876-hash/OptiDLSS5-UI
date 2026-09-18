@@ -274,6 +274,7 @@ window.I18N.register("de", {
   "Deployed the Streamline SDK (needed for DLSS Frame Gen) to: {list}": "Streamline SDK (für DLSS Frame Gen nötig) bereitgestellt in: {list}",
   "Could not auto-update: {list} — close the game and retry.": "Automatisches Update nicht möglich: {list} — schließe das Spiel und versuche es erneut.",
   "Could not set up the bundled OptiScaler engine: {error}": "Die mitgelieferte OptiScaler-Engine konnte nicht eingerichtet werden: {error}",
+  "{engine} {tag} is out, but this app version was not tested with it -- it comes with the next app update.": "{engine} {tag} ist erschienen, aber diese App-Version wurde nicht damit getestet -- es kommt mit dem nächsten App-Update.",
   "OptiScaler engine {tag} set up from the installer -- nothing to download.": "OptiScaler-Engine {tag} aus dem Installer eingerichtet -- nichts herunterzuladen.",
   "Fetching the DLSS NR model file (about 165 MB)…": "DLSS-NR-Modelldatei wird geholt (etwa 165 MB)…",
   "Could not fetch the DLSS NR model automatically: {error}": "DLSS-NR-Modell konnte nicht automatisch geholt werden: {error}",

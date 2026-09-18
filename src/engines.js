@@ -37,6 +37,41 @@ function releasesApi(id) {
   return `https://api.github.com/repos/${engine(id).repo}/releases/latest`;
 }
 
+function releaseByTagApi(id, tag) {
+  return `https://api.github.com/repos/${engine(id).repo}/releases/tags/${encodeURIComponent(tag)}`;
+}
+
+// The engine release this app version was built and tested with: package.json's engineVersion,
+// the same pin release.yml bundles. null in a checkout without one (then "latest" is used).
+function pinnedEngineTag(pkg = null) {
+  try {
+    const p = pkg || require('../package.json');
+    const tag = p && typeof p.engineVersion === 'string' ? p.engineVersion.trim() : '';
+    return /^v?\d+(\.\d+)*/.test(tag) ? tag : null;
+  } catch {
+    return null;
+  }
+}
+
+// v1.0.41 vs v1.0.40 -> 1; anything after the numbers ("-final") is ignored.
+function compareEngineTags(a, b) {
+  const nums = (t) => (String(t || '').replace(/^v/i, '').match(/^\d+(\.\d+)*/) || ['0'])[0].split('.').map(Number);
+  const x = nums(a); const y = nums(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const d = (x[i] || 0) - (y[i] || 0);
+    if (d) return d > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+// What the updater offers: the pinned release when there is a pin (a newer "latest" is only
+// reported, as untested with this app version), otherwise the latest release.
+function chooseEngineOffer({ pin, pinned, latest }) {
+  if (!pin) return { offer: latest || null, newerUntested: null };
+  const newer = latest && latest.tag_name && compareEngineTags(latest.tag_name, pin) > 0 ? latest.tag_name : null;
+  return { offer: pinned || null, newerUntested: newer };
+}
+
 function releasePageUrl(id) {
   return `https://github.com/${engine(id).repo}/releases/latest`;
 }
@@ -94,6 +129,7 @@ function markerForInstall(prev, id) {
 
 module.exports = {
   DEFAULT_ENGINE, ENGINES, ENGINE_MARKER,
-  normalizeEngine, engine, releasesApi, releasePageUrl, pickAssets, parseSha256Text,
+  normalizeEngine, engine, releasesApi, releaseByTagApi, releasePageUrl, pickAssets, parseSha256Text,
+  pinnedEngineTag, compareEngineTags, chooseEngineOffer,
   readEngineMarker, writeEngineMarker, clampPasses, iniEditsFor, markerForInstall,
 };

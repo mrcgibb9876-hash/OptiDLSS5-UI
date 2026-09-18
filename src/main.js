@@ -14,6 +14,7 @@ const injector = require('./injector');
 const feeder = require('./feeder');
 const lossless = require('./lossless');
 const reengine = require('./reengine');
+const integrity = require('./integrity');
 const presentroute = require('./presentroute');
 const lumaue = require('./lumaue');
 const nativeDlss = require('./native-dlss');
@@ -1019,7 +1020,7 @@ ipcMain.handle('legacy:installHost32', async (_evt, { exePath, detected, release
       throw new Error(`${chosenMv.displayName} needs its licence confirmed before it can be fetched`);
     }
     const asset = await feeder.resolveFeederAsset(GITHUB_HEADERS);
-    const feederZip = await feeder.downloadToCache(asset.url, feederCacheDir(), asset.name, GITHUB_HEADERS);
+    const feederZip = await feeder.downloadToCache(asset.url, feederCacheDir(), asset.name, GITHUB_HEADERS, { sha256: asset.digest });
     const reshadeSetup = await feeder.downloadToCache(feeder.RESHADE_SETUP_URL, feederCacheDir(), path.basename(feeder.RESHADE_SETUP_URL), GITHUB_HEADERS);
     const res = await legacy.deployHost32(dir, plan, {
       feederZip,
@@ -4362,7 +4363,9 @@ async function ensureStreamlineSdkCache(release) {
   try {
     const dlRes = await fetch(release.url, { headers: GITHUB_HEADERS });
     if (!dlRes.ok) throw new Error(`Download failed: HTTP ${dlRes.status}`);
+    integrity.checkFinalUrl(release.url, dlRes);
     const buf = Buffer.from(await dlRes.arrayBuffer());
+    integrity.verifyBuffer(buf, await integrity.expectedSha256(release.url, { headers: GITHUB_HEADERS }), path.basename(release.url));
 
     tmpZip = path.join(os.tmpdir(), `streamline-sdk-${Date.now()}.zip`);
     await fsp.writeFile(tmpZip, buf);
@@ -4526,6 +4529,17 @@ async function getLatestREFrameworkVersion() {
   }
 }
 
+async function reframeworkZipDigest() {
+  try {
+    const res = await fetch(REFRAMEWORK_RELEASES_API, { headers: GITHUB_HEADERS });
+    if (!res.ok) return null;
+    const first = (await res.json())[0];
+    return integrity.digestFromAsset(((first && first.assets) || []).find((a) => a.name === 'REFramework.zip'));
+  } catch {
+    return null;
+  }
+}
+
 async function ensureREFrameworkCache() {
   const cacheDir = reframeworkCacheDir();
   const versionMarker = path.join(cacheDir, '.version');
@@ -4545,7 +4559,11 @@ async function ensureREFrameworkCache() {
   try {
     const dlRes = await fetch(REFRAMEWORK_ZIP_URL, { headers: GITHUB_HEADERS });
     if (!dlRes.ok) throw new Error(`Download failed: HTTP ${dlRes.status}`);
+    integrity.checkFinalUrl(REFRAMEWORK_ZIP_URL, dlRes);
     const buf = Buffer.from(await dlRes.arrayBuffer());
+    // "latest/download" names no tag, so the digest comes from the newest release's asset. A
+    // nightly published between the two requests only costs a retry.
+    integrity.verifyBuffer(buf, await reframeworkZipDigest(), 'REFramework.zip');
 
     tmpZip = path.join(os.tmpdir(), `reframework-${Date.now()}.zip`);
     await fsp.writeFile(tmpZip, buf);
@@ -4655,7 +4673,10 @@ async function ensurePdReframeworkCache(game) {
     if (!asset) throw new Error(`no ${reengine.pdUpscalerAssetName(game)} in ${reengine.PD_UPSCALER_SOURCE_LABEL}`);
     const res = await feeder.fetchWithRetry(asset.browser_download_url, { headers: GITHUB_HEADERS });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    await fsp.writeFile(tmpZip, Buffer.from(await res.arrayBuffer()));
+    integrity.checkFinalUrl(asset.browser_download_url, res);
+    const pdBuf = Buffer.from(await res.arrayBuffer());
+    integrity.verifyBuffer(pdBuf, integrity.digestFromAsset(asset), asset.name);
+    await fsp.writeFile(tmpZip, pdBuf);
     await fsp.mkdir(cacheDir, { recursive: true });
     const revision = reengine.extractPdReframework(tmpZip, cachedDll);
     if (revision) await fsp.writeFile(revisionFile, revision, 'utf-8');
@@ -5577,13 +5598,26 @@ ipcMain.handle('banner:import-local', async (_evt, sourcePath) => {
 ipcMain.handle('update:check', async (_evt, { engine } = {}) => {
   const id = engines.normalizeEngine(engine);
   try {
-    const res = await fetch(engines.releasesApi(id), { headers: GITHUB_HEADERS });
-    if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
-    const data = await res.json();
+    // The pinned release (package.json engineVersion) is what this app version was tested with;
+    // a newer "latest" is only reported. No pin: latest, as before.
+    const pin = engines.pinnedEngineTag();
+    const getJson = async (url) => {
+      const r = await fetch(url, { headers: GITHUB_HEADERS });
+      if (!r.ok) throw new Error(`GitHub API returned ${r.status}`);
+      return r.json();
+    };
+    const pinned = pin ? await getJson(engines.releaseByTagApi(id, pin)) : null;
+    let latest = null;
+    try { latest = await getJson(engines.releasesApi(id)); } catch (e) { if (!pin) throw e; }
+    const { offer: data, newerUntested } = engines.chooseEngineOffer({ pin, pinned, latest });
+    if (!data) throw new Error('no engine release found');
     const { zip: zipAsset, sha256: shaAsset } = engines.pickAssets(data);
     return {
       ok: true,
       engine: id,
+      pinned: !!pin,
+      newerUntested,
+      sha256: integrity.digestFromAsset(zipAsset),
       tag: data.tag_name,
       name: data.name || data.tag_name,
       publishedAt: data.published_at,
@@ -5706,7 +5740,7 @@ ipcMain.handle('update:bundledEngine', () => ({ ...(bundledEngine() || {}), mana
 // extracted and validated -- a truncated zip or a blocked Expand-Archive leaves a working engine
 // exactly as it was. engine picks which managed folder; sha256Url (a release's own checksum
 // asset, which the Pre-SR fork publishes) is checked before anything is extracted.
-ipcMain.handle('update:install', async (_evt, { downloadUrl, localZip, tag, engine, sha256Url }) => {
+ipcMain.handle('update:install', async (_evt, { downloadUrl, localZip, tag, engine, sha256Url, sha256: digest }) => {
   let tmpZip;
   const dest = managedReleaseFolder(engine);
   const staging = `${dest}.new`;
@@ -5715,7 +5749,10 @@ ipcMain.handle('update:install', async (_evt, { downloadUrl, localZip, tag, engi
     if (!zipPath) {
       const res = await fetch(downloadUrl, { headers: GITHUB_HEADERS });
       if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
+      integrity.checkFinalUrl(downloadUrl, res);
       const buf = Buffer.from(await res.arrayBuffer());
+      // GitHub's published digest for the asset, when update:check had one.
+      if (digest && /^[0-9a-f]{64}$/i.test(digest)) integrity.verifyBuffer(buf, digest.toLowerCase(), 'The engine zip');
 
       if (sha256Url) {
         const shaRes = await fetch(sha256Url, { headers: GITHUB_HEADERS });

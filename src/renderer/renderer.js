@@ -4818,7 +4818,7 @@ async function ensureEngine() {
       const res = await window.api.checkUpdate(DEFAULT_ENGINE_ID);
       if (!res.ok) return { ok: false, error: res.error };
       toast(t('Fetching {engine} {tag}…', { engine: engineLabel(), tag: res.tag }));
-      const installRes = await window.api.installUpdate({ downloadUrl: res.downloadUrl, assetName: res.assetName, tag: res.tag, engine: DEFAULT_ENGINE_ID, sha256Url: res.sha256Url });
+      const installRes = await window.api.installUpdate({ downloadUrl: res.downloadUrl, assetName: res.assetName, tag: res.tag, engine: DEFAULT_ENGINE_ID, sha256Url: res.sha256Url, sha256: res.sha256 });
       if (!installRes.ok) return { ok: false, error: installRes.error };
       setEngineState(DEFAULT_ENGINE_ID, installRes.folder, res.tag);
       await window.api.saveSettings(settings);
@@ -4915,8 +4915,9 @@ async function updateEngineIfNewer() {
   const res = await window.api.checkUpdate(DEFAULT_ENGINE_ID);
   if (!res.ok) return { ok: false, error: res.error };
   const installed = engineVersion();
-  // Never step backwards from the bundled engine because GitHub's "latest" lags behind it.
-  if (installed && compareTags(installed, res.tag) >= 0) return { ok: true, updated: false, tag: installed };
+  // Never step backwards from the bundled engine because GitHub's "latest" lags behind it. The
+  // offer is the engine this app version was tested with; a newer one is only mentioned.
+  if (installed && compareTags(installed, res.tag) >= 0) return { ok: true, updated: false, tag: installed, newerUntested: res.newerUntested };
   const hadRelease = !!engineFolder();
   const installRes = await window.api.installUpdate({
     downloadUrl: res.downloadUrl,
@@ -4924,13 +4925,14 @@ async function updateEngineIfNewer() {
     tag: res.tag,
     engine: DEFAULT_ENGINE_ID,
     sha256Url: res.sha256Url,
+    sha256: res.sha256,
   });
   if (!installRes.ok) return { ok: false, error: installRes.error, tag: res.tag };
   setEngineState(DEFAULT_ENGINE_ID, installRes.folder, res.tag);
   await window.api.saveSettings(settings);
   refreshBannerVisibility();
   autoSyncStaleGames();
-  return { ok: true, updated: true, hadRelease, tag: res.tag };
+  return { ok: true, updated: true, hadRelease, tag: res.tag, newerUntested: res.newerUntested };
 }
 
 async function autoUpdateOptiScalerRelease() {
@@ -4986,6 +4988,9 @@ $('#btn-check-updates').addEventListener('click', async () => {
     if (!engineRes.ok) lines.push(t('Update failed: {error}', { error: engineRes.error }));
     else if (engineRes.updated) lines.push(t('OptiScaler engine updated to {tag}', { tag: engineRes.tag }) + '.');
     else lines.push(t('{engine} up to date ({tag}).', { engine: engineLabel(), tag: engineRes.tag || '?' }));
+    if (engineRes.ok && engineRes.newerUntested) {
+      lines.push(t('{engine} {tag} is out, but this app version was not tested with it -- it comes with the next app update.', { engine: engineLabel(), tag: engineRes.newerUntested }));
+    }
 
     // Toasts for itself when it fetches; a newer model reaches the games through the sync.
     ensureNrModel().then((fetched) => { if (fetched) autoSyncStaleGames(); }).catch(() => {});

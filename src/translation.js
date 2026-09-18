@@ -422,7 +422,7 @@ function canDeploy(dir, layer) {
 const DXVK = {
   version: '3.1.1',
   url: 'https://github.com/doitsujin/dxvk/releases/download/v3.1.1/dxvk-3.1.1.tar.gz',
-  sha256: '40565b4a724aadc4433fa4e010b4b23916d9b1f1baeee64e17186db94f54e608',
+  sha256: require('./integrity').pinFor('https://github.com/doitsujin/dxvk/releases/download/v3.1.1/dxvk-3.1.1.tar.gz'),
   fileName: 'dxvk-3.1.1.tar.gz',
   cacheName: 'dxvk-3.1.1',
   page: 'https://github.com/doitsujin/dxvk/releases',

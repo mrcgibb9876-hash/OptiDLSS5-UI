@@ -45,6 +45,7 @@ const os = require('node:os');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const { setIniKey, getIniKey } = require('./ini-merge');
 const nativeDlss = require('./native-dlss');
+const integrity = require('./integrity');
 
 const FEEDER_RELEASES_API = 'https://api.github.com/repos/jlrouzies-fr/DLSS5-Feeder/releases/latest';
 // GitHub's /releases/latest deliberately excludes pre-releases, so a beta the Feeder's author
@@ -60,7 +61,7 @@ const FEEDER_ASSET_PATTERN = /^DLSS5-Feeder-.*\.zip$/i;
 // inside) was not re-verified this pass since a prior, since-removed integration in this same
 // repo already downloaded and confirmed this exact URL's contents (see git history on the
 // deleted src/native-feeder/reshade.js, commit 0738a9e removed it, ec3083d added it).
-const RESHADE_SETUP_URL = 'https://reshade.me/downloads/ReShade_Setup_6.8.0_Addon.exe';
+const RESHADE_SETUP_URL = integrity.URLS.reshadeSetup;
 
 // Plain filename, not a proxy name -- see the file header for why ReShade no longer proxies
 // anything itself in this integration. OptiScaler.ini's [Plugins] LoadReshade=true is what
@@ -76,7 +77,8 @@ const RESHADE_DLL_NAME = 'ReShade64.dll';
 // real deploy (Batman: Arkham Knight, 2026-09-09): compilation failed on both shaders until
 // these were fetched by hand from ReShade's own community shader repo.
 const RESHADE_COMMON_HEADERS = ['ReShade.fxh', 'ReShadeUI.fxh'];
-const RESHADE_SHADERS_REPO_RAW = 'https://raw.githubusercontent.com/crosire/reshade-shaders/slim/Shaders/';
+// Pinned to one commit (integrity.js) so each header's sha256 can be checked.
+const RESHADE_SHADERS_REPO_RAW = integrity.URLS.reshadeShadersRaw;
 
 // LumeniteFX's own official repo, fetched live (never cached/mirrored) -- see the licence
 // note on MV_PROVIDERS['lumenite-kernel'] for why that matters, not just why it's convenient.
@@ -84,7 +86,8 @@ const RESHADE_SHADERS_REPO_RAW = 'https://raw.githubusercontent.com/crosire/resh
 // real source, 2026-09-09: ReShade.fxh -- already covered by RESHADE_COMMON_HEADERS -- plus
 // three from its own include/ subfolder; lumenite_ColorManagement.fxh in that same folder is
 // NOT included by Kernel.fx and is deliberately left out).
-const LUMENITEFX_REPO_RAW = 'https://raw.githubusercontent.com/umar-afzaal/LumeniteFX/mainline/Shaders/';
+// Still the official repo, fetched live -- at a pinned commit, so each file's sha256 is checked.
+const LUMENITEFX_REPO_RAW = integrity.URLS.lumeniteRaw;
 const LUMENITEFX_KERNEL_FILE = 'lumenite_Kernel.fx';
 const LUMENITEFX_KERNEL_INCLUDES = [
   'include/lumenite_Projections.fxh',
@@ -125,7 +128,7 @@ const FEEDER_DEPLOY_MARKER = '.dlss5ui-feeder-deploy.json';
 // all, so it is offered only when the user's own iMMERSE install is already in the game's shader
 // folder; DRME (0) stays listed but unselectable, so a game deployed with it before this change
 // is still recognised, reported and cleaned up.
-const VORT_COMMIT = 'b410b9f0c0fbb83c8cb42164aaf1655fab386f4a';
+const VORT_COMMIT = integrity.VORT_COMMIT;
 const MV_PROVIDERS = {
   vort: {
     id: 'vort',
@@ -436,12 +439,22 @@ async function fetchWithRetry(url, init = {}, { fetchImpl = fetch, pauses = RETR
   throw lastError;
 }
 
-async function downloadToCache(url, cacheDir, fileName, ghHeaders) {
+// sha256: the digest the caller already has (a GitHub release asset's). Pinned URLs need none, and
+// a GitHub release URL without one is looked up (integrity.js). A cached copy is re-checked when
+// its hash is known without the network, so a file damaged in the cache is fetched again.
+async function downloadToCache(url, cacheDir, fileName, ghHeaders, { sha256: given = null, fetchImpl = fetch } = {}) {
   const dest = path.join(cacheDir, fileName);
-  if (fs.existsSync(dest)) return dest;
-  const res = await fetchWithRetry(url, { headers: ghHeaders });
+  if (fs.existsSync(dest)) {
+    const known = integrity.pinFor(url) || given;
+    if (!known || integrity.sha256(fs.readFileSync(dest)) === String(known).toLowerCase()) return dest;
+    await fsp.rm(dest, { force: true });
+  }
+  const res = await fetchWithRetry(url, { headers: ghHeaders }, { fetchImpl });
   if (!res.ok) throw new Error(`Download failed: HTTP ${res.status} for ${url}`);
+  integrity.checkFinalUrl(url, res);
   const buf = Buffer.from(await res.arrayBuffer());
+  const expected = await integrity.expectedSha256(url, { sha256: given, fetchImpl, headers: ghHeaders });
+  integrity.verifyBuffer(buf, expected, fileName);
   await fsp.mkdir(cacheDir, { recursive: true });
   const tmp = dest + '.part';
   await fsp.writeFile(tmp, buf);
@@ -455,6 +468,7 @@ function feederAssetFromRelease(release) {
   return {
     url: asset.browser_download_url,
     name: asset.name,
+    digest: integrity.digestFromAsset(asset),
     tag: release.tag_name,
     prerelease: !!release.prerelease,
   };
@@ -659,7 +673,7 @@ async function deployReShade(dir, cacheDir, ghHeaders, { force = false, api = 'd
 // minute at raw.githubusercontent.com (a real HTTP 503 on a user's deploy, 2026-09-12) is not
 // the end of the install. Fetched once and kept in the cache folder with the other downloads,
 // so every later deploy on this machine needs no network for them at all.
-const RESHADE_SHADERS_MIRROR_RAW = 'https://cdn.jsdelivr.net/gh/crosire/reshade-shaders@slim/Shaders/';
+const RESHADE_SHADERS_MIRROR_RAW = integrity.URLS.reshadeShadersMirror;
 
 async function fetchReShadeHeader(name, ghHeaders, { fetchImpl = fetch, pauses } = {}) {
   const init = { headers: { 'User-Agent': ghHeaders['User-Agent'] } };
@@ -668,11 +682,15 @@ async function fetchReShadeHeader(name, ghHeaders, { fetchImpl = fetch, pauses }
     try {
       const res = await fetchWithRetry(base + name, init, { fetchImpl, pauses });
       if (!res.ok) { lastError = new Error(`HTTP ${res.status} for ${base + name}`); continue; }
-      const text = await res.text();
+      const buf = Buffer.from(await res.arrayBuffer());
+      integrity.verifyBuffer(buf, integrity.pinFor(base + name), name);
+      const text = buf.toString('utf8');
       // A host's error page is not a shader: the real file opens with ReShade's own guard.
       if (!/#pragma once|#ifndef|#define/.test(text.slice(0, 400))) { lastError = new Error(`${base + name} did not return a shader header`); continue; }
       return text;
     } catch (e) {
+      // A mismatch is final, not a reason to try the mirror: both serve the same pinned commit.
+      if (e && e.code === 'checksum-mismatch') throw e;
       lastError = e;
     }
   }
@@ -688,7 +706,8 @@ async function deployReShadeCommonHeaders(dir, ghHeaders, { force = false, cache
     if (fs.existsSync(dest) && !force) continue;
     const cached = cacheDir ? path.join(cacheDir, 'reshade-headers', name) : null;
     let text = null;
-    if (cached && fs.existsSync(cached)) {
+    const pinned = integrity.pinFor(RESHADE_SHADERS_REPO_RAW + name);
+    if (cached && fs.existsSync(cached) && (!pinned || integrity.sha256(fs.readFileSync(cached)) === pinned)) {
       text = await fsp.readFile(cached, 'utf8');
     } else {
       text = await fetchReShadeHeader(name, ghHeaders, { fetchImpl, pauses });
@@ -715,7 +734,7 @@ async function deployFeederAddon(dir, cacheDir, ghHeaders, { force = false, allo
   }
 
   const asset = await resolveFeederAsset(ghHeaders, { allowPrerelease });
-  const zipPath = await downloadToCache(asset.url, cacheDir, asset.name, ghHeaders);
+  const zipPath = await downloadToCache(asset.url, cacheDir, asset.name, ghHeaders, { sha256: asset.digest });
   const zip = openZip(zipPath);
 
   const addonEntry = findEntry(zip, /(^|\/)dlss5-feed\.addon64$/i);
@@ -830,8 +849,10 @@ async function deployLumeniteFx(dir, ghHeaders, { licenseConfirmed = false, fetc
   for (const relPath of files) {
     const res = await fetchImpl(LUMENITEFX_REPO_RAW + relPath, { headers: { 'User-Agent': ghHeaders['User-Agent'] } });
     if (!res.ok) throw new Error(`Could not fetch ${relPath} from LumeniteFX's official repo: HTTP ${res.status}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    integrity.verifyBuffer(buf, integrity.pinFor(LUMENITEFX_REPO_RAW + relPath), relPath);
     const dest = path.join(shaderDir, ...relPath.split('/'));
-    await fsp.writeFile(dest, await res.text(), 'utf8');
+    await fsp.writeFile(dest, buf);
     // reshade-shaders-relative, same as deployMvProvider's, so the deploy marker's mvFiles list
     // means one thing whichever provider wrote it.
     deployed.push(`Shaders/${relPath}`);

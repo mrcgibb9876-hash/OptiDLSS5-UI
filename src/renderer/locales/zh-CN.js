@@ -274,6 +274,7 @@ window.I18N.register("zh-CN", {
   "Deployed the Streamline SDK (needed for DLSS Frame Gen) to: {list}": "已把 Streamline SDK（DLSS 帧生成需要）部署到：{list}",
   "Could not auto-update: {list} — close the game and retry.": "无法自动更新：{list} — 请关闭游戏后重试。",
   "Could not set up the bundled OptiScaler engine: {error}": "无法配置捆绑的 OptiScaler 引擎：{error}",
+  "{engine} {tag} is out, but this app version was not tested with it -- it comes with the next app update.": "{engine} {tag} 已发布，但此应用版本未经其测试 -- 它将随下一次应用更新提供。",
   "OptiScaler engine {tag} set up from the installer -- nothing to download.": "已从安装程序配置 OptiScaler 引擎 {tag} -- 无需下载。",
   "Fetching the DLSS NR model file (about 165 MB)…": "正在获取 DLSS NR 模型文件（约 165 MB）…",
   "Could not fetch the DLSS NR model automatically: {error}": "无法自动获取 DLSS NR 模型：{error}",
