@@ -292,9 +292,16 @@ const DG_WINDOWED = [
 // rendering resolution itself is left to the game ([DirectX] Resolution stays unforced): forcing it
 // breaks the 2D layout of some games, while scaling only makes what is drawn bigger. "fullscreensize"
 // also covers a game that opens its own small window on the 64-bit route.
+//
+// ColorSpace: plain SDR output. dgVoodoo2's shipped "appdriven" drew a black screen on an HDR laptop
+// panel (Lenovo DisplayHDR, 150% scaling) with dgVoodoo 2.87.x -- Assassin's Creed II, 2026-09-18,
+// the game running and nothing faulting -- and "argb8888_srgb" gave a picture, confirmed by a
+// screenshot in a windowed test. PresentationModel and DesktopResolution were tried there too and are
+// deliberately NOT set: both forced exclusive fullscreen.
 const DG_DISPLAY = [
   ['General', 'ScalingMode', 'stretched_ar'],
   ['GeneralExt', 'WindowedAttributes', 'borderless, fullscreensize'],
+  ['GeneralExt', 'ColorSpace', 'argb8888_srgb'],
 ];
 
 function configureDgVoodoo(text, { windowed = false } = {}) {
@@ -477,6 +484,25 @@ async function deployDgVoodoo(dir, plan, source) {
 //   deployShaders(dir)          headers, motion-vector provider, ReShade.ini and preset beside the exe:
 //                               deployLegacyShaders' result, or a plain list of the files it created
 //   deployNvngxDlss(hostDir)    nvngx_dlss.dll into the helper folder
+// Keys in host64\OptiScaler.ini that the ENGINE writes, not this app. [DlssNr] PanelShownOnce: the
+// DLSS 5 panel auto-opens once in the Feeder helper and the engine then sets it true, so it stays
+// shut on later launches (2026-09-18). Every other writer here edits single lines (setIniKey,
+// ensureIniKey, dlssnr.writeSettings), which never drops a key; the one thing that does is a
+// re-install copying the release's OptiScaler.ini over the file, so deployHost32 reads these first
+// and puts them back. Without it every re-install would pop the panel open again.
+const ENGINE_OWNED_HOST_KEYS = [['DlssNr', 'PanelShownOnce']];
+
+function readEngineOwnedKeys(iniPath) {
+  let text;
+  try { text = fs.readFileSync(iniPath, 'utf8'); } catch { return []; }
+  const kept = [];
+  for (const [section, key] of ENGINE_OWNED_HOST_KEYS) {
+    const value = getIniKey(text, section, key);
+    if (value !== null && value !== undefined && String(value).trim() !== '') kept.push([section, key, String(value).trim()]);
+  }
+  return kept;
+}
+
 async function deployHost32(dir, plan, deps) {
   if (!plan || !plan.host32) throw new Error('this game does not take the 32-bit helper route');
   for (const k of ['feederZip', 'reshadeSetup', 'releaseFolder', 'nrDllPath']) {
@@ -536,6 +562,10 @@ async function deployHost32(dir, plan, deps) {
   for (const [section, key, value] of HOST_RESHADE_KEYS) hostIni = setIniKey(hostIni, section, key, value);
   await rec.write(path.join(hostDir, 'ReShade.ini'), Buffer.from(hostIni, 'utf8'), { ours: () => true });
 
+  // Keys the engine itself writes into host64\OptiScaler.ini, read before the release's template
+  // replaces the file below so a re-install does not undo them (ENGINE_OWNED_HOST_KEYS).
+  const engineKept = readEngineOwnedKeys(path.join(hostDir, 'OptiScaler.ini'));
+
   // OptiScaler_DLSSNR, the release as it ships, with OptiScaler.dll as winmm.dll (the helper imports it).
   for (const entry of await fsp.readdir(deps.releaseFolder, { withFileTypes: true })) {
     const src = path.join(deps.releaseFolder, entry.name);
@@ -568,6 +598,7 @@ async function deployHost32(dir, plan, deps) {
       ['Log', 'LogToFile', 'true'],
       ['Log', 'LogLevel', '2'],
     ]) ini = setIniKey(ini, section, key, value);
+    for (const [section, key, value] of engineKept) ini = setIniKey(ini, section, key, value);
     fs.writeFileSync(optiIni, ini, 'utf8');
   }
   await rec.copy(deps.nrDllPath, path.join(hostDir, 'nvngx_dlssnr.dll'), { ours: () => true });
