@@ -1,0 +1,364 @@
+{
+  "_readme": "The known-good catalog (src/catalog.js): per game exe, the setup PROVEN to run DLSS 5 and the setups known to be dead ends, each with its source. Only real evidence goes here -- a confirmed run on a real install, or a run log -- never a guess. After any edit run `node tools/catalog/build.js`: it checks every entry and rewrites sha256, and the app refuses the file while the hash does not match. `node tools/catalog/build.js --digest <issue body> --source \"issue #N\" --write` adds a report from an issue's Run digest.",
+  "version": 1,
+  "sha256": "782a50b1f4ca5fff7a7b6bcefe11ea557cc2aa15f9761ae416396e672588c5b7",
+  "entries": [
+    {
+      "exe": "ai.exe",
+      "name": "Alien: Isolation",
+      "status": "works",
+      "setup": {
+        "route": "feeder32",
+        "via": "native",
+        "api": "dx11"
+      },
+      "reports": {
+        "works": 1,
+        "fails": 0
+      },
+      "dead_ends": [],
+      "updated": "2026-09-16",
+      "notes": "32-bit Direct3D 11 on its own Direct3D: the Feeder's 32-bit add-on hands each frame to the 64-bit helper in host64\\, where the neural pass runs. Alt+Home opens the DLSS 5 panel (since 2026-09-16).",
+      "sources": [
+        "live run 2026-09-14: host64\\OptiScaler.log, NR over 3600 frames, clean shutdown (src/native-dlss.js, test/legacy.test.js)",
+        "live test 2026-09-16: Alt+Home panel on the 32-bit route (src/route.js)"
+      ]
+    },
+    {
+      "exe": "armoredcore6.exe",
+      "name": "ARMORED CORE VI FIRES OF RUBICON",
+      "status": "works",
+      "setup": {
+        "route": "present",
+        "via": null,
+        "api": "dx12"
+      },
+      "reports": {
+        "works": 1,
+        "fails": 1
+      },
+      "dead_ends": [
+        {
+          "route": "feeder",
+          "via": null,
+          "api": null,
+          "verdict": "nr-model-crash",
+          "why": "the DLSS5 Feeder crashed the neural model on its first frame",
+          "source": "live test 2026-09-13/15 (src/presentroute.js, src/verified-games.json)"
+        }
+      ],
+      "updated": "2026-09-15",
+      "notes": "Engine Present route ([DlssNr] Placement=present), no Feeder. 4800 frames, 0 model failures, 50-60 fps with 1 pass at 2560x1600. Launch from the app (skips EasyAntiCheat), offline only.",
+      "sources": [
+        "src/verified-games.json armored-core-vi (verified 2026-09-15)",
+        "src/presentroute.js comment: live run 2026-09-15"
+      ]
+    },
+    {
+      "exe": "assassinscreediigame.exe",
+      "name": "Assassin's Creed II",
+      "status": "no-route",
+      "issue": "no working route yet (DXVK shakes the camera, ReShade on dgVoodoo2 crashes at the 3D menu); waits for the DLSS5 Feeder's Direct3D 9 backend (Feeder issue #64)",
+      "setup": {},
+      "reports": {
+        "works": 0,
+        "fails": 2
+      },
+      "dead_ends": [
+        {
+          "route": "feeder32",
+          "via": "dxvk",
+          "api": null,
+          "verdict": null,
+          "why": "DXVK makes the camera shake (a game bug, DXVK issue #2249)",
+          "source": "live test 2026-09-16/18; app blocks DXVK for early Assassin's Creed (842dccd)"
+        },
+        {
+          "route": "feeder32",
+          "via": "dgvoodoo",
+          "api": null,
+          "verdict": null,
+          "why": "ReShade on dgVoodoo2's Direct3D 11 crashes the game as the 3D menu starts (0xC0000005 at 00BE89B7)",
+          "source": "live test 2026-09-16/18, reproduced with the Feeder and every add-on disabled"
+        }
+      ],
+      "updated": "2026-09-18",
+      "notes": "32-bit DirectX 9. Runs with ReShade on its native D3D9, which the Feeder cannot use yet. The game also dies on focus loss (DXVK issue #3653, a game bug).",
+      "sources": [
+        "live test 2026-09-16/18, parked 2026-09-18"
+      ]
+    },
+    {
+      "exe": "batmanak.exe",
+      "name": "Batman: Arkham Knight",
+      "status": "works",
+      "setup": {
+        "route": "feeder",
+        "via": null,
+        "api": "dx11"
+      },
+      "reports": {
+        "works": 1,
+        "fails": 0
+      },
+      "dead_ends": [],
+      "fg": {
+        "works": [
+          "lossless"
+        ]
+      },
+      "updated": "2026-09-09",
+      "notes": "DLSS5 Feeder + OptiScaler as dxgi.dll. Disable Enhanced Godrays in-game. Frame generation: Lossless Scaling, confirmed in a full session 2026-09-10.",
+      "sources": [
+        "src/verified-games.json batman-arkham-knight (verified 2026-09-09)",
+        "live test 2026-09-10: Lossless Scaling 2x, full session, no crash"
+      ]
+    },
+    {
+      "exe": "codevein2-win64-shipping.exe",
+      "name": "CODE VEIN 2",
+      "status": "works",
+      "setup": {
+        "route": "optiscaler",
+        "via": null,
+        "api": "dx12"
+      },
+      "reports": {
+        "works": 1,
+        "fails": 1
+      },
+      "dead_ends": [
+        {
+          "route": "feeder",
+          "via": null,
+          "api": null,
+          "verdict": "duplicate-dlss",
+          "why": "the game ships DLSS under Engine\\Plugins; a Feeder beside it loads two DLSS DLLs and crashes",
+          "source": "live test 2026-09-11 (src/verified-games.json, src/native-dlss.js)"
+        }
+      ],
+      "updated": "2026-09-11",
+      "notes": "Ships DLSS and Streamline under Engine\\Plugins. OptiScaler alone.",
+      "sources": [
+        "src/verified-games.json code-vein-2 (verified 2026-09-11)"
+      ]
+    },
+    {
+      "exe": "cyberpunk2077.exe",
+      "name": "Cyberpunk 2077",
+      "status": "works",
+      "setup": {
+        "route": "optiscaler",
+        "via": null,
+        "api": "dx12"
+      },
+      "reports": {
+        "works": 2,
+        "fails": 0
+      },
+      "dead_ends": [
+        {
+          "feature": "optifg",
+          "why": "OptiScaler's own frame generation with the game's Streamline caused a TDR crash",
+          "source": "live test 2026-09-08 (src/verified-games.json)"
+        }
+      ],
+      "fg": {
+        "works": [
+          "native-dlssg"
+        ]
+      },
+      "updated": "2026-09-16",
+      "notes": "Native Streamline DLSS. OptiScaler's own frame generation stays off (the app forces it). The game's own DLSS frame generation (2x-4x) runs with DLSS 5 since engine v1.0.40 (VRAM check).",
+      "sources": [
+        "src/verified-games.json cyberpunk-2077 (verified 2026-09-08)",
+        "live test 2026-09-16, engine v1.0.40: path tracing + RR + DLSS FG x2-x4 + NR up to 3 passes, no crashes"
+      ]
+    },
+    {
+      "exe": "devilmaycry5.exe",
+      "name": "Devil May Cry 5",
+      "status": "works",
+      "setup": {
+        "route": "reframework-pd",
+        "via": null,
+        "api": "dx12"
+      },
+      "reports": {
+        "works": 1,
+        "fails": 1
+      },
+      "dead_ends": [
+        {
+          "route": "feeder",
+          "via": null,
+          "api": null,
+          "verdict": null,
+          "why": "the Feeder's ReShade wraps the D3D12 device, and neither the Feeder nor the Present route ran DLSS 5",
+          "source": "live test 2026-09-14 (src/reengine.js)"
+        }
+      ],
+      "updated": "2026-09-14",
+      "notes": "RE Engine Present route, no Feeder. Engine v1.0.29 fixed the crash when the game moves its swapchain to R10G10B10A2.",
+      "sources": [
+        "live test 2026-09-14, engine v1.0.29: working"
+      ]
+    },
+    {
+      "exe": "dolphin.exe",
+      "name": "Dolphin (emulator)",
+      "setup": {},
+      "reports": {
+        "works": 0,
+        "fails": 1
+      },
+      "dead_ends": [
+        {
+          "route": "feeder",
+          "via": null,
+          "api": "dx12",
+          "verdict": "nr-model-crash",
+          "why": "the neural model crashed in its first evaluate on Dolphin's Direct3D 12 backend (same-device D3D12)",
+          "source": "user report 2026-09-15: dlss5-feed.log evaluate raised 0xC0000005 (app v1.64.0 notes)"
+        }
+      ],
+      "notes": "Dolphin's Direct3D 11 backend is the way round it (the Feeder then makes its own device); not yet confirmed live.",
+      "sources": [
+        "user report 2026-09-15, RTX 5070 Ti, driver 616.64"
+      ]
+    },
+    {
+      "exe": "eldenring.exe",
+      "name": "ELDEN RING",
+      "status": "works",
+      "setup": {
+        "route": "present",
+        "via": null,
+        "api": "dx12"
+      },
+      "reports": {
+        "works": 1,
+        "fails": 1
+      },
+      "dead_ends": [
+        {
+          "route": "feeder",
+          "via": null,
+          "api": null,
+          "verdict": "nr-model-crash",
+          "why": "the DLSS5 Feeder crashed the neural model on its first frame",
+          "source": "live test 2026-09-15 (src/presentroute.js)"
+        }
+      ],
+      "updated": "2026-09-15",
+      "notes": "Engine Present route, no Feeder. 4800 frames, 0 model failures, 45 fps at 2560x1600. Launch from the app (skips EasyAntiCheat), offline only. Load a save: menus have no depth.",
+      "sources": [
+        "src/verified-games.json elden-ring (verified 2026-09-15)"
+      ]
+    },
+    {
+      "exe": "mortalshell2-win64-shipping.exe",
+      "name": "Mortal Shell II",
+      "status": "works",
+      "setup": {
+        "route": "optiscaler",
+        "via": null,
+        "api": "dx12"
+      },
+      "reports": {
+        "works": 1,
+        "fails": 0
+      },
+      "dead_ends": [],
+      "updated": "2026-09-11",
+      "notes": "Ships DLSS under Engine\\Plugins\\Runtime\\Nvidia. OptiScaler alone.",
+      "sources": [
+        "src/verified-games.json mortal-shell-ii (verified 2026-09-11)"
+      ]
+    },
+    {
+      "exe": "re2.exe",
+      "name": "RESIDENT EVIL 2",
+      "status": "works",
+      "setup": {
+        "route": "reframework-pd",
+        "via": null,
+        "api": "dx12"
+      },
+      "reports": {
+        "works": 2,
+        "fails": 0
+      },
+      "dead_ends": [],
+      "updated": "2026-09-18",
+      "notes": "RE Engine Present route: REFramework with its TemporalUpscaler off, OptiScaler as dxgi.dll, no PureDark plugin. 8400 frames, 0 failures, about 65 fps (2026-09-14); no hitches with paced prebuilds (2026-09-18).",
+      "sources": [
+        "live test 2026-09-14, engine v1.0.24: works",
+        "live test 2026-09-18, engine 85a64aac (local build): no hitches"
+      ]
+    },
+    {
+      "exe": "spyro-win64-shipping.exe",
+      "name": "Spyro Reignited Trilogy",
+      "setup": {},
+      "reports": {
+        "works": 0,
+        "fails": 1
+      },
+      "dead_ends": [
+        {
+          "route": "lumaue",
+          "via": null,
+          "api": null,
+          "verdict": null,
+          "why": "the game does not start with Luma UE deployed",
+          "source": "user report 2026-09-12 (src/verified-games.json knownBad)"
+        }
+      ],
+      "notes": "Feeder route only; not yet confirmed there.",
+      "sources": [
+        "user report 2026-09-12"
+      ]
+    },
+    {
+      "exe": "starwarsjedifallenorder.exe",
+      "name": "STAR WARS Jedi: Fallen Order",
+      "status": "works",
+      "setup": {
+        "route": "lumaue",
+        "via": null,
+        "api": "dx11"
+      },
+      "reports": {
+        "works": 1,
+        "fails": 0
+      },
+      "dead_ends": [],
+      "updated": "2026-09-11",
+      "notes": "Luma UE supplies the DLSS call; select DLSS in Luma's overlay (Home) in gameplay. Menus cause pop-in and noise (Luma-Framework issue #122).",
+      "sources": [
+        "src/verified-games.json star-wars-jedi-fallen-order (verified 2026-09-11)"
+      ]
+    },
+    {
+      "exe": "swgame-win64-shipping.exe",
+      "name": "STAR WARS Jedi: Fallen Order",
+      "status": "works",
+      "setup": {
+        "route": "lumaue",
+        "via": null,
+        "api": "dx11"
+      },
+      "reports": {
+        "works": 1,
+        "fails": 0
+      },
+      "dead_ends": [],
+      "updated": "2026-09-11",
+      "notes": "Luma UE supplies the DLSS call; select DLSS in Luma's overlay (Home) in gameplay. Menus cause pop-in and noise (Luma-Framework issue #122).",
+      "sources": [
+        "src/verified-games.json star-wars-jedi-fallen-order (verified 2026-09-11)"
+      ]
+    }
+  ]
+}

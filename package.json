@@ -25,6 +25,7 @@
     },
     "files": [
       "src/**/*",
+      "data/**/*",
       "package.json"
     ],
     "extraResources": [
