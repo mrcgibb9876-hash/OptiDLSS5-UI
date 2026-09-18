@@ -1192,11 +1192,27 @@ async function openHelp(game) {
   // The model-only route, reachable by hand as well as when a verdict offers it. A game that dies
   // on startup writes no log at all, so there is no verdict to hang it off -- and that is exactly
   // the case this route exists for, so it cannot only be offered by the rule table.
+  // Two routes that are worth choosing, not only worth being offered after a failure.
   try {
     const r = await window.api.gameRoute(game.exePath, game.detectedPath || null);
     $('#help-native').classList.toggle('hidden', !(r && r.shipsDlss && r.optiInstalled));
-  } catch { $('#help-native').classList.add('hidden'); }
+    // The DXVK swap was reachable only from a 'wrapper-crash' verdict: the game had to crash INSIDE
+    // the dgVoodoo2 DLL this app deployed, and be classified as that. A game that merely renders
+    // wrong under dgVoodoo2, or that has not been run yet, could never ask for the other layer --
+    // Assassin's Creed II is the case that found it. The APIs are DXVK's own file sets
+    // (translation.js DXVK_FILES_FOR_API), and deployDxvk handles x32, so a 32-bit game qualifies.
+    const dxvkApis = ['dx8', 'dx9', 'dx10', 'dx11'];
+    const dxvkOk = !!(r && r.legacy && r.legacy.supported && dxvkApis.includes(r.legacy.api));
+    $('#help-dxvk').classList.toggle('hidden', !dxvkOk);
+  } catch {
+    $('#help-native').classList.add('hidden');
+    $('#help-dxvk').classList.add('hidden');
+  }
 }
+
+$('#help-dxvk').addEventListener('click', () => {
+  applyHelpFix(helpGame, { fix: { id: 'swap-to-dxvk' }, run: helpDiag && helpDiag.run }, { modal: true });
+});
 
 $('#help-native').addEventListener('click', () => {
   // A synthetic diagnosis: the fix is the same one the rule table hands out, and applyHelpFix only
