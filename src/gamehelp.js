@@ -108,6 +108,25 @@ function diagnose(ctx) {
     }
     return out('needs-run', 'needs-run');
   }
+  // Two frame generators at once. NVIDIA Smooth Motion IS frame generation -- the driver's own,
+  // done outside the process after the frame is handed over -- so it stacks with whichever one
+  // this app configured, and the two interleave their generated frames.
+  //
+  // This app already refuses that pattern everywhere it owns both ends: configuring Lossless
+  // Scaling turns OptiScaler's Frame Generation off, and the Lossless section says "one frame
+  // generator at a time" in as many words. It has never said it about the driver's, because the
+  // driver's cannot be seen from here at all -- NVIDIA publishes no NVAPI setting for Smooth
+  // Motion (NvApiDriverSettings.h carries 125 ids and every DLSSG one, and none for this), so the
+  // ONLY evidence is the DLSS5 Feeder noticing it in the process and saying so in its log.
+  //
+  // Hence: reported, never acted on, and only when the Feeder actually saw it. It sits ahead of
+  // the verdict switch so a working run still gets told -- a game that "works" while quietly
+  // running two generators is the case worth catching -- and behind the hard stops, so it can
+  // never mask a real failure.
+  if (run.feedSmoothMotion && (ctx.frameGen || []).length) {
+    return out('step', 'smooth-motion-stacked', { generator: ctx.frameGen.join(' and '), verdict: run.verdict });
+  }
+
   switch (run.verdict) {
     // Every frame reached the upscaler and none came back. OptiScaler will not dispatch unless it
     // can put the root signature back afterwards, and on the pd-upscaler route it never can: the

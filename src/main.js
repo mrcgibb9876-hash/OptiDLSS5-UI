@@ -2590,6 +2590,16 @@ async function helpContext(exePath, detected, fixesTried = []) {
     // private one included (detect.js). Null unless the exe really carries those exports and no
     // D3D12Core.dll can be found for them.
     agilityRedist: agilityRedistRisk(dir, effective),
+    // Which frame generator, if any, this app has configured for this game. Marker files, because
+    // they are what the app writes when it sets one up -- cheap, and true whether or not the game
+    // has been run since. Needed to spot a SECOND generator: NVIDIA Smooth Motion is frame
+    // generation done by the driver, outside the process, and the Feeder is the only thing that
+    // can see it (runlog.js feedSmoothMotion).
+    frameGen: [
+      fs.existsSync(path.join(dir, LOSSLESS_MARKER)) ? 'Lossless Scaling' : null,
+      fs.existsSync(path.join(dir, FRAMEGEN_MARKER)) ? 'DLSS Frame Generation' : null,
+      fs.existsSync(path.join(dir, OPTIFG_MARKER)) ? "OptiScaler's own Frame Generation" : null,
+    ].filter(Boolean),
     // Which motion-vector provider this game is actually set up for, and whether that set-up
     // agrees with itself -- a Feeder deploy can be complete in every file sense and still feed
     // nothing (feeder.js's feederProviderStatus).
