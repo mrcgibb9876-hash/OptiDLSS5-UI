@@ -113,9 +113,58 @@ test('an Optimus laptop, whose window draws on the Intel iGPU, still gets the NV
       { vendorId: 0x10de, deviceId: 0x28a0, active: false, driverVersion: '32.0.16.1088' },
     ] }),
   }, async () => ({ stdout: '' }));
-  assert.equal(info.vendor, 'intel');
+  assert.equal(info.vendor, 'nvidia', 'and since the same day the vendor is the NVIDIA card too (pickPrimary)');
   assert.equal(info.driver.outdated, true);
   assert.equal(info.driver.branch, '610.88');
+});
+
+// User report, 2026-09-18: an AMD iGPU + RTX 4060 laptop was treated as an AMD machine, because
+// Chromium marks the adapter the app's own window renders on (the iGPU) active and that one won.
+test('the vendor is the adapter games run on, not the one the app window renders on', async () => {
+  const amdIgpu = { vendorId: 0x1002, deviceId: 0x15bf, active: true, driverVersion: '31.0.24002.92' };
+  const intelIgpu = { vendorId: 0x8086, deviceId: 0x46a6, active: true, driverVersion: '31.0.101.5186' };
+  const rtx4060 = { vendorId: 0x10de, deviceId: 0x28a0, active: false, driverVersion: '32.0.16.1692' };
+  const radeon7800 = { vendorId: 0x1002, deviceId: 0x747e, active: false, driverVersion: '32.0.12033.1030' };
+
+  assert.equal(gpu.vendorFromId(gpu.pickPrimary([amdIgpu, rtx4060]).vendorId), 'nvidia', 'AMD iGPU (active) + NVIDIA');
+  assert.equal(gpu.vendorFromId(gpu.pickPrimary([intelIgpu, rtx4060]).vendorId), 'nvidia', 'Intel iGPU (active) + NVIDIA');
+  assert.equal(gpu.vendorFromId(gpu.pickPrimary([{ ...radeon7800, active: true }]).vendorId), 'amd', 'AMD only');
+  assert.equal(gpu.vendorFromId(gpu.pickPrimary([{ ...rtx4060, active: true }]).vendorId), 'nvidia', 'NVIDIA only');
+  // AMD APU + discrete Radeon: the discrete card, by device ID or by name.
+  assert.equal(gpu.pickPrimary([amdIgpu, radeon7800]).deviceId, 0x747e);
+  const unknownApu = { vendorId: 0x1002, deviceId: 0x1900, active: true };
+  const rows = [
+    { vendorId: 0x1002, deviceId: 0x1900, name: 'AMD Radeon(TM) Graphics' },
+    { vendorId: 0x1002, deviceId: 0x747e, name: 'AMD Radeon RX 7800 XT' },
+  ];
+  assert.equal(gpu.pickPrimary([unknownApu, radeon7800], rows).deviceId, 0x747e);
+  // Intel iGPU + Intel Arc: the Arc card; Intel iGPU + discrete Radeon: the Radeon.
+  assert.equal(gpu.isIntegrated({ vendorId: 0x8086 }, { name: 'Intel(R) Arc(TM) A770 Graphics' }), false);
+  assert.equal(gpu.isIntegrated({ vendorId: 0x8086 }, { name: 'Intel(R) Arc(TM) Graphics' }), true);
+  assert.equal(gpu.vendorFromId(gpu.pickPrimary([intelIgpu, radeon7800]).vendorId), 'amd');
+  for (const name of ['AMD Radeon 780M Graphics', 'AMD Radeon(TM) Graphics', 'AMD Radeon(TM) Vega 8 Graphics', 'AMD Radeon(TM) 8060S Graphics']) {
+    assert.equal(gpu.isIntegrated({ vendorId: 0x1002, deviceId: 0x1 }, { name }), true, name);
+  }
+  for (const name of ['AMD Radeon RX 7600M XT', 'AMD Radeon RX 9070 XT', 'AMD Radeon Pro W7900', null]) {
+    assert.equal(gpu.isIntegrated({ vendorId: 0x1002, deviceId: 0x1 }, { name }), false, String(name));
+  }
+  // Chromium listed only the adapter it renders on; Win32_VideoController still has the NVIDIA card.
+  assert.equal(gpu.vendorFromId(gpu.pickPrimary([amdIgpu], [{ vendorId: 0x10de, deviceId: 0x28a0, name: 'NVIDIA GeForce RTX 4060 Laptop GPU', driverVersion: '32.0.16.1692' }]).vendorId), 'nvidia');
+
+  // Through detectGpu: vendor, the NVIDIA card's name and driver, and the window's adapter kept apart.
+  const cim = JSON.stringify([
+    { Name: 'AMD Radeon 780M Graphics', DriverVersion: '31.0.24002.92', PNPDeviceID: 'PCI\\VEN_1002&DEV_15BF&SUBSYS_1' },
+    { Name: 'NVIDIA GeForce RTX 4060 Laptop GPU', DriverVersion: '32.0.16.1088', PNPDeviceID: 'PCI\\VEN_10DE&DEV_28A0&SUBSYS_2' },
+  ]);
+  const info = await gpu.detectGpu({ getGPUInfo: async () => ({ gpuDevice: [amdIgpu, { ...rtx4060, driverVersion: undefined }] }) }, async () => ({ stdout: cim }));
+  assert.equal(info.vendor, 'nvidia');
+  assert.equal(info.devices.length, 2, 'every adapter is still reported');
+  assert.equal(info.renderAdapter.vendor, 'amd', 'the adapter the app renders on is kept, separately');
+  if (process.platform === 'win32') {
+    assert.equal(info.name, 'NVIDIA GeForce RTX 4060 Laptop GPU');
+    assert.equal(info.driver.branch, '610.88', 'the NVIDIA card\'s driver is the one judged');
+    assert.equal(info.driver.outdated, true);
+  }
 });
 
 test('the warning is wired into the front page and can be dismissed', () => {
