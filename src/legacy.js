@@ -484,6 +484,25 @@ async function deployDgVoodoo(dir, plan, source) {
 //   deployShaders(dir)          headers, motion-vector provider, ReShade.ini and preset beside the exe:
 //                               deployLegacyShaders' result, or a plain list of the files it created
 //   deployNvngxDlss(hostDir)    nvngx_dlss.dll into the helper folder
+// Keys in host64\OptiScaler.ini that the ENGINE writes, not this app. [DlssNr] PanelShownOnce: the
+// DLSS 5 panel auto-opens once in the Feeder helper and the engine then sets it true, so it stays
+// shut on later launches (2026-09-18). Every other writer here edits single lines (setIniKey,
+// ensureIniKey, dlssnr.writeSettings), which never drops a key; the one thing that does is a
+// re-install copying the release's OptiScaler.ini over the file, so deployHost32 reads these first
+// and puts them back. Without it every re-install would pop the panel open again.
+const ENGINE_OWNED_HOST_KEYS = [['DlssNr', 'PanelShownOnce']];
+
+function readEngineOwnedKeys(iniPath) {
+  let text;
+  try { text = fs.readFileSync(iniPath, 'utf8'); } catch { return []; }
+  const kept = [];
+  for (const [section, key] of ENGINE_OWNED_HOST_KEYS) {
+    const value = getIniKey(text, section, key);
+    if (value !== null && value !== undefined && String(value).trim() !== '') kept.push([section, key, String(value).trim()]);
+  }
+  return kept;
+}
+
 async function deployHost32(dir, plan, deps) {
   if (!plan || !plan.host32) throw new Error('this game does not take the 32-bit helper route');
   for (const k of ['feederZip', 'reshadeSetup', 'releaseFolder', 'nrDllPath']) {
@@ -543,6 +562,10 @@ async function deployHost32(dir, plan, deps) {
   for (const [section, key, value] of HOST_RESHADE_KEYS) hostIni = setIniKey(hostIni, section, key, value);
   await rec.write(path.join(hostDir, 'ReShade.ini'), Buffer.from(hostIni, 'utf8'), { ours: () => true });
 
+  // Keys the engine itself writes into host64\OptiScaler.ini, read before the release's template
+  // replaces the file below so a re-install does not undo them (ENGINE_OWNED_HOST_KEYS).
+  const engineKept = readEngineOwnedKeys(path.join(hostDir, 'OptiScaler.ini'));
+
   // OptiScaler_DLSSNR, the release as it ships, with OptiScaler.dll as winmm.dll (the helper imports it).
   for (const entry of await fsp.readdir(deps.releaseFolder, { withFileTypes: true })) {
     const src = path.join(deps.releaseFolder, entry.name);
@@ -575,6 +598,7 @@ async function deployHost32(dir, plan, deps) {
       ['Log', 'LogToFile', 'true'],
       ['Log', 'LogLevel', '2'],
     ]) ini = setIniKey(ini, section, key, value);
+    for (const [section, key, value] of engineKept) ini = setIniKey(ini, section, key, value);
     fs.writeFileSync(optiIni, ini, 'utf8');
   }
   await rec.copy(deps.nrDllPath, path.join(hostDir, 'nvngx_dlssnr.dll'), { ours: () => true });
