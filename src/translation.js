@@ -46,7 +46,10 @@ const LAYERS = {
     id: 'dxvk',
     label: 'DXVK',
     translates: 'Direct3D 9/10/11 to Vulkan',
-    owns: ['d3d9.dll', 'd3d10core.dll', 'd3d11.dll', 'dxgi.dll'],
+    // d3d8.dll is in DXVK's set too, from 3.x onward: the v3.1.1 release ships x32/ and x64/ each
+    // holding d3d8, d3d9, d3d10core, d3d11 and dxgi. Leaving it out made a purge walk past a DXVK
+    // d3d8.dll and, worse, let dgVoodoo2 claim the name unopposed.
+    owns: ['d3d8.dll', 'd3d9.dll', 'd3d10core.dll', 'd3d11.dll', 'dxgi.dll'],
     configs: ['dxvk.conf'],
     logs: ['dxvk.log', 'd3d9.log', 'd3d11.log', 'dxgi.log'],
     signature: 'DXVK',

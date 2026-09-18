@@ -141,6 +141,23 @@ test('the two layers can never share a folder', () => {
   assert.match(overTheirs.reason, /D3D9\.dll/i);
 });
 
+test('DXVK\'s d3d8.dll is part of its set, and the two layers both claiming that name is resolved by contents', async () => {
+  // DXVK 3.x ships d3d8.dll: the v3.1.1 release has x32/ and x64/, each with d3d8, d3d9, d3d10core,
+  // d3d11 and dxgi. dgVoodoo2 owns a d3d8.dll too, so the name alone settles nothing.
+  const dxvkDir = scratchDir('tl-d3d8-dxvk');
+  write(dxvkDir, 'd3d8.dll', dll('DXVK'));
+  assert.equal(translation.activeLayer(dxvkDir).layer, 'dxvk', 'a DXVK d3d8.dll is DXVK');
+  const gone = await translation.purgeTranslationLayer(dxvkDir, { layer: 'dxvk' });
+  assert.deepEqual(gone.removed, ['d3d8.dll'], 'and a DXVK purge takes it');
+
+  const dgDir = scratchDir('tl-d3d8-dg');
+  write(dgDir, 'd3d8.dll', dll('dgVoodoo'));
+  assert.equal(translation.activeLayer(dgDir).layer, 'dgvoodoo', 'the same name from dgVoodoo2 is dgVoodoo2');
+  const kept = await translation.purgeTranslationLayer(dgDir, { layer: 'dxvk' });
+  assert.deepEqual(kept.removed, [], 'so a DXVK purge leaves it alone');
+  assert.match(kept.skipped.find((x) => x.file === 'd3d8.dll').reason, /dgvoodoo/);
+});
+
 test('a purge with no layer named resets the folder to stock, which is what a retry needs', async () => {
   const dir = scratchDir('tl-purge-all');
   write(dir, 'D3D9.dll', dll('dgVoodoo'));
