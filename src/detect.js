@@ -986,12 +986,32 @@ async function optiScalerRuntimeApi(dir) {
   return null;
 }
 
+// Saber Interactive's Swarm-engine games put a small launcher at the install root and the client
+// that renders in client_pc\root\bin\pc: Steam's own launch config for Warhammer 40,000: Space
+// Marine 2 carries `--cwd client_pc\root\bin\pc`, and the binary there is "Warhammer 40000 Space
+// Marine 2 - Retail.exe". Pointed at the root launcher, the app read ITS bitness (32-bit) and turned
+// the whole game away as bit32 (#77, 2026-09-18). The client is the exe named like the launcher;
+// a lone exe there is taken too, but never the crash reporter beside it.
+function resolveSaberClientExe(exePath) {
+  const dir = path.join(path.dirname(exePath), 'client_pc', 'root', 'bin', 'pc');
+  let files = [];
+  try { files = fs.readdirSync(dir); } catch { return exePath; }
+  const exes = files.filter((f) => /\.exe$/i.test(f) && !/crash|report|unins|setup|redist/i.test(f));
+  const stem = path.basename(exePath, path.extname(exePath)).toLowerCase();
+  const client = exes.find((f) => f.toLowerCase().startsWith(stem)) || (exes.length === 1 ? exes[0] : null);
+  return client ? path.join(dir, client) : exePath;
+}
+
 // A UE game's root holds a launcher stub named like the game (CodeVein2.exe) that only spawns
 // <Project>\Binaries\Win64\<Project>-Win64-Shipping.exe -- the process that actually renders,
 // and the only folder where a proxy DLL, the ini and every check in this app mean anything.
 // Pointed at the stub, the app would install beside a file that never loads dxgi.dll.
+// Every caller that swaps a launcher for the real exe comes through here, so the Saber layout
+// above is resolved here too.
 function resolveUnrealShippingExe(exePath) {
   if (!exePath || /-win(64|gdk)-shipping\.exe$/i.test(exePath)) return exePath;
+  const saber = resolveSaberClientExe(exePath);
+  if (saber !== exePath) return saber;
   const root = path.dirname(exePath);
   if (!fs.existsSync(path.join(root, 'Engine'))) return exePath;
   let entries = [];
