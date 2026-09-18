@@ -128,9 +128,11 @@ const ROUTE_TEXT = {
 // outranks it is proof: OptiScaler's own log saying the game really ran on DX11 last time
 // (runtimeApi) -- configuring DX12 for a game that is running DX11 would break its route, and it is
 // what an emulator switched to Direct3D 11 on Game Help's advice has to follow.
+// A watched launch (probe.js) that saw the game create DX11 is the same kind of proof (probeApi, set
+// only when its facts won the precedence in probe.applyProbe).
 function preferDx12(base) {
   const apis = base.apis || [];
-  if (!apis.includes('dx12') || !apis.includes('dx11') || base.api === 'dx12' || base.runtimeApi === 'dx11') return base;
+  if (!apis.includes('dx12') || !apis.includes('dx11') || base.api === 'dx12' || base.runtimeApi === 'dx11' || base.probeApi === 'dx11') return base;
   if (base.api !== 'dx11') return base;
   return { ...base, api: 'dx12', apis: ['dx12', ...apis.filter((a) => a !== 'dx12')], detectedApi: base.api };
 }

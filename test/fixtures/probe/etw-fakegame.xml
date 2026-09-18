@@ -1,0 +1,2378 @@
+<Events>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>1</EventID>
+		<Version>4</Version>
+		<Level>4</Level>
+		<Task>1</Task>
+		<Opcode>1</Opcode>
+		<Keywords>0x8000000000000010</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.108673500+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="44240" ThreadID="44888" ProcessorID="9" KernelTime="30" UserTime="15" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ProcessSequenceNumber">134519</Data>
+		<Data Name="CreateTime">2026-09-18T20:33:24.108649400Z</Data>
+		<Data Name="ParentProcessID">   44240</Data>
+		<Data Name="ParentProcessSequenceNumber">134514</Data>
+		<Data Name="SessionID">       1</Data>
+		<Data Name="Flags">       0</Data>
+		<Data Name="ProcessTokenElevationType">       2</Data>
+		<Data Name="ProcessTokenIsElevated">       1</Data>
+		<Data Name="MandatoryLabel">S-1-16-12288</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Games\FakeGame\Launcher.exe</Data>
+		<Data Name="ImageChecksum">0x588B458</Data>
+		<Data Name="TimeDateStamp">0x6A707850</Data>
+		<Data Name="PackageFullName"></Data>
+		<Data Name="PackageRelativeAppId"></Data>
+		<Data Name="SecurityMitigations">       0</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.111743200+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="44240" ThreadID="44888" ProcessorID="9" KernelTime="30" UserTime="15" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF897670000</Data>
+		<Data Name="ImageSize">0x9F000</Data>
+		<Data Name="ProcessID">   44240</Data>
+		<Data Name="ImageCheckSum">  685194</Data>
+		<Data Name="TimeDateStamp">958601479</Data>
+		<Data Name="DefaultBase">0x7FF897670000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\apphelp.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.112364800+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF724510000</Data>
+		<Data Name="ImageSize">0x58E6000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">92845144</Data>
+		<Data Name="TimeDateStamp">1785755728</Data>
+		<Data Name="DefaultBase">0x7FF724510000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Games\FakeGame\Launcher.exe</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.112384500+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89DB20000</Data>
+		<Data Name="ImageSize">0x267000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum"> 2533631</Data>
+		<Data Name="TimeDateStamp">1809777610</Data>
+		<Data Name="DefaultBase">0x7FF89DB20000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\ntdll.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.113139700+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89C320000</Data>
+		<Data Name="ImageSize">0xCB000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  883219</Data>
+		<Data Name="TimeDateStamp">1053609746</Data>
+		<Data Name="DefaultBase">0x7FF89C320000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\kernel32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.113208800+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89B430000</Data>
+		<Data Name="ImageSize">0x402000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum"> 4240117</Data>
+		<Data Name="TimeDateStamp">677407521</Data>
+		<Data Name="DefaultBase">0x7FF89B430000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\KernelBase.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.114093400+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF897670000</Data>
+		<Data Name="ImageSize">0x9F000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  685194</Data>
+		<Data Name="TimeDateStamp">958601479</Data>
+		<Data Name="DefaultBase">0x7FF897670000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\apphelp.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.115276000+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FFFE63E0000</Data>
+		<Data Name="ImageSize">0x81000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  538888</Data>
+		<Data Name="TimeDateStamp">1785402485</Data>
+		<Data Name="DefaultBase">0x7FFFE63E0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\AcGenral.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.115332800+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89C1B0000</Data>
+		<Data Name="ImageSize">0xA9000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  730518</Data>
+		<Data Name="TimeDateStamp">2222928953</Data>
+		<Data Name="DefaultBase">0x7FF89C1B0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\msvcrt.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.115387600+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89C620000</Data>
+		<Data Name="ImageSize">0xA9000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  758373</Data>
+		<Data Name="TimeDateStamp">2925099912</Data>
+		<Data Name="DefaultBase">0x7FF89C620000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\sechost.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.115444900+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89BE90000</Data>
+		<Data Name="ImageSize">0x66000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  488598</Data>
+		<Data Name="TimeDateStamp">3184337242</Data>
+		<Data Name="DefaultBase">0x7FF89BE90000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\shlwapi.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.115497300+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89AFC0000</Data>
+		<Data Name="ImageSize">0x14C000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum"> 1388259</Data>
+		<Data Name="TimeDateStamp">733937011</Data>
+		<Data Name="DefaultBase">0x7FF89AFC0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\ucrtbase.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.115560200+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89C9C0000</Data>
+		<Data Name="ImageSize">0x1CF000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum"> 1970110</Data>
+		<Data Name="TimeDateStamp">1277537702</Data>
+		<Data Name="DefaultBase">0x7FF89C9C0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\user32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.115609500+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89B400000</Data>
+		<Data Name="ImageSize">0x27000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  216168</Data>
+		<Data Name="TimeDateStamp">2922534025</Data>
+		<Data Name="DefaultBase">0x7FF89B400000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\win32u.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.115661100+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89C720000</Data>
+		<Data Name="ImageSize">0x2B000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  248980</Data>
+		<Data Name="TimeDateStamp">1557283195</Data>
+		<Data Name="DefaultBase">0x7FF89C720000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\gdi32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.115711900+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89AD20000</Data>
+		<Data Name="ImageSize">0x129000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum"> 1220821</Data>
+		<Data Name="TimeDateStamp">890656319</Data>
+		<Data Name="DefaultBase">0x7FF89AD20000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\gdi32full.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.115756900+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89AF10000</Data>
+		<Data Name="ImageSize">0xA3000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  652961</Data>
+		<Data Name="TimeDateStamp">801462590</Data>
+		<Data Name="DefaultBase">0x7FF89AF10000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\msvcp_win.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.115825900+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89BCF0000</Data>
+		<Data Name="ImageSize">0x19A000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum"> 1728697</Data>
+		<Data Name="TimeDateStamp">2028696108</Data>
+		<Data Name="DefaultBase">0x7FF89BCF0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\ole32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.115883700+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89B840000</Data>
+		<Data Name="ImageSize">0x385000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum"> 3742507</Data>
+		<Data Name="TimeDateStamp">2349147981</Data>
+		<Data Name="DefaultBase">0x7FF89B840000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\combase.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.115925200+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89C3F0000</Data>
+		<Data Name="ImageSize">0x118000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum"> 1225911</Data>
+		<Data Name="TimeDateStamp">3146881180</Data>
+		<Data Name="DefaultBase">0x7FF89C3F0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\rpcrt4.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.116004300+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89CBA0000</Data>
+		<Data Name="ImageSize">0xBC000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  782048</Data>
+		<Data Name="TimeDateStamp">736674132</Data>
+		<Data Name="DefaultBase">0x7FF89CBA0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\advapi32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.116063200+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89BBD0000</Data>
+		<Data Name="ImageSize">0xFB000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum"> 1080623</Data>
+		<Data Name="TimeDateStamp">3129514382</Data>
+		<Data Name="DefaultBase">0x7FF89BBD0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\SHCore.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.116125600+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89D160000</Data>
+		<Data Name="ImageSize">0x798000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum"> 8045699</Data>
+		<Data Name="TimeDateStamp">138090267</Data>
+		<Data Name="DefaultBase">0x7FF89D160000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\shell32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.116758900+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF8918E0000</Data>
+		<Data Name="ImageSize">0xB000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">   72452</Data>
+		<Data Name="TimeDateStamp">2275202464</Data>
+		<Data Name="DefaultBase">0x7FF8918E0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\version.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.116942600+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89A060000</Data>
+		<Data Name="ImageSize">0x34000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  226897</Data>
+		<Data Name="TimeDateStamp">1246422943</Data>
+		<Data Name="DefaultBase">0x7FF89A060000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\userenv.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.117200400+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF876E00000</Data>
+		<Data Name="ImageSize">0x21000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  203967</Data>
+		<Data Name="TimeDateStamp">2433114060</Data>
+		<Data Name="DefaultBase">0x7FF876E00000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\mpr.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.117467600+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF899CB0000</Data>
+		<Data Name="ImageSize">0x49000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  326792</Data>
+		<Data Name="TimeDateStamp">1263343596</Data>
+		<Data Name="DefaultBase">0x7FF899CB0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\sspicli.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.119019900+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="9" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89C980000</Data>
+		<Data Name="ImageSize">0x31000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  216742</Data>
+		<Data Name="TimeDateStamp">2376539079</Data>
+		<Data Name="DefaultBase">0x7FF89C980000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\imm32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.120669200+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="9" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89B120000</Data>
+		<Data Name="ImageSize">0x17E000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum"> 1608552</Data>
+		<Data Name="TimeDateStamp">861530059</Data>
+		<Data Name="DefaultBase">0x7FF89B120000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\crypt32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.120779000+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="9" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89C8C0000</Data>
+		<Data Name="ImageSize">0x80000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  552992</Data>
+		<Data Name="TimeDateStamp">536873802</Data>
+		<Data Name="DefaultBase">0x7FF89C8C0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\ws2_32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.121087100+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="23608" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF899370000</Data>
+		<Data Name="ImageSize">0x33000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  266325</Data>
+		<Data Name="TimeDateStamp">2286535387</Data>
+		<Data Name="DefaultBase">0x7FF899370000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\IPHLPAPI.DLL</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.121124800+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF8981A0000</Data>
+		<Data Name="ImageSize">0x24C000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum"> 2324962</Data>
+		<Data Name="TimeDateStamp">2384527248</Data>
+		<Data Name="DefaultBase">0x7FF8981A0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\dbghelp.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.121171000+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="14896" ProcessorID="19" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF8938C0000</Data>
+		<Data Name="ImageSize">0x36000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  229639</Data>
+		<Data Name="TimeDateStamp">2251690161</Data>
+		<Data Name="DefaultBase">0x7FF8938C0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\winmm.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.121225300+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89C540000</Data>
+		<Data Name="ImageSize">0xD9000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  904958</Data>
+		<Data Name="TimeDateStamp">62109679</Data>
+		<Data Name="DefaultBase">0x7FF89C540000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\oleaut32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.121422700+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="45444" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF862160000</Data>
+		<Data Name="ImageSize">0x3B000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  301605</Data>
+		<Data Name="TimeDateStamp">811737392</Data>
+		<Data Name="DefaultBase">0x7FF862160000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\dbgcore.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.121624900+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="45444" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89A2C0000</Data>
+		<Data Name="ImageSize">0xC000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">   90640</Data>
+		<Data Name="TimeDateStamp">3727022991</Data>
+		<Data Name="DefaultBase">0x7FF89A2C0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\cryptbase.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.122613800+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="9" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF870E60000</Data>
+		<Data Name="ImageSize">0xF2000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  980117</Data>
+		<Data Name="TimeDateStamp">1765225020</Data>
+		<Data Name="DefaultBase">0x7FF870E60000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Program Files\Windhawk\Engine\1.7.3\64\windhawk.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.124256100+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="9" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89A8F0000</Data>
+		<Data Name="ImageSize">0x5E000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  457799</Data>
+		<Data Name="TimeDateStamp">2858637235</Data>
+		<Data Name="DefaultBase">0x7FF89A8F0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\powrprof.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.124526800+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="9" KernelTime="0" UserTime="15" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89A6F0000</Data>
+		<Data Name="ImageSize">0x15000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  149814</Data>
+		<Data Name="TimeDateStamp">3847741064</Data>
+		<Data Name="DefaultBase">0x7FF89A6F0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\umpdc.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.124661100+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="9" KernelTime="0" UserTime="15" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89B340000</Data>
+		<Data Name="ImageSize">0xAC000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  723676</Data>
+		<Data Name="TimeDateStamp">3672939517</Data>
+		<Data Name="DefaultBase">0x7FF89B340000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\bcryptprimitives.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.124987100+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="9" KernelTime="0" UserTime="15" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF8978D0000</Data>
+		<Data Name="ImageSize">0xA8000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  709559</Data>
+		<Data Name="TimeDateStamp">734920565</Data>
+		<Data Name="DefaultBase">0x7FF8978D0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\uxtheme.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.126116700+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="12" KernelTime="0" UserTime="15" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF899FB0000</Data>
+		<Data Name="ImageSize">0x6C000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  460444</Data>
+		<Data Name="TimeDateStamp">2853914095</Data>
+		<Data Name="DefaultBase">0x7FF899FB0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\mswsock.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.129213600+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="9" KernelTime="0" UserTime="15" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89A2A0000</Data>
+		<Data Name="ImageSize">0x1B000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  163816</Data>
+		<Data Name="TimeDateStamp">421397379</Data>
+		<Data Name="DefaultBase">0x7FF89A2A0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\cryptsp.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.129498500+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="9" KernelTime="0" UserTime="15" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF899950000</Data>
+		<Data Name="ImageSize">0x39000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  249654</Data>
+		<Data Name="TimeDateStamp">1744229608</Data>
+		<Data Name="DefaultBase">0x7FF899950000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\rsaenh.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.130390400+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="11220" ProcessorID="9" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF8999F0000</Data>
+		<Data Name="ImageSize">0x1B000</Data>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ImageCheckSum">  141496</Data>
+		<Data Name="TimeDateStamp">246514534</Data>
+		<Data Name="DefaultBase">0x7FF8999F0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\kernel.appcore.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>1</EventID>
+		<Version>4</Version>
+		<Level>4</Level>
+		<Task>1</Task>
+		<Opcode>1</Opcode>
+		<Keywords>0x8000000000000010</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.149083200+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="8" KernelTime="15" UserTime="15" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ProcessSequenceNumber">134520</Data>
+		<Data Name="CreateTime">2026-09-18T20:33:24.149038900Z</Data>
+		<Data Name="ParentProcessID">    6440</Data>
+		<Data Name="ParentProcessSequenceNumber">134519</Data>
+		<Data Name="SessionID">       1</Data>
+		<Data Name="Flags">       0</Data>
+		<Data Name="ProcessTokenElevationType">       2</Data>
+		<Data Name="ProcessTokenIsElevated">       1</Data>
+		<Data Name="MandatoryLabel">S-1-16-12288</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Games\FakeGame\Binaries\Game.exe</Data>
+		<Data Name="ImageChecksum">0x588B458</Data>
+		<Data Name="TimeDateStamp">0x6A707850</Data>
+		<Data Name="PackageFullName"></Data>
+		<Data Name="PackageRelativeAppId"></Data>
+		<Data Name="SecurityMitigations">       0</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.153438000+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF7CD090000</Data>
+		<Data Name="ImageSize">0x58E6000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">92845144</Data>
+		<Data Name="TimeDateStamp">1785755728</Data>
+		<Data Name="DefaultBase">0x7FF7CD090000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Games\FakeGame\Binaries\Game.exe</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.153459700+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89DB20000</Data>
+		<Data Name="ImageSize">0x267000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum"> 2533631</Data>
+		<Data Name="TimeDateStamp">1809777610</Data>
+		<Data Name="DefaultBase">0x7FF89DB20000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\ntdll.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.154184000+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89C320000</Data>
+		<Data Name="ImageSize">0xCB000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  883219</Data>
+		<Data Name="TimeDateStamp">1053609746</Data>
+		<Data Name="DefaultBase">0x7FF89C320000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\kernel32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.154249700+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89B430000</Data>
+		<Data Name="ImageSize">0x402000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum"> 4240117</Data>
+		<Data Name="TimeDateStamp">677407521</Data>
+		<Data Name="DefaultBase">0x7FF89B430000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\KernelBase.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.155005800+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89B120000</Data>
+		<Data Name="ImageSize">0x17E000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum"> 1608552</Data>
+		<Data Name="TimeDateStamp">861530059</Data>
+		<Data Name="DefaultBase">0x7FF89B120000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\crypt32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.155085200+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89AFC0000</Data>
+		<Data Name="ImageSize">0x14C000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum"> 1388259</Data>
+		<Data Name="TimeDateStamp">733937011</Data>
+		<Data Name="DefaultBase">0x7FF89AFC0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\ucrtbase.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.155195900+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89C8C0000</Data>
+		<Data Name="ImageSize">0x80000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  552992</Data>
+		<Data Name="TimeDateStamp">536873802</Data>
+		<Data Name="DefaultBase">0x7FF89C8C0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\ws2_32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.155266800+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89C3F0000</Data>
+		<Data Name="ImageSize">0x118000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum"> 1225911</Data>
+		<Data Name="TimeDateStamp">3146881180</Data>
+		<Data Name="DefaultBase">0x7FF89C3F0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\rpcrt4.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.155322200+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89C9C0000</Data>
+		<Data Name="ImageSize">0x1CF000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum"> 1970110</Data>
+		<Data Name="TimeDateStamp">1277537702</Data>
+		<Data Name="DefaultBase">0x7FF89C9C0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\user32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.155388700+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89B400000</Data>
+		<Data Name="ImageSize">0x27000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  216168</Data>
+		<Data Name="TimeDateStamp">2922534025</Data>
+		<Data Name="DefaultBase">0x7FF89B400000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\win32u.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.155438300+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89C720000</Data>
+		<Data Name="ImageSize">0x2B000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  248980</Data>
+		<Data Name="TimeDateStamp">1557283195</Data>
+		<Data Name="DefaultBase">0x7FF89C720000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\gdi32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.155492000+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89AD20000</Data>
+		<Data Name="ImageSize">0x129000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum"> 1220821</Data>
+		<Data Name="TimeDateStamp">890656319</Data>
+		<Data Name="DefaultBase">0x7FF89AD20000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\gdi32full.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.155555500+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89AF10000</Data>
+		<Data Name="ImageSize">0xA3000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  652961</Data>
+		<Data Name="TimeDateStamp">801462590</Data>
+		<Data Name="DefaultBase">0x7FF89AF10000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\msvcp_win.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.155639600+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89CBA0000</Data>
+		<Data Name="ImageSize">0xBC000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  782048</Data>
+		<Data Name="TimeDateStamp">736674132</Data>
+		<Data Name="DefaultBase">0x7FF89CBA0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\advapi32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.155712500+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89C1B0000</Data>
+		<Data Name="ImageSize">0xA9000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  730518</Data>
+		<Data Name="TimeDateStamp">2222928953</Data>
+		<Data Name="DefaultBase">0x7FF89C1B0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\msvcrt.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.155773800+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89C620000</Data>
+		<Data Name="ImageSize">0xA9000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  758373</Data>
+		<Data Name="TimeDateStamp">2925099912</Data>
+		<Data Name="DefaultBase">0x7FF89C620000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\sechost.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.155869000+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89D160000</Data>
+		<Data Name="ImageSize">0x798000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum"> 8045699</Data>
+		<Data Name="TimeDateStamp">138090267</Data>
+		<Data Name="DefaultBase">0x7FF89D160000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\shell32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.155921500+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="6904" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF8981A0000</Data>
+		<Data Name="ImageSize">0x24C000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum"> 2324962</Data>
+		<Data Name="TimeDateStamp">2384527248</Data>
+		<Data Name="DefaultBase">0x7FF8981A0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\dbghelp.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.155992800+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="1" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89BCF0000</Data>
+		<Data Name="ImageSize">0x19A000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum"> 1728697</Data>
+		<Data Name="TimeDateStamp">2028696108</Data>
+		<Data Name="DefaultBase">0x7FF89BCF0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\ole32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.156015900+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="6904" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89B840000</Data>
+		<Data Name="ImageSize">0x385000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum"> 3742507</Data>
+		<Data Name="TimeDateStamp">2349147981</Data>
+		<Data Name="DefaultBase">0x7FF89B840000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\combase.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.156110700+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="6904" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89C540000</Data>
+		<Data Name="ImageSize">0xD9000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  904958</Data>
+		<Data Name="TimeDateStamp">62109679</Data>
+		<Data Name="DefaultBase">0x7FF89C540000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\oleaut32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.156162300+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="44164" ProcessorID="9" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89A060000</Data>
+		<Data Name="ImageSize">0x34000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  226897</Data>
+		<Data Name="TimeDateStamp">1246422943</Data>
+		<Data Name="DefaultBase">0x7FF89A060000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\userenv.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.156166400+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46068" ProcessorID="18" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF899370000</Data>
+		<Data Name="ImageSize">0x33000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  266325</Data>
+		<Data Name="TimeDateStamp">2286535387</Data>
+		<Data Name="DefaultBase">0x7FF899370000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\IPHLPAPI.DLL</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.156422700+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="1" KernelTime="15" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF85C5D0000</Data>
+		<Data Name="ImageSize">0x36000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  229639</Data>
+		<Data Name="TimeDateStamp">2251690161</Data>
+		<Data Name="DefaultBase">0x7FF85C5D0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Games\FakeGame\Binaries\winmm.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.156648100+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="44164" ProcessorID="7" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF862160000</Data>
+		<Data Name="ImageSize">0x3B000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  301605</Data>
+		<Data Name="TimeDateStamp">811737392</Data>
+		<Data Name="DefaultBase">0x7FF862160000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\dbgcore.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.156869500+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46068" ProcessorID="9" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89A2C0000</Data>
+		<Data Name="ImageSize">0xC000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">   90640</Data>
+		<Data Name="TimeDateStamp">3727022991</Data>
+		<Data Name="DefaultBase">0x7FF89A2C0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\cryptbase.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.157630000+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="9" KernelTime="15" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89C980000</Data>
+		<Data Name="ImageSize">0x31000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  216742</Data>
+		<Data Name="TimeDateStamp">2376539079</Data>
+		<Data Name="DefaultBase">0x7FF89C980000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\imm32.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.159335600+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="9" KernelTime="15" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF870E60000</Data>
+		<Data Name="ImageSize">0xF2000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  980117</Data>
+		<Data Name="TimeDateStamp">1765225020</Data>
+		<Data Name="DefaultBase">0x7FF870E60000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Program Files\Windhawk\Engine\1.7.3\64\windhawk.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.160887800+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="9" KernelTime="15" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89A8F0000</Data>
+		<Data Name="ImageSize">0x5E000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  457799</Data>
+		<Data Name="TimeDateStamp">2858637235</Data>
+		<Data Name="DefaultBase">0x7FF89A8F0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\powrprof.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.161105500+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="9" KernelTime="15" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89A6F0000</Data>
+		<Data Name="ImageSize">0x15000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  149814</Data>
+		<Data Name="TimeDateStamp">3847741064</Data>
+		<Data Name="DefaultBase">0x7FF89A6F0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\umpdc.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.161213600+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="9" KernelTime="15" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89B340000</Data>
+		<Data Name="ImageSize">0xAC000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  723676</Data>
+		<Data Name="TimeDateStamp">3672939517</Data>
+		<Data Name="DefaultBase">0x7FF89B340000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\bcryptprimitives.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.161468500+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="9" KernelTime="15" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF8978D0000</Data>
+		<Data Name="ImageSize">0xA8000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  709559</Data>
+		<Data Name="TimeDateStamp">734920565</Data>
+		<Data Name="DefaultBase">0x7FF8978D0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\uxtheme.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.162346300+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="9" KernelTime="15" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF899FB0000</Data>
+		<Data Name="ImageSize">0x6C000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  460444</Data>
+		<Data Name="TimeDateStamp">2853914095</Data>
+		<Data Name="DefaultBase">0x7FF899FB0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\mswsock.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.164892900+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="9" KernelTime="15" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF89A2A0000</Data>
+		<Data Name="ImageSize">0x1B000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  163816</Data>
+		<Data Name="TimeDateStamp">421397379</Data>
+		<Data Name="DefaultBase">0x7FF89A2A0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\cryptsp.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.165167000+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="9" KernelTime="15" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF899950000</Data>
+		<Data Name="ImageSize">0x39000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  249654</Data>
+		<Data Name="TimeDateStamp">1744229608</Data>
+		<Data Name="DefaultBase">0x7FF899950000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\rsaenh.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.165925800+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="26384" ProcessorID="9" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF8999F0000</Data>
+		<Data Name="ImageSize">0x1B000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  141496</Data>
+		<Data Name="TimeDateStamp">246514534</Data>
+		<Data Name="DefaultBase">0x7FF8999F0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\kernel.appcore.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.186925700+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="9" KernelTime="15" UserTime="15" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF895DB0000</Data>
+		<Data Name="ImageSize">0x260000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum"> 2511243</Data>
+		<Data Name="TimeDateStamp">2497598362</Data>
+		<Data Name="DefaultBase">0x7FF895DB0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\d3d11.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.187248900+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="6904" ProcessorID="8" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF897A20000</Data>
+		<Data Name="ImageSize">0x13B000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum"> 1349629</Data>
+		<Data Name="TimeDateStamp">2734512402</Data>
+		<Data Name="DefaultBase">0x7FF897A20000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\dxgi.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.187748000+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="9" KernelTime="30" UserTime="15" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF8979D0000</Data>
+		<Data Name="ImageSize">0x44000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum">  299486</Data>
+		<Data Name="TimeDateStamp">1771679452</Data>
+		<Data Name="DefaultBase">0x7FF8979D0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\DXCore.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:24.188208700+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46616" ProcessorID="9" KernelTime="30" UserTime="15" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF897A20000</Data>
+		<Data Name="ImageSize">0x13B000</Data>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ImageCheckSum"> 1349629</Data>
+		<Data Name="TimeDateStamp">2734512402</Data>
+		<Data Name="DefaultBase">0x7FF897A20000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\dxgi.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>2</EventID>
+		<Version>2</Version>
+		<Level>4</Level>
+		<Task>2</Task>
+		<Opcode>2</Opcode>
+		<Keywords>0x8000000000000010</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:25.662277100+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6440" ThreadID="30812" ProcessorID="7" KernelTime="15" UserTime="15" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ProcessID">    6440</Data>
+		<Data Name="ProcessSequenceNumber">134519</Data>
+		<Data Name="CreateTime">2026-09-18T20:33:24.108649400Z</Data>
+		<Data Name="ExitTime">2026-09-18T20:33:25.661956600Z</Data>
+		<Data Name="ExitCode">       0</Data>
+		<Data Name="TokenElevationType">       2</Data>
+		<Data Name="HandleCount">     118</Data>
+		<Data Name="CommitCharge">19877888</Data>
+		<Data Name="CommitPeak">20770816</Data>
+		<Data Name="CPUCycleCount">124983648</Data>
+		<Data Name="ReadOperationCount">       5</Data>
+		<Data Name="WriteOperationCount">       0</Data>
+		<Data Name="ReadTransferKiloBytes">       0</Data>
+		<Data Name="WriteTransferKiloBytes">       0</Data>
+		<Data Name="HardFaultCount">       0</Data>
+		<Data Name="ImageName">Launcher.exe</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:29.205257800+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="2224" ThreadID="26984" ProcessorID="19" KernelTime="15" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF881DC0000</Data>
+		<Data Name="ImageSize">0x662000</Data>
+		<Data Name="ProcessID">    2224</Data>
+		<Data Name="ImageCheckSum"> 6820699</Data>
+		<Data Name="TimeDateStamp">2784382749</Data>
+		<Data Name="DefaultBase">0x7FF881DC0000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\OneCoreUAPCommonProxyStub.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>5</EventID>
+		<Version>0</Version>
+		<Level>4</Level>
+		<Task>5</Task>
+		<Opcode>0</Opcode>
+		<Keywords>0x8000000000000040</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:29.911941800+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="6148" ThreadID="13408" ProcessorID="6" KernelTime="21765" UserTime="183300" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ImageBase">0x7FF882D80000</Data>
+		<Data Name="ImageSize">0x89000</Data>
+		<Data Name="ProcessID">    6148</Data>
+		<Data Name="ImageCheckSum">  591280</Data>
+		<Data Name="TimeDateStamp">1787590577</Data>
+		<Data Name="DefaultBase">0x7FF882D80000</Data>
+		<Data Name="ImageName">\Device\HarddiskVolume3\Windows\System32\nvapi64.dll</Data>
+	</EventData>
+	
+</Event>
+<Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+	<System>
+		<Provider Name="Microsoft-Windows-Kernel-Process" Guid="{22fb2cd6-0e7b-422b-a0c7-2fad1fd0e716}" />
+		<EventID>2</EventID>
+		<Version>2</Version>
+		<Level>4</Level>
+		<Task>2</Task>
+		<Opcode>2</Opcode>
+		<Keywords>0x8000000000000010</Keywords>
+		<TimeCreated SystemTime="2026-09-18T22:33:30.387074100+01:59" />
+		<Correlation ActivityID="{00000000-0000-0000-0000-000000000000}" />
+		<Execution ProcessID="46708" ThreadID="46072" ProcessorID="9" KernelTime="0" UserTime="0" />
+		<Channel>Microsoft-Windows-Kernel-Process/Analytic</Channel>
+		<Computer />
+	</System>
+	<EventData>
+		<Data Name="ProcessID">   46708</Data>
+		<Data Name="ProcessSequenceNumber">134520</Data>
+		<Data Name="CreateTime">2026-09-18T20:33:24.149038900Z</Data>
+		<Data Name="ExitTime">2026-09-18T20:33:30.386817400Z</Data>
+		<Data Name="ExitCode">4294967295</Data>
+		<Data Name="TokenElevationType">       2</Data>
+		<Data Name="HandleCount">     175</Data>
+		<Data Name="CommitCharge">19898368</Data>
+		<Data Name="CommitPeak">20013056</Data>
+		<Data Name="CPUCycleCount">115064352</Data>
+		<Data Name="ReadOperationCount">       5</Data>
+		<Data Name="WriteOperationCount">       0</Data>
+		<Data Name="ReadTransferKiloBytes">       0</Data>
+		<Data Name="WriteTransferKiloBytes">       0</Data>
+		<Data Name="HardFaultCount">       0</Data>
+		<Data Name="ImageName">Game.exe</Data>
+	</EventData>
+	
+</Event>
+</Events>
