@@ -2740,6 +2740,10 @@ async function applyHelpFix(exePath, fixId) {
     case 'swap-to-dxvk': {
       const plan = legacyPlanFor(dir, exePath, {});
       if (!plan || !plan.supported) return { done: false, text: 'this game has no translation-layer route' };
+      // The wording cannot assume a crash any more: this is reachable from Game Help's More row as a
+      // choice, not only from a 'wrapper-crash' verdict, so it has to read correctly for a game that
+      // is merely misbehaving -- or that has dgVoodoo2 nowhere near it yet.
+      const hasDgVoodoo = legacy.status(dir).dgVoodoo;
       const answer = await dialog.showMessageBox({
         type: 'question',
         buttons: ['Try DXVK', 'Cancel'],
@@ -2747,10 +2751,15 @@ async function applyHelpFix(exePath, fixId) {
         cancelId: 1,
         noLink: true,
         title: 'Try the other compatibility layer',
-        message: 'Swap dgVoodoo2 for DXVK in this game?',
-        detail: 'The game crashed inside dgVoodoo2 as it started. DXVK does the same job by a different route, '
-          + 'and is worth trying before giving up on it.\n\nWhatever dgVoodoo2 displaced is handed back first, '
-          + 'so this can be undone. Run the game afterwards and check here again.',
+        message: hasDgVoodoo ? 'Swap dgVoodoo2 for DXVK in this game?' : 'Use DXVK as this game\'s compatibility layer?',
+        detail: (hasDgVoodoo
+          ? 'dgVoodoo2 and DXVK do the same job by different routes -- dgVoodoo2 through Direct3D 11, DXVK '
+            + 'through Vulkan -- so when a game will not behave under one, the other is worth a try.\n\n'
+            + 'Whatever dgVoodoo2 displaced is handed back first, so this can be undone.'
+          : 'DXVK translates this game\'s old Direct3D to Vulkan, which is what gives OptiScaler something '
+            + 'modern to hook.\n\nAnything it displaces is backed up first, so this can be undone.')
+          + '\n\nNeither layer is better everywhere: the swap can make a nearly-working game worse, and '
+          + 'nothing here can tell which way it went until you run the game. Run it afterwards and check here again.',
       });
       if (answer.response !== 0) return { done: false, text: 'cancelled by the user' };
       let sourceDir;
