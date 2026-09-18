@@ -211,26 +211,33 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     # A card in the Discord server's #announcements once the release is live. The webhook URL lives
-    # in the DISCORD_RELEASE_WEBHOOK secret; without it (a fork) this step does nothing. Pre-releases
+    # in the DISCORD_RELEASE_WEBHOOK secret; without it (a fork) this step does nothing.
+    #
+    # A pre-release announces itself too, as a DIFFERENT card: amber rather than green, the warning
+    # first, and the fact that nobody will be given it automatically said out loud. This used to be
+    # `if: !inputs.prerelease` -- pre-releases stayed silent, which meant the builds that most need
+    # testers were the ones nobody was told about, and the post then had to be written and pasted by
+    # hand every time. Silence is the wrong default; an unmistakably-marked card is the right one.
+    #
+    # A failed post never fails the release -- shipping the build matters more than announcing it --
+    # but it does raise a warning that lands on the run's summary page, because the alternative is
+    # what happened with v1.73.0: the webhook had been deleted, Discord answered "Unknown Webhook"
+    # (code 10015), the step went red inside a green job, and the release went out with nobody told.
+    # A post that silently does not happen is worse than one that fails loudly.
     #
     # Where the webhook is, for when it next needs replacing: guild "OptiDLSS5-UI"
     # (1549486108859957308), channel #announcements (1549487286364934174), webhook named
     # "OptiDLSS5-UI Releases". It has died twice now -- once before v1.73.0, and again when the
     # setup bot was removed from the server, which cost the v1.74.1 and v1.74.2 announcements.
     # Remaking it needs Manage Webhooks in that server and `gh secret set DISCORD_RELEASE_WEBHOOK`.
-    # stay quiet. A failed post never fails the release -- shipping the build matters more than
-    # announcing it -- but it does raise a warning that lands on the run's summary page, because the
-    # alternative is what happened with v1.73.0: the webhook had been deleted, Discord answered
-    # "Unknown Webhook" (code 10015), the step went red inside a green job, and the release went out
-    # with nobody told. A post that silently does not happen is worse than one that fails loudly.
     - name: Announce on Discord
-      if: ${{ !inputs.prerelease }}
       shell: pwsh
       continue-on-error: true
       env:
         DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
         TAG: ${{ inputs.tag }}
         TITLE: ${{ inputs.title }}
+        PRERELEASE: ${{ inputs.prerelease }}
       run: |
         if (-not $env:DISCORD_RELEASE_WEBHOOK) {
           Write-Output "::warning title=Discord announcement skipped::No DISCORD_RELEASE_WEBHOOK secret is set, so this release was not announced."
@@ -239,19 +246,37 @@ jobs:
         $repo = "${{ github.repository }}"
         $page = "https://github.com/$repo/releases/tag/$env:TAG"
         $engine = if (Test-Path engine\VERSION) { (Get-Content engine\VERSION -Raw).Trim() } else { $null }
-        $lines = @(
-          "A new version is out. The app updates itself: if it hasn't yet, press **Check for Updates** at the top.",
-          "",
-          "**Download:** [GitHub release $env:TAG]($page)"
-        )
+        # PowerShell gets "true"/"false" as a string here, not a boolean.
+        $pre = $env:PRERELEASE -eq 'true'
+
+        if ($pre) {
+          # The warning goes first, before anything that might tempt someone to install it, and the
+          # second line is the one people most need: nothing will hand them this build, so if they
+          # are reading it out of curiosity rather than to test, they can stop here.
+          $lines = @(
+            "**This is a pre-release.** It is here to be tested, not to be relied on -- expect it to misbehave, and say so when it does.",
+            "",
+            "**You will not get this automatically.** The app only updates itself to stable releases, so this is a deliberate download.",
+            "",
+            "**Download:** [GitHub release $env:TAG]($page)"
+          )
+        } else {
+          $lines = @(
+            "A new version is out. The app updates itself: if it hasn't yet, press **Check for Updates** at the top.",
+            "",
+            "**Download:** [GitHub release $env:TAG]($page)"
+          )
+        }
         if ($engine) { $lines += "**Engine:** OptiScaler_DLSSNR $engine" }
         $payload = @{
           username = "OptiDLSS5-UI Releases"
           embeds = @(@{
-            title = "🚀 $env:TITLE"
+            title = $(if ($pre) { "⚠️ PRE-RELEASE -- $env:TITLE" } else { "🚀 $env:TITLE" })
             url = $page
             description = ($lines -join "`n")
-            color = 0x76B900
+            # Amber, the same warning colour the app's own UI uses, so the card reads as a warning
+            # at a glance in a channel of green ones.
+            color = $(if ($pre) { 0xD9A441 } else { 0x76B900 })
             thumbnail = @{ url = "https://raw.githubusercontent.com/$repo/master/build/icon.png" }
             timestamp = (Get-Date).ToUniversalTime().ToString("o")
           })
