@@ -15,6 +15,10 @@ on:
         description: "Mark as a pre-release"
         type: boolean
         default: false
+      engine_tag:
+        description: "Engine release to bundle, e.g. v2.0.0. Leave empty for the engine's latest stable release."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -77,11 +81,24 @@ jobs:
         # "no zip on the release" and failed two releases in a row (2026-09-12). Retried with a
         # pause for the ordinary hiccups on top of that.
         $headers = @{ 'User-Agent' = 'OptiDLSS5-UI-release'; Accept = 'application/vnd.github+json'; Authorization = "Bearer $env:GITHUB_TOKEN" }
+
+        # /releases/latest deliberately EXCLUDES pre-releases, so a manager pre-release paired with
+        # an engine pre-release would silently bundle the last STABLE engine instead -- a v2 manager
+        # carrying a v1 engine, with nothing failing to say so. Naming the tag is the way to pair
+        # the two. Empty keeps the old behaviour for an ordinary stable release.
+        $engineTag = "${{ inputs.engine_tag }}".Trim()
+        $uri = if ($engineTag) {
+          "https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/tags/$engineTag"
+        } else {
+          'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest'
+        }
+        Write-Output "Engine release: $uri"
+
         $asset = $null
         $release = $null
         for ($attempt = 1; $attempt -le 5; $attempt++) {
           try {
-            $release = Invoke-RestMethod -Headers $headers -Uri 'https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/latest'
+            $release = Invoke-RestMethod -Headers $headers -Uri $uri
             $asset = $release.assets | Where-Object { $_.name -like '*.zip' } | Select-Object -First 1
           } catch {
             Write-Output "attempt $attempt failed: $($_.Exception.Message)"
@@ -92,7 +109,13 @@ jobs:
         }
 
         if (-not $asset) {
-          Write-Error "No .zip asset found on OptiScaler_DLSSNR's latest release ($($release.tag_name)) after 5 attempts."
+          Write-Error "No .zip asset found on OptiScaler_DLSSNR release $(if ($engineTag) { $engineTag } else { 'latest' }) ($($release.tag_name)) after 5 attempts."
+          exit 1
+        }
+
+        # Said out loud so a mismatched pair is visible in the log rather than only in the artefact.
+        if ($engineTag -and $release.tag_name -ne $engineTag) {
+          Write-Error "Asked for engine $engineTag but got $($release.tag_name)."
           exit 1
         }
 
