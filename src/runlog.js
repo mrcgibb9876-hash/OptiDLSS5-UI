@@ -468,7 +468,7 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
 // this is read by a person and by a script, and a script should not have to parse prose.
 //
 // Redaction is the caller's: ghreport.sendReport redacts the whole body, this included.
-function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = null, route = null, feeder = null } = {}) {
+function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = null, route = null, feeder = null, timing = null, fpsTarget = null } = {}) {
   const lines = [];
   const add = (key, value) => { if (value !== null && value !== undefined && value !== '' && value !== false) lines.push(`${key}: ${value}`); };
 
@@ -527,6 +527,14 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = 
     add('neural passes', run.nrFrames || run.nrDispatch || null);
     add('feeder frames', run.feedFrames || null);
     add('fps', run.fps);
+    // What the neural pass costs (nrTiming, the engine's own heartbeat and cost lines), and the frame
+    // rate the player is aiming for. Together they decide whether frame generation is worth suggesting
+    // (fgsuggest.js), and a digest is where a report's version of that question gets answered.
+    if (timing && timing.ok && (timing.totalMs || timing.msPerFrame)) {
+      const ms = timing.totalMs || timing.msPerFrame;
+      add('neural cost', `${ms} ms per frame${timing.modelMs ? ` (${timing.modelMs} ms model)` : ''}${timing.fps ? `, ${timing.fps} fps at the last heartbeat` : ''}`);
+    }
+    add('fps target', fpsTarget);
     add('dlss features created', run.dlssCreated || null);
 
     // The neural consumer, in the Feeder's own words (see the DetectOptiScaler block above).
