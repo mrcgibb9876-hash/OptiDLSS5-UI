@@ -28,26 +28,38 @@ games, press **Install**, play. The app works out what each game needs and sets 
 
 ## Screenshots
 
-**Your library.** Each card shows the engine, the graphics API, the route the game gets, a ✓ when that route is
-verified, and what the last run did.
+**Your library.** One card per game, and the card says the whole story: the engine, the graphics API, the
+route that game gets, a ✓ when someone has confirmed that route on this game, and what the last run did.
 
-![Game grid](docs/screenshots/manager-game-grid.png)
+The chip at the top and the big button underneath always agree, because they are decided together — there is
+one next step at a time, and it is the button. Everything else moved behind the ⋯ menu.
 
-**Game Help** reads the game's logs and says what to do in a few steps. The long explanation is under Details.
+![The game grid, showing the six states a card can be in](docs/screenshots/manager-game-grid.png)
 
-![Game Help on a working game](docs/screenshots/game-help.png)
+- **Working** — the neural pass ran, and the line beside the chips is the evidence: passes, frame rate, API.
+- **Set up** with something to fix — the card names the problem and the button applies the fix.
+- **Running** — while the game is up the card says how to reach the panel instead of offering a fix, because
+  a fix would move DLLs the game is holding open.
+- **Not installed**, **Leftovers**, **Exe missing** — each with the one button that belongs to it.
 
-![Game Help with a finding (example data): the NVIDIA driver is too old](docs/screenshots/game-help-fix.png)
+**Game Help** reads the game's own logs and says what to do in a few steps. When the app can fix it, the fix
+is one button — on this dialog, and on the card itself. The long explanation is under Details.
 
-**Edit** is the game and its DLSS 5 settings. Everything else is behind Settings > *Show advanced options*.
+![Game Help with a fix available](docs/screenshots/game-help.png)
 
-![Edit Game, DLSS 5 settings](docs/screenshots/edit-game.png)
-
-**In game**, `Alt+Home` opens the DLSS 5 Developer Controls panel (dark and light themes):
+**In game**, `Alt+Home` opens the DLSS 5 Developer Controls panel. Every DLSS 5 control lives here rather than
+in the manager, so a change lands on the frame you are looking at.
 
 ![DLSS 5 Developer Controls panel, dark theme](docs/screenshots/dlssnr-panel-dark.png)
 
 ![DLSS 5 Developer Controls panel, light theme](docs/screenshots/dlssnr-panel-light.png)
+
+**New in v2.1.0 — adaptive model resolution.** Tell it a frame rate and the neural pass holds itself to it,
+moving how hard the model works as the scene changes. It only ever changes the *model's* resolution — the
+frame is never reduced — it will not go below a floor you set, and when the frame rate you asked for is out
+of reach it says so rather than sitting at the floor looking broken. Off by default.
+
+![Adaptive model resolution in the panel's Cost group](docs/screenshots/dlssnr-auto-resolution.png)
 
 ## Community and support
 
