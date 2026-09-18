@@ -299,6 +299,9 @@ window.addEventListener('blur', stopRunningPoll);
 // The newest run wins; older ones stop at their next await.
 let renderGeneration = 0;
 
+// Exe paths whose card "Fix it" is still running (applyRecommendation).
+const cardFixesInFlight = new Set();
+
 async function renderGrid() {
   if (!bannerSearchVersionLoaded) {
     try { bannerSearchVersion = (await window.api.steamSearchVersion()) || 1; } catch {}
@@ -329,11 +332,16 @@ async function renderGrid() {
     // What the chip and the primary button are computed from. Filled in further by
     // applyRecommendation once the route and the diagnosis come back; refreshCardState renders it.
     // On an AMD card a lone nvngx_dlssnr.dll is the DLSS-NR-on-AMD layout, not a half-done
-    // OptiScaler install, so it does not count as leftovers here.
+    // OptiScaler install, so it does not count as leftovers here. main.js's detectInstalledBackends
+    // lists nvngx_dlssnr.dll among its leftovers regardless of vendor, which quietly defeated the
+    // hasNr check (review of 2026-09-18) -- and the menu's "Remove leftovers" then ran the full
+    // uninstall and deleted the AMD model. So on AMD the model file is taken out of the list, and
+    // the chip, the menu label and the Remove handler all read this one filtered list.
+    const leftoverFiles = (backends.leftovers || []).filter((n) => !(gpu.vendor === 'amd' && String(n).toLowerCase() === 'nvngx_dlssnr.dll'));
     const initialState = {
       exeMissing: !!status.exeMissing,
       installed: !!backends.optiscaler,
-      leftovers: !backends.optiscaler && ((backends.leftovers || []).length > 0 || status.hasIni || (status.hasNr && gpu.vendor !== 'amd')),
+      leftovers: !backends.optiscaler && (leftoverFiles.length > 0 || status.hasIni || (status.hasNr && gpu.vendor !== 'amd')),
       working: false,
       problem: null,
       installLabel: t('Install'),
@@ -360,7 +368,7 @@ async function renderGrid() {
           <button class="btn btn-ghost btn-edit">${escapeHtml(t('Settings'))}</button>
           <button class="btn btn-ghost btn-help has-tip" data-tip="${escapeHtml(t('Checks this game\'s setup and its last run, applies the fix when the app has one, tells you plainly when DLSS 5 is not available here, and can save a bundle to share or ask an AI.'))}">${escapeHtml(t('Game Help'))}</button>
           <button class="btn btn-ghost btn-open">${escapeHtml(t('Open folder'))}</button>
-          <button class="btn btn-ghost btn-danger btn-install">${escapeHtml(backends.optiscaler ? t('Uninstall OptiScaler') : (backends.leftovers || []).length ? t('Remove leftovers') : t('Install OptiScaler'))}</button>
+          <button class="btn btn-ghost btn-danger btn-install">${escapeHtml(backends.optiscaler ? t('Uninstall OptiScaler') : leftoverFiles.length ? t('Remove leftovers') : t('Install OptiScaler'))}</button>
           ${(status.foreign || []).length ? `<button class="btn btn-ghost btn-danger btn-remove-foreign">${escapeHtml(t('Remove the other DLSS 5 toolchain…'))}</button>` : ''}
           <button class="btn btn-ghost btn-danger btn-remove">${escapeHtml(t('Remove from list'))}</button>
         </div>
@@ -442,7 +450,7 @@ async function renderGrid() {
     }
 
     card.querySelector('.btn-install').addEventListener('click', async () => {
-      if (backends.optiscaler || (backends.leftovers || []).length) {
+      if (backends.optiscaler || leftoverFiles.length) {
         // The exact list first: Remove never surprises anyone with what it took.
         const plan = await window.api.uninstallPlan(game.exePath);
         const clip = (arr) => (arr.length > 12 ? arr.slice(0, 12).join(', ') + ' \u2026(+' + (arr.length - 12) + ')' : arr.join(', '));
@@ -753,7 +761,25 @@ async function applyRecommendation(game, card, backends, generation = renderGene
     let action;
     if (diag.status === 'fix') {
       // Applied straight from the card. No dialog opens: the toast names what changed.
-      action = { label: t('Fix it'), run: () => applyHelpFix(game, diag, { modal: false }) };
+      // With modal:false applyHelpFix's busy() has no button to disable, so a double-click ran the
+      // same fix twice at once -- two DLL swaps racing in one folder (review of 2026-09-18). The
+      // in-flight set is keyed by exe rather than held on the card because the fix re-renders the
+      // grid, which builds a fresh card for the same game.
+      action = {
+        label: t('Fix it'),
+        run: async () => {
+          if (cardFixesInFlight.has(game.exePath)) return;
+          cardFixesInFlight.add(game.exePath);
+          const btn = card.querySelector('.btn-card-primary');
+          if (btn) btn.disabled = true;
+          try {
+            await applyHelpFix(game, diag, { modal: false });
+          } finally {
+            cardFixesInFlight.delete(game.exePath);
+            if (btn) btn.disabled = false;
+          }
+        },
+      };
     } else if (diag.code === 'pd-plugin-missing') {
       // The one file the app cannot fetch: its own popup, which finds the download afterwards.
       action = { label: t('Get plugin'), run: () => openPdPluginModal() };
@@ -790,6 +816,14 @@ async function applyRecommendation(game, card, backends, generation = renderGene
         text: t('Menus are in the helper: Home \u2192 Add-ons \u2192 DLSS 5 Feed \u2192 show the panel \u2192 Insert'),
         title: t('Expect nothing on screen in the game: no OptiScaler splash when it loads, and no menu on any key. A 32-bit game cannot run DLSS in its own process, so the neural pass runs in the 64-bit helper beside the game -- and OptiScaler runs there with it, in a process with no window to draw on. Press "Show the DLSS 5 panel in-game" in the add-on first; Insert then opens OptiScaler\'s menu inside it. Needs windowed or borderless. Game Help spells it out.'),
       }
+    // With the pop-out panel switched off (or its hotkey taken by another program) naming that
+    // hotkey sent people to a key that did nothing (review of 2026-09-18); Alt+Home is then the
+    // only way in, so the card says just that.
+    : route.optiInstalled && !popoutHotkeyUsable()
+      ? {
+          text: t('Press Alt+Home in the game for the DLSS 5 panel'),
+          title: t('OptiScaler\'s own menu, inside the game, with the DLSS 5 controls live on the frame. Needs the game windowed or borderless if it does not show. The pop-out panel\'s hotkey is off or taken by another program -- see Settings.'),
+        }
     : route.optiInstalled
       ? {
           text: t('{hotkey} opens the DLSS 5 panel', { hotkey: settings.panelHotkey || DEFAULT_PANEL_HOTKEY }),
@@ -980,7 +1014,9 @@ function helpSteps(diag) {
       ? [t("In Prey: Options > Display > Anti-Aliasing: TAA (or SMAA 2TX)"), t('Play a minute of actual gameplay, then quit'), launch]
       : [t('Play a minute of actual gameplay, then quit'), t("In the game: Home > Luma > select DLSS"), launch];
     case 'needs-run': case 'needs-run-after-fix': return [t('Launch the game'), t('Play a minute of actual gameplay, then quit'), t('Come back here')];
-    case 'ok-panel-in-helper': return [t('Press Alt+Home in the game for the DLSS 5 panel'), t('Its controls take clicks there, as in any other game'), t('Or press {hotkey} for the pop-out panel', { hotkey: settings.panelHotkey || DEFAULT_PANEL_HOTKEY })];
+    // The pop-out line only when that panel can actually answer its hotkey (see popoutHotkeyUsable).
+    case 'ok-panel-in-helper': return [t('Press Alt+Home in the game for the DLSS 5 panel'), t('Its controls take clicks there, as in any other game'),
+      ...(popoutHotkeyUsable() ? [t('Or press {hotkey} for the pop-out panel', { hotkey: settings.panelHotkey || DEFAULT_PANEL_HOTKEY })] : [])];
     case 'vulkan-layer-missing': return [t('Install ReShade with add-on support for this exe, choosing Vulkan'), t('Or switch the emulator to OpenGL and pick OpenGL in Edit'), t('Press Install here again')];
     case 'vulkan-layer-no-addon': return [t('Reinstall ReShade with "Enable loading of add-ons"'), t('Press Install here again')];
     case 'vulkan-layer-not-loaded': return [t('Run ReShade\'s installer for this exe, choosing Vulkan'), t('Turn NVIDIA Smooth Motion off for it'), t('Launch again')];
@@ -1188,8 +1224,14 @@ async function openHelp(game) {
   $('#help-status').textContent = '';
   $('#help-ai-out').classList.add('hidden');
   $('#help-ai-out').textContent = '';
+  // Hidden until this game's route says otherwise: they are only set after two awaits below, and
+  // until then they still showed the previous game's answer (review of 2026-09-18).
+  $('#help-native').classList.add('hidden');
+  $('#help-dxvk').classList.add('hidden');
   helpModal.classList.remove('hidden');
   const diag = await refreshHelp();
+  // Closed, or reopened on another game, while that ran: what follows belongs to that one now.
+  if (helpGame !== game) return;
   helpLastRunAt = diag && diag.run && diag.run.at ? diag.run.at : null;
 
   // The model-only route, reachable by hand as well as when a verdict offers it. A game that dies
@@ -1198,6 +1240,8 @@ async function openHelp(game) {
   // Two routes that are worth choosing, not only worth being offered after a failure.
   try {
     const r = await window.api.gameRoute(game.exePath, game.detectedPath || null);
+    // Same race: without this a slow route lookup for game A lit its buttons on game B's dialog.
+    if (helpGame !== game) return;
     $('#help-native').classList.toggle('hidden', !(r && r.shipsDlss && r.optiInstalled));
     // The DXVK swap was reachable only from a 'wrapper-crash' verdict: the game had to crash INSIDE
     // the dgVoodoo2 DLL this app deployed, and be classified as that. A game that merely renders
@@ -1208,6 +1252,7 @@ async function openHelp(game) {
     const dxvkOk = !!(r && r.legacy && r.legacy.supported && dxvkApis.includes(r.legacy.api));
     $('#help-dxvk').classList.toggle('hidden', !dxvkOk);
   } catch {
+    if (helpGame !== game) return;
     $('#help-native').classList.add('hidden');
     $('#help-dxvk').classList.add('hidden');
   }
@@ -3640,9 +3685,21 @@ function panelEnabled() {
   return settings.panelEnabled === undefined || !!settings.panelEnabled;
 }
 
+// What the last panelHotkeyState answer said: false once Windows refused the hotkey (another
+// program holds it). Remembered rather than asked per card, since the card hint and Game Help's
+// steps are built synchronously; null until the first answer, which counts as usable.
+let panelHotkeyRegistered = null;
+
+// Whether telling someone "press {hotkey} for the pop-out panel" is true right now. The card hint
+// and Game Help both named the hotkey with the panel switched off (review of 2026-09-18).
+function popoutHotkeyUsable() {
+  return panelEnabled() && panelHotkeyRegistered !== false;
+}
+
 async function showPanelHotkeyState() {
   const el = $('#panel-hotkey-status');
   const state = await window.api.panelHotkeyState();
+  panelHotkeyRegistered = state && !state.disabled ? !!state.ok : null;
   if (!state || state.disabled || !panelEnabled()) {
     el.textContent = t('The hotkey is off. The button above still opens it.');
     el.className = 'status-line';
@@ -4288,6 +4345,8 @@ window.addEventListener('focus', () => {
   // Vendor colours: the default green is NVIDIA's; an AMD card gets AMD red (style.css, body.vendor-amd).
   document.body.classList.toggle('vendor-amd', gpu.vendor === 'amd');
   refreshDriverBanner();
+  // Before the first grid so the cards' panel hint already knows whether the pop-out hotkey works.
+  try { const hk = await window.api.panelHotkeyState(); panelHotkeyRegistered = hk && !hk.disabled ? !!hk.ok : null; } catch {}
   await refreshBannerVisibility();
   await renderGrid();
   await ensureBundledEngine();
