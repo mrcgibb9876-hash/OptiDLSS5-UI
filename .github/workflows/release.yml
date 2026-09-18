@@ -183,7 +183,23 @@ jobs:
         body: |
           [![Join the Discord](https://img.shields.io/badge/Join%20the%20Discord-Help%20·%20Results%20·%20Releases-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/HFZTDdSNmJ)
 
-          **Download:** `OptiDLSS5-UI-Setup-*.exe` (installer) or `OptiDLSS5-UI-Portable-*.exe`. The app updates itself after that.
+          ### What to download
+
+          **`OptiDLSS5-UI-Setup-*.exe`** — the installer. Most people want this one. The app updates itself after that.
+
+          **`OptiDLSS5-UI-Portable-*.exe`** — the same app with nothing to install.
+
+          <details>
+          <summary>The other files are not downloads</summary>
+
+          `latest.yml` and `*.exe.blockmap` are for the app, not for you. The updater reads `latest.yml` to
+          find the next version, and the blockmap lets it fetch only the parts of the installer that changed
+          instead of the whole thing. Downloading either by hand does nothing.
+
+          `OptiScaler_DLSSNR-*.zip` is the engine. It is already inside the installer and is set up for you on
+          first launch — it is here on its own only for anyone putting a game folder together by hand.
+
+          </details>
         # latest.yml + the blockmap are what the Manager's own updater (electron-updater, GitHub
         # provider) reads to find and delta-download the next build -- see src/manager-update.js.
         files: |
