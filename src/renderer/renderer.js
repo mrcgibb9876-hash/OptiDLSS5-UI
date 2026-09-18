@@ -973,7 +973,7 @@ function helpSteps(diag) {
       ? [t("In Prey: Options > Display > Anti-Aliasing: TAA (or SMAA 2TX)"), t('Play a minute of actual gameplay, then quit'), launch]
       : [t('Play a minute of actual gameplay, then quit'), t("In the game: Home > Luma > select DLSS"), launch];
     case 'needs-run': case 'needs-run-after-fix': return [t('Launch the game'), t('Play a minute of actual gameplay, then quit'), t('Come back here')];
-    case 'ok-panel-in-helper': return [t('Press Alt+Home in the game for the DLSS 5 panel'), t('Its controls take clicks there, as in any other game'), t('Or change settings in Edit here -- they apply live')];
+    case 'ok-panel-in-helper': return [t('Press Alt+Home in the game for the DLSS 5 panel'), t('Its controls take clicks there, as in any other game'), t('Or press {hotkey} for the pop-out panel', { hotkey: settings.panelHotkey || DEFAULT_PANEL_HOTKEY })];
     case 'vulkan-layer-missing': return [t('Install ReShade with add-on support for this exe, choosing Vulkan'), t('Or switch the emulator to OpenGL and pick OpenGL in Edit'), t('Press Install here again')];
     case 'vulkan-layer-no-addon': return [t('Reinstall ReShade with "Enable loading of add-ons"'), t('Press Install here again')];
     case 'vulkan-layer-not-loaded': return [t('Run ReShade\'s installer for this exe, choosing Vulkan'), t('Turn NVIDIA Smooth Motion off for it'), t('Launch again')];
