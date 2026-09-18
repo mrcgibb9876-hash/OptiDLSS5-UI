@@ -112,6 +112,12 @@ contextBridge.exposeInMainWorld('api', {
   cacheSteamBanner: (appid, fallbackImageUrl) => ipcRenderer.invoke('banner:cache-steam', { appid, fallbackImageUrl }),
   exeIconBanner: (exePath) => ipcRenderer.invoke('banner:exe-icon', exePath),
   gamesRunning: (exePaths) => ipcRenderer.invoke('games:running', exePaths),
+  // A launch this app started is watched in main.js (launchwatch.js); an early exit or an
+  // anti-cheat refusal comes back here. Restoring stays the user's click.
+  onLaunchOutcome: (cb) => { ipcRenderer.on('game:launch-outcome', (_evt, notice) => cb(notice)); },
+  safetyCheckInstalled: (exePath) => ipcRenderer.invoke('safety:check-installed', { exePath }),
+  safetyDgVoodooQuarantine: (exePath) => ipcRenderer.invoke('safety:dgvoodoo-quarantine', { exePath }),
+  openProtectionHistory: () => ipcRenderer.invoke('safety:open-protection-history'),
   dlssNrGet: (exePath) => ipcRenderer.invoke('dlssnr:get', exePath),
   dlssNrSet: (exePath, values) => ipcRenderer.invoke('dlssnr:set', { exePath, values }),
 
