@@ -156,18 +156,53 @@ async function ensureAmdNrModelCache({ getRhiManifest, cacheDir, ghHeaders }) {
 // Places the model file beside the exe. A copy already there is left alone unless the caller
 // says replace -- a game that ships its own (Cyberpunk does) or a user's hand-placed build is
 // theirs; when replacing, the old one is kept as .amdnr_backup so this is reversible.
+//
+// Never destroys a model. The first cut deleted the file in place whenever .amdnr_backup already
+// existed -- a second deploy, or a game whose update put its own model back after the first one --
+// so the game's own model could be lost outright (review of 2026-09-18). Now a file identical to the
+// one being placed is simply left (already: true, nothing copied), and a different one is kept under
+// a fresh backup name when the usual one is taken.
 async function deployAmdNrModel(dir, cachedDll, { replace = false } = {}) {
   const dest = path.join(dir, 'nvngx_dlssnr.dll');
   let backedUp = null;
   if (fs.existsSync(dest)) {
+    if (sameFile(dest, cachedDll)) return { deployed: true, already: true, backedUp: null, version: AMDNR_NR_MODEL_VERSION };
     if (!replace) return { deployed: false, reason: 'already present, not overwritten' };
-    const backup = `${dest}.amdnr_backup`;
-    if (!fs.existsSync(backup)) await fsp.rename(dest, backup);
-    else await fsp.rm(dest, { force: true });
+    let backup = `${dest}.amdnr_backup`;
+    if (fs.existsSync(backup)) backup = `${dest}.amdnr_backup-${Date.now()}`;
+    await fsp.rename(dest, backup);
     backedUp = path.basename(backup);
   }
   await fsp.copyFile(cachedDll, dest);
   return { deployed: true, backedUp, version: AMDNR_NR_MODEL_VERSION };
+}
+
+// Byte-for-byte, in chunks: the model is ~165 MB, and two different builds never share a size, so
+// the size check settles almost every call before any reading.
+function sameFile(a, b) {
+  let fa = null;
+  let fb = null;
+  try {
+    if (path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase()) return true;
+    const sa = fs.statSync(a).size;
+    if (sa !== fs.statSync(b).size) return false;
+    fa = fs.openSync(a, 'r');
+    fb = fs.openSync(b, 'r');
+    const ba = Buffer.alloc(1 << 20);
+    const bb = Buffer.alloc(1 << 20);
+    for (let pos = 0; pos < sa;) {
+      const na = fs.readSync(fa, ba, 0, ba.length, pos);
+      const nb = fs.readSync(fb, bb, 0, bb.length, pos);
+      if (na !== nb || na === 0 || !ba.subarray(0, na).equals(bb.subarray(0, nb))) return false;
+      pos += na;
+    }
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (fa !== null) try { fs.closeSync(fa); } catch {}
+    if (fb !== null) try { fs.closeSync(fb); } catch {}
+  }
 }
 
 module.exports = {

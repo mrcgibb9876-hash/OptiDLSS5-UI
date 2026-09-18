@@ -20,6 +20,8 @@ const nativeDlss = require('./native-dlss');
 const { recommendRoute, withApiOverride, API_OVERRIDE_VALUES } = require('./route');
 const gpu = require('./gpu');
 const amdnr = require('./amdnr');
+const nrmodelonly = require('./nrmodelonly');
+const helpfix = require('./helpfix');
 const { detectGameCached, invalidateDetection, peOriginalFilename, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, antiCheatPresent, peImports, peBitness, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const dlssnr = require('./dlssnr');
@@ -1814,7 +1816,8 @@ ipcMain.handle('game:status', (_evt, exePath) => {
   if (!exePath || !fs.existsSync(exePath)) return { exeMissing: true };
   const dir = gameDir(exePath);
   const hasIni = fs.existsSync(path.join(dir, 'OptiScaler.ini'));
-  const hasNr = fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'));
+  // Beside the exe, or where Game Help's model-only route put it (the game's own Streamline folder).
+  const hasNr = nrmodelonly.nrModelPresent(dir);
   const hasUninstaller = fs.existsSync(path.join(dir, 'Remove_OptiScaler.bat')) ||
     fs.existsSync(path.join(dir, 'uninstall_optiscaler.bat')) ||
     fs.existsSync(path.join(dir, 'uninstaller.bat'));
@@ -2144,6 +2147,13 @@ async function uninstallEverything(dir) {
   const core = await uninstallOptiScaler(dir);
   removed.push(...core.removed); kept.push(...core.kept);
   if (core.nrDllRemoved && !removed.includes('nvngx_dlssnr.dll')) removed.push('nvngx_dlssnr.dll');
+  // Game Help's model-only route (nrmodelonly.js): its copy of the model, wherever it put it, and the
+  // model it displaced put back. After uninstallOptiScaler, which deletes the one beside the exe.
+  {
+    const r = await nrmodelonly.removeNrModelOnly(dir);
+    for (const rel of r.removed) if (!removed.includes(rel)) removed.push(rel);
+    restored.push(...r.restored);
+  }
 
   for (const rel of journal.added || []) await rmRel(rel);
   for (const r of journal.replaced || []) {
@@ -2253,6 +2263,8 @@ async function planUninstall(dir) {
   if (journal.backedUp && has(journal.backedUp)) restore.push(`${journal.backedUpAs || journal.proxy} (from ${journal.backedUp})`);
   for (const n of ['OptiScaler.dll', 'OptiScaler_OpticalFlow.dll', 'OptiScaler.ini', 'OptiScaler.log', 'nvngx.dll_dlssnr.dll', 'Remove_OptiScaler.bat', 'setup_windows.bat', 'setup_linux.sh', 'nvngx_dlssnr.dll', 'OptiScaler', '!! EXTRACT ALL FILES TO GAME FOLDER !!']) add(n);
   for (const f of RELEASE_LICENSE_FILES) add('Licenses/' + f);
+  // Game Help's model-only route, which can place the model in the game's own Streamline folder.
+  { const p = nrmodelonly.removalPlan(dir); for (const rel of p.remove) add(rel); restore.push(...p.restore); }
   for (const rel of journal.added || []) add(rel);
   for (const r of journal.replaced || []) if (has(r.backup)) restore.push(r.rel);
   for (const m of APP_MARKERS) add(m);
@@ -2665,17 +2677,18 @@ async function applyHelpFix(exePath, fixId) {
       // The proxy under a name this game never loads (SWTOR's dxgi.dll beside DXVK) is as much a
       // configuration as any ini key, and the same migration sync runs -- Game Help's opti-proxy-name
       // finding lands here.
-      let moved = '';
+      // A failed move is said, not swallowed: with `catch {}` here a rename refused by a running game
+      // came back as "nothing needed changing", which is the one answer that sends the user away
+      // from the actual problem (review of 2026-09-18).
+      let migration = null;
+      let migrateError = null;
       try {
-        const m = await migrateProxyIfNeeded(dir, exePath);
-        if (m && !m.skipped) moved = `moved OptiScaler from ${m.from} to ${m.to}`;
-        else if (m && m.skipped) moved = `could not move OptiScaler from ${m.from} to ${m.to}: ${m.skipped}`;
-      } catch {}
+        migration = await migrateProxyIfNeeded(dir, exePath);
+      } catch (error) {
+        migrateError = error;
+      }
       const r = await autoConfigureGame(dir, exePath);
-      const changed = (r.applied || []).map((e) => `${e.section}.${e.key}=${e.value}`);
-      const refw = r.reframework && r.reframework.installed ? ', REFramework placed' : '';
-      const parts = [moved, changed.length ? `set ${changed.join(', ')}` : ''].filter(Boolean);
-      return { done: true, text: parts.length ? `${parts.join('; ')}${refw}` : `nothing needed changing${refw}` };
+      return helpfix.reconfigureSummary({ migration, migrateError, applied: r.applied, reframeworkPlaced: !!(r.reframework && r.reframework.installed) });
     }
     // Re-deploy the Feeder's own half of the stack, forced, from one answer: the provider (this
     // app's current default unless the game's existing choice is still usable), its shader, both
@@ -2800,6 +2813,11 @@ async function applyHelpFix(exePath, fixId) {
     // cannot serve -- a game that will not start with a DLL injected into its loader -- and it costs
     // the in-game panel, which is why it is offered on a failure and confirmed, never automatic.
     case 'nr-model-only': {
+      // Only a game with DLSS of its own. The rule table checks route.shipsDlss before offering this,
+      // but the fix is in gamehelp.FIX_IDS, so the AI tier can ask for it on any game -- where it would
+      // take OptiScaler out and leave a model nothing ever loads (review of 2026-09-18).
+      const refused = nrmodelonly.refusal(dir);
+      if (refused) return { done: false, text: refused };
       const answer = await dialog.showMessageBox({
         type: 'question',
         buttons: ['Use the model only', 'Cancel'],
@@ -2817,68 +2835,36 @@ async function applyHelpFix(exePath, fixId) {
       });
       if (answer.response !== 0) return { done: false, text: 'cancelled by the user' };
 
-      // The model this game already has is the one to keep. Install put it there from the user's own
-      // driver package (main.js's nvngx_dlssnr.dll copy), and uninstallEverything deletes it along
-      // with everything else -- removeSharedNrDllIfUnneeded removes it unconditionally. Without
-      // stashing it first, this route would throw away a known-good model the user supplied and
-      // download a different build over the top, which is not what "take OptiScaler out" should mean.
-      const existingModel = path.join(dir, 'nvngx_dlssnr.dll');
-      let preserved = null;
-      if (fs.existsSync(existingModel)) {
-        try {
-          await fsp.mkdir(nrModelCacheDir(), { recursive: true });
-          preserved = path.join(nrModelCacheDir(), `preserved-${Date.now()}-nvngx_dlssnr.dll`);
-          await fsp.copyFile(existingModel, preserved);
-        } catch {
-          preserved = null; // fetching a fresh one is the fallback, not a failure
-        }
-      }
-
-      const removal = await uninstallEverything(dir);
-
-      let source = preserved;
-      if (!source) {
-        try {
-          source = await amdnr.ensureAmdNrModelCache({ getRhiManifest, cacheDir: nrModelCacheDir(), ghHeaders: GITHUB_HEADERS });
-        } catch (error) {
-          // OptiScaler is already out at this point, so say so rather than reporting a clean failure:
-          // the folder has changed and the user needs to know in which direction.
-          invalidateDetection(dir);
-          return {
-            done: false,
-            text: `OptiScaler was removed, but no model could be fetched: ${error && error.message ? error.message : error}`,
-          };
-        }
-      }
-
       // Where the game keeps its OWN Streamline is where its NGX looks for the model, and that is
       // not always beside the exe: an Unreal game keeps it under Engine\\Plugins\\...\\Win64, and
       // Where Winds Meet keeps a whole Streamline runtime in a folder of its own. native-dlss.js
-      // already knows all three layouts, and framegen.js already swaps the game's frame-gen DLL
-      // wherever the game itself put it -- dropping the model beside the exe regardless would be a
-      // no-op on exactly the games most likely to need this route.
-      const shipped = nativeDlss.shippedDlssPath(dir);
-      const target = shipped ? path.dirname(shipped) : dir;
-      const placed = await amdnr.deployAmdNrModel(target, source, { replace: true });
+      // already knows all three layouts (nrmodelonly.targetDirFor) -- dropping the model beside the
+      // exe regardless would be a no-op on exactly the games most likely to need this route.
+      //
+      // nrmodelonly.nrModelOnly keeps the model the game already has (in that folder or beside the
+      // exe), records what it placed for Remove, and puts the model back if a step fails after the
+      // uninstall took it. The fetched model, when there is none, is the one Install would use on this
+      // machine: Settings' model or the newest RHI build on NVIDIA, the pinned 310.8.0 on AMD.
+      const { vendor } = await getGpuInfo();
+      const settings = readJson(settingsFile(), {});
+      const result = await nrmodelonly.nrModelOnly({
+        dir,
+        cacheDir: nrModelCacheDir(),
+        uninstall: uninstallEverything,
+        resolveSource: () => nrmodelonly.pickModelSource({
+          vendor,
+          settingsPath: settings.nrDllPath || null,
+          fetchNvidia: async () => {
+            if (!nrFetchInFlight) nrFetchInFlight = fetchNrModel().finally(() => { nrFetchInFlight = null; });
+            const r = await nrFetchInFlight;
+            if (!r || !r.ok) throw new Error((r && r.error) || 'the NR model could not be fetched');
+            return r.path;
+          },
+          fetchAmd: () => amdnr.ensureAmdNrModelCache({ getRhiManifest, cacheDir: nrModelCacheDir(), ghHeaders: GITHUB_HEADERS }),
+        }),
+      });
       invalidateDetection(dir);
-
-      if (!placed.deployed) {
-        return { done: false, text: `OptiScaler was removed, but the model was not placed: ${placed.reason || 'refused'}` };
-      }
-
-      const cleared = (removal && Array.isArray(removal.removed)) ? removal.removed.length : 0;
-      const where = path.relative(dir, target) || 'the game folder';
-      // Said out loud when there was already a model there: deployAmdNrModel renames it rather than
-      // destroying it, and the name of the backup is the only way anyone would know to put it back.
-      const kept = placed.backedUp ? ` A model already in that folder was kept as ${placed.backedUp}.` : '';
-      // Which model went back matters: the one the user supplied is the one they tested with.
-      const whose = preserved ? 'the model this game already had' : 'a freshly fetched model';
-      if (preserved) await fsp.rm(preserved, { force: true }).catch(() => {});
-      return {
-        done: true,
-        text: `OptiScaler is out (${cleared} file(s)) and ${whose} is in ${where}.${kept} Turn DLSS on in `
-          + `the game's own video settings, then run it and check here again`,
-      };
+      return result;
     }
     case 'remove-all': {
       const answer = await dialog.showMessageBox({
