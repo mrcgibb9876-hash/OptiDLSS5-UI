@@ -2789,19 +2789,38 @@ async function applyHelpFix(exePath, fixId) {
       });
       if (answer.response !== 0) return { done: false, text: 'cancelled by the user' };
 
+      // The model this game already has is the one to keep. Install put it there from the user's own
+      // driver package (main.js's nvngx_dlssnr.dll copy), and uninstallEverything deletes it along
+      // with everything else -- removeSharedNrDllIfUnneeded removes it unconditionally. Without
+      // stashing it first, this route would throw away a known-good model the user supplied and
+      // download a different build over the top, which is not what "take OptiScaler out" should mean.
+      const existingModel = path.join(dir, 'nvngx_dlssnr.dll');
+      let preserved = null;
+      if (fs.existsSync(existingModel)) {
+        try {
+          await fsp.mkdir(nrModelCacheDir(), { recursive: true });
+          preserved = path.join(nrModelCacheDir(), `preserved-${Date.now()}-nvngx_dlssnr.dll`);
+          await fsp.copyFile(existingModel, preserved);
+        } catch {
+          preserved = null; // fetching a fresh one is the fallback, not a failure
+        }
+      }
+
       const removal = await uninstallEverything(dir);
 
-      let cached;
-      try {
-        cached = await amdnr.ensureAmdNrModelCache({ getRhiManifest, cacheDir: nrModelCacheDir(), ghHeaders: GITHUB_HEADERS });
-      } catch (error) {
-        // OptiScaler is already out at this point, so say so rather than reporting a clean failure:
-        // the folder has changed and the user needs to know in which direction.
-        invalidateDetection(dir);
-        return {
-          done: false,
-          text: `OptiScaler was removed, but the model could not be fetched: ${error && error.message ? error.message : error}`,
-        };
+      let source = preserved;
+      if (!source) {
+        try {
+          source = await amdnr.ensureAmdNrModelCache({ getRhiManifest, cacheDir: nrModelCacheDir(), ghHeaders: GITHUB_HEADERS });
+        } catch (error) {
+          // OptiScaler is already out at this point, so say so rather than reporting a clean failure:
+          // the folder has changed and the user needs to know in which direction.
+          invalidateDetection(dir);
+          return {
+            done: false,
+            text: `OptiScaler was removed, but no model could be fetched: ${error && error.message ? error.message : error}`,
+          };
+        }
       }
 
       // Where the game keeps its OWN Streamline is where its NGX looks for the model, and that is
@@ -2812,7 +2831,7 @@ async function applyHelpFix(exePath, fixId) {
       // no-op on exactly the games most likely to need this route.
       const shipped = nativeDlss.shippedDlssPath(dir);
       const target = shipped ? path.dirname(shipped) : dir;
-      const placed = await amdnr.deployAmdNrModel(target, cached, { replace: true });
+      const placed = await amdnr.deployAmdNrModel(target, source, { replace: true });
       invalidateDetection(dir);
 
       if (!placed.deployed) {
@@ -2823,10 +2842,13 @@ async function applyHelpFix(exePath, fixId) {
       const where = path.relative(dir, target) || 'the game folder';
       // Said out loud when there was already a model there: deployAmdNrModel renames it rather than
       // destroying it, and the name of the backup is the only way anyone would know to put it back.
-      const kept = placed.backedUp ? ` The model already here was kept as ${placed.backedUp}.` : '';
+      const kept = placed.backedUp ? ` A model already in that folder was kept as ${placed.backedUp}.` : '';
+      // Which model went back matters: the one the user supplied is the one they tested with.
+      const whose = preserved ? 'the model this game already had' : 'a freshly fetched model';
+      if (preserved) await fsp.rm(preserved, { force: true }).catch(() => {});
       return {
         done: true,
-        text: `OptiScaler is out (${cleared} file(s)) and nvngx_dlssnr.dll is in ${where}.${kept} Turn DLSS on in `
+        text: `OptiScaler is out (${cleared} file(s)) and ${whose} is in ${where}.${kept} Turn DLSS on in `
           + `the game's own video settings, then run it and check here again`,
       };
     }
