@@ -129,6 +129,21 @@ function diagnose(ctx) {
   const pd = ctx.pdUpscaler;
   if (pd && route.route === 'reframework-pd' && pd.temporalUpscalerOn) return fix('pd-temporal-on', 'reconfigure');
 
+  // The evidence (routescore.js: the known-good catalog, the last run, a probe) outweighs the rules' own
+  // pick for this game, and there is a one-click way over. Never while DLSS 5 is running on the pick --
+  // a working game is left alone whatever the catalog says -- and only with a fix: a switch the app
+  // cannot make is explained under "Why this route?", not offered as a finding.
+  const score = ctx.routeScore;
+  if (score && score.overridden && score.chosen && score.chosen.fix && !(run.ran && run.verdict === 'nr-ran')) {
+    const against = ((score.ranked || []).find((c) => c.key === score.pick) || {}).reasons || [];
+    // The heaviest piece of evidence against the pick is the one worth naming.
+    const why = against.filter((x) => x.weight < 0).sort((a, b) => a.weight - b.weight)[0] || null;
+    return fix('catalog-prefers', score.chosen.fix, {
+      route: score.chosen.route, via: score.chosen.via || '', pick: score.pick,
+      why: why ? why.text : '', whyVars: why ? why.vars : null,
+    });
+  }
+
   // What the last run said.
   if (!run.ran || run.verdict === 'no-log') {
     // On a stub game, "no log at all" is the expected outcome of launching through Steam: the

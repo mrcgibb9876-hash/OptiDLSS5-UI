@@ -699,12 +699,28 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   chips.push(`<span class="engine-badge route-badge ${routeClass}" title="${routeTitle}">${escapeHtml(routeText)}</span>`);
   // Emulators, 32-bit games and DirectX 8/9: routes built from the Feeder's documented paths but not
   // yet run on a live game here (emulators.js, legacy.js).
-  if (route.experimental) {
+  // A route with no proof for this game in the known-good catalog (route.js unproven) is Experimental;
+  // one the catalog proves is not, whatever kind of route it is.
+  const kg = route.knownGood || null;
+  const proven = !!(kg && kg.proven);
+  if (route.experimental && !proven) {
     chips.push(`<span class="engine-badge engine-badge-experimental" title="${escapeHtml(t('Experimental: built from the DLSS5 Feeder\'s documented route for this kind of game, but not yet confirmed on a real one. It may not work, and depth or motion can be rough.'))}">${escapeHtml(t('Experimental'))}</span>`);
+  } else if (route.unproven) {
+    chips.push(`<span class="engine-badge engine-badge-experimental" title="${escapeHtml(t('Experimental: this route has not been confirmed on this game yet. It is the app\'s best choice from what the game is built on; a working run here, or a report, makes it known-good.'))}">${escapeHtml(t('Experimental'))}</span>`);
   }
   // Only a dated, human confirmation from the registry (src/verified-games.json) earns this.
-  if (route.verified && route.verified.route === route.route) {
+  const verifiedTick = !!(route.verified && route.verified.route === route.route);
+  if (verifiedTick) {
     chips.push(`<span class="engine-badge engine-badge-known" title="${escapeHtml(route.verified.notes || '')}">✓ ${escapeHtml(t('Verified {date}', { date: route.verified.verified }))}</span>`);
+  }
+  // The catalog's own word (catalog.badgeFor): a known issue always, "Known good" where no tick says it.
+  const badge = kg && kg.badge;
+  if (badge && (badge.kind === 'issue' || !verifiedTick)) {
+    const cls = badge.kind === 'issue' ? 'engine-badge-experimental' : 'engine-badge-known';
+    chips.push(`<span class="engine-badge ${cls}" title="${escapeHtml(badge.title || '')}">${escapeHtml(t(badge.text, badge.vars || {}))}</span>`);
+  }
+  if (route.catalogDefault) {
+    chips.push(`<span class="engine-badge engine-badge-known" title="${escapeHtml(t('The app\'s rules would pick another route; this one is proven on this game, so it is the default.'))}">${escapeHtml(t('Proven route'))}</span>`);
   }
 
   line.innerHTML = chips.join(' ');
@@ -895,9 +911,25 @@ let helpLastRunAt = null;
 const helpTriedByGame = new Map();
 const helpTriedFor = (game) => helpTriedByGame.get(game.exePath) || [];
 
+// A route key (route.js, routescore.js) as words, with its wrapper where it has one.
+function routeName(route, via = null) {
+  const names = {
+    optiscaler: t('OptiScaler on the game\'s own DLSS'), 'nr-model-only': t('the model file alone'),
+    feeder: t('the DLSS5 Feeder'), feeder32: t('the 32-bit Feeder'), lumaue: t('Luma'),
+    present: t('the Present route'), 'reframework-pd': t('the REFramework Present route'), amdnr: t('DLSS NR on AMD'),
+  };
+  const vias = { dgvoodoo: t('with dgVoodoo2'), dxvk: t('with DXVK'), native: t('on its own Direct3D') };
+  const name = names[route] || String(route || '?');
+  return via && vias[via] ? `${name} ${vias[via]}` : name;
+}
+
 function helpWords(diag) {
   const v = diag.vars || {};
   switch (diag.code) {
+    case 'catalog-prefers': return t('What is known about this game points away from the route the app picked ({pick}): {why}. {route} has the better record here, and Fix it switches to it.', {
+      pick: routeName(...String(v.pick || '').split(':')), route: routeName(v.route, v.via),
+      why: v.why ? t(v.why, v.whyVars || {}) : t('it has failed here before'),
+    });
     case 'bit32': return t('DLSS 5 is not currently available for this game: it is a 32-bit game, and OptiScaler and the NR model are 64-bit only.');
     case 'dgvoodoo-missing': return t('This DirectX 9 game needs dgVoodoo2 in front of it before the DLSS5 Feeder can work. Install puts it there.');
     case 'anticheat': return t('DLSS 5 is not currently available for this game: it runs under {antiCheat}, which blocks the DLL this app relies on. Using it there can also get an account banned.', v);
@@ -1031,6 +1063,7 @@ function helpSteps(diag) {
     case 'not-installed': case 'feeder-missing': case 'dgvoodoo-missing': case 'feeder-technique': return [t('Press Install'), launch];
     case 'luma-missing': return [t('Press Fix it (sets up Luma)'), t('In the game: pick DirectX 11'), launch];
     case 'luma-available': return [t('Press Fix it (switches to Luma)'), t('In the game: pick DirectX 11'), launch];
+    case 'catalog-prefers': return [t('Press Fix it (switches to {route})', { route: routeName(v.route, v.via) }), launch];
     case 'luma-needs-dx11': return [t('In the game\'s graphics settings: DirectX 11'), launch];
     case 'reframework-missing': case 'pd-temporal-on': case 'pd-build-missing': case 'd3d11-native':
     case 'nr-disabled': case 'dlss-runtime-missing': case 'feed-stopped':
@@ -1117,6 +1150,7 @@ function helpShort(diag) {
     case 'ue-crash': return t('Crashed -- no known fix');
     case 'driver-outdated': return v.min ? t('Update the NVIDIA driver ({min} or newer)', v) : t('Update the NVIDIA driver');
     case 'luma-available': return t('Luma has a better mod for this game');
+    case 'catalog-prefers': return t('Known to run better on {route}', { route: routeName(v.route, v.via) });
     case 'luma-needs-dx11': return t('Switch the game to DirectX 11 for Luma');
     case 'nr-model-crash-emulator': return t('DLSS 5 crashed on D3D12 -- switch to Direct3D 11');
     case 'nr-model-crash': return t('The DLSS 5 model crashed');
@@ -1208,7 +1242,16 @@ function renderHelp(diag) {
     stepsEl.insertAdjacentElement('afterend', lsBtn);
   }
   lsBtn.classList.add('hidden');
-  if (diag.status === 'ok' && helpGame && helpGame.exePath) {
+  // The frame-gen suggestion (main.js frameGenSuggestion, fgsuggest.js): with a measured frame rate it
+  // decides whether frame generation is worth it and which one; without one the old prompt stands.
+  const fg = diag.status === 'ok' ? diag.fg : null;
+  if (fg && fg.suggest) {
+    stepsEl.insertAdjacentHTML('beforeend', `<li>${escapeHtml(fgSuggestionText(fg))}</li>`);
+    stepsEl.classList.remove('hidden');
+    lsBtn.textContent = fg.generator === 'lossless' ? t('Set up Lossless Scaling frame generation') : t('Set up frame generation (Edit)');
+    lsBtn.classList.remove('hidden');
+  } else if (!fg && diag.status === 'ok' && helpGame && helpGame.exePath) {
+    lsBtn.textContent = t('Set up Lossless Scaling frame generation');
     const game = helpGame;
     window.api.losslessEligibility(game.exePath).then(async (gate) => {
       if (!gate || !gate.eligible || helpGame !== game) return;
@@ -1220,6 +1263,7 @@ function renderHelp(diag) {
     }).catch(() => {});
   }
   body.textContent = helpWords(diag);
+  renderHelpWhy(diag);
   // A finding that sends the user to one page (the pd route's Nexus plugin) gets the link.
   let linkBtn = $('#help-link');
   if (!linkBtn) {
@@ -1270,6 +1314,40 @@ async function refreshHelp() {
   if (!diag.ok) { toast(t('Game Help could not check this game: {error}', { error: diag.error })); return null; }
   renderHelp(diag);
   return diag;
+}
+
+// "Why this route?" under Details (routescore.js): the chosen route's reasons, and the runner-up's --
+// what the app would try next and why it did not start there.
+function renderHelpWhy(diag) {
+  let el = $('#help-why');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'help-why';
+    el.className = 'help-why';
+    $('#help-body').insertAdjacentElement('afterend', el);
+  }
+  const s = diag.score;
+  if (!s || !s.chosen) { el.innerHTML = ''; el.classList.add('hidden'); return; }
+  const reasons = (c) => (c.reasons || []).filter((x) => x.weight).map((x) => `<li>${escapeHtml(t(x.text, x.vars || {}))}</li>`).join('');
+  const kg = diag.knownGood;
+  const parts = [`<strong>${escapeHtml(t('Why this route?'))}</strong>`,
+    `<div>${escapeHtml(routeName(s.chosen.route, s.chosen.via))}</div><ul>${reasons(s.chosen)}</ul>`];
+  if (s.runnerUp) parts.push(`<div>${escapeHtml(t('Next best: {route}', { route: routeName(s.runnerUp.route, s.runnerUp.via) }))}</div><ul>${reasons(s.runnerUp)}</ul>`);
+  if (kg && kg.status === 'works' && kg.route) parts.push(`<div>${escapeHtml(t('Proven on this game: {route}', { route: routeName(kg.route) }))}${kg.notes ? ` -- ${escapeHtml(kg.notes)}` : ''}</div>`);
+  el.innerHTML = parts.join('');
+  el.classList.remove('hidden');
+}
+
+// One line for a frame-generation suggestion (fgsuggest.js).
+function fgSuggestionText(fg) {
+  const v = { ...fg.vars, multiplier: fg.multiplier };
+  switch (fg.code) {
+    case 'fg-native': return t('Want more FPS? This game has its own DLSS Frame Generation: set it to {multiplier}x in Edit (about {reach} fps from {fps})', v);
+    case 'fg-rtxmfg': return t('Want more FPS? Your RTX 40 runs the game\'s own frame generation at 2x; the RTX 40 multi-frame unlock in Edit takes it to {multiplier}x (about {reach} fps from {fps})', v);
+    case 'fg-lossless': return t('Want more FPS? Add Lossless Scaling frame generation at {multiplier}x (about {reach} fps from {fps}); the game must run Borderless or Windowed', v);
+    case 'fg-lossless-get': return t('Want more FPS? Lossless Scaling (on Steam) adds frame generation to any game: {multiplier}x would take {fps} fps to about {reach}', v);
+    default: return '';
+  }
 }
 
 function stopHelpPoll() { if (helpPoll) { clearInterval(helpPoll); helpPoll = null; } $('#help-waiting').classList.add('hidden'); }
@@ -2577,7 +2655,9 @@ async function loadRouteStatus(game) {
   el.className = `status-line ${route.route === 'unsupported' ? 'status-bad' : route.complete ? 'status-ok' : ''}`.trim();
   const progress = route.complete ? t('All set.') : route.nextStep ? t('Next: {step}.', { step: t(route.nextStep) }) : '';
   // One line; the route's full reasoning is the hover text.
-  el.textContent = `${t('Recommended: {label}.', { label: t(route.label) })} ${progress}`.trim();
+  const proven = !!(route.knownGood && route.knownGood.proven);
+  const tag = proven ? ` ${t('(known good)')}` : route.unproven || route.experimental ? ` ${t('(Experimental)')}` : '';
+  el.textContent = `${t('Recommended: {label}.', { label: t(route.label) })}${tag} ${progress}`.trim();
   el.title = t(route.reason, route.reasonVars);
 }
 

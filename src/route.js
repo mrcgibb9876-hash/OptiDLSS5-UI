@@ -49,6 +49,8 @@ const presentroute = require('./presentroute');
 const legacy = require('./legacy');
 const translation = require('./translation');
 const rtxmfg = require('./rtxmfg');
+const catalog = require('./catalog');
+const routescore = require('./routescore');
 
 // A user's per-game API choice laid over the detection result: the chosen API becomes the
 // primary, joins the list of APIs the game runs on (so keepGamesOwnDlss writes its upscaler key
@@ -205,8 +207,36 @@ function dllVersionCached(file) {
 }
 
 // opts.lumaMod: the Luma-Framework catalog entry matched for this game's names (main.js lumaModFor), or null.
+// opts.catalog: the game's known-good entry (catalog.lookup); looked up here when not given.
+//
+// The known-good catalog steers the rule chain where it has proof: a game whose route has been PROVEN
+// (status "works", data/known-good.json or this machine's own runs) takes that route wherever the chain
+// had a choice between the ones it can build -- the Luma default and the two Present-route tables. It
+// never overrides what was chosen by hand: an API set in Edit turns it off, and a stack already in the
+// folder keeps the game on it as before (the branches below already hold a hand-deployed Feeder or Luma).
+//
+// Every result says whether its route is proven for this game (knownGood.proven). One that is not is
+// `unproven`, and the card and Edit label it Experimental -- the catalog is what "confirmed" means now.
 function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {}) {
+  const kg = opts.catalog !== undefined ? opts.catalog : catalog.lookup(exePath);
+  const r = rulesRoute(dir, exePath, detected, gpuVendor, { ...opts, catalog: kg });
+  const kgRoute = kg && kg.setup ? kg.setup.route || null : null;
+  const proven = !!(kg && kg.status === 'works' && kgRoute === r.route && ((kg.reports || {}).works || 0) > 0);
+  r.knownGood = kg
+    ? { route: kgRoute, status: kg.status || null, proven, badge: catalog.badgeFor(kg, r, detected.api || null) }
+    : null;
+  r.unproven = !proven && !['unsupported', 'unknown'].includes(r.route);
+  r.score = routescore.scoreRoutes(r, { exePath, detected, gpuVendor, catalog: kg, lumaMod: opts.lumaMod || null });
+  return r;
+}
+
+function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {}) {
   const api = detected.api || null;
+  const kg = opts.catalog || null;
+  // The proven route, when there is one and the API was not set by hand (see recommendRoute).
+  const kgRoute = kg && kg.status === 'works' && kg.setup && kg.setup.route && !detected.apiOverride ? kg.setup.route : null;
+  // Set when the proven route changed the chain's answer, so the card can say so.
+  let steered = false;
   const feederDeployed = feeder.feederDeployed(dir);
   const lumaDeployed = lumaue.lumaUeDeployed(dir);
   // The experimental legacy routes (legacy.js): a 32-bit game's OptiScaler lives in host64\, and
@@ -246,6 +276,7 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts
       route, label, reason, reasonVars, steps, gpuVendor,
       optiInstalled, feederDeployed, lumaDeployed, feederMisdeployed, shipsDlss,
       verified: verified.verification(exePath),
+      catalogDefault: steered,
       complete: steps.length > 0 && !next,
       nextStep: next ? next.label : null,
     };
@@ -384,7 +415,8 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts
   const pd = reengine.pdStatus(dir, exePath);
   const presentGame = reengine.presentRouteGame(exePath);
   const feederIsOurs = feederDeployed && fs.existsSync(path.join(dir, '.dlss5ui-feeder-deploy.json'));
-  if (presentGame && (!feederDeployed || feederIsOurs)) {
+  if (presentGame && (!feederDeployed || feederIsOurs) && kgRoute && kgRoute !== 'reframework-pd') steered = true;
+  if (presentGame && (!feederDeployed || feederIsOurs) && (!kgRoute || kgRoute === 'reframework-pd')) {
     const reframeworkPresent = pd ? pd.reframeworkPresent : fs.existsSync(path.join(dir, 'dinput8.dll'));
     const temporalUpscalerOn = pd ? pd.temporalUpscalerOn : reengine.temporalUpscalerOn(dir);
     return finish('reframework-pd', 'OptiScaler + REFramework',
@@ -399,7 +431,9 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts
   // Elden Ring, Armored Core VI, Nightreign (presentroute.js): the same Present route, switched on in
   // OptiScaler.ini rather than by REFramework. The Feeder crashed the model on this engine, so it is the old
   // route here too -- one this app deployed goes on sync, one placed by hand keeps the game on the Feeder.
-  if (presentroute.iniPresentGame(exePath) && (!feederDeployed || feederIsOurs)) {
+  const iniPresent = presentroute.iniPresentGame(exePath) && (!feederDeployed || feederIsOurs);
+  if (iniPresent && kgRoute && kgRoute !== 'present') steered = true;
+  if (iniPresent && (!kgRoute || kgRoute === 'present')) {
     return finish('present', 'OptiScaler',
       'No DLSS of its own. DLSS 5 runs at the end of each frame on top of the game\'s own anti-aliasing, and ' +
       'OptiScaler finds the game\'s depth itself -- no Feeder, nothing to download by hand. Install places ' +
@@ -415,7 +449,12 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts
   const nativeVersion = nativeDlssPath ? dllVersionCached(nativeDlssPath) : null;
   const nativeMajor = nativeVersion ? parseInt(nativeVersion.split('.')[0], 10) : null;
   const nativeTooOld = shipsDlss && nativeMajor !== null && nativeMajor < 2 && !lumaDeployed;
-  const lumaWanted = lumaDeployed || (lumaue.isLumaUeDefault(exePath, lumaMod) && (!shipsDlss || nativeTooOld));
+  // A proven route decides the Luma default either way: proven on Luma, Luma; proven on anything else,
+  // not Luma (Luma already in the folder still holds the game, as a choice someone made).
+  const lumaByRules = lumaue.isLumaUeDefault(exePath, lumaMod) && (!shipsDlss || nativeTooOld);
+  const lumaByCatalog = kgRoute ? kgRoute === 'lumaue' : lumaByRules;
+  if (!lumaDeployed && lumaByCatalog !== lumaByRules) steered = true;
+  const lumaWanted = lumaDeployed || lumaByCatalog;
 
   if (shippedDlss && !lumaWanted) {
     return finish('optiscaler', 'OptiScaler',

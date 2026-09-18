@@ -38,6 +38,9 @@ const pdplugin = require('./pdplugin');
 const rtxmfg = require('./rtxmfg');
 const legacy = require('./legacy');
 const translation = require('./translation');
+const catalog = require('./catalog');
+const routescore = require('./routescore');
+const fgsuggest = require('./fgsuggest');
 const elevate = require('./elevate');
 const panelwindow = require('./panelwindow');
 let electronAutoUpdater = null;
@@ -104,6 +107,8 @@ app.whenReady().then(() => {
   // Luma-Framework's per-game mods: the cached list now, a fresh one from GitHub in the background and daily.
   lumacatalog.load(lumaCatalogFile());
   refreshLumaCatalog();
+  // The known-good catalog's local half: this machine's own runs (catalog.js learnFromRun).
+  catalog.configure({ localFile: () => path.join(userDataDir(), 'known-good.local.json') });
   setInterval(refreshLumaCatalog, 24 * 60 * 60 * 1000);
   createWindow();
   // The Manager's own updater: checks its GitHub releases after launch and every few hours,
@@ -2742,6 +2747,7 @@ ipcMain.handle('report:send', async (_evt, { exePath, detected, title, body } = 
       vulkanFeeder: helpCtx ? helpCtx.vulkanFeeder : null,
       detected: helpCtx ? helpCtx.detected : effective,
       route: helpCtx ? helpCtx.route : null, feeder: helpCtx ? helpCtx.feederReady : null,
+      timing: helpCtx ? helpCtx.timing : null,
     });
     const out = await ghreport.sendReport({ token, title, body: runlog.withDigest(body, digest), files: withText });
     return { ok: true, ...out };
@@ -2794,9 +2800,27 @@ async function dxvkHost32Status(dir, exePath) {
 async function helpContext(exePath, detected, fixesTried = []) {
   const dir = gameDir(exePath);
   const effective = effectiveDetection(dir, exePath, detected || {});
-  const { vendor } = await getGpuInfo();
-  const route = recommendRoute(dir, exePath, effective, vendor || 'unknown', { lumaMod: lumaModFor(exePath, effective) });
+  const gpuInfo = (await getGpuInfo()) || {};
+  const { vendor } = gpuInfo;
+  const lumaMod = lumaModFor(exePath, effective);
+  const route = recommendRoute(dir, exePath, effective, vendor || 'unknown', { lumaMod });
   const run = await runlog.analyzeRun(dir, { optiDir: optiScalerDirFor(dir) });
+  // This machine's own evidence (catalog.js learnFromRun): a run that proved or sank the installed
+  // setup is recorded once, by its timestamp, and the route is scored again with it and the run.
+  if (route.optiInstalled) {
+    try {
+      catalog.learnFromRun({
+        exePath, name: path.basename(exePath, path.extname(exePath)), run,
+        setup: { route: route.route, via: routescore.pickVia(route), api: run.runtimeApi || effective.api || null },
+      });
+    } catch {}
+  }
+  const knownGood = catalog.lookup(exePath);
+  const routeScore = routescore.scoreRoutes(route, {
+    exePath, detected: effective, gpuVendor: vendor || 'unknown', run, catalog: knownGood, lumaMod,
+  });
+  // What the neural pass costs and the frame rate it leaves, for the digest and the frame-gen suggestion.
+  const timing = run.ran ? await runlog.nrTiming(optiScalerDirFor(dir)).catch(() => null) : null;
   let nrEnabledInIni = null;
   try {
     const ini = fs.readFileSync(path.join(dir, 'OptiScaler.ini'), 'utf8');
@@ -2868,7 +2892,27 @@ async function helpContext(exePath, detected, fixesTried = []) {
       : null,
     nrEnabledInIni,
     gpuVendor: vendor || 'unknown',
+    gpu: { vendor: vendor || 'unknown', name: gpuInfo.name || null },
+    knownGood, routeScore, timing,
   };
+}
+
+// The frame-generation suggestion for a game Game Help has just looked at (fgsuggest.js). Only worth
+// the Steam-library scan (Lossless Scaling) and the plugin-tree walk (native frame generation) once a
+// run has left a frame rate to judge by.
+function frameGenSuggestion(ctx) {
+  const run = ctx.run || {};
+  const t = ctx.timing && ctx.timing.ok ? ctx.timing : null;
+  const fps = (t && t.fps) || run.fps || null;
+  if (!run.ran || !fps) return null;
+  let hasNativeFg = false;
+  try { hasNativeFg = !!framegen.frameGenSwapState(ctx.dir).hasFrameGen; } catch {}
+  let ls = { installed: false };
+  try { ls = lossless.detect(); } catch {}
+  return fgsuggest.suggestFrameGen({
+    fps, route: ctx.route, hasNativeFg, gpu: ctx.gpu, lossless: ls,
+    configured: ctx.frameGen, smoothMotion: !!run.feedSmoothMotion, catalog: ctx.knownGood,
+  });
 }
 
 ipcMain.handle('game:help', async (_evt, { exePath, detected, fixesTried = [] } = {}) => {
@@ -2880,9 +2924,16 @@ ipcMain.handle('game:help', async (_evt, { exePath, detected, fixesTried = [] } 
     // browser itself ("Report on GitHub"), not only in the one report:send posts.
     const digest = runlog.reportDigest(ctx.run, {
       mvProvider: ctx.mvProvider, vulkanFeeder: ctx.vulkanFeeder,
-      detected: ctx.detected, route: ctx.route, feeder: ctx.feederReady,
+      detected: ctx.detected, route: ctx.route, feeder: ctx.feederReady, timing: ctx.timing,
     });
-    return { ok: true, ...diag, run: ctx.run, route: { route: ctx.route.route, label: ctx.route.label, reason: ctx.route.reason }, foreign: ctx.foreign, digest };
+    const kg = ctx.knownGood;
+    return {
+      ok: true, ...diag, run: ctx.run, route: { route: ctx.route.route, label: ctx.route.label, reason: ctx.route.reason }, foreign: ctx.foreign, digest,
+      // "Why this route?" (routescore.js), the catalog's word on this game, and the frame-gen suggestion.
+      score: ctx.routeScore,
+      knownGood: kg ? { status: kg.status || null, route: (kg.setup || {}).route || null, notes: kg.notes || '', local: !!kg.local } : null,
+      fg: frameGenSuggestion(ctx),
+    };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }

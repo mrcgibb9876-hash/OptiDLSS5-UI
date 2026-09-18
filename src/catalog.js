@@ -215,7 +215,7 @@ function featureDeadEnd(entry, feature) {
 // Order: a game with no working route at all says so first (it is the one thing worth knowing before
 // Install). Then a dead end that is exactly the route this card is on. Then "Known good" when the
 // catalog's proven route IS this card's route. A launcher entry names the exe to pick instead.
-function badgeFor(entry, route = null) {
+function badgeFor(entry, route = null, api = null) {
   if (!entry) return null;
   const title = entry.notes || '';
   if (entry.status === 'launcher') {
@@ -225,8 +225,10 @@ function badgeFor(entry, route = null) {
     return { kind: 'issue', text: 'Known issue: {what}', vars: { what: entry.issue || `no working route (${entry.updated || '?'})` }, title };
   }
   if (route && route.route) {
-    const via = route.via || null;
-    const dead = deadEndsFor(entry, { route: route.route, via, api: route.api || null })[0];
+    // A route result names its wrapper only through its legacy plan (routescore.pickVia); required
+    // here, not at the top, because routescore.js requires this module.
+    const via = route.via !== undefined ? route.via : require('./routescore').pickVia(route);
+    const dead = deadEndsFor(entry, { route: route.route, via, api: api || route.api || null })[0];
     if (dead) return { kind: 'issue', text: 'Known issue: {what}', vars: { what: dead.why || dead.what || 'this route failed here before' }, title: dead.source ? `${dead.why || ''} (${dead.source})` : title };
   }
   const works = (entry.reports || {}).works || 0;
@@ -293,8 +295,75 @@ function learnFromRun({ exePath, name = null, run, setup = {}, file = localPath(
   return { kind, entry };
 }
 
+// ── the shipped file's shape (tools/catalog/build.js) ───────────────────────────────────────────
+// Every shipped entry has to say where it came from: a catalog entry is a claim about a game, and a
+// claim with no source is exactly what this file exists to keep out.
+const ROUTES = new Set(['optiscaler', 'nr-model-only', 'feeder', 'feeder32', 'lumaue', 'present', 'reframework-pd', 'amdnr']);
+const VIAS = new Set(['dgvoodoo', 'dxvk', 'native']);
+const STATUSES = new Set(['works', 'no-route', 'launcher']);
+// Frame generators, as fgsuggest.js names them. A feature dead end may also name one of these.
+const FG_KINDS = new Set(['native-dlssg', 'rtxmfg', 'lossless', 'optifg']);
+
+function validateEntry(e) {
+  const problems = [];
+  if (!e || typeof e !== 'object') return ['not an object'];
+  if (typeof e.exe !== 'string' || !/^[^\\/]+\.exe$/.test(e.exe) || e.exe !== e.exe.toLowerCase()) problems.push('exe must be a lower-case file name ending .exe');
+  if (e.status != null && !STATUSES.has(e.status)) problems.push(`status "${e.status}" is not one of ${[...STATUSES].join(', ')}`);
+  const setup = e.setup || {};
+  if (setup.route != null && !ROUTES.has(setup.route)) problems.push(`setup.route "${setup.route}" is not a route`);
+  if (setup.via != null && !VIAS.has(setup.via)) problems.push(`setup.via "${setup.via}" is not a wrapper`);
+  if (e.status === 'works' && !setup.route) problems.push('a "works" entry needs setup.route');
+  if (e.status === 'works' && !((e.reports || {}).works > 0)) problems.push('a "works" entry needs reports.works > 0');
+  for (const [i, d] of (e.dead_ends || []).entries()) {
+    if (!d.route && !d.feature) problems.push(`dead_ends[${i}] names neither a route nor a feature`);
+    if (d.route && !ROUTES.has(d.route)) problems.push(`dead_ends[${i}].route "${d.route}" is not a route`);
+    if (d.via != null && !VIAS.has(d.via)) problems.push(`dead_ends[${i}].via "${d.via}" is not a wrapper`);
+    if (!d.why) problems.push(`dead_ends[${i}] has no why`);
+    if (!d.source) problems.push(`dead_ends[${i}] has no source`);
+  }
+  for (const k of (e.fg || {}).works || []) if (!FG_KINDS.has(k)) problems.push(`fg.works "${k}" is not a frame generator`);
+  if (!Array.isArray(e.sources) || e.sources.length === 0) problems.push('no sources');
+  return problems;
+}
+
+// A run digest (digest.parseDigest) as a catalog entry: a report that DLSS 5 ran records its setup, one
+// that failed with a DEAD_END_VERDICTS verdict records a dead end, anything else says nothing (null).
+function entryFromDigest(facts, { source, date = null } = {}) {
+  if (!facts || !facts.exe || !facts.route || !ROUTES.has(facts.route)) return null;
+  const worked = facts.verdict === 'nr-ran'
+    || (facts.verdict === 'shutdown-fault' && (facts.neuralPasses || 0) > 0);
+  const why = DEAD_END_VERDICTS[facts.verdict];
+  if (!worked && !why) return null;
+  const onWrapper = facts.route === 'feeder' || facts.route === 'feeder32';
+  const via = !onWrapper ? null
+    : facts.wrapper || (facts.route === 'feeder32' && (facts.api === 'dx10' || facts.api === 'dx11') ? 'native' : null);
+  const setup = { route: facts.route, via, api: facts.runtimeApi || facts.api || null };
+  const when = date || (facts.at ? String(facts.at).slice(0, 10) : null);
+  const src = `${source}${when ? ` (${when})` : ''}: ${facts.verdict}`;
+  const entry = {
+    exe: facts.exe, name: facts.game || null, setup: worked ? setup : {},
+    reports: { works: worked ? 1 : 0, fails: worked ? 0 : 1 }, dead_ends: [], sources: [src],
+  };
+  if (worked) { entry.status = 'works'; if (when) entry.updated = when; }
+  else entry.dead_ends.push({ ...setup, verdict: facts.verdict, why, source: src });
+  return entry;
+}
+
+// One more report into the shipped entries: merged like a local entry (mergeEntries), the local-only
+// fields dropped. Returns a new array.
+function addReport(entries, incoming) {
+  const out = [...(entries || [])];
+  const i = out.findIndex((e) => exeKey(e.exe) === exeKey(incoming.exe) && !(e.match && (e.match.size != null || e.match.version != null)));
+  const merged = mergeEntries(i >= 0 ? out[i] : null, incoming);
+  delete merged.local;
+  delete merged.seenRuns;
+  if (!merged.notes) delete merged.notes;
+  if (i >= 0) out[i] = merged; else out.push(merged);
+  return out;
+}
+
 module.exports = {
-  SHIPPED_FILE, DEAD_END_VERDICTS, runWorked,
+  SHIPPED_FILE, DEAD_END_VERDICTS, ROUTES, FG_KINDS, runWorked,
   entriesHash, verifyCatalog, configure, loadShipped, lookup, needsFacts, entryMatches, mergeEntries,
-  deadEndsFor, featureDeadEnd, badgeFor, learnFromRun, exeKey,
+  deadEndsFor, featureDeadEnd, badgeFor, learnFromRun, exeKey, validateEntry, entryFromDigest, addReport,
 };
