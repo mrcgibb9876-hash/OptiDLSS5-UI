@@ -191,7 +191,7 @@ test('the launch watch shares the running-games listing and only watches folders
   assert.match(mainJs, /const res = await launchGame\(\{ exePath, launcher, dryRun \}\);[\s\S]{0,700}watchLaunch\(exePath, res\)/);
   // Only the card's Launch is watched: Analyse and Verify close the game themselves within ~30 s, and
   // a watch on them would report a false early close and offer Restore.
-  assert.equal((mainJs.match(/\bwatchLaunch\(exePath, res\)/g) || []).length, 1);
+  assert.equal((mainJs.match(/(?<!function )\bwatchLaunch\(exePath, res\)/g) || []).length, 1);
 });
 
 test('every safety API the renderer calls is exposed by the preload', () => {
