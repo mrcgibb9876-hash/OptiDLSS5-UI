@@ -427,3 +427,41 @@ test('a DirectX 9 game through DXVK does not "ship DLSS" because a DLSS 5 mod pu
   assert.equal(nativeDlss.rendererCannotCallDlss({ api: 'dx12', apis: ['dx12', 'dx9'] }), false, 'a modern path keeps native DLSS possible');
   assert.equal(nativeDlss.rendererCannotCallDlss({ api: 'vulkan', apis: ['vulkan'] }), false, 'native Vulkan can call DLSS');
 });
+
+test('dgVoodoo2 making a DirectX 9 game look like D3D11 does not make it a game that ships DLSS', () => {
+  // SWTOR again, issue #50, the other machine (RTX 4060 laptop) and the player's own support bundle.
+  // dgVoodoo2 turns D3D9 into D3D11, so OptiScaler's log reported a D3D11 device and detection
+  // adopted it: api dx11, apis ["dx11"], runtimeApi dx11. The DXVK case above was caught by
+  // vulkanWrapper; this one had nothing to catch it, so `apis.has('dx11')` returned "not legacy",
+  // the leftover sl.* files from another DLSS 5 mod then read as "ships its own DLSS", and the
+  // route became plain OptiScaler waiting for a call a Direct3D 9 game never makes.
+  //
+  //   verdict: no-dlss, 0 dispatches, and the crash report named the adapter
+  //   "NVIDIA GeForce RTX 4060 Laptop (dgVoodoo DX API Layer)" with MFA d3d9!00065af0.
+  const nativeDlss = require(path.join(REPO, 'src', 'native-dlss'));
+  const translation = require(path.join(REPO, 'src', 'translation'));
+  const dir = scratchDir('swtor-dgvoodoo');
+  for (const f of ['swtor.exe', 'sl.interposer.dll', 'sl.dlss_nr.dll']) write(dir, f, 'x');
+  write(dir, 'D3D9.dll', `MZ${'\0'.repeat(64)}dgVoodoo${'x'.repeat(4096)}`);
+  translation.writeManifest(dir, translation.newManifest({
+    layer: 'dgvoodoo', arch: 'x64', source: 'dgVoodoo2_87_4', files: ['D3D9.dll'],
+  }));
+
+  // Exactly what detection recorded for that machine, plus the executable's own evidence.
+  const det = {
+    api: 'dx11', apis: ['dx11'], runtimeApi: 'dx11', exeApis: [], legacyApis: ['dx9'],
+    bitness: 64, recommend: 'optiscaler',
+  };
+
+  assert.equal(nativeDlss.rendererCannotCallDlss(det, dir), true, 'the game underneath is still DirectX 9');
+  assert.notEqual(route.recommendRoute(dir, path.join(dir, 'swtor.exe'), det, 'nvidia').route, 'optiscaler',
+    'so it must not be routed as a game that ships its own DLSS');
+
+  // A game that really does link D3D11 keeps its modern path, even with a wrapper in the folder and
+  // a d3d9.dll import of its own. Dropping the runtime API out of `apis` would have broken this.
+  const dual = { ...det, exeApis: ['dx11'], apis: ['dx11'] };
+  assert.equal(nativeDlss.rendererCannotCallDlss(dual, dir), false, 'a real D3D11 path is not legacy');
+
+  // And with no wrapper anywhere, an ordinary D3D11 game is untouched.
+  assert.equal(nativeDlss.rendererCannotCallDlss({ api: 'dx11', apis: ['dx11'], exeApis: ['dx11'], legacyApis: [] }), false);
+});
