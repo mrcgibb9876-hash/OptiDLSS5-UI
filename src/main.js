@@ -2804,7 +2804,15 @@ async function applyHelpFix(exePath, fixId) {
         };
       }
 
-      const placed = await amdnr.deployAmdNrModel(dir, cached, { replace: true });
+      // Where the game keeps its OWN Streamline is where its NGX looks for the model, and that is
+      // not always beside the exe: an Unreal game keeps it under Engine\\Plugins\\...\\Win64, and
+      // Where Winds Meet keeps a whole Streamline runtime in a folder of its own. native-dlss.js
+      // already knows all three layouts, and framegen.js already swaps the game's frame-gen DLL
+      // wherever the game itself put it -- dropping the model beside the exe regardless would be a
+      // no-op on exactly the games most likely to need this route.
+      const shipped = nativeDlss.shippedDlssPath(dir);
+      const target = shipped ? path.dirname(shipped) : dir;
+      const placed = await amdnr.deployAmdNrModel(target, cached, { replace: true });
       invalidateDetection(dir);
 
       if (!placed.deployed) {
@@ -2812,9 +2820,13 @@ async function applyHelpFix(exePath, fixId) {
       }
 
       const cleared = (removal && Array.isArray(removal.removed)) ? removal.removed.length : 0;
+      const where = path.relative(dir, target) || 'the game folder';
+      // Said out loud when there was already a model there: deployAmdNrModel renames it rather than
+      // destroying it, and the name of the backup is the only way anyone would know to put it back.
+      const kept = placed.backedUp ? ` The model already here was kept as ${placed.backedUp}.` : '';
       return {
         done: true,
-        text: `OptiScaler is out (${cleared} file(s)) and nvngx_dlssnr.dll is beside the game -- turn DLSS on in `
+        text: `OptiScaler is out (${cleared} file(s)) and nvngx_dlssnr.dll is in ${where}.${kept} Turn DLSS on in `
           + `the game's own video settings, then run it and check here again`,
       };
     }
