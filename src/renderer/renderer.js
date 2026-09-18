@@ -1577,6 +1577,44 @@ function setSendStatus(html) {
   el.classList.toggle('hidden', !html);
 }
 
+// The report exactly as main.js report:prepare will post it (redacted, cut); resolves true on Send.
+// Shown as plain text: nothing from a log is ever put into the page as HTML.
+function previewReport(prepared) {
+  const modal = $('#report-preview-modal');
+  $('#report-preview-title').textContent = prepared.title;
+  $('#report-preview-body').textContent = prepared.body;
+  const list = $('#report-preview-files');
+  list.textContent = '';
+  for (const f of prepared.files) {
+    const details = document.createElement('details');
+    const summary = document.createElement('summary');
+    summary.textContent = `${f.name} (${Math.max(1, Math.round(f.bytes / 1024))} KB${f.cut ? `, ${t('start cut, the end is kept')}` : ''})`;
+    const pre = document.createElement('pre');
+    pre.className = 'report-preview-text';
+    pre.textContent = f.text;
+    details.append(summary, pre);
+    list.append(details);
+  }
+  if (!prepared.files.length) list.textContent = t('None');
+  const skipped = $('#report-preview-skipped');
+  skipped.textContent = prepared.skipped && prepared.skipped.length
+    ? t('Left out: {files}', { files: prepared.skipped.map((s) => `${s.name} (${s.why})`).join(', ') }) : '';
+  skipped.classList.toggle('hidden', !skipped.textContent);
+  modal.classList.remove('hidden');
+  return new Promise((resolve) => {
+    const done = (answer) => {
+      modal.classList.add('hidden');
+      $('#report-preview-send').removeEventListener('click', onSend);
+      $('#report-preview-cancel').removeEventListener('click', onCancel);
+      resolve(answer);
+    };
+    const onSend = () => done(true);
+    const onCancel = () => done(false);
+    $('#report-preview-send').addEventListener('click', onSend);
+    $('#report-preview-cancel').addEventListener('click', onCancel);
+  });
+}
+
 let reportSignInWaiter = null;
 window.api.onReportSignIn((result) => {
   if (reportSignInWaiter) { reportSignInWaiter(result); reportSignInWaiter = null; }
@@ -1613,9 +1651,13 @@ $('#help-send').addEventListener('click', async () => {
       const result = await new Promise((resolve) => { reportSignInWaiter = resolve; });
       if (!result.ok) { setSendStatus(escapeHtml(t('GitHub sign-in failed: {error}', { error: result.error }))); return; }
     }
-    setSendStatus(escapeHtml(t('Sending…')));
+    setSendStatus(escapeHtml(t('Gathering the report…')));
     const { title, body } = await buildGameReport(game, diag);
-    const res = await window.api.reportSend({ exePath: game.exePath, detected: game.detectedPath || null, title, body });
+    const prepared = await window.api.reportPrepare({ exePath: game.exePath, detected: game.detectedPath || null, title, body, game: game.name, finding: diag.code });
+    if (!prepared.ok) { setSendStatus(escapeHtml(t('Could not send: {error}', { error: prepared.error }))); return; }
+    if (!(await previewReport(prepared))) { window.api.reportDiscard(prepared.id); setSendStatus(''); return; }
+    setSendStatus(escapeHtml(t('Sending…')));
+    const res = await window.api.reportSend(prepared.id);
     if (res.signedOut) { setSendStatus(escapeHtml(t('GitHub sign-in has expired -- press Send game failure again to sign in.'))); return; }
     if (!res.ok) { setSendStatus(escapeHtml(t('Could not send: {error}', { error: res.error }))); return; }
     if (res.cancelled) { setSendStatus(''); return; }

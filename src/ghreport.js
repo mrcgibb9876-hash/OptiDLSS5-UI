@@ -25,6 +25,11 @@
 // it appears in a path, and the player confirms before anything is sent.
 'use strict';
 
+// ┌──────────────────────────────────────────────────────────────────────────────────────────────┐
+// │ TODO(maintainer): paste the GitHub App's Client ID here, e.g. 'Iv23liAbCdEf0123456789'.       │
+// │ Empty = this build falls back to "save the zip + open a prefilled issue" (renderer.js).       │
+// │ The Client ID is public by design (device flow); there is NO client secret to add anywhere.   │
+// └──────────────────────────────────────────────────────────────────────────────────────────────┘
 const CLIENT_ID = '';
 const REPO = 'mrcgibb9876-hash/OptiDLSS5-UI';
 const API = 'https://api.github.com';
@@ -35,16 +40,28 @@ const configured = () => !!CLIENT_ID;
 
 // ---- redaction ---------------------------------------------------------------------------------
 
-// C:\Users\Yathin\Desktop\... -> C:\Users\<user>\Desktop\..., in either slash style, any drive, and the
-// bare user name wherever else it appears as a word.
-function redact(text, { userName = process.env.USERNAME || '', homeDir = process.env.USERPROFILE || '' } = {}) {
+// C:\Users\Yathin\Desktop\... -> C:\Users\<user>\Desktop\..., in either slash style (JSON's doubled
+// backslashes too), any drive; a home folder that is not under X:\Users the same way; and the bare user
+// name and the PC's name wherever else they appear as words (OptiScaler.log and app-view.json print both).
+function redact(text, {
+  userName = process.env.USERNAME || '',
+  homeDir = process.env.USERPROFILE || '',
+  computerName = process.env.COMPUTERNAME || '',
+} = {}) {
   let out = String(text || '');
   out = out.replace(/([A-Za-z]:[\\/]+Users[\\/]+)([^\\/:*?"<>|\r\n]+)/gi, '$1<user>');
-  if (homeDir) out = out.split(homeDir).join('C:\\Users\\<user>');
-  if (userName && userName.length >= 3 && !/^(user|admin|public|default)$/i.test(userName)) {
-    const esc = userName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    out = out.replace(new RegExp(`\\b${esc}\\b`, 'gi'), '<user>');
+  if (homeDir) {
+    for (const v of new Set([homeDir, homeDir.replace(/\\/g, '/'), homeDir.replace(/\\/g, '\\\\')])) out = out.split(v).join('<home>');
   }
+  const word = (name, as) => {
+    if (!name || name.length < 3 || /^(user|admin|administrator|public|default|guest|desktop|pc)$/i.test(name)) return;
+    const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out.replace(new RegExp(`\\b${esc}\\b`, 'gi'), as);
+  };
+  // The PC's name first: it often contains the user name ("YATHIN-LAPTOP"), which would otherwise leave
+  // "<user>-LAPTOP" behind.
+  word(computerName, '<pc>');
+  word(userName, '<user>');
   return out;
 }
 
@@ -106,32 +123,56 @@ async function gh(token, method, url, body, fetchImpl) {
   return data;
 }
 
-// files: [{ name, text }] (already read). Creates a secret gist with the redacted files, then the issue
-// linking it. Returns { issueUrl, issueNumber, gistUrl, sent: [names], cut: [names] }.
-async function sendReport({ token, title, body, files, fetchImpl = fetch, redactOpts = {} }) {
-  const gistFiles = {};
-  const sent = [];
-  const cut = [];
+const LOGS_PLACEHOLDER = '**Logs:** (link to the log gist, added when sent)';
+
+// files: [{ name, text, maxBytes? }] (already read; maxBytes caps that file's tail below the gist limit).
+// Everything that will leave the PC, redacted and cut, and nothing more: the player's preview shows
+// exactly this object, and postReport sends exactly this object.
+// Returns { title, body, files: [{ name, text, bytes, cut }], skipped: [{ name, why }] }.
+function prepareReport({ title, body, files = [], redactOpts = {} }) {
+  const out = [];
+  const skipped = [];
+  const used = new Set();
   let total = 0;
   for (const f of files) {
-    let text = redact(f.text, redactOpts);
-    const trimmed = tail(text);
-    if (trimmed !== text) cut.push(f.name);
-    text = trimmed;
-    const size = Buffer.byteLength(text, 'utf8');
-    if (!text.trim() || total + size > MAX_TOTAL_BYTES) continue;
-    total += size;
+    const redacted = redact(f.text, redactOpts);
+    const text = tail(redacted, Math.min(f.maxBytes || MAX_FILE_BYTES, MAX_FILE_BYTES));
+    if (!text.trim()) { skipped.push({ name: f.name, why: 'empty' }); continue; }
+    const bytes = Buffer.byteLength(text, 'utf8');
+    if (total + bytes > MAX_TOTAL_BYTES) { skipped.push({ name: f.name, why: 'over the size limit' }); continue; }
+    total += bytes;
     let name = gistName(f.name);
-    while (gistFiles[name]) name = '_' + name;
-    gistFiles[name] = { content: text };
-    sent.push(f.name);
+    while (used.has(name)) name = '_' + name;
+    used.add(name);
+    out.push({ name, text, bytes, cut: text !== redacted });
   }
-  const gist = Object.keys(gistFiles).length
-    ? await gh(token, 'POST', '/gists', { description: `OptiDLSS5-UI game failure: ${title}`, public: false, files: gistFiles }, fetchImpl)
-    : null;
-  const issueBody = redact(body, redactOpts) + (gist ? `\n\n**Logs:** ${gist.html_url}` : '') + '\n\n_Sent from OptiDLSS5-UI Game Help._';
-  const issue = await gh(token, 'POST', `/repos/${REPO}/issues`, { title: redact(title, redactOpts), body: issueBody }, fetchImpl);
-  return { issueUrl: issue.html_url, issueNumber: issue.number, gistUrl: gist ? gist.html_url : null, sent, cut };
+  return {
+    title: redact(title, redactOpts),
+    body: redact(body, redactOpts) + (out.length ? `\n\n${LOGS_PLACEHOLDER}` : '') + '\n\n_Sent from OptiDLSS5-UI Game Help._',
+    files: out,
+    skipped,
+  };
 }
 
-module.exports = { CLIENT_ID, REPO, configured, redact, tail, gistName, startDeviceFlow, pollForToken, sendReport };
+// Posts a prepareReport() result as it stands: a secret gist with its files, then the issue linking it.
+// Returns { issueUrl, issueNumber, gistUrl, sent: [names], cut: [names] }.
+async function postReport({ token, prepared, fetchImpl = fetch }) {
+  const gistFiles = {};
+  for (const f of prepared.files) gistFiles[f.name] = { content: f.text };
+  const gist = prepared.files.length
+    ? await gh(token, 'POST', '/gists', { description: `OptiDLSS5-UI game failure: ${prepared.title}`, public: false, files: gistFiles }, fetchImpl)
+    : null;
+  const body = gist ? prepared.body.replace(LOGS_PLACEHOLDER, `**Logs:** ${gist.html_url}`) : prepared.body;
+  const issue = await gh(token, 'POST', `/repos/${REPO}/issues`, { title: prepared.title, body }, fetchImpl);
+  return {
+    issueUrl: issue.html_url, issueNumber: issue.number, gistUrl: gist ? gist.html_url : null,
+    sent: prepared.files.map((f) => f.name), cut: prepared.files.filter((f) => f.cut).map((f) => f.name),
+  };
+}
+
+// prepare + post in one go, without a preview.
+async function sendReport({ token, title, body, files, fetchImpl = fetch, redactOpts = {} }) {
+  return postReport({ token, prepared: prepareReport({ title, body, files, redactOpts }), fetchImpl });
+}
+
+module.exports = { CLIENT_ID, REPO, configured, redact, tail, gistName, startDeviceFlow, pollForToken, prepareReport, postReport, sendReport };
