@@ -46,6 +46,8 @@ const translation = require('./translation');
 const catalog = require('./catalog');
 const routescore = require('./routescore');
 const fgsuggest = require('./fgsuggest');
+const launchwatch = require('./launchwatch');
+const defender = require('./defender');
 const elevate = require('./elevate');
 const panelwindow = require('./panelwindow');
 let electronAutoUpdater = null;
@@ -3653,7 +3655,25 @@ async function launchGame({ exePath, launcher = 'auto', dryRun = false } = {}) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
 }
-ipcMain.handle('game:launch', (_evt, opts = {}) => launchGame(opts));
+// Only the card's Launch is watched for an early close (launchwatch.js): Analyse and Verify close the
+// game themselves within ~30 s, so watching them would report a false crash and offer Restore.
+ipcMain.handle('game:launch', async (_evt, { exePath, launcher = 'auto', dryRun = false } = {}) => {
+  const res = await launchGame({ exePath, launcher, dryRun });
+  if (res.ok && !res.cancelled && !res.antiCheat && exePath) {
+    try {
+      const target = launchTarget(exePath);
+      const dir = path.dirname(target);
+      if (stackInstalledHere(dir)) {
+        const ac = antiCheatPresent(dir, target);
+        if (ac) res.antiCheatRisk = ac;
+      }
+    } catch {}
+  }
+  if (res.ok && !res.cancelled && !dryRun) {
+    try { watchLaunch(exePath, res); } catch {}
+  }
+  return res;
+});
 
 // ── Analyse game, Checks before Install, Verify install ──────────────────────
 // Analyse (probe.js) and Verify (verify.js) each start the game and close it again, so only one of
@@ -3774,12 +3794,7 @@ ipcMain.handle('game:verify', async (evt, { exePath, launcher = 'auto', detected
 // spent its whole release removing.
 ipcMain.handle('games:running', async (_evt, exePaths) => {
   try {
-    const { stdout } = await execFileAsync('tasklist.exe', ['/NH', '/FO', 'CSV'], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
-    const running = new Set();
-    for (const line of stdout.split(/\r?\n/)) {
-      const m = /^"([^"]+)"/.exec(line.trim());
-      if (m) running.add(m[1].toLowerCase());
-    }
+    const running = await runningImageSet();
     const out = {};
     for (const exePath of exePaths || []) {
       if (!exePath) continue;
@@ -3803,6 +3818,137 @@ ipcMain.handle('game:running', async (_evt, { exePath } = {}) => {
     return { ok: true, running: stdout.toLowerCase().includes(`"${name.toLowerCase()}"`) };
   } catch (error) {
     return { ok: false, running: null, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// One process listing, as image names. games:running and the launch watch below both read it.
+async function runningImageSet() {
+  const { stdout } = await execFileAsync('tasklist.exe', ['/NH', '/FO', 'CSV'], { windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
+  return launchwatch.runningImageNames(stdout);
+}
+
+// ── Watching a launch (launchwatch.js) ───────────────────────────────────────────────────────
+//
+// The card's own poll only runs while this window has focus, and a game that has just started has
+// taken it -- so a game that dies ten seconds in is never seen running by the grid at all. A launch
+// this app started is watched here instead, focus or not, for the minute or so it takes to decide:
+// one tasklist for every watched game, every few seconds, and nothing once they are all decided.
+// Only a folder this app has modified is watched: an untouched game crashing is not ours to explain,
+// and there would be nothing to restore.
+const launchWatches = new Map(); // exe name (lower) -> { watch, exePath, dir, antiCheat, firstRun }
+let launchWatchTimer = null;
+
+const launchHistoryFile = () => path.join(userDataDir(), 'launch-watch.json');
+
+function watchedExeFor(exePath) {
+  const target = launchTarget(exePath);
+  const dir = path.dirname(target);
+  // A card that holds an anti-cheat stub (<Game>_BE.exe) is launched as the exe it fronts, and
+  // that is the process that has to be watched.
+  const stub = antiCheatStub(dir);
+  if (stub && stub.gameExe && path.basename(target).toLowerCase() === stub.stub.toLowerCase()) return path.join(dir, stub.gameExe);
+  return target;
+}
+
+function watchLaunch(exePath, res) {
+  const target = watchedExeFor(exePath);
+  const dir = path.dirname(target);
+  if (!stackInstalledHere(dir)) return;
+  const history = readJson(launchHistoryFile(), {});
+  const firstRun = launchwatch.firstRunSinceInstall(dir, history);
+  history[dir.toLowerCase()] = Date.now();
+  try { writeJson(launchHistoryFile(), history); } catch {}
+  const via = res.via === 'launcher' || res.via === 'launcher-no-anticheat' ? 'launcher' : res.via;
+  const exeName = path.basename(target);
+  launchWatches.set(exeName.toLowerCase(), {
+    watch: launchwatch.createWatch({ exeName, startedAt: Date.now(), via }),
+    exePath,
+    dir,
+    antiCheat: antiCheatPresent(dir, target),
+    firstRun,
+  });
+  if (!launchWatchTimer) launchWatchTimer = setInterval(tickLaunchWatches, launchwatch.POLL_MS);
+}
+
+async function tickLaunchWatches() {
+  if (tickLaunchWatches.busy) return;
+  tickLaunchWatches.busy = true;
+  try {
+    let running;
+    try { running = await runningImageSet(); } catch { return; }
+    const now = Date.now();
+    for (const [name, w] of [...launchWatches]) {
+      const outcome = launchwatch.step(w.watch, running.has(name), now);
+      if (!outcome) continue;
+      launchWatches.delete(name);
+      const notice = launchwatch.outcomeNotice(outcome, {
+        exePath: w.exePath,
+        antiCheat: w.antiCheat,
+        canRestore: stackInstalledHere(w.dir),
+        firstRun: w.firstRun,
+      });
+      if (!notice) continue;
+      sendToWindows('game:launch-outcome', notice);
+      // The game has just gone, so this window is probably behind something: say so in the taskbar.
+      if (notice.kind !== 'ok') {
+        for (const win of BrowserWindow.getAllWindows()) { try { if (!win.isFocused()) win.flashFrame(true); } catch {} }
+      }
+    }
+  } finally {
+    tickLaunchWatches.busy = false;
+    if (!launchWatches.size) { clearInterval(launchWatchTimer); launchWatchTimer = null; }
+  }
+}
+
+// ── Did something take the files Install just placed? (defender.js) ──────────────────────────
+//
+// The DLLs the install leaves beside the game (defender.js expectedInstallBinaries), checked a moment after it.
+// Only when one is gone is Defender's history read -- one powershell.exe, only then.
+function placedBinaries(dir) {
+  return defender.expectedInstallBinaries(dir, readInstallMarker(dir), { companions: ENGINE_COMPANION_DLLS });
+}
+
+async function quarantineReport(targets, missing, since) {
+  const hits = await defender.defenderRemovals([...missing, ...targets], { execFileAsync, since });
+  return {
+    ok: true,
+    missing: missing.map((f) => path.basename(f)),
+    // null: Defender could not be asked (another antivirus, a policy) -- the renderer says "antivirus".
+    defender: hits,
+  };
+}
+
+ipcMain.handle('safety:check-installed', async (_evt, { exePath, waitMs = 1500 } = {}) => {
+  try {
+    const dir = gameDir(exePath);
+    const wait = Number(process.env.LEGACY_QUARANTINE_WAIT_MS ?? waitMs);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    const missing = placedBinaries(dir).filter((f) => !fs.existsSync(f));
+    if (!missing.length) return { ok: true, missing: [] };
+    const since = launchwatch.installedAt(dir);
+    return await quarantineReport([dir], missing, since ? since - 60_000 : 0);
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// After legacy.js reported dgvoodoo-quarantined: which file, and what Defender called it. The cache
+// and the game folder are where it could have been taken from.
+ipcMain.handle('safety:dgvoodoo-quarantine', async (_evt, { exePath } = {}) => {
+  try {
+    const targets = [feederCacheDir()];
+    if (exePath) targets.push(gameDir(exePath));
+    return await quarantineReport(targets, [], Date.now() - 15 * 60_000);
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// Windows Security's protection history, where a quarantined file is restored or allowed. A fixed
+// URI, nothing from the renderer is passed through.
+ipcMain.handle('safety:open-protection-history', async () => {
+  try { await shell.openExternal(defender.PROTECTION_HISTORY_URI); return { ok: true }; } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
   }
 });
 

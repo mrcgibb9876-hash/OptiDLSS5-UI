@@ -272,7 +272,9 @@ function refreshCardState(card) {
 
   let tone = 'badge-none';
   let label = t('Not installed');
+  const issue = !running && card._exePath ? launchIssues.get(card._exePath) : null;
   if (state.exeMissing) { tone = 'badge-missing'; label = t('Exe missing'); }
+  else if (issue) { tone = 'badge-attention'; label = issue.kind === 'never-started' ? t('Did not start') : t('Closed early'); }
   else if (running) { tone = 'badge-installed'; label = `\u25cf ${t('Running')}`; }
   else if (state.problem && state.problem.bad) { tone = 'badge-attention'; label = t('Needs attention'); }
   else if (state.working) { tone = 'badge-installed'; label = t('Working'); }
@@ -285,7 +287,8 @@ function refreshCardState(card) {
   // panel. A problem still outranks it -- there is no point naming a hotkey for a pass that is
   // not running.
   const problemEl = card.querySelector('.card-problem');
-  const shown = (state.problem && state.problem.bad) ? state.problem
+  const shown = issue ? { bad: true, text: launchIssueText(issue, (card._game && card._game.name) || '') }
+    : (state.problem && state.problem.bad) ? state.problem
     : running && state.panelHint ? { bad: false, text: state.panelHint.text, title: state.panelHint.title }
     : state.problem;
   if (problemEl) {
@@ -309,6 +312,11 @@ function refreshCardState(card) {
   if (state.exeMissing) {
     text = t('Settings');
     onClick = delegate('.btn-edit');
+  } else if (issue && issue.canRestore && card._game) {
+    text = t('Restore originals');
+    cls = 'btn btn-card-primary btn-attention';
+    onClick = () => offerRestore(card, card._game, issue);
+    hideLaunch = false;
   } else if (running) {
     // Ahead of Fix it deliberately: a fix moves DLLs the running game is holding open, so it would
     // fail on the file it most needs to replace. The panel is live over the frame anyway.
@@ -525,24 +533,7 @@ async function renderGrid() {
 
     card.querySelector('.btn-install').addEventListener('click', async () => {
       if (backends.optiscaler || leftoverFiles.length) {
-        // The exact list first: Remove never surprises anyone with what it took.
-        const plan = await window.api.uninstallPlan(game.exePath);
-        const clip = (arr) => (arr.length > 12 ? arr.slice(0, 12).join(', ') + ' \u2026(+' + (arr.length - 12) + ')' : arr.join(', '));
-        const preview = plan && plan.ok
-          ? ' ' + t('Will remove {count} item(s): {list}.', { count: plan.remove.length, list: clip(plan.remove) || t('nothing') }) +
-            (plan.restore.length ? ' ' + t('Will restore: {list}.', { list: clip(plan.restore) }) : '') +
-            (plan.kept.length ? ' ' + t('Left alone: {list}.', { list: plan.kept.join('; ') }) : '')
-          : '';
-        flipToConfirm(card, {
-          title: t('Remove OptiScaler?'),
-          detail: t('Removes everything this app put in the game folder -- OptiScaler, the Feeder or Luma UE, Streamline, REFramework, swapped DLLs, its markers -- and puts back anything it renamed or replaced. No terminal.') + preview,
-          onConfirm: async () => {
-            const res = await window.api.runUninstall(game.exePath);
-            if (res.ok) await removeLosslessProfile(game);
-            toast(res.ok ? describeUninstall(res) : t("Couldn't remove OptiScaler: {error}", { error: res.error }));
-            renderGrid();
-          }
-        });
+        await confirmRemoveOnCard(card, game);
       } else if ((status.foreign || []).length) {
         // Another DLSS 5 toolchain is in the folder: installing on top of it is how a real
         // user's Fallen Order came to crash on launch. Said before the click lands.
@@ -599,20 +590,23 @@ async function renderGrid() {
       if (!res.ok) { toast(t('Could not launch {name}: {error}', { name: game.name, error: res.error })); return; }
       if (res.cancelled) { toast(t('Not launched.')); return; }
       const exe = res.target.split(/[\\/]/).pop();
-      toast(res.via === 'steam'
+      toast((res.via === 'steam'
         ? t('Launching {name} through Steam.', { name: game.name })
         : res.via === 'launcher'
           ? t('Started {name} through its launcher ({exe}). Sign in there; the game is watched once it starts.', { name: game.name, exe: String(res.launcher).split(/[\\/]/).pop() })
         // Said out loud on every launch, remembered choice or not: what started, and what it costs.
         : res.via === 'exe-no-anticheat'
           ? t('Launched {name} without {antiCheat} ({exe}) -- online play will not work while it is modded.', { name: game.name, antiCheat: res.antiCheat || t('anti-cheat'), exe })
-          : t('Launched {name} ({exe}).', { name: game.name, exe }));
+          : t('Launched {name} ({exe}).', { name: game.name, exe }))
+        + (res.antiCheatRisk ? ' ' + t('{antiCheat} is in this game\'s folder: it may refuse to start the game with OptiScaler installed, or close it soon after. This app will say so if it does.', { antiCheat: res.antiCheatRisk }) : ''));
     });
 
     // The overflow. Everything that is not the one next step lives behind it, which is what takes
     // the card from seven buttons to two. Closes on a click anywhere else so it cannot be left open
     // over the grid.
     card._state = initialState;
+    card._exePath = game.exePath;
+    card._game = game;
     const menu = card.querySelector('.card-menu');
     const menuBtn = card.querySelector('.btn-card-menu');
     menuBtn.addEventListener('click', (e) => {
@@ -958,6 +952,114 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   if (runningGames.has(game.exePath)) applyRunningState(card, true);
 }
 const API_LABEL = { dx12: 'DX12', dx11: 'DX11', vulkan: 'Vulkan', opengl: 'OpenGL' };
+
+// Remove, with the exact list first: Remove never surprises anyone with what it took. The card's own
+// Remove and the early-exit offer below both come here, so there is one implementation of it.
+async function confirmRemoveOnCard(card, game, { title = t('Remove OptiScaler?'), lead = '', confirmLabel } = {}) {
+  const plan = await window.api.uninstallPlan(game.exePath);
+  const clip = (arr) => (arr.length > 12 ? arr.slice(0, 12).join(', ') + ' \u2026(+' + (arr.length - 12) + ')' : arr.join(', '));
+  const preview = plan && plan.ok
+    ? ' ' + t('Will remove {count} item(s): {list}.', { count: plan.remove.length, list: clip(plan.remove) || t('nothing') }) +
+      (plan.restore.length ? ' ' + t('Will restore: {list}.', { list: clip(plan.restore) }) : '') +
+      (plan.kept.length ? ' ' + t('Left alone: {list}.', { list: plan.kept.join('; ') }) : '')
+    : '';
+  flipToConfirm(card, {
+    title,
+    detail: (lead ? lead + ' ' : '') + t('Removes everything this app put in the game folder -- OptiScaler, the Feeder or Luma UE, Streamline, REFramework, swapped DLLs, its markers -- and puts back anything it renamed or replaced. No terminal.') + preview,
+    ...(confirmLabel ? { confirmLabel } : {}),
+    onConfirm: async () => {
+      const res = await window.api.runUninstall(game.exePath);
+      if (res.ok) {
+        await removeLosslessProfile(game);
+        launchIssues.delete(game.exePath);
+      }
+      toast(res.ok ? describeUninstall(res) : t("Couldn't remove OptiScaler: {error}", { error: res.error }));
+      renderGrid();
+    }
+  });
+}
+
+// ── A launch that went wrong (main.js watches it, launchwatch.js decides) ────────────────────
+//
+// Kept per game until the next launch runs cleanly or the files are restored, so a re-render of the
+// grid does not lose it. Never acted on here: the card offers the restore, the user clicks it.
+const launchIssues = new Map();
+
+function launchIssueText(notice, name) {
+  const ac = notice.antiCheat;
+  if (notice.kind === 'never-started') {
+    return t('{name} never started. {antiCheat} is in its folder and usually refuses to run a game with OptiScaler\'s DLL beside it -- often without any message. Use this app\'s Launch button (it starts the game without the anti-cheat where it can), or restore the original files to play online.', { name, antiCheat: ac });
+  }
+  const when = notice.firstRun
+    ? t('{name} closed {seconds} s after starting -- its first run since this app installed to it.', { name, seconds: notice.upSeconds })
+    : t('{name} closed {seconds} s after starting.', { name, seconds: notice.upSeconds });
+  const why = ac
+    ? ' ' + t('{antiCheat} is in its folder, and anti-cheat closing a modded game is the most likely reason.', { antiCheat: ac })
+    : ' ' + t('If it did not do that before, what this app installed is the likely reason. Game Help can say more from its log; restoring the original files puts it back as it was.');
+  return when + why;
+}
+
+function setLaunchIssue(notice) {
+  const card = cardsByExe.get(notice.exePath);
+  if (notice.kind === 'ok') {
+    if (!launchIssues.delete(notice.exePath)) return;
+  } else {
+    launchIssues.set(notice.exePath, notice);
+  }
+  if (card) refreshCardState(card);
+}
+
+function offerRestore(card, game, notice) {
+  confirmRemoveOnCard(card, game, {
+    title: t('Restore the original files?'),
+    lead: launchIssueText(notice, game.name),
+    confirmLabel: t('Restore originals'),
+  });
+}
+
+window.api.onLaunchOutcome((notice) => {
+  if (!notice || !notice.exePath) return;
+  setLaunchIssue(notice);
+  if (notice.kind === 'ok') return;
+  const game = games.find((g) => g.exePath === notice.exePath);
+  toast(launchIssueText(notice, game ? game.name : String(notice.exePath).split(/[\\/]/).pop()));
+});
+
+// ── Antivirus took a file (defender.js) ───────────────────────────────────────────────────────
+//
+// Said as what happened and what to do about it, not as an install error: retrying does not help,
+// and a second install would be taken the same way.
+function quarantineText(report, fallbackFile) {
+  const hits = report && Array.isArray(report.defender) ? report.defender : null;
+  const named = hits && hits.length ? [...new Set(hits.map((h) => String(h.file).split(/[\\/]/).pop()))].join(', ') : '';
+  const files = (report && report.missing && report.missing.length) ? report.missing.join(', ') : named || fallbackFile;
+  if (hits && hits.length) {
+    const threat = hits[0].threat || t('a detection');
+    return t('Windows Defender removed {files} right after being placed ({threat}). These files are what this app installs, not something picked up elsewhere. To keep them: open Windows Security > Protection history, pick the entry, choose Actions > Allow (or Restore), then press Install again.', { files, threat });
+  }
+  if (hits) {
+    return t('{files} disappeared right after being placed, and Windows Defender has no record of it -- another antivirus probably took it. Allow the file in that antivirus (or exclude this game\'s folder), then press Install again.', { files });
+  }
+  return t('{files} disappeared right after being placed -- that is what antivirus quarantine looks like. Check Windows Security > Protection history (or your antivirus), allow the file, then press Install again.', { files });
+}
+
+async function showQuarantineNotice(report, fallbackFile) {
+  const text = quarantineText(report, fallbackFile);
+  toast(text);
+  if (window.confirm(text + '\n\n' + t('Open Windows Security\'s protection history now?'))) {
+    await window.api.openProtectionHistory();
+  }
+}
+
+// Called after an install reports success: did something take its files a moment later?
+async function checkQuarantineAfterInstall(game) {
+  let report = null;
+  try { report = await window.api.safetyCheckInstalled(game.exePath); } catch {}
+  if (report && report.ok && report.missing && report.missing.length) {
+    await showQuarantineNotice(report, report.missing.join(', '));
+    renderGrid();
+  }
+}
 
 function flipToConfirm(card, { title, detail, onConfirm, confirmLabel = t('Remove'), danger = true }) {
   card.querySelector('.card-remove-title').textContent = title;
@@ -2025,6 +2127,13 @@ async function installGame(game) {
   if (route.legacy && route.legacy.dgVoodoo && !route.dgVoodooDeployed && !route.dxvkDeployed) {
     toast(dxvkChosen ? t('Setting up DXVK first…') : t('Setting up dgVoodoo2 first…'));
     const dg = await window.api.legacyDgVoodoo(game.exePath, game.detectedPath);
+    if (!dg.ok && dg.code === 'dgvoodoo-quarantined') {
+      let report = null;
+      try { report = await window.api.safetyDgVoodooQuarantine(game.exePath); } catch {}
+      await showQuarantineNotice(report, 'dgVoodoo2');
+      renderGrid();
+      return;
+    }
     if (!dg.ok) {
       toast(dxvkChosen
         ? t('DXVK could not be set up: {error}', { error: dg.error })
@@ -2183,6 +2292,7 @@ async function installGame(game) {
     ].join('');
     console.info('[install]', game.name, `${feederNote} ${t('Copied nvngx_dlssnr.dll ({mb} MB) to {dir}', { mb, dir: res.dir })}${proxyNote}${proxyCreatedNote}${configNote}${streamlineNote}${reEngineNote}${profileNote}${hotfixNote}${reframeworkNote}${reframeworkConfigNote}`);
     toast(`${t('Installed.')}${actionNotes}`);
+    checkQuarantineAfterInstall(game);
     // A Resident Evil on the pd route still missing PureDark's plugin: say so now, not on a card
     // line someone may not read. Once imported it is placed automatically, so this pops only once.
     const after = await window.api.gameRoute(game.exePath, game.detectedPath);
