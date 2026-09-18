@@ -1,0 +1,80 @@
+'use strict';
+// The renderer is a plain script with no bundler and no framework: `$('#id')` returns null for an
+// id that is not in index.html, and at module scope `$('#gone').addEventListener(...)` throws
+// before anything else runs, taking the whole window with it. Nothing else in this repo catches
+// that -- `node --check` parses the file happily, and Electron is not on a CI runner. So these
+// tests read both files as text and check that every id and card class the renderer reaches for
+// is one the markup actually has.
+
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const root = path.join(__dirname, '..', 'src', 'renderer');
+const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const js = fs.readFileSync(path.join(root, 'renderer.js'), 'utf8');
+
+function htmlIds() {
+  const ids = [];
+  for (const m of html.matchAll(/\sid="([^"]+)"/g)) ids.push(m[1]);
+  return ids;
+}
+
+test('every id the renderer looks up exists in index.html', () => {
+  const ids = new Set(htmlIds());
+  // Ids the renderer creates at runtime rather than finding in the markup -- set on an element it
+  // built, or written into markup it assigns to innerHTML.
+  const made = new Set();
+  for (const m of js.matchAll(/\.id\s*=\s*'([^']+)'/g)) made.add(m[1]);
+  for (const m of js.matchAll(/\bid="([^"$]+)"/g)) made.add(m[1]);
+
+  const missing = [];
+  for (const m of js.matchAll(/\$\('#([^']+)'\)/g)) {
+    const id = m[1];
+    if (!ids.has(id) && !made.has(id)) missing.push(id);
+  }
+  assert.deepStrictEqual([...new Set(missing)], [], 'renderer.js reaches for ids index.html does not have');
+});
+
+test('no id appears twice in index.html', () => {
+  const seen = new Set();
+  const dupes = [];
+  for (const id of htmlIds()) {
+    if (seen.has(id)) dupes.push(id);
+    seen.add(id);
+  }
+  assert.deepStrictEqual(dupes, [], 'duplicate ids: the second one is unreachable through $()');
+});
+
+test('every card class the renderer queries is in the card template', () => {
+  // The card is built from a template literal in renderGrid, then addressed by class. A rename in
+  // one place and not the other is silent -- card.querySelector returns null and the listener is
+  // never attached, or `?.click()` quietly does nothing.
+  const tpl = js.slice(js.indexOf('card.innerHTML = `'), js.indexOf('setBannerWithFallback(game, card.querySelector'));
+  assert.ok(tpl.includes('card-actions'), 'could not find the card template');
+  const missing = [];
+  for (const m of js.matchAll(/card\.querySelector\('\.([a-z0-9-]+)'\)/g)) {
+    if (!tpl.includes(`"${m[1]}`) && !tpl.includes(` ${m[1]}"`) && !tpl.includes(` ${m[1]} `)) missing.push(m[1]);
+  }
+  assert.deepStrictEqual([...new Set(missing)], [], 'card classes the template does not define');
+});
+
+test('the pop-out panel still renders every group', () => {
+  // The Settings dialog was narrowed to the Display group; the pop-out panel must NOT be, because
+  // it is the only full route to these controls on the 32-bit route -- OptiScaler runs in the
+  // 64-bit helper there, so the in-game panel is a mirror the game may not let you click. Both
+  // renderers read the same dlssnr.js field list, so narrowing one and then "tidying" the other to
+  // match would take that route's settings away without a single test going red.
+  const panel = fs.readFileSync(path.join(root, 'panel.js'), 'utf8');
+  assert.match(panel, /for \(const group of \[\.\.\.new Set\(fields\.map\(\(f\) => f\.group\)\)\]\)/);
+  assert.ok(!panel.includes('EDITABLE_GROUPS'), 'the pop-out panel must not filter groups');
+});
+
+test('the DLSS 5 field table is not offered in two places at once', () => {
+  // The in-game panel and Settings both write the same OptiScaler.ini, and the panel saves the
+  // whole file whenever it changes something -- so a second copy of those controls in Settings
+  // does not just duplicate them, it loses edits. Only the Display group stays in the dialog.
+  assert.match(js, /const EDITABLE_GROUPS = \['Display'\]/);
+  assert.ok(!html.includes('game-dlssnr-fields'), 'the old DLSS NR field host is still in the markup');
+});

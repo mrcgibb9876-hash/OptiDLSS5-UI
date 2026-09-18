@@ -57,6 +57,62 @@ async function describeAdapters(execFileAsync) {
   }
 }
 
+// NVIDIA's own version number, from the one Windows reports.
+//
+// Win32_VideoController gives "32.0.16.1692"; NVIDIA, its release notes and every error message a
+// user will ever read call that 616.92. The two are the same number: drop the dots from the last
+// two parts, take the final five digits, and put the point before the last two.
+//
+// Confirmed against two reports in this project rather than taken on trust. Issue #50: a card
+// reported as "driver 32.0.16.1692" whose owner said "Game Ready Driver 616.92". And the Dolphin
+// bundle of 2026-09-15, "driver 32.0.16.1664", whose dlss5-feed.log logged "driver 616.64".
+function nvidiaDriverBranch(windowsVersion) {
+  const parts = String(windowsVersion || '').split('.');
+  if (parts.length < 4) return null;
+  const digits = `${parts[2]}${parts[3]}`.replace(/\D/g, '');
+  if (digits.length < 5) return null;
+  const last5 = digits.slice(-5);
+  return `${Number(last5.slice(0, 3))}.${last5.slice(3)}`;
+}
+
+// The floor for DLSS 5, and it is the DRIVER's own number, not one this app decided. When the
+// driver is too old its requirements probe for feature 18 answers OutOfDate and names the version
+// it wants, which the Feeder passes straight through (runlog.js reads it as feedDriverOutdated):
+//
+//   *** The installed NVIDIA driver reports feature 18 as OutOfDate. ... unavailable until the
+//   driver is updated to 616.56 or newer. ***
+//
+// A machine below this does not get a degraded neural pass, it gets none: the model is either
+// never created or crashes in its first evaluate, as on DOOM 3 BFG with 610.88 (2026-09-13).
+// Until now the app only found out after a game had been run and its log read, one game at a time.
+const MIN_NVIDIA_DRIVER = '616.56';
+
+// Compares two NVIDIA branch numbers. Not a string compare and not parseFloat: "616.9" and "616.90"
+// are the same release, and parseFloat makes 616.9 look older than 616.56.
+function compareDriverBranch(a, b) {
+  const part = (v) => {
+    const [maj, min] = String(v).split('.');
+    return [Number(maj) || 0, Number(String(min || '0').padEnd(2, '0').slice(0, 2)) || 0];
+  };
+  const [am, an] = part(a);
+  const [bm, bn] = part(b);
+  return am !== bm ? am - bm : an - bn;
+}
+
+// Is this machine's driver too old for DLSS 5? Only ever answered for NVIDIA, and only when the
+// version actually parses -- a silent unknown beats a false alarm on the app's front page.
+function driverStatus({ vendor, driverVersion } = {}) {
+  if (vendor !== 'nvidia') return { checked: false, outdated: false, branch: null, minimum: MIN_NVIDIA_DRIVER };
+  const branch = nvidiaDriverBranch(driverVersion);
+  if (!branch) return { checked: false, outdated: false, branch: null, minimum: MIN_NVIDIA_DRIVER };
+  return {
+    checked: true,
+    outdated: compareDriverBranch(branch, MIN_NVIDIA_DRIVER) < 0,
+    branch,
+    minimum: MIN_NVIDIA_DRIVER,
+  };
+}
+
 async function detectGpu(app, execFileAsync) {
   let devices = [];
   try {
@@ -78,7 +134,8 @@ async function detectGpu(app, execFileAsync) {
     name: described ? described.name : null,
     driverVersion: described ? described.driverVersion : (primary && primary.driverVersion) || null,
     devices: devices.map((d) => ({ vendor: vendorFromId(d.vendorId), vendorId: d.vendorId, deviceId: d.deviceId, active: !!d.active })),
+    driver: driverStatus({ vendor, driverVersion: described ? described.driverVersion : (primary && primary.driverVersion) || null }),
   };
 }
 
-module.exports = { vendorFromId, pickPrimary, detectGpu, describeAdapters };
+module.exports = { vendorFromId, pickPrimary, detectGpu, describeAdapters, nvidiaDriverBranch, compareDriverBranch, driverStatus, MIN_NVIDIA_DRIVER };

@@ -179,6 +179,15 @@ body {
   font-size: 13px;
 }
 .settings-banner a { color: var(--warn); font-weight: 600; }
+/* The driver warning carries two buttons beside its text; the other banners are text, or text and
+   one button, and sat fine on the default block layout. */
+.banner-warn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.banner-warn > span { flex: 1 1 320px; }
 .hidden { display: none !important; }
 
 .game-grid {
@@ -274,6 +283,9 @@ body {
 .badge-partial { background: rgba(217,164,65,0.9); color: #0c0e0f; }
 .badge-none { background: rgba(255,255,255,0.12); color: var(--text); }
 .badge-missing { background: rgba(var(--danger-rgb),0.85); color: #fff; }
+/* Amber, and outlined rather than filled: a game with something to fix should read as unfinished
+   next to a green "Working", not as broken next to a red "Exe missing". */
+.badge-attention { background: rgba(217,164,65,0.16); color: #d9a441; border: 1px solid rgba(217,164,65,0.45); }
 
 .engine-badge {
   display: inline-block;
@@ -315,20 +327,40 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* The 32-bit route puts the DLSS 5 panel in the helper process, and the key sequence that
-   reaches it is the whole point of the line -- so it wraps rather than ellipsing away. */
-.card-panel-note { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.35; }
+/* A run that worked, said beside the route it proves rather than on a line of its own. */
+.card-evidence { font-size: 11px; color: var(--text-dim); }
 
-.card-warning {
-  font-size: 11px;
-  color: #d9a441;
-  line-height: 1.3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+/* The one row. Whatever the card has to say -- a fix waiting, an unfinished route, the 32-bit
+   key sequence -- says it here, in one of two tones. It wraps: these sentences are the point of
+   the card, and an ellipsed one tells nobody anything. */
+.card-problem {
+  font-size: 11.5px;
+  line-height: 1.4;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  white-space: normal;
 }
+.card-problem-bad {
+  background: rgba(217,164,65,0.10);
+  border-color: rgba(217,164,65,0.28);
+  color: #d9a441;
+}
+
+/* The overflow. Everything that is not the one next step, stacked under the actions row. */
+.card-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+}
+.card-menu .btn { width: 100%; text-align: left; font-size: 12px; padding: 6px 8px; }
+
 .card-actions {
   margin-top: auto;
   display: flex;
@@ -336,7 +368,13 @@ body {
   gap: 6px;
 }
 .card-actions .btn { flex: 1; min-width: 70px; }
-.card-actions-row2 { display: flex; gap: 6px; }
+/* The primary grows, Launch keeps its label, the overflow is a glyph -- so three buttons still
+   read as "the thing to do, and the two others". */
+.card-actions .btn-card-primary { flex: 2 1 auto; font-weight: 600; }
+.card-actions .btn-card-menu { flex: 0 0 auto; min-width: 0; padding: 7px 11px; }
+/* The primary when the card is asking to be fixed: the same amber as the chip and the row. */
+.btn-attention { background: #d9a441; color: #191200; border-color: #d9a441; }
+.btn-attention:hover { background: #e6b658; border-color: #e6b658; }
 
 /* A floating explanation on hover, for buttons whose name alone does not say what they do.
    One element on the body, moved next to whichever [data-tip] element is hovered or focused
@@ -362,7 +400,6 @@ body {
   z-index: 1000;
 }
 .floating-tip.show { opacity: 1; }
-.card-actions-row2 .btn { flex: 1; }
 
 .modal-overlay {
   position: fixed;
@@ -514,9 +551,6 @@ select:focus { outline: 1px solid var(--accent); }
 /* Settings > Show advanced options: off by default, Install already picks the right setup. */
 body:not(.show-advanced) #game-modal .advanced-only { display: none !important; }
 
-.card-help { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 2px 0 6px; }
-.card-help-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.card-help .btn-card-fix { flex: none; }
 .btn-big { padding: 10px 18px; font-size: 14px; }
 .help-primary { justify-content: flex-start; margin-top: 16px; }
 .help-primary .btn-big { flex: 1; }
@@ -620,7 +654,6 @@ html[lang="ko"] { word-break: keep-all; }
    readout and -- for numbers -- a Default button, because auto is a state rather than a position
    on the track. A row whose dependency is not met is dimmed rather than hidden, so a setting never
    looks as though the app lost it. */
-.dlssnr-group { margin-top: 10px; }
 .dlssnr-row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
 .dlssnr-label { flex: 0 0 45%; font-size: 12px; color: var(--text-dim); cursor: help; }
 .dlssnr-input { flex: 1; min-width: 0; }

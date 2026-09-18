@@ -1080,6 +1080,14 @@ test('the frame-time readout takes the newest heartbeat, from the end of a long 
   assert.equal(untimed.gpuUnavailable, 'n/a (timer unreliable)');
   assert.equal(untimed.fps, 60, 'the rest of the heartbeat is still usable');
 
+  // Whole frames per second, like every other fps figure the app prints. The engine writes the
+  // heartbeat with a decimal, and a card that read "59.83 fps" would look like a measurement
+  // nobody asked for -- the Feeder's own interval line was already rounded, this one was not.
+  write(dir, 'OptiScaler.log', beat(900, '59.83', '16.71') + '\n');
+  const fractional = await runlog.nrTiming(dir);
+  assert.equal(fractional.fps, 60, 'the heartbeat fps is rounded where it is parsed');
+  assert.equal(fractional.msPerFrame, 16.71, 'the frame time keeps its precision, which is read at 0.01 ms');
+
   // A log with no heartbeat yet, and no log at all, are told apart: the first is a game that has
   // not reached 600 frames, the second is a game that has never run.
   write(dir, 'OptiScaler.log', 'Log.LogLevel: 2\nNVSDK_NGX_D3D12_Init\n');

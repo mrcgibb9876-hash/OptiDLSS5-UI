@@ -75,7 +75,7 @@ const ROUTE_TEXT = {
   // cast_key and opening the panel in the helper on startup (engine v1.0.35), Alt+Home is all it takes -- the same
   // key as every other route. Verified on Alien: Isolation, 2026-09-16.
   host32Panel:
-    'Press Alt+Home in the game for the DLSS 5 panel, the same as any other game. It is drawn by the helper and shown over the game, and its controls take clicks there. Settings also apply live from Edit here while the game runs, if you would rather change them outside.',
+    'Press Alt+Home in the game for the DLSS 5 panel, the same as any other game. It is drawn by the helper and shown over the game, and its controls take clicks there.',
   host32Lead:
     'Experimental. A 32-bit game cannot run DLSS in its own process -- NVIDIA ships no 32-bit version -- so the DLSS5 ' +
     'Feeder\'s 32-bit add-on sends each frame to its 64-bit helper beside the game, and OptiScaler runs Neural Rendering ' +

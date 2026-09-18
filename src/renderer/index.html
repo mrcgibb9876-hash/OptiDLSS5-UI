@@ -36,6 +36,12 @@
     <a id="settings-banner-link" href="#">Settings</a> to fetch them or set the paths by hand before installing to games.
   </div>
 
+  <div id="driver-banner" class="settings-banner banner-warn hidden">
+    <span id="driver-banner-text"></span>
+    <button id="btn-driver-download" class="btn btn-primary btn-small" data-i18n>Get the driver</button>
+    <button id="btn-driver-dismiss" class="btn btn-ghost btn-small" data-i18n>Dismiss</button>
+  </div>
+
   <div id="manager-update-banner" class="settings-banner hidden">
     <span id="manager-update-banner-text"></span>
     <button id="btn-manager-restart" class="btn btn-primary btn-small hidden" data-i18n>Restart to update</button>
@@ -94,26 +100,34 @@
         </div>
       </details>
 
-      <details id="edit-group-dlss5" class="edit-group" open>
-        <summary data-i18n>DLSS 5</summary>
-        <div id="game-dlssnr-section" class="hidden">
-          <label class="field-label" data-i18n>DLSS 5 neural rendering settings</label>
-          <p class="field-hint" data-i18n>The same controls as the in-game DLSS 5 panel, written straight into this game's OptiScaler.ini. They apply the next time the game starts. The in-game panel saves the whole file whenever you change something in it, so if you have it open, close it before changing anything here.</p>
-          <p class="field-hint hidden" id="game-dlssnr-helper-note" data-i18n><strong>This game runs the 32-bit route</strong>, so these are read from and written to host64\OptiScaler.ini -- the copy the helper process actually loads. That is also why the panel never appears over the game.</p>
+      <!-- The game's window, at the top, because it is set before a launch and seen immediately.
+           The DLSS 5 model's own controls are no longer here: Alt+Shift+Home opens the in-game
+           panel, live, over the frame they change -- and two places to set one value is how the
+           two drift apart. These keys come from the same [DlssNr] section all the same
+           (src/dlssnr.js, group "Display"), because that is where the engine reads them. -->
+      <details id="edit-group-display" class="edit-group" open>
+        <summary data-i18n>Display</summary>
+        <div id="game-display-section" class="hidden">
+          <p class="field-hint" data-i18n>The window this game runs in, written straight into its OptiScaler.ini. It applies the next time the game starts. The in-game panel saves the whole file whenever you change something in it, so if you have it open, close it before changing anything here.</p>
+          <p class="field-hint hidden" id="game-display-helper-note" data-i18n><strong>This game runs the 32-bit route</strong>, so these are read from and written to host64\OptiScaler.ini -- the copy the helper process actually loads.</p>
           <div id="game-dlssnr-emulator" class="field-subblock hidden">
             <label class="field-label" data-i18n>Emulator: DLSS 5 resolution</label>
-            <p class="field-hint" data-i18n>An emulator hands DLSS 5 its whole window, so the model works at your display resolution whatever internal resolution is set in the emulator -- at 4K that is four times the work of 1080p. Pick the resolution the model should work at instead; the picture stays at display size and only the model's own work is done smaller and enlarged. Match it to the emulator's internal resolution for the best cost/quality. This sets Model resolution below, and the same slider is in the in-game panel (Alt+Home).</p>
+            <p class="field-hint" data-i18n>An emulator hands DLSS 5 its whole window, so the model works at your display resolution whatever internal resolution is set in the emulator -- at 4K that is four times the work of 1080p. Pick the resolution the model should work at instead; the picture stays at display size and only the model's own work is done smaller and enlarged. Match it to the emulator's internal resolution for the best cost/quality. The same value is the Model resolution slider in the in-game panel (Alt+Shift+Home).</p>
             <div class="field-row">
               <select id="game-dlssnr-emulator-res"></select>
             </div>
             <span id="game-dlssnr-emulator-note" class="status-line"></span>
           </div>
-          <div id="game-dlssnr-fields"></div>
+          <div id="game-display-fields"></div>
           <div class="field-row">
-            <button id="btn-dlssnr-reset" class="btn btn-ghost" data-i18n>Reset all to default</button>
+            <button id="btn-display-reset" class="btn btn-ghost" data-i18n>Reset to default</button>
           </div>
-          <span id="game-dlssnr-status" class="status-line"></span>
+          <span id="game-display-status" class="status-line"></span>
         </div>
+      </details>
+
+      <details id="edit-group-dlss5" class="edit-group" open>
+        <summary data-i18n>Neural pass</summary>
         <div id="game-lumaue-section" class="hidden">
           <label class="field-label" data-i18n>Luma UE (adds DLSS to this game)</label>
           <p class="field-hint" data-i18n>This game has no DLSS of its own -- <a href="https://github.com/Filoppi/Luma-Framework" target="_blank" rel="noopener">Luma Framework's</a> Unreal Engine mod replaces its stock TAA with DLAA, which is what gives OptiScaler's Neural Rendering pass a real DLSS call to hook. Untested by this app against a real install -- built from Luma's actual release files and the OptiScaler wiki's setup page for this game, not guessed, but never run against the game.</p>

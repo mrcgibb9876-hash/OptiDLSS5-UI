@@ -154,7 +154,10 @@ test('routes and Game Help for the experimental cases', { skip: !onWindows }, ()
   // deploy writes the key, so the reader is told the one thing that is now true everywhere.
   assert.match(r32.reason, /Press Alt\+Home in the game for the DLSS 5 panel/, 'the same key as every other route');
   assert.match(r32.reason, /take clicks/, 'the cast is no longer display-only');
-  assert.match(r32.reason, /apply live from Edit/, 'Edit still works, as the alternative it now is');
+  // Edit no longer carries the DLSS 5 field table -- it was a second copy of the in-game panel
+  // writing the same ini, and the panel rewrites the whole file whenever it changes something. This
+  // paragraph must not send the reader there; the pop-out panel is the alternative now.
+  assert.ok(!/from Edit/.test(r32.reason), 'Edit no longer holds those settings');
   assert.ok(!/press Insert/.test(r32.reason), 'Insert in the host window is no longer the way in');
 
   const r32gl = route.recommendRoute(dir, exe, { api: 'opengl', apis: ['opengl'], bitness: 32, recommend: 'optiscaler' }, 'nvidia');

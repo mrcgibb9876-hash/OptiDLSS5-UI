@@ -104,7 +104,10 @@ async function nrTiming(optiDir) {
     ok: true,
     frames: Number(last[1]),
     failures: Number(last[2]),
-    fps: Number(last[3]),
+    // Whole frames per second, like every other fps figure this app prints. The engine writes the
+    // heartbeat with a decimal; a card that says "60.00 fps" reads like a measurement nobody asked
+    // for, and the tenth is noise at this sample rate anyway.
+    fps: Math.round(Number(last[3])),
     msPerFrame: gpuMs ? Number(gpuMs[1]) : null,
     gpuUnavailable: gpuMs ? null : gpuText,
     totalMs: cost ? Number(cost[1]) : null,
