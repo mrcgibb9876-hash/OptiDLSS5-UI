@@ -63,6 +63,22 @@ redistribution, so the manager only links to the release page and fetches the mo
   `path.basename()`, which does not treat `\` as a separator off Windows. CI runs on
   `windows-latest`, where it passes. Not a real bug. `test/feeder.test.js` "crashes inside dgVoodoo2"
   is the same story (its regex wants a drive-letter path).
+- **A third `npm test` failure in a sandboxed session is the network, not a regression.**
+  `test/feeder.test.js` "switching away from a provider deployed before mvFiles existed" downloads
+  the VORT shader pack and dies on `HTTP 503 for https://codeload.github.com/...` when the egress
+  proxy is refusing. It is intermittent: it failed on 2026-09-17 and passed on 2026-09-18 in the
+  same sandbox. So the baseline here is **two or three** failures, not two -- get master's own count
+  before judging a branch, rather than reading this one as something you broke.
+- **A user's support bundle can be read when they attach it to the chat**, even though a session
+  cannot fetch one from GitHub. The SWTOR bundle on #50 (2026-09-17) settled two questions the
+  digest could not: `OptiScaler.log` was clean end to end while BugSplat's `MFA: d3d9!00065af0` and
+  the adapter name `(dgVoodoo DX API Layer)` put the crash in dgVoodoo2, and `folder-listing.txt`
+  showed `nvngx_dlssnr.dll` and a renamed `xnvngx_dlss.dll` but no `nvngx_dlss.dll`. Ask for the zip
+  in the chat when the digest runs out. `folder-listing.txt` and `app-view.json` in that bundle are
+  the two most useful files and neither is a log.
+- **The support bundle does not collect the wrapper's own log.** `BUNDLE_FILES` in runlog.js has no
+  `swtor_d3d9.log` / `dgVoodoo.log` / `dxvk.log`, so on a dgVoodoo2 or DXVK route the one log that
+  would name the faulting layer is the one missing. Worth adding.
 - **On a Feeder game, OptiScaler.log is the wrong log to start from.** `dlss5-feed.log` says whether
   OptiScaler was even in the process (`OptiScaler: not present`, `... never loaded a DLL of that
   name`, `the DRIVER answered the NGX probe`, `not the DLSS-NR fork`); runlog.js turns those into
