@@ -28,6 +28,22 @@ test('resolveUnrealShippingExe swaps a root launcher stub for the shipping exe',
   assert.equal(detect.resolveUnrealShippingExe(path.join(other, 'game.exe')), path.join(other, 'game.exe'));
 });
 
+test('resolveUnrealShippingExe swaps a Saber root launcher for client_pc\\root\\bin\\pc (#77)', () => {
+  const root = scratchDir('saber');
+  write(root, 'Warhammer 40000 Space Marine 2.exe', 'launcher');
+  write(root, 'client_pc/root/bin/pc/Warhammer 40000 Space Marine 2 - Retail.exe', 'client');
+  write(root, 'client_pc/root/bin/pc/crash_reporter.exe', 'x');
+  const client = path.join(root, 'client_pc', 'root', 'bin', 'pc', 'Warhammer 40000 Space Marine 2 - Retail.exe');
+  assert.equal(detect.resolveUnrealShippingExe(path.join(root, 'Warhammer 40000 Space Marine 2.exe')), client);
+  // the client itself, picked directly, stays as picked
+  assert.equal(detect.resolveUnrealShippingExe(client), client);
+  // a client folder holding only the crash reporter resolves nothing
+  const lone = scratchDir('saber-lone');
+  write(lone, 'Game.exe', 'launcher');
+  write(lone, 'client_pc/root/bin/pc/crash_reporter.exe', 'x');
+  assert.equal(detect.resolveUnrealShippingExe(path.join(lone, 'Game.exe')), path.join(lone, 'Game.exe'));
+});
+
 test('optiScalerRuntimeApi reads the swapchain the game really created', async () => {
   const d3d11 = scratchDir('rt11');
   write(d3d11, 'OptiScaler.log', '[00:00:01.000000] [I] hkD3D11CreateDeviceAndSwapChain Device captured\n[00:00:01.000001] [I] hkD3D12CreateDevice Adapter Desc: NVIDIA\n[00:00:02.000000] [I] DxgiFactoryHooks::CreateSwapChain Failed to get ID3D12CommandQueue from pDevice, creating Dx11 swapchain!\n');
