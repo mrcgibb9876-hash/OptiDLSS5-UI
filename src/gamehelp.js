@@ -92,7 +92,14 @@ function diagnose(ctx) {
   // is what installs the layer, so that is the fix.
   // One of the games DXVK shakes (translation.js DXVK_BLOCKED) that is on DXVK anyway -- swapped before
   // the list existed. The fix is the way back, ahead of any layer diagnosis for a route it should leave.
-  if (route.dxvkBlocked && route.dxvkDeployed) return fix('dxvk-blocked-game', 'swap-to-dgvoodoo', { game: route.dxvkBlocked.game });
+  //
+  // On a 32-bit DirectX 10/11 game DXVK stands in for the game's own Direct3D, not for dgVoodoo2
+  // (legacy.js dxvkReplacesNative, 2026-09-18), so the way back there is 'swap-to-native'. The layer
+  // checks below are the same on both: under DXVK either game reaches ReShade only as its Vulkan layer.
+  const dxvkNative = !!(route.legacy && route.legacy.host32 && !route.legacy.dgVoodoo
+    && (route.legacy.api === 'dx10' || route.legacy.api === 'dx11'));
+  const wayBack = dxvkNative ? 'swap-to-native' : 'swap-to-dgvoodoo';
+  if (route.dxvkBlocked && route.dxvkDeployed) return fix('dxvk-blocked-game', wayBack, { game: route.dxvkBlocked.game });
   const dxvk32 = route.route === 'feeder32' && route.dxvkDeployed ? ctx.dxvkHost32 : null;
   if (dxvk32) {
     if (!dxvk32.layerRegistered || !dxvk32.layerAddon || dxvk32.appListed === false) {
@@ -250,6 +257,10 @@ function diagnose(ctx) {
       if (route.dxvkDeployed && route.legacy && route.legacy.dgVoodoo && !tried.has('swap-to-dgvoodoo')) {
         return fix('dxvk-no-dlss', 'swap-to-dgvoodoo', { api: route.legacy.api });
       }
+      // The same bet on a 32-bit DirectX 10/11 game, where the other side is the game's own Direct3D.
+      if (route.dxvkDeployed && dxvkNative && !tried.has('swap-to-native')) {
+        return fix('dxvk-no-dlss-native', 'swap-to-native', { api: route.legacy.api });
+      }
       if (route.route === 'feeder' && route.feederDeployed) return out('unknown', 'no-hook');
       if (route.route === 'lumaue') return out('step', 'luma-missing');
       return out('unknown', 'no-hook');
@@ -364,6 +375,13 @@ function diagnose(ctx) {
           ? fix('dxvk-crash', 'remove-all', { dll: run.detail || '' })
           : fix('dxvk-crash-swap', 'swap-to-dgvoodoo', { dll: run.detail || '', api: route.legacy.api });
       }
+      // A crash inside the D3D10/11 DXVK on a 32-bit DirectX 10/11 game: native Direct3D, once.
+      // runlog.js only names these files when they are DXVK's, since dxgi.dll is also ReShade's name.
+      if (route.dxvkDeployed && dxvkNative && /^(d3d10core|d3d11|dxgi)\.dll$/i.test(String(run.detail || ''))) {
+        return tried.has('swap-to-native')
+          ? fix('dxvk-crash', 'remove-all', { dll: run.detail || '' })
+          : fix('dxvk-crash-native', 'swap-to-native', { dll: run.detail || '', api: route.legacy.api });
+      }
       const ours = route.dgVoodooDeployed && route.legacy && route.legacy.dgVoodoo &&
         String(route.legacy.dgVoodoo.dll || '').toLowerCase() === String(run.detail || '').toLowerCase();
       if (!ours) return out('unknown', 'wrapper-crash', { dll: run.detail || '' });
@@ -382,6 +400,6 @@ function diagnose(ctx) {
 
 // The fixes in the order Game Help would try them, for the AI tier's tool list and the tests.
 // 'switch-to-luma' is applied by the renderer, which asks for Luma's licence first; main.js declines it.
-const FIX_IDS = ['remove-foreign', 'remove-feeder', 'remove-luma', 'redeploy-feeder', 'feeder-depth-profile', 'disable-agility-redist', 'reconfigure', 'remove-all', 'install', 'switch-to-luma', 'swap-to-dxvk', 'swap-to-dgvoodoo', 'nr-model-only'];
+const FIX_IDS = ['remove-foreign', 'remove-feeder', 'remove-luma', 'redeploy-feeder', 'feeder-depth-profile', 'disable-agility-redist', 'reconfigure', 'remove-all', 'install', 'switch-to-luma', 'swap-to-dxvk', 'swap-to-dgvoodoo', 'swap-to-native', 'nr-model-only'];
 
 module.exports = { diagnose, FIX_IDS };

@@ -453,18 +453,21 @@ test('Game Help after the swap: the layer, the add-on, the panel, and the way ba
 
 // ── main.js: the swap itself, and Remove ───────────────────────────────────────────────────────────
 
-test('the swap is offered only in dgVoodoo2\'s place, and a choice made before Install is recorded', { skip: !onWindows }, async () => {
+test('the swap is offered in dgVoodoo2\'s place or a 32-bit DX10/11 game\'s own, and a choice made before Install is recorded', { skip: !onWindows }, async () => {
   const base = scratchDir('swap-main');
   const { invoke } = loadMain({ dialogResponse: 0 });
 
-  // 32-bit DirectX 11: the helper route's ReShade is its dxgi.dll, which DXVK's D3D11 set needs.
+  // 32-bit DirectX 11 with nothing installed: refused until 2026-09-18 (the helper route's ReShade is
+  // its dxgi.dll); now the choice is recorded like the DX9 one, and Install places DXVK after the
+  // proxy it parks (test/dxvk-native32.test.js has the rest).
   const dx11 = path.join(base, 'dx11');
   const exe11 = exeWith(dx11, 'Game.exe', { bits: 32, marker: 'D3D11CreateDevice' });
-  const refused = await invoke('game:help-apply', { exePath: exe11, fixId: 'swap-to-dxvk' });
-  assert.equal(refused.ok, true, refused.error);
-  assert.equal(refused.done, false);
-  assert.match(refused.text, /only in place of dgVoodoo2/);
-  assert.ok(!fs.existsSync(path.join(dx11, 'd3d11.dll')), 'and nothing was placed');
+  const chosen11 = await invoke('game:help-apply', { exePath: exe11, fixId: 'swap-to-dxvk' });
+  assert.equal(chosen11.ok, true, chosen11.error);
+  assert.equal(chosen11.done, true, chosen11.text);
+  assert.match(chosen11.text, /instead of native Direct3D 11/);
+  assert.equal(translation.readPreference(dx11), 'dxvk');
+  assert.ok(!fs.existsSync(path.join(dx11, 'd3d11.dll')), 'and nothing was placed yet');
 
   // 32-bit DirectX 9 with nothing installed: the choice is written down, nothing deployed.
   const dx9 = path.join(base, 'dx9');
@@ -568,7 +571,7 @@ test('the card menu, Edit and Game Help all start the same main-process swap', (
   // Game Help's More-row button follows the same rule for which way the swap goes.
   assert.match(js, /const layerSwap = layerSwapFor\(r\);/);
   const rule = js.slice(js.indexOf('function layerSwapFor'), js.indexOf('async function applyLayerSwap'));
-  assert.match(rule, /route\.legacy\.dgVoodoo/, 'offered only where dgVoodoo2 is the plan');
+  assert.match(rule, /route\.legacy\.dgVoodoo/, 'offered where dgVoodoo2 is the plan');
   assert.match(rule, /swap-to-dgvoodoo/);
   assert.match(rule, /swap-to-dxvk/);
 });

@@ -938,12 +938,16 @@ function helpWords(diag) {
     case 'dgvoodoo-no-dlss': return t('The game ran and nothing called DLSS. On this route dgVoodoo2 is the layer that has to present a swapchain for OptiScaler to hook, so when a run has no DLSS in it at all -- including a game that runs but shows a black screen -- the wrapper is the first suspect, not the last. DXVK does the same job through Vulkan instead of Direct3D 11. Neither is better everywhere, and nothing here can tell which way it went until you run the game again.', v);
     case 'dxvk-no-dlss': return t('The game ran under DXVK and nothing called DLSS. DXVK was the other layer to try, and it did no better here, so dgVoodoo2 is worth having back -- or, if dgVoodoo2 could not draw this game either, Remove puts the folder back as it was. Nothing here can tell which layer suits a game until it is run.', v);
     case 'dxvk-crash-swap': return t('The game crashed as it started, inside DXVK\'s {dll}. dgVoodoo2 does the same job through Direct3D 11 instead of Vulkan; Fix it puts it back in DXVK\'s place, with whatever DXVK displaced handed back first.', v);
+    // A 32-bit DirectX 10/11 game on DXVK: the other side of the bet is its own Direct3D, not dgVoodoo2.
+    case 'dxvk-no-dlss-native': return t('The game ran under DXVK and nothing called DLSS. On a DirectX 10/11 game DXVK stands in for the game\'s own Direct3D, which the DLSS5 Feeder reaches directly through the game-folder ReShade, so native is worth having back. Nothing here can tell which suits a game until it is run.', v);
+    case 'dxvk-crash-native': return t('The game crashed as it started, inside DXVK\'s {dll}. Fix it takes DXVK back out and returns the game to its own Direct3D, with whatever DXVK displaced -- and the game-folder ReShade -- handed back.', v);
     case 'dxvk-crash': return t('The game still crashes inside {dll} with either layer in front of it. Remove puts the folder back as it was.', v);
     case 'dxvk-layer-missing': return t('DXVK presents this game through Vulkan, so ReShade -- and the DLSS5 Feeder add-on that rides on it -- can only reach it as ReShade\'s 32-bit Vulkan layer. That layer is {why} for {exe}, so the add-on never loads and DLSS 5 cannot run. Fix it runs ReShade\'s own setup again (it asks for administrator permission and installs the layer for the whole PC, switched on for this game).', { ...v, why: v.why === 'no-addon' ? t('a build without add-on support') : v.why === 'not-listed' ? t('installed but not switched on') : t('not installed') });
     case 'dxvk-reshade-ini-missing': return t('DXVK presents this game through Vulkan, and ReShade\'s Vulkan layer only starts in a game whose folder has a ReShade.ini -- this one has none any more, so the DLSS5 Feeder add-on cannot load. Install puts the Feeder\'s files, ReShade.ini among them, back.');
-    case 'dxvk-two-reshades': return t('{file} beside the game is ReShade again, while DXVK sends the game through ReShade\'s Vulkan layer too. Two ReShades in one game fight over the frame. Swap back to dgVoodoo2, or move {file} out of the folder.', v);
-    case 'dxvk-addon-not-loaded': return t('The game ran under DXVK and ReShade\'s Vulkan layer loaded (it wrote ReShade.log), but the DLSS5 Feeder add-on did not: dlss5-feed.log has not been written since the swap. Open ReShade\'s overlay in the game (Home) and look at its Add-ons tab for DLSS 5 Feed and any error beside it; ReShade.log in the game folder names add-ons it refused. If it is not there at all, swap back to dgVoodoo2.', v);
-    case 'dxvk-needs-run': return t('DXVK is in front of the game in place of dgVoodoo2, and it has not been run since. Launch it, reach gameplay, play a minute and quit. If ReShade.log and dlss5-feed.log in the game folder are still older than the swap after that, ReShade\'s Vulkan layer did not attach to this game.');
+    case 'dxvk-two-reshades': return t('{file} beside the game is ReShade again, while DXVK sends the game through ReShade\'s Vulkan layer too. Two ReShades in one game fight over the frame. Switch the game back off DXVK (More…), or move {file} out of the folder.', v);
+    case 'dxvk-addon-not-loaded': return t('The game ran under DXVK and ReShade\'s Vulkan layer loaded (it wrote ReShade.log), but the DLSS5 Feeder add-on did not: dlss5-feed.log has not been written since the swap. Open ReShade\'s overlay in the game (Home) and look at its Add-ons tab for DLSS 5 Feed and any error beside it; ReShade.log in the game folder names add-ons it refused. If it is not there at all, switch the game back off DXVK.', v);
+    // Worded for both routes DXVK serves: in place of dgVoodoo2 (DX8/9) or of native Direct3D (32-bit DX10/11).
+    case 'dxvk-needs-run': return t('DXVK is in front of the game, and it has not been run since. Launch it, reach gameplay, play a minute and quit. If ReShade.log and dlss5-feed.log in the game folder are still older than the swap after that, ReShade\'s Vulkan layer did not attach to this game.');
     case 'dxvk-panel-fullscreen': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run. But the game was in exclusive fullscreen when the DLSS5 Feeder started its helper, so the helper has no window and the Alt+Home panel has nothing to show -- under dgVoodoo2 this app held the game borderless, and DXVK has no such setting. Switch the game to borderless or windowed in its own options and restart it for the panel.', v);
     case 'nr-model-only': return t('The game never loaded OptiScaler ({file}), and it does not need to: this game ships its own DLSS, so Neural Rendering only wants the model file beside the exe -- the game\'s own Streamline loads it and the driver dispatches the pass. Taking OptiScaler out removes the one thing this app put into the game\'s loader, which is what a game that will not start with it needs. The cost is the in-game panel and the DLSS 5 controls that live on it; Install puts them back.', v);
     case 'opti-not-loaded': return t('The DLSS5 Feeder ran and reported OptiScaler as not present: the game never loaded {file}, so the Feeder\'s DLSS calls went to the driver and no neural pass ran. OptiScaler has to sit under a DLL name this exe imports at start (winmm.dll or version.dll suit most games; never dxgi.dll on a Vulkan, OpenGL or DirectX 9 game). Rename it in the game folder, then launch again -- or save the bundle so the name can be picked from the exe.', v);
@@ -1060,9 +1064,11 @@ function helpSteps(diag) {
     case 'dgvoodoo-no-dlss': return [t('Press Fix it -- DXVK goes in where dgVoodoo2 was'), launch, ...report];
     case 'dxvk-no-dlss': return [t('Press Fix it -- dgVoodoo2 goes back in where DXVK is'), launch, ...report];
     case 'dxvk-crash-swap': return [t('Press Fix it to swap DXVK back for dgVoodoo2'), launch];
+    case 'dxvk-no-dlss-native': return [t('Press Fix it -- DXVK comes out and the game is back on its own Direct3D'), launch, ...report];
+    case 'dxvk-crash-native': return [t('Press Fix it to take DXVK back out'), launch];
     case 'dxvk-layer-missing': return [t('Press Fix it and allow the administrator prompt'), launch];
     case 'dxvk-reshade-ini-missing': return [t('Press Install on the card'), launch];
-    case 'dxvk-two-reshades': return [t('Swap back to dgVoodoo2 (More…), or move the extra ReShade out'), launch];
+    case 'dxvk-two-reshades': return [t('Switch the game back off DXVK (More…), or move the extra ReShade out'), launch];
     case 'dxvk-addon-not-loaded': return [t('In the game, press Home and check ReShade\'s Add-ons tab for DLSS 5 Feed'), t('Read ReShade.log in the game folder'), ...report];
     case 'dxvk-needs-run': return [t('Launch the game'), t('Play a minute of actual gameplay, then quit'), t('Come back here')];
     case 'dxvk-panel-fullscreen': return [t('Set the game to borderless or windowed in its own options'), t('Restart it and press Alt+Home')];
@@ -1136,6 +1142,8 @@ function helpShort(diag) {
     case 'dgvoodoo-no-dlss': return t('Nothing called DLSS -- dgVoodoo2 is the likely reason');
     case 'dxvk-no-dlss': return t('Nothing called DLSS under DXVK either -- try dgVoodoo2 again');
     case 'dxvk-crash-swap': return t('DXVK crashes this game -- dgVoodoo2 is worth another try');
+    case 'dxvk-no-dlss-native': return t('Nothing called DLSS under DXVK -- try native Direct3D again');
+    case 'dxvk-crash-native': return t('DXVK crashes this game -- go back to native Direct3D');
     case 'dxvk-crash': return t('Both layers crash this game');
     case 'dxvk-layer-missing': return t('ReShade\'s 32-bit Vulkan layer is missing for this game');
     case 'dxvk-reshade-ini-missing': return t('No ReShade.ini -- ReShade\'s Vulkan layer will not start');
@@ -1157,6 +1165,7 @@ function helpFixLabel(id) {
     case 'nr-model-only': return t('Add Neural Rendering without OptiScaler');
     case 'swap-to-dxvk': return t('Try DXVK instead');
     case 'swap-to-dgvoodoo': return t('Try dgVoodoo2 instead');
+    case 'swap-to-native': return t('Use native Direct3D 11');
     case 'remove-foreign': return t('Remove the other toolchain');
     case 'remove-feeder': return t('Remove the Feeder');
     case 'remove-luma': return t('Remove Luma UE');
@@ -1301,22 +1310,25 @@ async function openHelp(game) {
     // wrong under dgVoodoo2, or that has not been run yet, could never ask for the other layer --
     // Assassin's Creed II is the case that found it.
     //
-    // Only where dgVoodoo2 is the plan (a DirectX 8/9 game): DXVK is offered in its place and
-    // nowhere else. It used to show for a 32-bit DirectX 10/11 game too, whose ReShade proxy holds
-    // the dxgi.dll DXVK's D3D11 set needs -- the swap placed d3d11.dll, refused dxgi.dll and called
-    // that success (review of 2.2.3, 2026-09-18). Once DXVK is in, the same button offers the way
-    // back, so the swap is never one-way.
+    // Where dgVoodoo2 is the plan (a DirectX 8/9 game) DXVK is offered in its place; on a 32-bit
+    // DirectX 10/11 game, in place of the game's own Direct3D (layerSwapFor). The second was refused
+    // until the swap learned to park the helper route's ReShade dxgi.dll first (2026-09-18) -- before
+    // that it placed d3d11.dll, refused dxgi.dll and called that success (review of 2.2.3). Once DXVK
+    // is in, the same button offers the way back, so the swap is never one-way.
     const layerSwap = layerSwapFor(r);
-    const dgPlan = !!layerSwap;
     const swapId = layerSwap ? layerSwap.id : 'swap-to-dxvk';
     const btn = $('#help-dxvk');
     btn.dataset.fix = swapId;
-    btn.textContent = helpFixLabel(swapId);
+    btn.textContent = layerSwap && layerSwap.native ? layerSwap.label : helpFixLabel(swapId);
     if (btn.dataset.tipDxvk === undefined) btn.dataset.tipDxvk = btn.dataset.tip || '';
     btn.dataset.tip = swapId === 'swap-to-dgvoodoo'
       ? t('Puts dgVoodoo2 back in place of DXVK, handing back whatever DXVK displaced. On a 32-bit game the game-folder ReShade returns with it; ReShade\'s Vulkan layer stays installed on the PC.')
-      : btn.dataset.tipDxvk;
-    btn.classList.toggle('hidden', !dgPlan);
+      : swapId === 'swap-to-native'
+        ? t('Takes DXVK back out, handing back whatever it displaced, and returns the game-folder ReShade (dxgi.dll) so the game runs on its own Direct3D again. ReShade\'s Vulkan layer stays installed on the PC.')
+        : layerSwap && layerSwap.native
+          ? t('Runs this game\'s Direct3D 10/11 on Vulkan through DXVK (d3d10core.dll, d3d11.dll, dxgi.dll beside the exe) instead of natively. The game-folder ReShade is set aside and ReShade\'s 32-bit Vulkan layer set up in its place, which asks for administrator permission and is installed for the whole PC. Anything DXVK displaces is backed up, so it can be undone.')
+          : btn.dataset.tipDxvk;
+    btn.classList.toggle('hidden', !layerSwap);
   } catch {
     if (helpGame !== game) return;
     $('#help-native').classList.add('hidden');
@@ -1325,7 +1337,8 @@ async function openHelp(game) {
 }
 
 $('#help-dxvk').addEventListener('click', () => {
-  const id = $('#help-dxvk').dataset.fix === 'swap-to-dgvoodoo' ? 'swap-to-dgvoodoo' : 'swap-to-dxvk';
+  const fixId = $('#help-dxvk').dataset.fix;
+  const id = fixId === 'swap-to-dgvoodoo' || fixId === 'swap-to-native' ? fixId : 'swap-to-dxvk';
   applyHelpFix(helpGame, { fix: { id }, run: helpDiag && helpDiag.run }, { modal: true });
 });
 
@@ -1655,6 +1668,8 @@ async function installGame(game) {
     toast(!res32.ok
       ? t('Install failed: {error}', { error: res32.error })
       // Under DXVK, DLSS 5 needs ReShade's 32-bit Vulkan layer, which Install sets up last.
+      : res32.dxvkLayer && res32.dxvkLayer.dxvkRefused
+        ? t('Installed on the game\'s own Direct3D: DXVK could not be put in front of it ({error}). The choice is kept; Game Help can try again.', { error: res32.dxvkLayer.error })
       : res32.dxvkLayer && !res32.dxvkLayer.ok
         ? t('Installed, but ReShade\'s 32-bit Vulkan layer is not set up ({error}), so DLSS 5 cannot run under DXVK yet. Game Help can try again.', { error: res32.dxvkLayer.error })
         : t('Installed. No splash or menu appears in the game on this route -- Game Help shows how to reach it.'));
@@ -2409,21 +2424,32 @@ $('#btn-amdnr-run-setup').addEventListener('click', async () => {
 // Vulkan layer and its administrator prompt, and -- on a game with nothing installed yet -- the
 // recorded choice Install acts on.
 
-// Which way the swap goes for this route, or null when the game has no dgVoodoo2 plan (DXVK is only
-// offered in dgVoodoo2's place: a DirectX 8/9 game).
+// Which way the swap goes for this route, or null when DXVK has no place on it. Two places: instead
+// of dgVoodoo2 on a DirectX 8/9 game, and instead of the game's own Direct3D on a 32-bit DirectX
+// 10/11 game (legacy.js dxvkReplacesNative, 2026-09-18) -- 'native' marks the second, whose other
+// side is "Direct3D 11 (native)" rather than dgVoodoo2.
 function layerSwapFor(route) {
-  if (!(route && route.legacy && route.legacy.supported && route.legacy.dgVoodoo)) return null;
+  if (!(route && route.legacy && route.legacy.supported)) return null;
+  const plan = route.legacy;
+  const native = !!(plan.host32 && !plan.dgVoodoo && (plan.api === 'dx10' || plan.api === 'dx11'));
+  if (!route.legacy.dgVoodoo && !native) return null;
   const onDxvk = !!route.dxvkDeployed || route.wrapperPreference === 'dxvk';
   // The early Assassin's Creed games shake under DXVK on Windows (translation.js DXVK_BLOCKED): only the
   // way back is offered there.
   if (route.dxvkBlocked && !onDxvk) return null;
+  if (native) {
+    const d3d = plan.api === 'dx10' ? 'Direct3D 10' : 'Direct3D 11';
+    return onDxvk
+      ? { id: 'swap-to-native', label: t('Switch back to native {d3d}', { d3d }), current: 'dxvk', native: true, d3d }
+      : { id: 'swap-to-dxvk', label: t('Try DXVK instead of native {d3d}', { d3d }), current: 'native', native: true, d3d };
+  }
   return onDxvk
     ? { id: 'swap-to-dgvoodoo', label: t('Switch back to dgVoodoo2'), current: 'dxvk' }
     : { id: 'swap-to-dxvk', label: t('Try DXVK instead of dgVoodoo2'), current: 'dgvoodoo' };
 }
 
 async function applyLayerSwap(game, id) {
-  if (!game || (id !== 'swap-to-dxvk' && id !== 'swap-to-dgvoodoo')) return null;
+  if (!game || !['swap-to-dxvk', 'swap-to-dgvoodoo', 'swap-to-native'].includes(id)) return null;
   const res = await window.api.gameHelpApply(game.exePath, id);
   if (!res.ok) toast(t('The fix failed: {error}', { error: res.error }));
   else toast(res.done ? t('Done: {text}', { text: res.text }) : t('Not done: {text}', { text: res.text }));
@@ -2441,7 +2467,10 @@ async function loadLayerSection(game) {
   if (!swap) { section.classList.add('hidden'); return; }
   section.classList.remove('hidden');
   select.innerHTML = '';
-  for (const [value, label] of [['dgvoodoo', t('dgVoodoo2 (Direct3D 11)')], ['dxvk', t('DXVK (Vulkan)')]]) {
+  const choices = swap.native
+    ? [['native', t('{d3d} (native)', { d3d: swap.d3d })], ['dxvk', t('DXVK (Vulkan)')]]
+    : [['dgvoodoo', t('dgVoodoo2 (Direct3D 11)')], ['dxvk', t('DXVK (Vulkan)')]];
+  for (const [value, label] of choices) {
     const opt = document.createElement('option');
     opt.value = value;
     opt.textContent = label;
@@ -2453,13 +2482,14 @@ async function loadLayerSection(game) {
     ? t('DXVK is in front of this game.')
     : route.wrapperPreference === 'dxvk'
       ? t('DXVK is chosen: Install puts it in front of the game.')
-      : route.dgVoodooDeployed ? t('dgVoodoo2 is in front of this game.') : '';
+      : route.dgVoodooDeployed ? t('dgVoodoo2 is in front of this game.')
+        : swap.native ? t('The game draws with its own {d3d}.', { d3d: swap.d3d }) : '';
 }
 
 $('#game-layer-select').addEventListener('change', async (e) => {
   if (!editingGameId) return;
   const game = games.find((x) => x.id === editingGameId);
-  const id = e.target.value === 'dxvk' ? 'swap-to-dxvk' : 'swap-to-dgvoodoo';
+  const id = e.target.value === 'dxvk' ? 'swap-to-dxvk' : e.target.value === 'native' ? 'swap-to-native' : 'swap-to-dgvoodoo';
   $('#game-layer-status').textContent = t('Applying…');
   await applyLayerSwap(game, id);
   // A cancelled confirm leaves the layer as it was, so the select is re-read rather than trusted.

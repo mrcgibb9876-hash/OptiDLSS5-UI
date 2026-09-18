@@ -127,11 +127,12 @@
 
       <details id="edit-group-dlss5" class="edit-group" open>
         <summary data-i18n>Neural pass</summary>
-        <!-- DirectX 8/9 games only: which layer turns the old Direct3D into something the DLSS5 Feeder
-             can ride on. The same swap Game Help and the card's menu run (game:help-apply). -->
+        <!-- DirectX 8/9 games, and 32-bit DirectX 10/11 games (since 2026-09-18): which layer the game's
+             Direct3D goes through before the DLSS5 Feeder rides on it. The same swap Game Help and the
+             card's menu run (game:help-apply). -->
         <div id="game-layer-section" class="hidden">
           <label class="field-label" data-i18n>Translation layer</label>
-          <p class="field-hint" data-i18n>A DirectX 8/9 game needs a layer in front of it before DLSS 5 can reach it. dgVoodoo2 turns it into Direct3D 11; DXVK turns it into Vulkan. Neither is better everywhere -- some games only draw under one of them (Assassin's Creed II shows a black screen under dgVoodoo2 and runs under DXVK). On a 32-bit game, DXVK also needs ReShade's 32-bit Vulkan layer, which asks for administrator permission and is installed for the whole PC.</p>
+          <p class="field-hint" data-i18n>A DirectX 8/9 game needs a layer in front of it before DLSS 5 can reach it: dgVoodoo2 turns it into Direct3D 11, DXVK turns it into Vulkan. A 32-bit DirectX 10/11 game runs natively by default, and DXVK can run it on Vulkan instead. Neither is better everywhere -- some games only draw under one of them (Assassin's Creed II shows a black screen under dgVoodoo2 and runs under DXVK). On a 32-bit game, DXVK also needs ReShade's 32-bit Vulkan layer, which asks for administrator permission and is installed for the whole PC.</p>
           <div class="field-row">
             <select id="game-layer-select"></select>
           </div>

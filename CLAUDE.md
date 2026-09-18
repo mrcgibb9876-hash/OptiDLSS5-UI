@@ -136,3 +136,9 @@ redistribution, so the manager only links to the release page and fetches the mo
   elevated (elevate.js). At runtime the layer takes the EXE's folder as its base and only starts
   when a ReShade.ini is there (source/dll_main.cpp) -- the Apps= list is what the setup maintains.
   Remove takes the exe off Apps= and never uninstalls the machine-wide layer.
+  Since 2026-09-18 a **32-bit DirectX 10/11** game can take DXVK too, in place of its own Direct3D
+  (`legacy.dxvkReplacesNative`, fix ids `swap-to-dxvk` / `swap-to-native`). The order differs from
+  DX9: the proxy is parked *before* DXVK goes in, because DXVK's dxgi.dll takes its name
+  (`legacy.swapNativeToDxvk`, which un-parks on a refusal). The set is d3d10core + d3d11 + dxgi for
+  both APIs; DXVK 3.x ships no d3d10.dll/d3d10_1.dll. Whether the Feeder add-on actually runs under
+  the Vulkan layer on a DX11-via-DXVK game is not yet proven on a real game.

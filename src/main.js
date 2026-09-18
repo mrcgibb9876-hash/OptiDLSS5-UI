@@ -800,7 +800,11 @@ function legacyPlanFor(dir, exePath, detected) {
 function wrapperPlanFor(dir, exePath, detected) {
   const effective = effectiveDetection(dir, exePath, detected || {});
   const tl = translation.readManifest(dir);
-  const own = (effective.legacyApis || []).find((a) => a === 'dx8' || a === 'dx9');
+  // A 32-bit DirectX 10/11 game can be under our DXVK too now (legacy.dxvkReplacesNative); its own API
+  // is dx10 in legacyApis or dx11 in exeApis, which the wrapper's 'vulkan' never overwrites.
+  const own = (effective.legacyApis || []).find((a) => a === 'dx8' || a === 'dx9')
+    || (effective.bitness === 32 && ((effective.legacyApis || []).find((a) => a === 'dx10')
+      || (effective.exeApis || []).find((a) => a === 'dx11')));
   if (effective.api === 'vulkan' && tl && tl.layer === 'dxvk' && own) return legacy.planFor({ ...effective, api: own });
   return legacy.planFor(effective);
 }
@@ -821,6 +825,52 @@ async function deployDxvkFor(dir, plan) {
     return { ok: false, text: `DXVK was not deployed: ${why || 'refused'}` };
   }
   return { ok: true, deployed: r.deployed, backedUp: r.backedUp };
+}
+
+// A 32-bit DirectX 10/11 game: DXVK in place of its own Direct3D (legacy.swapNativeToDxvk parks the
+// ReShade dxgi.dll proxy first and puts it back if DXVK is refused). { ok, deployed, backedUp,
+// parkedNote, text }.
+async function deployDxvkNative32(dir, plan) {
+  const r = await legacy.swapNativeToDxvk(dir, plan, () => deployDxvkFor(dir, plan));
+  invalidateDetection(dir);
+  const parkedNote = r.parked ? `; the game-folder ReShade (${r.parked.parked}) is set aside as ${r.parked.as}` : '';
+  return { ...r, parkedNote };
+}
+
+// "Use native Direct3D 11": DXVK out of a 32-bit DirectX 10/11 game, whatever it displaced handed
+// back, and the parked ReShade proxy back as dxgi.dll (legacy.swapDxvkToNative). Game Help's answer
+// shape, { done, text }. A DXVK only chosen, not placed, is forgotten.
+async function swapBackToNative(dir, plan) {
+  const nativeName = plan.api === 'dx10' ? 'Direct3D 10' : 'Direct3D 11';
+  const layerNow = translation.activeLayer(dir);
+  if (!(layerNow.ours && layerNow.layer === 'dxvk')) {
+    if (translation.readPreference(dir) === 'dxvk') {
+      translation.writePreference(dir, null);
+      return { done: true, text: `native ${nativeName} it is again: Install leaves the game's own Direct3D in place` };
+    }
+    return { done: false, text: 'DXVK is not a layer this app put in front of this game, so there is nothing to swap back from' };
+  }
+  const answer = await dialog.showMessageBox({
+    type: 'question',
+    buttons: ['Switch back', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+    title: 'Run this game through DXVK',
+    message: `Switch this game back from DXVK to native ${nativeName}?`,
+    detail: 'DXVK\'s files come out and anything of the game\'s they displaced goes back. The game-folder ReShade '
+      + '(dxgi.dll) returns, so DLSS 5 reaches the game through it again; ReShade\'s Vulkan layer stays installed on the PC.'
+      + '\n\nRun the game afterwards and check here again.',
+  });
+  if (answer.response !== 0) return { done: false, text: 'cancelled by the user' };
+  translation.writePreference(dir, null);
+  const r = await legacy.swapDxvkToNative(dir);
+  invalidateDetection(dir);
+  const back = (r.restored || []).length ? `; the game's own ${r.restored.join(', ')} is back` : '';
+  const proxy = (r.unparked || []).length ? '; the game-folder ReShade is back'
+    : (r.stillParked || []).length ? '; the game-folder ReShade could not go back under its name (something else holds it)' : '';
+  const left = (r.skipped || []).length ? `; left alone: ${r.skipped.map((s) => `${s.file} (${s.reason})`).join(', ')}` : '';
+  return { done: true, text: `DXVK is out and the game is on native ${nativeName} again${back}${proxy}${left} -- run the game and check again` };
 }
 
 // The 32-bit helper route under DXVK: the game-folder ReShade proxy parked and ReShade's own setup
@@ -908,7 +958,7 @@ ipcMain.handle('legacy:installHost32', async (_evt, { exePath, detected, release
     const dir = gameDir(exePath);
     const plan = legacyPlanFor(dir, exePath, detected);
     if (!plan.supported || !plan.host32) throw new Error(`this game does not take the 32-bit route (${plan.reason || 'not 32-bit'})`);
-    const dxvkInstead = (translation.readManifest(dir) || {}).layer === 'dxvk';
+    let dxvkInstead = (translation.readManifest(dir) || {}).layer === 'dxvk';
     if (plan.dgVoodoo && !legacy.status(dir).dgVoodoo && !dxvkInstead) throw new Error('dgVoodoo2 has to be in place first');
     const root = releaseFolder && findReleaseRoot(releaseFolder);
     if (!root || !hasDlssNrSection(root)) throw new Error('OptiScaler release folder not set, or not the DLSS-NR build');
@@ -935,6 +985,21 @@ ipcMain.handle('legacy:installHost32', async (_evt, { exePath, detected, release
     // 32-bit Vulkan layer set up instead -- the same step the swap runs. It asks for admin only when
     // the layer is not already registered and switched on for this exe.
     let dxvkLayer = null;
+    // A 32-bit DirectX 10/11 game with DXVK chosen before Install: there is no dgVoodoo2 step for it
+    // to take the place of, so it goes in here, after the ReShade proxy it has to park exists.
+    // Placing it first would have deployHost32 back DXVK's dxgi.dll up as "the game's own" and put
+    // ReShade over it.
+    if (!dxvkInstead && legacy.dxvkReplacesNative(plan) && translation.readPreference(dir) === 'dxvk'
+        && !translation.dxvkBlockedFor(exePath)) {
+      const r = await deployDxvkNative32(dir, plan);
+      if (r.ok) {
+        translation.writePreference(dir, null);
+        dxvkInstead = true;
+      } else {
+        // Installed all the same, on the game's own Direct3D; the choice stays for another try.
+        dxvkLayer = { ok: false, dxvkRefused: true, error: r.text || 'DXVK was not deployed' };
+      }
+    }
     if (dxvkInstead) dxvkLayer = await dxvkHost32LayerStep(dir, exePath);
     return { ok: true, ...res, feederVersion: asset.tag, api: plan.api, dxvkLayer };
   } catch (error) {
@@ -2948,12 +3013,16 @@ async function applyHelpFix(exePath, fixId) {
           text: `this game has no translation-layer route (${plan && plan.reason ? plan.reason : 'unsupported'})`,
         };
       }
-      // DXVK is offered in dgVoodoo2's place, and only there. A 32-bit DirectX 10/11 game on the helper
-      // route has ReShade as its dxgi.dll -- the very name DXVK's D3D11 set needs -- so the swap used to
-      // put d3d11.dll in, refuse dxgi.dll and still report success (review of 2.2.3, 2026-09-18).
-      if (!plan.dgVoodoo) {
-        return { done: false, text: `DXVK is offered here only in place of dgVoodoo2, for a DirectX 8 or 9 game; this one is ${plan.api || 'an unknown API'}` };
+      // DXVK is offered in dgVoodoo2's place (DirectX 8/9), and in place of the game's own Direct3D on a
+      // 32-bit DirectX 10/11 game (legacy.dxvkReplacesNative). That second case used to be refused: the
+      // helper route's ReShade is its dxgi.dll, the name DXVK's D3D11 set needs, and the swap put
+      // d3d11.dll in, refused dxgi.dll and still reported success (review of 2.2.3, 2026-09-18). It
+      // now parks that proxy first, exactly as the DX9 swap does before the Vulkan layer goes in.
+      const native = legacy.dxvkReplacesNative(plan);
+      if (!plan.dgVoodoo && !native) {
+        return { done: false, text: `DXVK is offered here in place of dgVoodoo2 (DirectX 8/9) or of a 32-bit DirectX 10/11 game's own Direct3D; this one is ${plan.host32 ? '32-bit ' : ''}${plan.api || 'an unknown API'}` };
       }
+      const nativeName = plan.api === 'dx10' ? 'Direct3D 10' : 'Direct3D 11';
       const layerNow = translation.activeLayer(dir);
       const dxvkIn = layerNow.ours && layerNow.layer === 'dxvk';
       // The wording cannot assume a crash any more: this is reachable from Game Help's More row as a
@@ -2968,29 +3037,40 @@ async function applyHelpFix(exePath, fixId) {
         ? '\n\nThis game\'s DLSS 5 runs through ReShade, and under DXVK ReShade has to be its 32-bit Vulkan layer. '
           + 'ReShade\'s own setup installs that now: Windows will ask for administrator permission, and the layer is '
           + 'installed for the whole PC (C:\\ProgramData\\ReShade) and switched on for this game only. The game-folder '
-          + 'ReShade (dxgi.dll) is set aside while DXVK is in, and comes back with dgVoodoo2. Remove takes this game off '
-          + 'the layer\'s list but leaves the layer for any other game that uses it.'
+          + `ReShade (dxgi.dll) is set aside while DXVK is in, and comes back with ${native ? `native ${nativeName}` : 'dgVoodoo2'}. `
+          + 'Remove takes this game off the layer\'s list but leaves the layer for any other game that uses it.'
         : '';
+      // A DirectX 10/11 game has no dgVoodoo2 to swap out: DXVK replaces the game's own Direct3D, and
+      // its full D3D10/11 set (d3d10core.dll, d3d11.dll, dxgi.dll) goes beside the exe.
+      const intro = native
+        ? `DXVK runs this game's ${nativeName} on Vulkan instead: its d3d10core.dll, d3d11.dll and dxgi.dll go beside `
+          + 'the exe. Any game file under those names is backed up first, so switching back to native '
+          + `${nativeName} puts the folder back as it was.`
+          + '\n\nNative is usually the better choice on a DirectX 10/11 game; DXVK is worth trying when the game '
+          + 'misbehaves under it. Nothing here can tell which way it went until you run the game. Run it '
+          + 'afterwards and check here again.'
+        : (hasDgVoodoo
+          ? 'dgVoodoo2 and DXVK do the same job by different routes -- dgVoodoo2 through Direct3D 11, DXVK '
+            + 'through Vulkan -- so when a game will not behave under one, the other is worth a try.\n\n'
+            + 'Whatever dgVoodoo2 displaced is handed back first, so this can be undone.'
+          : 'DXVK translates this game\'s old Direct3D to Vulkan, which is what gives OptiScaler something '
+            + 'modern to hook.\n\nAnything it displaces is backed up first, so this can be undone.')
+          + '\n\nNeither layer is better everywhere: the swap can make a nearly-working game worse, and '
+          + 'nothing here can tell which way it went until you run the game. Run it afterwards and check here again.';
       const answer = await dialog.showMessageBox({
         type: 'question',
         buttons: [dxvkIn ? 'Set up the layer' : 'Try DXVK', 'Cancel'],
         defaultId: 0,
         cancelId: 1,
         noLink: true,
-        title: 'Try the other compatibility layer',
+        title: native ? 'Run this game through DXVK' : 'Try the other compatibility layer',
         message: dxvkIn
           ? 'Set up ReShade\'s 32-bit Vulkan layer for this game again?'
-          : hasDgVoodoo ? 'Swap dgVoodoo2 for DXVK in this game?' : 'Use DXVK as this game\'s compatibility layer?',
+          : native ? `Use DXVK (Vulkan) instead of native ${nativeName} in this game?`
+            : hasDgVoodoo ? 'Swap dgVoodoo2 for DXVK in this game?' : 'Use DXVK as this game\'s compatibility layer?',
         detail: (dxvkIn
           ? 'DXVK is already in front of this game. This runs ReShade\'s setup for it once more.'
-          : (hasDgVoodoo
-            ? 'dgVoodoo2 and DXVK do the same job by different routes -- dgVoodoo2 through Direct3D 11, DXVK '
-              + 'through Vulkan -- so when a game will not behave under one, the other is worth a try.\n\n'
-              + 'Whatever dgVoodoo2 displaced is handed back first, so this can be undone.'
-            : 'DXVK translates this game\'s old Direct3D to Vulkan, which is what gives OptiScaler something '
-              + 'modern to hook.\n\nAnything it displaces is backed up first, so this can be undone.')
-            + '\n\nNeither layer is better everywhere: the swap can make a nearly-working game worse, and '
-            + 'nothing here can tell which way it went until you run the game. Run it afterwards and check here again.')
+          : intro)
           + layerNote,
       });
       if (answer.response !== 0) return { done: false, text: 'cancelled by the user' };
@@ -3002,16 +3082,26 @@ async function applyHelpFix(exePath, fixId) {
         // Nothing installed yet: the choice is recorded and Install acts on it (legacy:dgvoodoo puts
         // DXVK in, legacy:installHost32 sets up the layer). Deploying now would put DXVK in front of
         // a game whose ReShade proxy Install is about to add -- two ReShades.
+        // On a DirectX 10/11 game legacy:installHost32 places DXVK itself, after the proxy it parks.
         translation.writePreference(dir, 'dxvk');
-        return { done: true, text: 'DXVK is chosen for this game: Install puts it in front of the game instead of dgVoodoo2, then sets up ReShade\'s 32-bit Vulkan layer (asking for administrator permission)' };
+        return {
+          done: true,
+          text: native
+            ? `DXVK is chosen for this game: Install puts it in front of the game instead of native ${nativeName}, then sets up ReShade's 32-bit Vulkan layer (asking for administrator permission)`
+            : 'DXVK is chosen for this game: Install puts it in front of the game instead of dgVoodoo2, then sets up ReShade\'s 32-bit Vulkan layer (asking for administrator permission)',
+        };
       } else {
-        const r = await deployDxvkFor(dir, plan);
+        // DirectX 10/11: the ReShade dxgi.dll proxy is parked BEFORE DXVK goes in (its dxgi.dll takes
+        // the name), and put back if DXVK is refused. DirectX 8/9 parks it in the layer step below.
+        const r = native ? await deployDxvkNative32(dir, plan) : await deployDxvkFor(dir, plan);
         if (!r.ok) return { done: false, text: r.text };
         // Said from what happened, not assumed: dgVoodoo2 may never have been here.
         const files = (r.deployed || []).join(', ');
         const kept = (r.backedUp || []).map((b) => `${b.rel} kept as ${b.backup}`).join(', ');
-        said = hasDgVoodoo ? `DXVK (${files}) replaced dgVoodoo2` : `DXVK (${files}) is in front of the game`;
+        said = native ? `DXVK (${files}) is in front of the game instead of native ${nativeName}`
+          : hasDgVoodoo ? `DXVK (${files}) replaced dgVoodoo2` : `DXVK (${files}) is in front of the game`;
         if (kept) said += `; the game's own ${kept}`;
+        if (native) said += r.parkedNote || '';
       }
       translation.writePreference(dir, null);
       if (!plan.host32) {
@@ -3022,7 +3112,7 @@ async function applyHelpFix(exePath, fixId) {
       }
       const layer = await dxvkHost32LayerStep(dir, exePath);
       if (!layer.ok) {
-        return { done: false, text: `${said}${layer.parkedNote}, but ReShade's 32-bit Vulkan layer is NOT set up: ${layer.error}. DLSS 5 will not run under DXVK until it is -- try again from Game Help, or swap back to dgVoodoo2.` };
+        return { done: false, text: `${said}${layer.parkedNote}, but ReShade's 32-bit Vulkan layer is NOT set up: ${layer.error}. DLSS 5 will not run under DXVK until it is -- try again from Game Help, or swap back to ${native ? `native ${nativeName}` : 'dgVoodoo2'}.` };
       }
       return { done: true, text: `${said}${layer.parkedNote}; ReShade's 32-bit Vulkan layer is ${layer.ran ? 'now' : 'already'} set up for ${path.basename(exePath)} -- run the game (borderless or windowed, for the panel) and check again` };
     }
@@ -3033,6 +3123,9 @@ async function applyHelpFix(exePath, fixId) {
     case 'swap-to-dgvoodoo': {
       const detectedForPlan = await detectFor(dir, exePath);
       const plan = wrapperPlanFor(dir, exePath, detectedForPlan);
+      // A 32-bit DirectX 10/11 game's way back is its own Direct3D, not dgVoodoo2 -- an older card or
+      // the AI tier asking for this there gets that instead of a refusal.
+      if (legacy.dxvkReplacesNative(plan)) return swapBackToNative(dir, plan);
       if (!plan || !plan.supported || !plan.dgVoodoo) {
         return { done: false, text: `this game has no dgVoodoo2 route (${plan && plan.reason ? plan.reason : plan && plan.api ? plan.api : 'unsupported'})` };
       }
@@ -3071,6 +3164,15 @@ async function applyHelpFix(exePath, fixId) {
       const stillParked = !!((legacy.readMarker(dir) || {}).parked || []).length;
       const proxy = hadParked && !stillParked ? '; the game-folder ReShade is back' : stillParked ? '; the game-folder ReShade could not go back under its name (something else holds it)' : '';
       return { done: true, text: `dgVoodoo2 (${plan.dgVoodoo.dll}) is back in place of DXVK${proxy} -- run the game and check again` };
+    }
+    // Back from DXVK to a 32-bit DirectX 10/11 game's own Direct3D: the other half of the native swap.
+    case 'swap-to-native': {
+      const detectedForPlan = await detectFor(dir, exePath);
+      const plan = wrapperPlanFor(dir, exePath, detectedForPlan);
+      if (!legacy.dxvkReplacesNative(plan)) {
+        return { done: false, text: `native Direct3D is the way back only on a 32-bit DirectX 10/11 game (${plan && plan.reason ? plan.reason : plan && plan.api ? plan.api : 'unsupported'})` };
+      }
+      return swapBackToNative(dir, plan);
     }
     // The route RHI takes on a game that ships its own DLSS: no proxy at all, just the model beside
     // the exe for the game's own Streamline to load. It is the fallback for the case the proxy route
