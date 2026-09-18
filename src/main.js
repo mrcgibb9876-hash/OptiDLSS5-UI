@@ -2767,6 +2767,57 @@ async function applyHelpFix(exePath, fixId) {
       }
       return { done: true, text: `DXVK is in place of dgVoodoo2 (${(r.deployed || []).length} file(s)) -- run the game and check again` };
     }
+    // The route RHI takes on a game that ships its own DLSS: no proxy at all, just the model beside
+    // the exe for the game's own Streamline to load. It is the fallback for the case the proxy route
+    // cannot serve -- a game that will not start with a DLL injected into its loader -- and it costs
+    // the in-game panel, which is why it is offered on a failure and confirmed, never automatic.
+    case 'nr-model-only': {
+      const answer = await dialog.showMessageBox({
+        type: 'question',
+        buttons: ['Use the model only', 'Cancel'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+        title: 'Add Neural Rendering without OptiScaler',
+        message: 'Take OptiScaler out and let the game load the model itself?',
+        detail: 'This game has DLSS of its own, so Neural Rendering does not need OptiScaler to reach it: the '
+          + 'model file beside the exe is enough, and the game\'s own Streamline loads it.\n\n'
+          + 'Everything this app placed here is removed first, so the game goes back to loading only its own '
+          + 'DLLs. That is the point -- nothing of ours is in its loader any more -- but it also means no '
+          + 'in-game panel and none of the DLSS 5 controls. Take this route when a game will not start with '
+          + 'OptiScaler in it.\n\nInstall puts OptiScaler back whenever you want it.',
+      });
+      if (answer.response !== 0) return { done: false, text: 'cancelled by the user' };
+
+      const removal = await uninstallEverything(dir);
+
+      let cached;
+      try {
+        cached = await amdnr.ensureAmdNrModelCache({ getRhiManifest, cacheDir: nrModelCacheDir(), ghHeaders: GITHUB_HEADERS });
+      } catch (error) {
+        // OptiScaler is already out at this point, so say so rather than reporting a clean failure:
+        // the folder has changed and the user needs to know in which direction.
+        invalidateDetection(dir);
+        return {
+          done: false,
+          text: `OptiScaler was removed, but the model could not be fetched: ${error && error.message ? error.message : error}`,
+        };
+      }
+
+      const placed = await amdnr.deployAmdNrModel(dir, cached, { replace: true });
+      invalidateDetection(dir);
+
+      if (!placed.deployed) {
+        return { done: false, text: `OptiScaler was removed, but the model was not placed: ${placed.reason || 'refused'}` };
+      }
+
+      const cleared = (removal && Array.isArray(removal.removed)) ? removal.removed.length : 0;
+      return {
+        done: true,
+        text: `OptiScaler is out (${cleared} file(s)) and nvngx_dlssnr.dll is beside the game -- turn DLSS on in `
+          + `the game's own video settings, then run it and check here again`,
+      };
+    }
     case 'remove-all': {
       const answer = await dialog.showMessageBox({
         type: 'question',

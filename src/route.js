@@ -217,7 +217,7 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts
       experimental: false, emulator: null, legacy: null, dgVoodooDeployed: legacyStatus.dgVoodoo,
       ...extra,
       route, label, reason, reasonVars, steps, gpuVendor,
-      optiInstalled, feederDeployed, lumaDeployed, feederMisdeployed,
+      optiInstalled, feederDeployed, lumaDeployed, feederMisdeployed, shipsDlss,
       verified: verified.verification(exePath),
       complete: steps.length > 0 && !next,
       nextStep: next ? next.label : null,

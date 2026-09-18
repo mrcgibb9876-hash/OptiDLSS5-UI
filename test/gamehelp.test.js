@@ -121,6 +121,35 @@ const rows = [
   // SWTOR (2026-09-16): the Feeder said "OptiScaler: not present" -- installed as dxgi.dll beside DXVK.
   ['Feeder found no OptiScaler and the app knows the name the game loads: reconfigure moves it', { ...base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'opti-not-loaded' } }), optiProxy: 'dxgi.dll', wantedProxy: 'winmm.dll' }, { status: 'fix', code: 'opti-proxy-name', fix: 'reconfigure' }],
   ['Feeder found no OptiScaler and the name is already the best guess: a user step', { ...base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'opti-not-loaded' } }), optiProxy: 'winmm.dll', wantedProxy: null }, { status: 'step', code: 'opti-not-loaded' }],
+
+  // A game with DLSS of its own does not need the proxy at all: the model beside the exe is enough
+  // and the game's own Streamline loads it. So "OptiScaler never loaded" on such a game is answered
+  // by the route that never wanted a proxy, not by another guess at a DLL name. (RHI works on
+  // Assassin's Creed Black Flag Resynced for exactly this reason -- it never proxies.)
+  ['OptiScaler never loaded and the game has its own DLSS: offer the model-only route',
+    { ...base({ route: { shipsDlss: true }, run: { ran: true, verdict: 'opti-not-loaded' } }), optiProxy: 'dxgi.dll', wantedProxy: null },
+    { status: 'fix', code: 'nr-model-only', fix: 'nr-model-only' }],
+  // The proxy name is still the better first answer when the app knows a name the exe imports:
+  // renaming keeps the panel, and the model-only route costs it.
+  ['a known-better proxy name outranks the model-only route',
+    { ...base({ route: { shipsDlss: true }, run: { ran: true, verdict: 'opti-not-loaded' } }), optiProxy: 'dxgi.dll', wantedProxy: 'winmm.dll' },
+    { status: 'fix', code: 'opti-proxy-name', fix: 'reconfigure' }],
+  // Applied, and no newer run to judge it by yet: the table says so rather than re-offering it.
+  // That is the shared rule for every fix, not this one's own -- asserted here so the model-only
+  // route is known to be inside it.
+  ['the model-only route awaits a run before it is judged',
+    { ...base({ route: { shipsDlss: true }, run: { ran: true, verdict: 'opti-not-loaded', at: 200 } }), optiProxy: 'dxgi.dll', wantedProxy: null, fixesTried: [{ id: 'nr-model-only', runAt: 200 }] },
+    { status: 'needs-run', code: 'needs-run-after-fix' }],
+  // Applied, then run again, and OptiScaler still did not load. Offering to take it out a second
+  // time is no answer, so the rule steps aside and the rename step comes back.
+  ['the model-only route is not offered twice',
+    { ...base({ route: { shipsDlss: true }, run: { ran: true, verdict: 'opti-not-loaded', at: 900 } }), optiProxy: 'dxgi.dll', wantedProxy: null, fixesTried: [{ id: 'nr-model-only', runAt: 200 }] },
+    { status: 'step', code: 'opti-not-loaded' }],
+  // A game without its own DLSS has nothing to fall back to: the model alone dispatches nothing
+  // there, so the step stays "rename it".
+  ['a game with no DLSS of its own still gets the rename step',
+    { ...base({ route: { shipsDlss: false }, run: { ran: true, verdict: 'opti-not-loaded' } }), optiProxy: 'dxgi.dll', wantedProxy: null },
+    { status: 'step', code: 'opti-not-loaded' }],
   ['the driver answered the Feeder\'s probe instead of OptiScaler: reconfigure', base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'opti-not-routed' } }), { status: 'fix', code: 'opti-not-routed', fix: 'reconfigure' }],
   ['a stock OptiScaler answered the Feeder: Install puts the fork back', base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'opti-not-fork' } }), { status: 'fix', code: 'opti-not-fork', fix: 'install' }],
   ['the Feeder\'s Vulkan interop never opened: the fallback layer is the step', base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'feed-vulkan-interop' } }), { status: 'step', code: 'feed-vulkan-interop' }],
