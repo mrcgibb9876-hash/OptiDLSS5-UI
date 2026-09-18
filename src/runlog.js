@@ -555,8 +555,12 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = 
       !feeder.addonInstalled && 'the add-on',
       !feeder.fxInstalled && 'DLSS5_Feed.fx',
       !feeder.headersInstalled && 'the ReShade headers',
-      !feeder.dlssInstalled && 'nvngx_dlss.dll',
-      !feeder.dlssnrInstalled && 'nvngx_dlssnr.dll',
+      // Named apart on purpose. These two differ by two characters, they sit next to each other in
+      // the same folder, and a reporter on #50 (2026-09-17) read "missing nvngx_dlss.dll" off a
+      // folder that held nvngx_dlssnr.dll and answered "THIS FILE IS PRESENT" -- which cost a
+      // round trip and left the actual gap in place. The bare name is not enough to act on.
+      !feeder.dlssInstalled && 'nvngx_dlss.dll (the DLSS runtime)',
+      !feeder.dlssnrInstalled && 'nvngx_dlssnr.dll (the neural model)',
     ].filter(Boolean);
     add('feeder', missing.length
       ? `INCOMPLETE -- missing ${missing.join(', ')} (ReShade reaches this game ${feeder.reshadeMode})`

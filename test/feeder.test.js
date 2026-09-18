@@ -692,6 +692,20 @@ test('the digest names the missing Feeder piece, and does not call our own OptiS
   // An unsupported API reports no feeder line at all rather than six missing pieces.
   assert.doesNotMatch(runlog.reportDigest(run, { feeder: { supported: false } }), /feeder:/);
 
+  // #50 again (2026-09-17, second round): the digest said "missing nvngx_dlss.dll" on a folder that
+  // held nvngx_dlssnr.dll, and the reporter answered "THIS FILE IS PRESENT". The two names differ by
+  // two characters and sit in the same folder, so each says which file it means.
+  const runtimeGone = runlog.reportDigest(run, { feeder: ready({ dlssInstalled: false }) });
+  assert.match(runtimeGone, /missing nvngx_dlss\.dll \(the DLSS runtime\)/);
+  assert.doesNotMatch(runtimeGone, /nvngx_dlssnr/, 'the model is present, so it is not in the missing list at all');
+
+  const modelGone = runlog.reportDigest(run, { feeder: ready({ dlssnrInstalled: false }) });
+  assert.match(modelGone, /missing nvngx_dlssnr\.dll \(the neural model\)/);
+
+  // Both gone: two entries a reader can tell apart, not the same name twice over.
+  const bothGone = runlog.reportDigest(run, { feeder: ready({ dlssInstalled: false, dlssnrInstalled: false }) });
+  assert.match(bothGone, /nvngx_dlss\.dll \(the DLSS runtime\), nvngx_dlssnr\.dll \(the neural model\)/);
+
   // Ours versus somebody else's, which decides whether there is anything to go and delete.
   const ours = runlog.reportDigest(run, { detected: { optiScalerProxy: { file: 'dxgi.dll', matchesOurBuild: true } } });
   assert.match(ours, /optiscaler: dxgi\.dll \(this app's own install\)/);
