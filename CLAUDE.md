@@ -5,9 +5,28 @@
 - **OptiDLSS5-UI** (this repo) is the Electron manager. Plain-script renderer, no bundler.
 - **OptiScaler_DLSSNR** is the engine fork. Default branch `dlss5-developer-controls-ui`, not `master`.
 
-A manager release **bundles the engine's newest release**, so the order is always: merge and
-release the engine first, wait for its release to publish, then release the manager. Both use a
-`workflow_dispatch` on `release.yml` whose tag must match the version already on the default branch.
+A manager release **bundles the exact engine release pinned in `package.json` → `engineVersion`**
+(e.g. `"v1.0.41"`), never "latest", so the same commit always builds the same manager + engine pair.
+To ship a new engine with the manager:
+
+1. Release the engine first (its own `release.yml`) and wait for the release and its `.zip` to publish.
+2. Bump `engineVersion` in `package.json` to that exact tag, in the same commit as (or before) the
+   manager version bump. `test/engine-pin.test.js` rejects anything that is not an exact `vX.Y.Z` tag.
+3. Release the manager. Both use a `workflow_dispatch` on `release.yml` whose tag must match the
+   version already on the default branch.
+
+The manager workflow's `engine_tag` input overrides the pin for a one-off build. The workflow fails
+if the pinned tag has no `.zip` asset or resolves to a different tag. It never falls back to
+"latest". A draft engine release is not visible to the workflow, so publish it (or mark it a
+pre-release) before pinning to it.
+
+## Keep the library fast
+
+`test/perf-library.test.js` syncs a 50-game fake library three times and fails if a pass exceeds its
+time budget, if a later pass re-reads any game exe (detection not served from `detectGameCached`), or
+if any process is started per game folder. Those are the two v1.59.0 regressions (uncached
+`detectGame`, a `powershell.exe` per folder). If it fails, fix the per-game work rather than raising
+the budget.
 
 ## Do not ship a guessed D3D12 resource state as a default
 
