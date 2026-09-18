@@ -905,6 +905,7 @@ function helpWords(diag) {
     case 'nr-model-crash': return t('The DLSS 5 model crashed on its very first frame, inside NVIDIA\'s own code ({stack}), and the Feeder stopped. The game carried on without it. No ini setting this app knows changes that. If the game has a Direct3D 11 mode, try it: the Feeder then runs DLSS on a device of its own. Otherwise save the bundle to share.', v) +
       (v.smoothMotion ? ' ' + t('NVIDIA Smooth Motion was also on inside this process. Turn it off for this game in the NVIDIA app if the crash stays.') : '');
     case 'feed-stopped': return t('The Feeder gave up on the last run. Reconfigure rewrites its ReShade settings; if it stops again, dlss5-feed.log has its own diagnosis.');
+    case 'wrapper-crash-swap': return t('The game crashed as it started, inside dgVoodoo2\'s {dll} -- before the DLSS5 Feeder or OptiScaler had done anything. No dgVoodoo2 setting is known to get past this: where it was first seen, every setting tried hung or crashed the same way. But dgVoodoo2 is not the only way to present DirectX 8/9 to a modern pipeline -- DXVK does the same job by a different route, and on one report the same game crashed under dgVoodoo2 on one machine while running through DXVK on another. Worth trying before giving up. Whatever dgVoodoo2 displaced is handed back first, so this can be undone; run the game afterwards and check here again.', v);
     case 'dgvoodoo-crash': return t('The game crashed as it started, inside dgVoodoo2\'s {dll} -- before the DLSS5 Feeder or OptiScaler had done anything. This DirectX 9 route cannot work without dgVoodoo2, and no dgVoodoo2 setting is known to get past this: where it was first seen, every setting tried hung or crashed the same way while the game ran fine without dgVoodoo2. The same fault can also show as a black screen that never responds, which leaves no log. Removing puts the game back exactly as it was.', v);
     case 'wrapper-crash': return t('The game crashed as it started, inside {dll} in its own folder -- a DirectX wrapper this app did not place. No rule covers this. Save the bundle to share, or ask the AI.', v);
     case 'feeder-mv-broken': return t('The Feeder is deployed here, but its motion-vector shader is {why} ({provider}). DLSS is then fed no motion at all: sharp standing still, smearing the moment you move. Re-deploying writes the provider, its shader and the preset from one answer -- the default is VORT now, which compiles on the ReShade this app installs.', v);
@@ -984,6 +985,7 @@ function helpSteps(diag) {
     case 'feed-vulkan-interop': return [t('Launch through the Feeder\'s layer\\run-with-feed-layer.bat'), ...report];
     case 'ok': return [t('Tune it in Edit, or with Alt+Home in the game')];
     case 'ok-exit-crash': return [t('Nothing to do -- it only crashes when quitting')];
+    case 'wrapper-crash-swap': return [t('Press Fix it to swap dgVoodoo2 for DXVK'), t('Launch the game and reach gameplay'), t('Come back here -- if it still crashes, the next step is putting the game back')];
     case 'dgvoodoo-crash': return [t('Press Fix it (puts the game back as it was)')];
     case 'sr-backend-fallback': return [t("Check the game's own settings ask for DLSS"), ...report];
     case 'bit32': case 'anticheat': case 'unsupported': case 'upscale-skipped': return [];
@@ -1026,6 +1028,7 @@ function helpShort(diag) {
     case 'nr-model-crash-emulator': return t('DLSS 5 crashed on D3D12 -- switch to Direct3D 11');
     case 'nr-model-crash': return t('The DLSS 5 model crashed');
     case 'feed-stopped': return t('The Feeder gave up');
+    case 'wrapper-crash-swap': return t('dgVoodoo2 crashes this game -- DXVK is worth a try');
     case 'dgvoodoo-crash': return t('dgVoodoo2 crashes this game');
     case 'wrapper-crash': return t('Crashed in {dll} -- no known fix', v);
     case 'feeder-mv-broken': return t('Motion-vector shader cannot work');
@@ -1051,6 +1054,7 @@ function helpShort(diag) {
 
 function helpFixLabel(id) {
   switch (id) {
+    case 'swap-to-dxvk': return t('Try DXVK instead');
     case 'remove-foreign': return t('Remove the other toolchain');
     case 'remove-feeder': return t('Remove the Feeder');
     case 'remove-luma': return t('Remove Luma UE');
