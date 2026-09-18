@@ -30,7 +30,7 @@
 // │ Empty = this build falls back to "save the zip + open a prefilled issue" (renderer.js).       │
 // │ The Client ID is public by design (device flow); there is NO client secret to add anywhere.   │
 // └──────────────────────────────────────────────────────────────────────────────────────────────┘
-const CLIENT_ID = '';
+const CLIENT_ID = 'Iv23liqJAyFQx13XQWET';
 const REPO = 'mrcgibb9876-hash/OptiDLSS5-UI';
 const API = 'https://api.github.com';
 const MAX_FILE_BYTES = 900 * 1024; // GitHub truncates gist files over 1 MB
