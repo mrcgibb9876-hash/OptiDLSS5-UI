@@ -37,6 +37,9 @@ const engines = require('./engines');
 const pdplugin = require('./pdplugin');
 const rtxmfg = require('./rtxmfg');
 const legacy = require('./legacy');
+const probe = require('./probe');
+const preflight = require('./preflight');
+const verify = require('./verify');
 const translation = require('./translation');
 const elevate = require('./elevate');
 const panelwindow = require('./panelwindow');
@@ -1735,10 +1738,21 @@ function lumaModFor(exePath, detected) {
   return lumaModCache.get(key);
 }
 // Luma games are DirectX 11 games as far as everything here is concerned (route.js withApiOverride).
+// A watched launch's facts (probe.js) sit between the two: over static detection, under Edit.
 function effectiveDetection(dir, exePath, detected) {
   const lumaMod = lumaModFor(exePath, detected);
   const luma = lumaue.lumaUeDeployed(dir) || (!!lumaMod && lumaue.isLumaUeDefault(exePath, lumaMod));
-  return withApiOverride(detected || {}, readApiOverride(dir), { luma });
+  const observed = probe.applyProbe(detected || {}, probeFactsFor(exePath));
+  return withApiOverride(observed, readApiOverride(dir), { luma });
+}
+
+// ── Watched launch facts (probe.js) ──────────────────────────────────────────
+// One file for every game, keyed by exe; probe.readStore caches it on its mtime, so asking per card
+// per render is a stat, not a read. Facts expire by themselves when the exe changes (a game update).
+const probeFactsFile = () => path.join(userDataDir(), 'probe-facts.json');
+function probeFactsFor(exePath) {
+  if (!exePath) return null;
+  try { return probe.freshFacts(probeFactsFile(), exePath); } catch { return null; }
 }
 async function refreshLumaCatalog() {
   try {
@@ -3464,7 +3478,9 @@ async function startDetached(file, argv = [], { cwd, env } = {}) {
   return { elevated: true };
 }
 
-ipcMain.handle('game:launch', async (_evt, { exePath, launcher = 'auto', dryRun = false } = {}) => {
+// The card's Launch, as a function: a watched launch (probe.js) and Verify install start the game the
+// same way, anti-cheat question and all.
+async function launchGame({ exePath, launcher = 'auto', dryRun = false } = {}) {
   try {
     const target = launchTarget(exePath);
     const dir = path.dirname(target);
@@ -3542,6 +3558,116 @@ ipcMain.handle('game:launch', async (_evt, { exePath, launcher = 'auto', dryRun 
     return { ok: true, target, via: 'exe', elevated };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+}
+ipcMain.handle('game:launch', (_evt, opts = {}) => launchGame(opts));
+
+// ── Analyse game, Checks before Install, Verify install ──────────────────────
+// Analyse (probe.js) and Verify (verify.js) each start the game and close it again, so only one of
+// either runs at a time. Neither focuses, clicks or types into the game: some games die on a focus
+// change (Assassin's Creed II), and the progress shows in this window whether it is in front or not.
+let watchedLaunchBusy = null;
+const sendTo = (sender, channel, payload) => { try { if (!sender.isDestroyed()) sender.send(channel, payload); } catch {} };
+
+ipcMain.handle('game:probe', async (evt, { exePath, launcher = 'auto' } = {}) => {
+  if (watchedLaunchBusy) return { ok: false, error: `${watchedLaunchBusy} is already running` };
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    watchedLaunchBusy = 'Analyse game';
+    const workDir = path.join(os.tmpdir(), 'optidlss5-probe');
+    const res = await probe.runProbe({
+      exePath: launchTarget(exePath), execFileAsync, workDir,
+      launch: () => launchGame({ exePath, launcher }),
+      onProgress: (p) => sendTo(evt.sender, 'game:probe-progress', { exePath, ...p }),
+    });
+    if (!res.ok) return res;
+    // Stored under the card's exe, which is what effectiveDetection and the proxy helpers look up.
+    probe.writeFacts(probeFactsFile(), exePath, res.facts);
+    return { ok: true, summary: probe.summary(res.facts), proxyHint: probe.proxyHint(res.facts), closed: res.closed, etwError: res.etwError, facts: res.facts };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  } finally {
+    watchedLaunchBusy = null;
+  }
+});
+
+ipcMain.handle('game:probe-facts', (_evt, { exePath } = {}) => {
+  const facts = probeFactsFor(exePath);
+  return { ok: true, summary: probe.summary(facts), proxyHint: probe.proxyHint(facts) };
+});
+
+async function preflightFor(exePath, detected) {
+  const dir = gameDir(exePath);
+  const effective = effectiveDetection(dir, exePath, detected || await detectFor(dir, exePath));
+  const gpuInfo = await getGpuInfo();
+  const route = recommendRoute(dir, exePath, effective, gpuInfo.vendor || 'unknown', { lumaMod: lumaModFor(exePath, effective) });
+  const facts = probeFactsFor(exePath);
+  let target = exePath;
+  try { target = launchTarget(exePath); } catch {}
+  // Every exe the game really runs as: the launch target, and the one a watched launch saw take over.
+  const exes = [...new Map([target, facts && facts.realExe].filter(Boolean).map((e) => [String(e).toLowerCase(), e])).values()];
+  let run = null;
+  try { run = await runlog.analyzeRun(dir, { optiDir: optiScalerDirFor(dir) }); } catch {}
+  const gathered = await preflight.gather({
+    exePath, dir, exes, gpuInfo, detected: effective, route, run,
+    ourReShade: feeder.feederDeployed(dir) || lumaue.lumaUeDeployed(dir),
+    probe: probe.summary(facts),
+  }, { execFileAsync, detect: { antiCheatPresent, antiCheatStub } });
+  return { checks: preflight.evaluate(gathered), gpuPrefs: gathered.gpuPrefs };
+}
+
+ipcMain.handle('game:preflight', async (_evt, { exePath, detected } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const { checks } = await preflightFor(exePath, detected);
+    return { ok: true, checks };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// The only two things a check may do (preflight.js). Anything else a renderer asks for is refused.
+ipcMain.handle('game:preflight-fix', async (_evt, { exePath, fix } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const { checks, gpuPrefs } = await preflightFor(exePath, null);
+    // Acted on as main.js computed it just now, never as the renderer sent it: the exes and the
+    // folder come from this machine's own check, not from the message.
+    const current = checks.find((c) => c.fix && fix && c.fix.id === fix.id);
+    if (!current) return { ok: true, done: false, text: 'nothing to do any more' };
+    if (current.fix.id === 'set-gpu-preference') {
+      const done = await preflight.setGpuPreference(current.fix.exes, { execFileAsync, prefs: gpuPrefs });
+      return { ok: true, done: true, text: `High performance set for ${done.map((d) => path.basename(d.exe)).join(', ')}` };
+    }
+    if (current.fix.id === 'open-folder') {
+      await shell.openPath(current.fix.path);
+      return { ok: true, done: true, text: 'folder opened' };
+    }
+    return { ok: false, error: `unknown fix ${current.fix.id}` };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+ipcMain.handle('game:verify', async (evt, { exePath, launcher = 'auto', detected } = {}) => {
+  if (watchedLaunchBusy) return { ok: false, error: `${watchedLaunchBusy} is already running` };
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    watchedLaunchBusy = 'Verify install';
+    const res = await verify.runVerify({
+      exePath: launchTarget(exePath), execFileAsync, workDir: path.join(os.tmpdir(), 'optidlss5-probe'),
+      launch: () => launchGame({ exePath, launcher }),
+      readRun: async () => {
+        const ctx = await helpContext(exePath, detected);
+        return { run: ctx.run, diag: gamehelp.diagnose(ctx) };
+      },
+      onProgress: (p) => sendTo(evt.sender, 'game:verify-progress', { exePath, ...p }),
+    });
+    return res;
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  } finally {
+    watchedLaunchBusy = null;
   }
 });
 
@@ -4884,6 +5010,9 @@ function proxyOverrideFor(exePath) {
 async function wantedProxyFor(dir, exePath) {
   const override = proxyOverrideFor(exePath);
   if (override) return override;
+  // A watched launch that saw the game ignore a dxgi.dll beside it, or never load one (probe.proxyHint).
+  const observed = probe.proxyHint(probeFactsFor(exePath));
+  if (observed) return observed;
   if (!isFeederGame(dir)) return null;
   const name = await proxyNameForGame(dir, exePath, true);
   return name && name.toLowerCase() !== DEFAULT_PROXY.toLowerCase() ? name : null;
@@ -4926,6 +5055,8 @@ async function migrateProxyIfNeeded(dir, exePath) {
 async function proxyNameForGame(dir, exePath, feederGame) {
   const override = proxyOverrideFor(exePath);
   if (override) return override;
+  const observed = probe.proxyHint(probeFactsFor(exePath));
+  if (observed) return observed;
   if (!feederGame) return DEFAULT_PROXY;
   const api = await resolveApi(dir, exePath);
   // dx9: a 64-bit DirectX 9 game behind dgVoodoo2 imports no DXGI at start either (legacy.js).

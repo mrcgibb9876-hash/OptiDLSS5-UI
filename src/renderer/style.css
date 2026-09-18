@@ -693,3 +693,12 @@ html[lang="ko"] { word-break: keep-all; }
 @media (prefers-reduced-motion: reduce) {
   .card-live-dot { animation: none; }
 }
+/* Checks before Install, Analyse game, Verify install (one dialog). */
+.checks-intro { font-size: 13px; line-height: 1.5; color: var(--text-dim); margin: 0 0 10px 0; }
+.checks-list { list-style: none; margin: 0 0 10px 0; padding: 0; }
+.check-item { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; padding: 8px 10px; margin: 0 0 6px 0; border-left: 3px solid var(--border); font-size: 13.5px; line-height: 1.5; }
+.check-item > span { flex: 1; }
+.check-block { border-left-color: var(--danger); }
+.check-warn { border-left-color: var(--warn); }
+.check-ok { border-left-color: var(--accent-text); }
+.check-resolved > span { opacity: 0.6; }

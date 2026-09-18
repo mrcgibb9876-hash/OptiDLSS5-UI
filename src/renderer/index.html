@@ -411,6 +411,20 @@
     </div>
   </div>
 
+  <!-- Checks before Install, Analyse game (watched launch) and Verify install share this one dialog. -->
+  <div id="checks-modal" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <h2 id="checks-title"></h2>
+      <p id="checks-intro" class="checks-intro"></p>
+      <ul id="checks-list" class="checks-list"></ul>
+      <div id="checks-status" class="status-line"></div>
+      <div class="modal-actions">
+        <button id="checks-go" class="btn btn-primary hidden"></button>
+        <button id="checks-close" class="btn btn-ghost" data-i18n>Close</button>
+      </div>
+    </div>
+  </div>
+
   <div id="settings-modal" class="modal-overlay hidden">
     <div class="modal">
       <h2 data-i18n>Settings</h2>

@@ -367,6 +367,8 @@ async function renderGrid() {
         <div class="card-menu hidden">
           <button class="btn btn-ghost btn-edit">${escapeHtml(t('Settings'))}</button>
           <button class="btn btn-ghost btn-help has-tip" data-tip="${escapeHtml(t('Checks this game\'s setup and its last run, applies the fix when the app has one, tells you plainly when DLSS 5 is not available here, and can save a bundle to share or ask an AI.'))}">${escapeHtml(t('Game Help'))}</button>
+          <button class="btn btn-ghost btn-analyse has-tip" data-tip="${escapeHtml(t('Starts the game once, as it is, for about 25 seconds and writes down what it really loads -- the graphics API, which DLLs from where, and which process hands off to which. Nothing is changed; the game is closed at the end.'))}">${escapeHtml(t('Analyse game'))}</button>
+          <button class="btn btn-ghost btn-verify has-tip${backends.optiscaler ? '' : ' hidden'}" data-tip="${escapeHtml(t('Starts the game for about 30 seconds, reads its logs the way Game Help does, and closes it again: did DLSS 5 run?'))}">${escapeHtml(t('Verify install'))}</button>
           <button class="btn btn-ghost btn-swap-layer hidden"></button>
           <button class="btn btn-ghost btn-mv-provider hidden"></button>
           <button class="btn btn-ghost btn-open">${escapeHtml(t('Open folder'))}</button>
@@ -520,6 +522,8 @@ async function renderGrid() {
       });
     }
     card.querySelector('.btn-help').addEventListener('click', () => openHelp(game));
+    card.querySelector('.btn-analyse').addEventListener('click', () => analyseGame(game));
+    card.querySelector('.btn-verify').addEventListener('click', () => verifyInstall(game));
     card.querySelector('.btn-launch').addEventListener('click', async () => {
       const res = await window.api.launchGame(game.exePath, game.launcher);
       if (!res.ok) { toast(t('Could not launch {name}: {error}', { name: game.name, error: res.error })); return; }
@@ -1583,6 +1587,202 @@ $('#help-ai').addEventListener('click', async () => {
   refreshHelp();
 });
 
+// ── Checks before Install, Analyse game, Verify install ───────────────────────
+// One dialog for all three (src/preflight.js, src/probe.js, src/verify.js). Analyse and Verify start
+// the game and close it again; nothing here focuses the game or sends it input, and the progress is
+// written into this window whether it is in front or not.
+const checksModal = $('#checks-modal');
+let checksResolve = null;
+let checksExe = null;
+
+function closeChecks(result = false) {
+  checksModal.classList.add('hidden');
+  checksExe = null;
+  const resolve = checksResolve;
+  checksResolve = null;
+  if (resolve) resolve(result);
+}
+
+function openChecks({ exePath, title, intro = '' }) {
+  if (checksResolve) closeChecks(false);
+  checksExe = exePath;
+  $('#checks-title').textContent = title;
+  $('#checks-intro').textContent = intro;
+  $('#checks-list').textContent = '';
+  $('#checks-status').textContent = '';
+  const go = $('#checks-go');
+  go.classList.add('hidden');
+  go.classList.remove('btn-danger');
+  go.disabled = false;
+  go.onclick = null;
+  checksModal.classList.remove('hidden');
+}
+
+function showChecksGo(label, onClick, { danger = false } = {}) {
+  const go = $('#checks-go');
+  go.textContent = label;
+  go.classList.toggle('btn-danger', danger);
+  go.classList.remove('hidden');
+  go.disabled = false;
+  go.onclick = onClick;
+}
+
+function addCheckItem(severity, text, { fix = null, exePath = null } = {}) {
+  const li = document.createElement('li');
+  li.className = `check-item check-${severity}`;
+  const words = document.createElement('span');
+  words.textContent = text;
+  li.appendChild(words);
+  if (fix && exePath) {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-ghost btn-small';
+    btn.textContent = fix.id === 'set-gpu-preference' ? t('Set High performance') : t('Open folder');
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const res = await window.api.preflightFix(exePath, fix);
+      if (!res.ok) { toast(t('The fix failed: {error}', { error: res.error })); btn.disabled = false; return; }
+      if (fix.id === 'set-gpu-preference' && res.done) {
+        btn.textContent = t('Done');
+        li.classList.add('check-resolved');
+      } else {
+        btn.disabled = false;
+      }
+    });
+    li.appendChild(btn);
+  }
+  $('#checks-list').appendChild(li);
+}
+
+$('#checks-close').addEventListener('click', () => closeChecks(false));
+checksModal.addEventListener('click', (e) => { if (e.target === checksModal) closeChecks(false); });
+
+// Resolves true when Install should go ahead. A check that could not run never stands in the way,
+// and information alone does not open the dialog.
+async function preflightBeforeInstall(game) {
+  let res;
+  try { res = await window.api.preflight(game.exePath, game.detectedPath || null); } catch { return true; }
+  if (!res || !res.ok || !res.checks.some((c) => c.severity !== 'info')) return true;
+  const blocked = res.checks.some((c) => c.severity === 'block');
+  openChecks({
+    exePath: game.exePath,
+    title: t('Before installing on {name}', { name: game.name }),
+    intro: blocked
+      ? t('Install is not offered for this game, for the reason below.')
+      : t('Found on this PC or in the game folder, and each is known to break a DLSS 5 install. Deal with them first, or install anyway.'),
+  });
+  for (const c of res.checks) addCheckItem(c.severity, t(c.text, c.vars || {}), { fix: c.fix, exePath: game.exePath });
+  if (!blocked) showChecksGo(t('Install anyway'), () => closeChecks(true));
+  return new Promise((resolve) => { checksResolve = resolve; });
+}
+
+const PROBE_API_NAMES = { dx8: 'DirectX 8', dx9: 'DirectX 9', dx10: 'DirectX 10', dx11: 'DirectX 11', dx12: 'DirectX 12', vulkan: 'Vulkan', opengl: 'OpenGL' };
+const baseName = (p) => String(p || '').split(/[\\/]/).pop();
+
+window.api.onProbeProgress((p) => {
+  if (!p || p.exePath !== checksExe) return;
+  const status = $('#checks-status');
+  if (p.phase === 'launching') status.textContent = p.method === 'etw' ? t('Starting the game…') : t('Starting the game (watching without administrator rights)…');
+  else if (p.phase === 'watching') status.textContent = t('Watching: {elapsed} of {seconds} s. Leave the game alone; it is closed by itself.', { elapsed: p.elapsed, seconds: p.seconds });
+  else if (p.phase === 'closing') status.textContent = t('Closing the game…');
+  else if (p.phase === 'reading') status.textContent = t('Reading what was seen…');
+});
+
+function analyseGame(game) {
+  openChecks({
+    exePath: game.exePath,
+    title: t('Analyse game -- {name}', { name: game.name }),
+    intro: t('Starts the game once, as it is, for about 25 seconds and writes down what it really loads: the graphics API, which DLLs from where, and which process hands off to which. Nothing is installed or changed, and the game is closed at the end. Leave it alone while it runs.'),
+  });
+  showChecksGo(t('Start'), async () => {
+    $('#checks-go').classList.add('hidden');
+    const res = await window.api.probeGame(game.exePath, game.launcher);
+    if (checksExe !== game.exePath) return;
+    const status = $('#checks-status');
+    if (!res.ok) {
+      status.textContent = res.cancelled ? t('Not launched.') : t('Analyse game failed: {error}', { error: res.error });
+      return;
+    }
+    const s = res.summary || {};
+    if (s.api) {
+      addCheckItem('info', t('Graphics API: {api} ({evidence}).', { api: PROBE_API_NAMES[s.api] || s.api, evidence: s.apiEvidence || '' }));
+    } else {
+      addCheckItem('warn', t('No graphics API was seen. The game may not have reached its renderer in time -- a launcher waiting for a sign-in looks like this.'));
+    }
+    if (s.handoff && s.realExe) addCheckItem('info', t('The launch hands off to {exe}: that is the process that really runs the game.', { exe: baseName(s.realExe) }));
+    if ((s.ignoredProxies || []).length) addCheckItem('warn', t('{files} sits beside the exe, but the game loaded Windows\' own copy instead.', { files: s.ignoredProxies.join(', ') }));
+    if (res.proxyHint) addCheckItem('info', t('OptiScaler goes in as {name} for this game.', { name: res.proxyHint }));
+    if ((s.antiCheat || []).length) addCheckItem('warn', t('Anti-cheat seen: {list}.', { list: s.antiCheat.join(', ') }));
+    if ((s.overlays || []).length) addCheckItem('warn', t('Overlays seen: {list}.', { list: s.overlays.join(', ') }));
+    if (s.method === 'poll') addCheckItem('info', t('Watched without administrator rights, by listing modules once a second: a DLL that loads and unloads quickly, and most of a 32-bit game\'s modules, can be missed.'));
+    status.textContent = t('Done. The card uses what was seen from now on, until the game is updated.');
+    renderGrid();
+  });
+}
+
+window.api.onVerifyProgress((p) => {
+  if (!p || p.exePath !== checksExe) return;
+  const status = $('#checks-status');
+  if (p.phase === 'waiting') status.textContent = t('Waiting for the game to start…');
+  else if (p.phase === 'running') status.textContent = t('Running: {elapsed} of {seconds} s. Leave the game alone; it is closed by itself.', { elapsed: p.elapsed, seconds: p.seconds });
+  else if (p.phase === 'closing') status.textContent = t('Closing the game…');
+  else if (p.phase === 'reading') status.textContent = t('Reading the logs…');
+});
+
+function verifyInstall(game) {
+  openChecks({
+    exePath: game.exePath,
+    title: t('Verify install -- {name}', { name: game.name }),
+    intro: t('Starts the game for about 30 seconds, reads its logs the way Game Help does, and closes it again. Leave the game alone while it runs.'),
+  });
+  showChecksGo(t('Start'), async () => {
+    $('#checks-go').classList.add('hidden');
+    const res = await window.api.verifyInstall(game.exePath, game.launcher, game.detectedPath || null);
+    if (checksExe !== game.exePath) return;
+    const status = $('#checks-status');
+    if (!res.ok) {
+      status.textContent = res.cancelled ? t('Not launched.') : t('Verify install failed: {error}', { error: res.error });
+      return;
+    }
+    const v = res.verdict;
+    status.textContent = '';
+    switch (v.code) {
+      case 'ran':
+        addCheckItem('ok', t('DLSS 5 ran: {frames} frames in the log.', { frames: v.frames }));
+        break;
+      case 'not-started':
+        addCheckItem('warn', t('The game never appeared within a minute. If a launcher is waiting for you, finish there and verify again.'));
+        break;
+      case 'exited':
+        addCheckItem('warn', t('The game closed itself during the check -- often a launcher or a first-run prompt. Start it once by hand, then verify again.'));
+        break;
+      case 'no-log':
+        addCheckItem('warn', t('The game ran but wrote no new log, so OptiScaler may not have loaded. Game Help can say why.'));
+        showChecksGo(t('Game Help'), () => { closeChecks(); openHelp(game); });
+        break;
+      case 'diagnosis':
+        addCheckItem('warn', v.diag ? helpWords(v.diag) : t('The game ran, and the logs say something is off.'));
+        showChecksGo(t('Game Help'), () => { closeChecks(); openHelp(game); });
+        break;
+      case 'crash':
+        // Offered, not done: the crash can have a cause that has nothing to do with the install, and
+        // the files may be wanted for a report.
+        addCheckItem('block', t('The game crashed during the check.') + (v.diag ? ' ' + helpWords(v.diag) : ''));
+        showChecksGo(t('Uninstall OptiScaler'), async () => {
+          if (!window.confirm(t('Remove everything this app put in the game folder?'))) return;
+          $('#checks-go').disabled = true;
+          const un = await window.api.runUninstall(game.exePath);
+          if (un.ok) await removeLosslessProfile(game);
+          toast(un.ok ? describeUninstall(un) : t("Couldn't remove OptiScaler: {error}", { error: un.error }));
+          closeChecks();
+          renderGrid();
+        }, { danger: true });
+        break;
+      default:
+        addCheckItem('warn', t('The game ran, and the logs say something is off.'));
+    }
+  });
+}
+
 async function installGame(game) {
   // Normally already on disk (bundled, then kept current); fetched here only if that failed.
   const engineId = engineOf(game);
@@ -1618,6 +1818,7 @@ async function installGame(game) {
     game.detectedPath = await window.api.detectPath(game.exePath);
     window.api.saveGames(games);
   }
+  if (!(await preflightBeforeInstall(game))) return;
   const route = await window.api.gameRoute(game.exePath, game.detectedPath);
 
   // Experimental DirectX 8/9 routes: dgVoodoo2 goes in first. The main process fetches it without
