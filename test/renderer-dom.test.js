@@ -112,3 +112,15 @@ test('an AMD card never counts its lone NR model as leftovers to remove', () => 
   assert.match(js, /const leftoverFiles = \(backends\.leftovers \|\| \[\]\)\.filter\(/);
   assert.match(js, /if \(backends\.optiscaler \|\| leftoverFiles\.length\)/);
 });
+
+test('the pop-out hotkey is only named when the pop-out panel can answer it', () => {
+  // 2026-09-18: the card hint and Game Help's 32-bit steps said "{hotkey} ..." with the pop-out
+  // panel switched off in Settings. Every place that names it goes through popoutHotkeyUsable.
+  assert.match(js, /function popoutHotkeyUsable\(\) \{\s*return panelEnabled\(\)/);
+  const named = [...js.matchAll(/hotkey: settings\.panelHotkey \|\| DEFAULT_PANEL_HOTKEY/g)];
+  assert.ok(named.length >= 2, 'expected the card hint and the Game Help step');
+  for (const m of named) {
+    const before = js.slice(Math.max(0, m.index - 700), m.index);
+    assert.ok(before.includes('popoutHotkeyUsable()'), `hotkey named without a popoutHotkeyUsable() check near: ${js.slice(m.index - 120, m.index)}`);
+  }
+});
