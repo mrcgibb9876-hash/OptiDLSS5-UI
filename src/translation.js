@@ -32,6 +32,8 @@
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
+const crypto = require('node:crypto');
+const { readTarGz, findTarEntry } = require('./tar');
 
 const MANIFEST = '.dlss5ui-translation.json';
 // The marker the dgVoodoo2 half of legacy.js has been writing since the 32-bit route shipped. Folders
@@ -322,6 +324,177 @@ function canDeploy(dir, layer) {
   };
 }
 
+// ---------------------------------------------------------------------------------------------
+// DXVK: acquiring it, and putting it in front of a game
+
+// The pinned release. Fetched on demand and never bundled, the same shape as legacy.js's dgVoodoo2
+// pin, so the installer carries no third-party binaries. DXVK is zlib/libpng licensed, which does
+// permit redistribution; fetching still beats bundling because it keeps the manager small and lets
+// the pin move without a release of ours.
+//
+// Verified against the real archive, not from memory: dxvk-3.1.1.tar.gz is 18,041,512 bytes and
+// unpacks to dxvk-3.1.1/x32/ and dxvk-3.1.1/x64/, each holding d3d8, d3d9, d3d10core, d3d11 and
+// dxgi. That is where the d3d8.dll in DXVK's file set above comes from.
+const DXVK = {
+  version: '3.1.1',
+  url: 'https://github.com/doitsujin/dxvk/releases/download/v3.1.1/dxvk-3.1.1.tar.gz',
+  sha256: '40565b4a724aadc4433fa4e010b4b23916d9b1f1baeee64e17186db94f54e608',
+  fileName: 'dxvk-3.1.1.tar.gz',
+  cacheName: 'dxvk-3.1.1',
+  page: 'https://github.com/doitsujin/dxvk/releases',
+  licence: 'zlib/libpng',
+};
+
+// Which of DXVK's DLLs a game actually needs, by the API it renders with. Only what the game loads
+// goes in: every extra file is another name that can collide with OptiScaler, ReShade or the game's
+// own, and the whole point of this module is to stop that happening.
+//
+// dxgi.dll is the one to watch. DXVK needs it for D3D10/11, and it is also the name OptiScaler
+// installs under, so those two routes cannot both have it. deployDxvk refuses rather than choosing.
+const DXVK_FILES_FOR_API = {
+  dx8: ['d3d8.dll', 'd3d9.dll'],
+  dx9: ['d3d9.dll'],
+  dx10: ['d3d10core.dll', 'd3d11.dll', 'dxgi.dll'],
+  dx11: ['d3d11.dll', 'dxgi.dll'],
+};
+
+const DXVK_MANIFEST_FILE = 'files.json';
+
+function sha256(buf) {
+  return crypto.createHash('sha256').update(buf).digest('hex');
+}
+
+function archDir(bitness) {
+  return Number(bitness) === 32 ? 'x32' : 'x64';
+}
+
+// Is this cache folder a usable DXVK unpack?
+function cachedDxvk(cacheDir) {
+  const dest = path.join(cacheDir, DXVK.cacheName);
+  for (const arch of ['x32', 'x64']) {
+    if (!fs.existsSync(path.join(dest, arch, 'd3d9.dll'))) return null;
+  }
+  return dest;
+}
+
+// The pinned release, verified, unpacked into the cache as x32/ and x64/. Errors are told apart the
+// way legacy.js tells them apart, because the remedies differ: a bad download is worth retrying and
+// a file that vanished after being written is antivirus, which is not.
+async function ensureDxvk(cacheDir, { fetchImpl = fetch, headers = {} } = {}) {
+  const cached = cachedDxvk(cacheDir);
+  if (cached) return cached;
+  await fsp.mkdir(cacheDir, { recursive: true });
+
+  const res = await fetchImpl(DXVK.url, { headers });
+  if (!res.ok) throw Object.assign(new Error(`DXVK download failed: HTTP ${res.status}`), { code: 'dxvk-network' });
+  const buf = Buffer.from(await res.arrayBuffer());
+  const got = sha256(buf);
+  if (got !== DXVK.sha256) {
+    throw Object.assign(
+      new Error(`DXVK download did not match its checksum (expected ${DXVK.sha256.slice(0, 12)}…, got ${got.slice(0, 12)}…)`),
+      { code: 'dxvk-checksum' },
+    );
+  }
+  return unpackDxvk(buf, cacheDir);
+}
+
+async function unpackDxvk(buf, cacheDir) {
+  const files = readTarGz(buf);
+  const dest = path.join(cacheDir, DXVK.cacheName);
+  const partial = `${dest}.partial`;
+  await fsp.rm(partial, { recursive: true, force: true });
+
+  const written = {};
+  const wanted = [...new Set(Object.values(DXVK_FILES_FOR_API).flat())];
+  for (const arch of ['x32', 'x64']) {
+    for (const name of wanted) {
+      const entry = findTarEntry(files, `${arch}/${name}`);
+      if (!entry) continue;
+      const out = path.join(partial, arch, name);
+      await fsp.mkdir(path.dirname(out), { recursive: true });
+      await fsp.writeFile(out, entry.data);
+      written[`${arch}/${name}`] = sha256(entry.data);
+    }
+  }
+  if (!written['x64/d3d9.dll'] || !written['x32/d3d9.dll']) {
+    await fsp.rm(partial, { recursive: true, force: true });
+    throw Object.assign(new Error('that archive is not a DXVK release (no x32/d3d9.dll and x64/d3d9.dll)'), { code: 'dxvk-not-a-release' });
+  }
+
+  await fsp.writeFile(
+    path.join(partial, DXVK_MANIFEST_FILE),
+    JSON.stringify({ source: `official ${DXVK.version}`, archiveSha256: sha256(buf), files: written }, null, 2),
+    'utf8',
+  );
+  await fsp.rm(dest, { recursive: true, force: true });
+  await fsp.rename(partial, dest);
+  return dest;
+}
+
+// Puts DXVK in front of a game.
+//
+// sourceDir is an ensureDxvk() unpack. api decides which DLLs go in, bitness which build. Anything
+// of the game's own under one of those names is backed up and recorded, so a purge gives it back.
+//
+// It refuses rather than overwrites when a name is held by OptiScaler or ReShade. Backing those up
+// would take the file out from under their own install journals, which is how the SWTOR folder
+// ended up with OptiScaler's dxgi.dll and DXVK's buried under three different names at once.
+async function deployDxvk(dir, { sourceDir, api, bitness }) {
+  const wanted = DXVK_FILES_FOR_API[api];
+  if (!wanted) throw new Error(`DXVK has no file set for ${api || 'an unknown API'}`);
+
+  const gate = canDeploy(dir, 'dxvk');
+  if (!gate.ok) return { deployed: [], backedUp: [], refused: [{ file: gate.conflict, reason: gate.reason }], ok: false };
+  if (gate.purgeFirst) await purgeTranslationLayer(dir, { layer: gate.conflict || 'dxvk' });
+
+  const arch = archDir(bitness);
+  const index = indexDir(dir);
+  const deployed = [];
+  const backedUp = [];
+  const refused = [];
+
+  for (const name of wanted) {
+    const src = path.join(sourceDir, arch, name);
+    if (!fs.existsSync(src)) {
+      refused.push({ file: name, reason: `the cached DXVK release has no ${arch}/${name}` });
+      continue;
+    }
+    const existingName = index.get(name);
+    if (existingName) {
+      const identity = identifyWrapper(path.join(dir, existingName));
+      if (identity === 'optiscaler' || identity === 'reshade') {
+        refused.push({
+          file: existingName,
+          reason: `${existingName} is ${identity === 'optiscaler' ? 'OptiScaler' : 'ReShade'}, which loads under that name here. `
+            + 'Moving it would break its own install record, so DXVK was not put in on top of it.',
+        });
+        continue;
+      }
+      if (identity !== 'dxvk') {
+        // The game's own, or something unidentifiable: preserved under the suffix a purge restores from.
+        const backup = `${existingName}${BACKUP_SUFFIX}`;
+        if (!fs.existsSync(path.join(dir, backup))) {
+          await fsp.rename(path.join(dir, existingName), path.join(dir, backup));
+          backedUp.push({ rel: existingName, backup });
+        }
+      }
+    }
+    await fsp.copyFile(src, path.join(dir, name));
+    deployed.push(name);
+  }
+
+  if (!deployed.length) return { deployed, backedUp, refused, ok: false };
+
+  writeManifest(dir, newManifest({
+    layer: 'dxvk',
+    arch,
+    source: `official ${DXVK.version}`,
+    files: deployed,
+    backups: backedUp,
+  }));
+  return { deployed, backedUp, refused, ok: true };
+}
+
 module.exports = {
   MANIFEST,
   LEGACY_MARKER,
@@ -336,4 +509,10 @@ module.exports = {
   surveyWrappers,
   purgeTranslationLayer,
   canDeploy,
+  DXVK,
+  DXVK_FILES_FOR_API,
+  ensureDxvk,
+  unpackDxvk,
+  deployDxvk,
+  cachedDxvk,
 };

@@ -13,6 +13,8 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { REPO, scratchDir, write } = require('./helpers');
 const translation = require(path.join(REPO, 'src', 'translation'));
+const tar = require(path.join(REPO, 'src', 'tar'));
+const zlib = require('node:zlib');
 
 // A DLL big enough to look real, carrying the signature the identifier looks for.
 const dll = (signature) => `MZ${'\0'.repeat(64)}${signature}${'x'.repeat(4096)}`;
@@ -186,4 +188,154 @@ test('a dry run reports exactly what it would do and changes nothing', async () 
   assert.deepEqual(out.removed.sort(), ['D3D9.dll', 'dgVoodoo.conf'].sort());
   assert.ok(fs.existsSync(path.join(dir, 'D3D9.dll')), 'still there');
   assert.ok(fs.existsSync(path.join(dir, 'dgVoodoo.conf')), 'still there');
+});
+
+// ── DXVK acquisition and deploy ───────────────────────────────────────────────────────────────
+// The archive is built here rather than downloaded: the real dxvk-3.1.1.tar.gz is 18 MB, and what
+// these tests are about is the layout and the collision rules, not the bytes.
+
+function tarEntry(name, data) {
+  const h = Buffer.alloc(512);
+  h.write(name, 0, 100, 'latin1');
+  h.write('0000644\0', 100, 8, 'latin1');
+  h.write(`${data.length.toString(8).padStart(11, '0')}\0`, 124, 12, 'latin1');
+  h.write('        ', 148, 8, 'latin1');
+  h.write('0', 156, 1, 'latin1');
+  h.write('ustar\0', 257, 6, 'latin1');
+  h.write('00', 263, 2, 'latin1');
+  let sum = 0;
+  for (const b of h) sum += b;
+  h.write(`${sum.toString(8).padStart(6, '0')}\0 `, 148, 8, 'latin1');
+  return Buffer.concat([h, data, Buffer.alloc((512 - (data.length % 512)) % 512)]);
+}
+
+// The real release's shape: everything under dxvk-<version>/, with x32 and x64 beside each other.
+function fakeDxvkTarGz(root = 'dxvk-3.1.1') {
+  const names = ['d3d8.dll', 'd3d9.dll', 'd3d10core.dll', 'd3d11.dll', 'dxgi.dll'];
+  const parts = [];
+  for (const arch of ['x32', 'x64']) {
+    for (const n of names) {
+      parts.push(tarEntry(`${root}/${arch}/${n}`, Buffer.from(dll(`DXVK ${arch} ${n}`))));
+    }
+  }
+  parts.push(Buffer.alloc(1024));
+  return zlib.gzipSync(Buffer.concat(parts));
+}
+
+test('the tar reader finds a release file without knowing the version folder', () => {
+  const files = tar.readTarGz(fakeDxvkTarGz());
+  assert.equal(files.length, 10, 'five DLLs in each of the two architectures');
+
+  const hit = tar.findTarEntry(files, 'x64/d3d9.dll');
+  assert.ok(hit, 'found through the dxvk-3.1.1/ wrapper folder');
+  assert.match(hit.data.toString('latin1'), /DXVK x64 d3d9\.dll/);
+  assert.equal(hit.size, hit.data.length, 'the octal size field matches what came out');
+
+  // The version is in the folder name, so a pin bump must not need the reader changed.
+  const other = tar.readTarGz(fakeDxvkTarGz('dxvk-9.9.9'));
+  assert.ok(tar.findTarEntry(other, 'x32/d3d8.dll'));
+  assert.equal(tar.findTarEntry(files, 'x64/nope.dll'), null);
+});
+
+test('a DXVK archive unpacks to both architectures, and anything else is refused', async () => {
+  const cache = scratchDir('dxvk-cache');
+  const dest = await translation.unpackDxvk(fakeDxvkTarGz(), cache);
+
+  assert.equal(dest, path.join(cache, translation.DXVK.cacheName));
+  for (const arch of ['x32', 'x64']) {
+    for (const n of ['d3d8.dll', 'd3d9.dll', 'd3d11.dll', 'dxgi.dll']) {
+      assert.ok(fs.existsSync(path.join(dest, arch, n)), `${arch}/${n}`);
+    }
+  }
+  assert.equal(translation.cachedDxvk(cache), dest, 'and it is found again without downloading');
+
+  const notDxvk = zlib.gzipSync(Buffer.concat([tarEntry('readme.txt', Buffer.from('hello')), Buffer.alloc(1024)]));
+  await assert.rejects(translation.unpackDxvk(notDxvk, scratchDir('dxvk-bad')), /not a DXVK release/);
+});
+
+test('a download that does not match the pinned checksum never reaches the cache', async () => {
+  const cache = scratchDir('dxvk-hash');
+  const fetchImpl = async () => ({ ok: true, status: 200, arrayBuffer: async () => fakeDxvkTarGz() });
+  await assert.rejects(
+    translation.ensureDxvk(cache, { fetchImpl }),
+    (e) => e.code === 'dxvk-checksum',
+    'the synthetic archive is not the pinned one, so it is rejected',
+  );
+  assert.equal(translation.cachedDxvk(cache), null, 'nothing was left behind');
+
+  const offline = async () => ({ ok: false, status: 503 });
+  await assert.rejects(translation.ensureDxvk(scratchDir('dxvk-net'), { fetchImpl: offline }), (e) => e.code === 'dxvk-network');
+});
+
+test('DXVK goes in with only the DLLs that API needs, and the game\'s own file is kept', async () => {
+  const cache = scratchDir('dxvk-dep-cache');
+  const sourceDir = await translation.unpackDxvk(fakeDxvkTarGz(), cache);
+  const dir = scratchDir('dxvk-dep');
+  write(dir, 'd3d9.dll', dll('the game\'s own d3d9'));
+
+  const out = await translation.deployDxvk(dir, { sourceDir, api: 'dx9', bitness: 64 });
+
+  assert.equal(out.ok, true);
+  assert.deepEqual(out.deployed, ['d3d9.dll'], 'a DirectX 9 game needs one file, not all five');
+  assert.ok(!fs.existsSync(path.join(dir, 'dxgi.dll')), 'and definitely not dxgi.dll');
+  assert.deepEqual(out.backedUp, [{ rel: 'd3d9.dll', backup: `d3d9.dll${translation.BACKUP_SUFFIX}` }]);
+  assert.match(fs.readFileSync(path.join(dir, 'd3d9.dll'), 'latin1'), /DXVK x64 d3d9/);
+
+  const m = translation.readManifest(dir);
+  assert.equal(m.layer, 'dxvk');
+  assert.equal(m.arch, 'x64');
+
+  // And the round trip: purging gives the game its own file back.
+  await translation.purgeTranslationLayer(dir, { layer: 'dxvk' });
+  assert.match(fs.readFileSync(path.join(dir, 'd3d9.dll'), 'latin1'), /the game's own d3d9/);
+});
+
+test('DXVK will not take a name OptiScaler is loading under', async () => {
+  // dxgi.dll is in DXVK's D3D11 set and is also the name OptiScaler installs under. Backing
+  // OptiScaler up would take the file out from under its own install journal, so the deploy refuses
+  // and says so instead of quietly winning.
+  const cache = scratchDir('dxvk-clash-cache');
+  const sourceDir = await translation.unpackDxvk(fakeDxvkTarGz(), cache);
+  const dir = scratchDir('dxvk-clash');
+  write(dir, 'dxgi.dll', dll('OptiScaler'));
+
+  const out = await translation.deployDxvk(dir, { sourceDir, api: 'dx11', bitness: 64 });
+
+  assert.deepEqual(out.deployed, ['d3d11.dll'], 'the file with no conflict still goes in');
+  assert.equal(out.refused.length, 1);
+  assert.equal(out.refused[0].file, 'dxgi.dll');
+  assert.match(out.refused[0].reason, /OptiScaler/);
+  assert.match(fs.readFileSync(path.join(dir, 'dxgi.dll'), 'latin1'), /OptiScaler/, 'untouched');
+  assert.ok(!fs.existsSync(path.join(dir, `dxgi.dll${translation.BACKUP_SUFFIX}`)), 'and not quietly moved aside');
+});
+
+test('deploying DXVK over our own dgVoodoo2 purges it first, so the two never share a folder', async () => {
+  const cache = scratchDir('dxvk-swap-cache');
+  const sourceDir = await translation.unpackDxvk(fakeDxvkTarGz(), cache);
+  const dir = scratchDir('dxvk-swap');
+  write(dir, 'D3D9.dll', dll('dgVoodoo'));
+  write(dir, 'dgVoodoo.conf', '[General]');
+  write(dir, 'dgVoodooCpl.exe', 'MZ cpl');
+  translation.writeManifest(dir, translation.newManifest({
+    layer: 'dgvoodoo', arch: 'x64', files: ['D3D9.dll', 'dgVoodoo.conf', 'dgVoodooCpl.exe'],
+  }));
+
+  const out = await translation.deployDxvk(dir, { sourceDir, api: 'dx9', bitness: 64 });
+
+  assert.equal(out.ok, true);
+  assert.ok(!fs.existsSync(path.join(dir, 'dgVoodoo.conf')), 'dgVoodoo2 is gone, not buried');
+  assert.ok(!fs.existsSync(path.join(dir, 'dgVoodooCpl.exe')));
+  assert.equal(translation.identifyWrapper(path.join(dir, 'd3d9.dll')), 'dxvk');
+  assert.equal(translation.activeLayer(dir).layer, 'dxvk', 'and the manifest says so');
+});
+
+test('a 32-bit game gets the 32-bit build', async () => {
+  const cache = scratchDir('dxvk-32-cache');
+  const sourceDir = await translation.unpackDxvk(fakeDxvkTarGz(), cache);
+  const dir = scratchDir('dxvk-32');
+
+  const out = await translation.deployDxvk(dir, { sourceDir, api: 'dx9', bitness: 32 });
+  assert.equal(out.ok, true);
+  assert.match(fs.readFileSync(path.join(dir, 'd3d9.dll'), 'latin1'), /DXVK x32 d3d9/);
+  assert.equal(translation.readManifest(dir).arch, 'x32');
 });
