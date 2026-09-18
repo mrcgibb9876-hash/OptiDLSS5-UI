@@ -220,6 +220,15 @@
           <span id="game-api-status" class="status-line"></span>
         </div>
 
+        <div id="game-neural-section" class="advanced-only hidden">
+          <label class="field-label" data-i18n>Which add-on does the neural pass</label>
+          <p class="field-hint" data-i18n>OptiScaler's own Neural Rendering is the default. Deep Fried Chicken is another neural add-on that does the same job on top of whatever feeds it, so the route is unchanged and only the final pass swaps. It is supplied by its author on Discord, not by this app: copy its three files into the game folder yourself. <strong>Never run two neural add-ons in one game</strong> -- when Deep Fried Chicken finds another one it does nothing at all for the whole session, silently, so choosing here also switches OptiScaler's own pass off and on for you.</p>
+          <div class="field-row">
+            <select id="game-neural-select"></select>
+          </div>
+          <span id="game-neural-status" class="status-line"></span>
+        </div>
+
         <div id="game-feeder-section" class="advanced-only hidden">
           <label class="field-label" data-i18n>Neural Rendering source: DLSS5 Feeder</label>
           <p class="field-hint" data-i18n>This game has no native DLSS, so there's no DLSS call for OptiScaler to add Neural Rendering to. The Feeder synthesises one from ReShade's own depth and motion vectors -- estimated, so it ghosts more in fast motion than a native-DLSS-fed game. Deploys ReShade (as a plain ReShade64.dll, not a proxy), the Feeder add-on, and a motion-vector shader here; install OptiScaler normally afterward (Install button) -- it loads ReShade itself once installed, not the other way round.</p>

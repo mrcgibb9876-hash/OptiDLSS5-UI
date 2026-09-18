@@ -91,6 +91,7 @@ contextBridge.exposeInMainWorld('api', {
   reportSignIn: () => ipcRenderer.invoke('report:signin'),
   reportSignOut: () => ipcRenderer.invoke('report:signout'),
   reportSend: (payload) => ipcRenderer.invoke('report:send', payload),
+  setNeuralConsumer: (exePath, consumer) => ipcRenderer.invoke('game:setNeuralConsumer', { exePath, consumer }),
   gameHelp: (exePath, detected, fixesTried) => ipcRenderer.invoke('game:help', { exePath, detected, fixesTried }),
   gameHelpApply: (exePath, fixId) => ipcRenderer.invoke('game:help-apply', { exePath, fixId }),
   gameHelpAi: (exePath, detected, fixesTried) => ipcRenderer.invoke('game:help-ai', { exePath, detected, fixesTried }),

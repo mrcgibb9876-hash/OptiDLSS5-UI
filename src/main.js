@@ -35,6 +35,8 @@ const engines = require('./engines');
 const pdplugin = require('./pdplugin');
 const rtxmfg = require('./rtxmfg');
 const legacy = require('./legacy');
+const dfc = require('./dfc');
+const { setIniKey } = require('./ini-merge');
 const panelwindow = require('./panelwindow');
 let electronAutoUpdater = null;
 try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
@@ -1591,6 +1593,39 @@ ipcMain.handle('game:setApiOverride', async (_evt, { exePath, api }) => {
   }
 });
 
+// The neural consumer for one game: OptiScaler's own pass, or Deep Fried Chicken (dfc.js).
+//
+// Choosing DFC turns OptiScaler's NR off in the ini straight away, the same way setApiOverride
+// re-runs the configuration rather than waiting for a sync. That is not a convenience: two neural
+// add-ons in one process is the case DFC refuses outright, and it refuses silently, so leaving the
+// ini as it was would hand the user an install that looks right and never renders anything.
+// Choosing OptiScaler back turns it on again, because nothing else would.
+ipcMain.handle('game:setNeuralConsumer', async (_evt, { exePath, consumer } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    if (!dfc.CONSUMERS.includes(consumer)) throw new Error(`${consumer} is not a neural consumer this app knows`);
+    const dir = gameDir(exePath);
+    dfc.setConsumer(dir, consumer);
+
+    const iniPath = path.join(dir, 'OptiScaler.ini');
+    const applied = [];
+    if (fs.existsSync(iniPath)) {
+      const want = consumer === 'dfc' ? 'false' : 'true';
+      const before = fs.readFileSync(iniPath, 'utf8');
+      const after = setIniKey(before, 'DlssNr', 'Enabled', want);
+      if (after !== before) {
+        fs.writeFileSync(iniPath, after, 'utf8');
+        applied.push({ key: 'DlssNr.Enabled', value: want });
+      }
+    }
+    const detected = await detectFor(dir, exePath);
+    const bitness = (detected && detected.bitness) || 64;
+    return { ok: true, consumer, applied, dfc: dfc.dfcStatus(dir, bitness) };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
 function detectInstalledBackends(dir) {
   const has = (name) => fs.existsSync(path.join(dir, name));
   // A 32-bit game's OptiScaler is in host64\ (legacy.js).
@@ -1600,7 +1635,7 @@ function detectInstalledBackends(dir) {
   // Anything else of ours still in the folder once OptiScaler itself is gone -- so the card can
   // still offer Remove and take the folder the rest of the way back.
   // Only what an INSTALL leaves behind. The preference markers (.dlss5ui-api.json,
-  // .dlss5ui-lossless.json, .dlss5ui-framegen.json, .dlss5ui-optifg-enabled) are deliberately not here: each can be set
+  // .dlss5ui-lossless.json, .dlss5ui-framegen.json, .dlss5ui-optifg-enabled, .dlss5ui-neural.json) are deliberately not here: each can be set
   // on a game before anything is installed -- choosing DX12 for Where Winds Meet in Edit wrote
   // .dlss5ui-api.json, this list then called it a leftover, and the card's Install button turned
   // into a red "Remove leftovers" that deleted the choice. Remove (the full uninstall) still
@@ -2074,7 +2109,7 @@ function keptAsIs(dir) {
   return fs.existsSync(path.join(dir, KEEP_AS_IS_MARKER));
 }
 
-const APP_MARKERS = ['.dlss5ui-lossless.json', '.dlss5ui-framegen.json', '.dlss5ui-api.json', '.dlss5ui-optifg-enabled', '.optiscaler-manager-install.json', reengine.REFRAMEWORK_BUILD_MARKER, engines.ENGINE_MARKER, KEEP_AS_IS_MARKER];
+const APP_MARKERS = ['.dlss5ui-lossless.json', '.dlss5ui-framegen.json', '.dlss5ui-api.json', '.dlss5ui-optifg-enabled', dfc.MARKER, '.optiscaler-manager-install.json', reengine.REFRAMEWORK_BUILD_MARKER, engines.ENGINE_MARKER, KEEP_AS_IS_MARKER];
 const LEGACY_PAYLOAD = [
   'OptiScaler_DlssNr.addon64', 'OptiScaler_DlssNr.exp', 'OptiScaler_DlssNr.lib', 'OptiScaler_DlssNr.pdb', 'OptiScaler_DlssNr.dll',
   '.optdlss5-active-manifest.json', 'Verify-DLSS5Feeder.ps1', 'Run-DLSS5-Feeder-Install.bat', 'Remove_OptiScaler.bat',

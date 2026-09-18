@@ -46,6 +46,8 @@ const nativeDlss = require('./native-dlss');
 const verified = require('./verified');
 const reengine = require('./reengine');
 const presentroute = require('./presentroute');
+const dfc = require('./dfc');
+const { getIniKey } = require('./ini-merge');
 const legacy = require('./legacy');
 const rtxmfg = require('./rtxmfg');
 
@@ -187,6 +189,74 @@ function dllVersionCached(file) {
   return dllVersionCache.get(key);
 }
 
+// Which neural add-on ends this route, and what that costs in extra steps.
+//
+// Deep Fried Chicken (dfc.js) is a consumer, not a route: whatever produces the DLSS call here --
+// the game's own DLSS, the Feeder, the 32-bit helper -- is unchanged, and only the pass at the end
+// swaps from OptiScaler's to DFC's. So this overlays the chosen route rather than replacing it,
+// which is also why every route gets the same treatment from one place.
+//
+// Routes with no neural pass to swap are left alone: there is nothing to consume on `unsupported`,
+// and `amdnr` is a different runtime entirely (danielblnc's, not OptiScaler's).
+const NO_NEURAL_PASS = new Set(['unsupported', 'amdnr']);
+
+// OptiScaler's own NR pass, from its ini. Read rather than assumed because it is the thing that has
+// to be OFF for DFC to do anything: DFC finding another neural add-on does nothing at all for the
+// whole session, silently, which is the failure this overlay exists to make visible.
+function optiScalerNrOn(dir) {
+  let text = null;
+  try { text = fs.readFileSync(path.join(dir, 'OptiScaler.ini'), 'utf8'); } catch { return false; }
+  const v = getIniKey(text, 'DlssNr', 'Enabled');
+  if (v == null) return false;
+  return !/^(false|0)$/i.test(String(v).trim());
+}
+
+function applyNeuralConsumer(dir, detected, route, label, steps) {
+  const consumer = dfc.consumerFor(dir);
+  const switchable = !NO_NEURAL_PASS.has(route);
+  if (consumer !== 'dfc' || !switchable) {
+    return { consumer: 'optiscaler', switchable, label, steps, dfc: null };
+  }
+
+  const bitness = (detected && detected.bitness) || 64;
+  const status = dfc.dfcStatus(dir, bitness);
+  const nrOn = optiScalerNrOn(dir);
+  const blockers = dfc.dfcBlockers(dir, { bitness, optiScalerNrOn: nrOn });
+  const rivals = dfc.rivalNeuralAddons(dir, bitness);
+
+  // The steps that produce the DLSS call stay exactly as they were; these are appended, so the
+  // route reads as "everything as before, then DFC consumes it instead of OptiScaler".
+  const extra = [
+    {
+      key: 'dfc-files',
+      label: status.inHostDir
+        ? `Put Deep Fried Chicken's three files in ${dfc.HOST_DIR}\\ (not beside the exe -- the 64-bit helper runs the pass)`
+        : 'Put Deep Fried Chicken\'s three files beside the game exe',
+      done: status.present,
+    },
+    {
+      key: 'dfc-optiscaler-nr',
+      label: 'Turn OptiScaler\'s own Neural Rendering off -- two neural add-ons and DFC does nothing at all',
+      done: !nrOn,
+    },
+  ];
+  if (rivals.length) {
+    extra.push({
+      key: 'dfc-rival-addon',
+      label: `Remove the other neural add-on (${rivals.join(', ')}) -- DFC stands down for the whole session when it finds one`,
+      done: false,
+    });
+  }
+
+  return {
+    consumer: 'dfc',
+    switchable,
+    label: `${label} + Deep Fried Chicken`,
+    steps: [...steps, ...extra],
+    dfc: { ...status, blockers, rivals, source: dfc.DFC_SOURCE, minVersion: dfc.DFC_MIN_VERSION },
+  };
+}
+
 // opts.lumaMod: the Luma-Framework catalog entry matched for this game's names (main.js lumaModFor), or null.
 function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {}) {
   const api = detected.api || null;
@@ -212,14 +282,19 @@ function recommendRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts
   const feederMisdeployed = shipsDlss && feederDeployed;
 
   const finish = (route, label, reason, steps, reasonVars = null, extra = {}) => {
-    const next = steps.find((s) => !s.done) || null;
+    const withConsumer = applyNeuralConsumer(dir, detected, route, label, steps);
+    const useSteps = withConsumer.steps;
+    const next = useSteps.find((s) => !s.done) || null;
     return {
       experimental: false, emulator: null, legacy: null, dgVoodooDeployed: legacyStatus.dgVoodoo,
       ...extra,
-      route, label, reason, reasonVars, steps, gpuVendor,
+      route, label: withConsumer.label, reason, reasonVars, steps: useSteps, gpuVendor,
       optiInstalled, feederDeployed, lumaDeployed, feederMisdeployed,
+      neuralConsumer: withConsumer.consumer,
+      neuralConsumerSwitchable: withConsumer.switchable,
+      dfc: withConsumer.dfc,
       verified: verified.verification(exePath),
-      complete: steps.length > 0 && !next,
+      complete: useSteps.length > 0 && !next,
       nextStep: next ? next.label : null,
     };
   };

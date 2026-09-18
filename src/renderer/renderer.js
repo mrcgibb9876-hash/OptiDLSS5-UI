@@ -1690,6 +1690,7 @@ async function openGameModal(game, { focus = null } = {}) {
   gameModal.classList.remove('hidden');
   await loadRouteStatus(game);
   await loadApiSection(game);
+  await loadNeuralSection(game);
   await loadEngineProfileStatus(game);
   await loadFrameGenSection(game);
   await loadInjectorSection(game);
@@ -2157,6 +2158,72 @@ $('#game-api-select').addEventListener('change', async (e) => {
   await loadDlssNrSection(game);
   await loadLosslessSection(game);
   await loadAmdNrSection(game);
+  renderGrid();
+});
+
+// Which neural add-on ends this game's route -- see game:setNeuralConsumer in main.js, and dfc.js
+// for why this is a consumer choice and not a route of its own.
+//
+// Hidden on routes with no neural pass of ours to swap (unsupported, the AMD runtime), which is the
+// same rule route.js applies, so the dropdown never offers a choice that would do nothing.
+async function loadNeuralSection(game) {
+  const section = $('#game-neural-section');
+  const select = $('#game-neural-select');
+  const status = $('#game-neural-status');
+  if (!game || !game.exePath) {
+    section.classList.add('hidden');
+    return;
+  }
+  const route = await window.api.gameRoute(game.exePath, game.detectedPath);
+  if (!route || !route.neuralConsumerSwitchable) {
+    section.classList.add('hidden');
+    return;
+  }
+  section.classList.remove('hidden');
+
+  select.innerHTML = '';
+  for (const [value, label] of [['optiscaler', t('OptiScaler Neural Rendering (default)')], ['dfc', t('Deep Fried Chicken')]]) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    select.appendChild(opt);
+  }
+  select.value = route.neuralConsumer;
+
+  const d = route.dfc;
+  if (route.neuralConsumer !== 'dfc') {
+    status.className = 'status-line';
+    status.textContent = '';
+    return;
+  }
+  // Chosen: say plainly what is still in the way, because every one of these fails silently.
+  const blockers = (d && d.blockers) || [];
+  status.className = `status-line ${blockers.length ? '' : 'status-ok'}`.trim();
+  status.textContent = blockers.length
+    ? blockers.map((b) => b.detail).join(' ')
+    : t('Deep Fried Chicken is in place and OptiScaler\'s own pass is off. It does the neural rendering for this game.');
+}
+
+$('#game-neural-select').addEventListener('change', async (e) => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  const consumer = e.target.value;
+  const status = $('#game-neural-status');
+  status.textContent = t('Applying…');
+  const res = await window.api.setNeuralConsumer(game.exePath, consumer);
+  if (!res.ok) {
+    toast(t('Could not switch the neural add-on: {error}', { error: res.error }));
+  } else {
+    const applied = res.applied && res.applied.length > 0
+      ? ' ' + t('Re-configured OptiScaler.ini: {keys}.', { keys: res.applied.map((x) => x.key).join(', ') })
+      : '';
+    toast((consumer === 'dfc'
+      ? t('Deep Fried Chicken does the neural pass for this game now.')
+      : t('OptiScaler does the neural pass for this game again.')) + applied);
+  }
+  await loadRouteStatus(game);
+  await loadNeuralSection(game);
+  await loadDlssNrSection(game);
   renderGrid();
 });
 

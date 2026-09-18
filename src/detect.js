@@ -21,6 +21,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { findUnrealPluginFile } = require('./framegen');
 const emulators = require('./emulators');
+const dfc = require('./dfc');
 const rtxmfg = require('./rtxmfg');
 
 // 11: KNOWN_RENDERERS names the API of games whose executable cannot say it (FIFA 16), so a stored
@@ -1033,7 +1034,22 @@ const FOREIGN_TOOLCHAINS = [
   // finds a competing one "it does nothing at all for the whole session". OptiScaler's NR pass is a
   // competing one. Without this the user sees an install that reports success, a panel that opens,
   // and no picture change ever, with nothing anywhere saying why.
-  { tool: 'Deep Fried Chicken', files: ['deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg'] },
+  // ... unless this game is set to use it. Since the neural consumer became a per-game choice
+  // (dfc.js), DFC in a folder is only a clash when something else is doing the neural pass. Chosen,
+  // it is the thing that is supposed to be there, and reporting it as a rival toolchain would offer
+  // to delete the route the user just picked.
+  //
+  // host64\ is listed as well because that is where DFC's files go for a 32-bit game, next to
+  // dlss5-feed-host64.exe rather than beside the exe (the Feeder's README is explicit). Without it
+  // the clash on a 32-bit game was invisible.
+  {
+    tool: 'Deep Fried Chicken',
+    skipWhen: (dir) => dfc.dfcChosen(dir),
+    files: [
+      'deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg',
+      'host64/deep-fried-chicken.addon64', 'host64/deep-fried-chicken-nvngx.dll', 'host64/deep-fried-chicken.cfg',
+    ],
+  },
 ];
 
 // What each recognised tool is known to place -- the explicit "remove the other toolchain"
@@ -1058,7 +1074,12 @@ const FOREIGN_REMOVALS = {
   // Only the three files Deep Fried Chicken ships. It places no backups and patches nothing, so
   // there is nothing to restore -- and the log it writes beside them goes too. Offered rather than
   // done: someone may be running it on purpose and want ours gone instead, which Remove already does.
-  'Deep Fried Chicken': { files: ['deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg', 'deep-fried-chicken.log'] },
+  'Deep Fried Chicken': {
+    files: [
+      'deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg', 'deep-fried-chicken.log',
+      'host64/deep-fried-chicken.addon64', 'host64/deep-fried-chicken-nvngx.dll', 'host64/deep-fried-chicken.cfg', 'host64/deep-fried-chicken.log',
+    ],
+  },
 };
 // A backed-up name a game could legitimately own comes back from the backup; anything else that
 // only a DLSS 5 tool would put there is deleted along with its backup.
@@ -1089,6 +1110,7 @@ function foreignToolchains(dir) {
   const out = [];
   for (const t of FOREIGN_TOOLCHAINS) {
     if (t.unless && fs.existsSync(path.join(dir, t.unless))) continue;
+    if (t.skipWhen && t.skipWhen(dir)) continue;
     const found = new Set();
     for (const rel of t.files || []) {
       if (ours.has(rel.toLowerCase())) continue;
