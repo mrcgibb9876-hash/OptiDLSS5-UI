@@ -63,6 +63,22 @@ redistribution, so the manager only links to the release page and fetches the mo
   `path.basename()`, which does not treat `\` as a separator off Windows. CI runs on
   `windows-latest`, where it passes. Not a real bug. `test/feeder.test.js` "crashes inside dgVoodoo2"
   is the same story (its regex wants a drive-letter path).
+- **A third `npm test` failure in a sandboxed session is the network, not a regression.**
+  `test/feeder.test.js` "switching away from a provider deployed before mvFiles existed" downloads
+  the VORT shader pack and dies on `HTTP 503 for https://codeload.github.com/...` when the egress
+  proxy is refusing. It is intermittent: it failed on 2026-09-17 and passed on 2026-09-18 in the
+  same sandbox. So the baseline here is **two or three** failures, not two -- get master's own count
+  before judging a branch, rather than reading this one as something you broke.
+- **A user's support bundle can be read when they attach it to the chat**, even though a session
+  cannot fetch one from GitHub. The SWTOR bundle on #50 (2026-09-17) settled two questions the
+  digest could not: `OptiScaler.log` was clean end to end while BugSplat's `MFA: d3d9!00065af0` and
+  the adapter name `(dgVoodoo DX API Layer)` put the crash in dgVoodoo2, and `folder-listing.txt`
+  showed `nvngx_dlssnr.dll` and a renamed `xnvngx_dlss.dll` but no `nvngx_dlss.dll`. Ask for the zip
+  in the chat when the digest runs out. `folder-listing.txt` and `app-view.json` in that bundle are
+  the two most useful files and neither is a log.
+- **The support bundle does not collect the wrapper's own log.** `BUNDLE_FILES` in runlog.js has no
+  `swtor_d3d9.log` / `dgVoodoo.log` / `dxvk.log`, so on a dgVoodoo2 or DXVK route the one log that
+  would name the faulting layer is the one missing. Worth adding.
 - **On a Feeder game, OptiScaler.log is the wrong log to start from.** `dlss5-feed.log` says whether
   OptiScaler was even in the process (`OptiScaler: not present`, `... never loaded a DLL of that
   name`, `the DRIVER answered the NGX probe`, `not the DLSS-NR fork`); runlog.js turns those into
@@ -77,12 +93,17 @@ redistribution, so the manager only links to the release page and fetches the mo
   triage works from the **issue body**, which since v1.80.0 carries a folded "Run digest" block --
   `runlog.reportDigest`, the verdict and the Feeder's own sentences as `key: value` lines. Reports
   from before v1.80.0 have only the header lines; say so rather than guessing at the rest.
-- **A daily triage Routine** (`trig_014oKuLCuUn3CwLDnqEqxUR8`, 07:00 UTC) reads issues updated in
-  the last 30 hours, diagnoses them from that digest against `src/gamehelp.js`, and either opens a
-  **draft** PR with a test or posts one diagnosis comment. It is forbidden from merging, releasing
-  and pushing to master: the engine cannot be validated on a runner (no GPU, no game), and the
-  manager updates itself through electron-updater, so a wrong automatic release installs itself on
-  everyone. Set up 2026-09-17, after the user chose "triage and draft PRs" over full automation.
+- **A daily triage Routine** (`trig_01Rzks92LWzZgHpmzGrn91tM`, 07:00 UTC, bound to
+  `session_01RQaLiUKYFXVtsJ1rjiHUCw`) reads issues updated in the last 30 hours, diagnoses them
+  from that digest against `src/gamehelp.js`, and either opens a **draft** PR with a test or posts
+  one diagnosis comment. It is forbidden from merging, releasing and pushing to master: the engine
+  cannot be validated on a runner (no GPU, no game), and the manager updates itself through
+  electron-updater, so a wrong automatic release installs itself on everyone. Set up 2026-09-17,
+  after the user chose "triage and draft PRs" over full automation. Its prompt is kept in
+  `docs/routines/daily-triage.md`. An earlier copy (`trig_014oKuLCuUn3CwLDnqEqxUR8`, bound to
+  the SWTOR session) is disabled, not deleted. A session-bound Routine dies with its session,
+  which the user does not want; the way out is a Routine created from the claude.ai Routines UI
+  with both repositories attached, and that file is the prompt to paste there.
 - **A Routine that spawns a fresh session cannot reach GitHub here**, so that one is bound to an
   existing session instead. A trigger-fired session gets Bash/Read/Write/Edit/Glob/Grep/Agent and
   no MCP tools at all: `git clone` works, every `api.github.com` call is refused with "GitHub access
@@ -90,5 +111,6 @@ redistribution, so the manager only links to the release page and fetches the mo
   `add_repo` is not there to call. `create_trigger`'s `connectors` parameter is rejected for this
   organisation ("not available"), and this session's GitHub tooling comes from the environment
   rather than from a passable connector grant, so it cannot be handed on. Proven by firing one
-  (2026-09-17). A fresh-session Routine that needs GitHub has to be created from the claude.ai
-  Routines UI, where the repository and its access can be attached.
+  (2026-09-17), and the `connectors` rejection re-confirmed the same day. A fresh-session
+  Routine that needs GitHub has to be created from the claude.ai Routines UI, where the
+  repository and its access can be attached.
