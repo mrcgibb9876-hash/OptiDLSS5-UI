@@ -292,9 +292,16 @@ const DG_WINDOWED = [
 // rendering resolution itself is left to the game ([DirectX] Resolution stays unforced): forcing it
 // breaks the 2D layout of some games, while scaling only makes what is drawn bigger. "fullscreensize"
 // also covers a game that opens its own small window on the 64-bit route.
+//
+// ColorSpace: plain SDR output. dgVoodoo2's shipped "appdriven" drew a black screen on an HDR laptop
+// panel (Lenovo DisplayHDR, 150% scaling) with dgVoodoo 2.87.x -- Assassin's Creed II, 2026-09-18,
+// the game running and nothing faulting -- and "argb8888_srgb" gave a picture, confirmed by a
+// screenshot in a windowed test. PresentationModel and DesktopResolution were tried there too and are
+// deliberately NOT set: both forced exclusive fullscreen.
 const DG_DISPLAY = [
   ['General', 'ScalingMode', 'stretched_ar'],
   ['GeneralExt', 'WindowedAttributes', 'borderless, fullscreensize'],
+  ['GeneralExt', 'ColorSpace', 'argb8888_srgb'],
 ];
 
 function configureDgVoodoo(text, { windowed = false } = {}) {
