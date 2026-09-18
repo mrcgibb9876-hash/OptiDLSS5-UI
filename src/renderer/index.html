@@ -128,6 +128,16 @@
 
       <details id="edit-group-dlss5" class="edit-group" open>
         <summary data-i18n>Neural pass</summary>
+        <!-- DirectX 8/9 games only: which layer turns the old Direct3D into something the DLSS5 Feeder
+             can ride on. The same swap Game Help and the card's menu run (game:help-apply). -->
+        <div id="game-layer-section" class="hidden">
+          <label class="field-label" data-i18n>Translation layer</label>
+          <p class="field-hint" data-i18n>A DirectX 8/9 game needs a layer in front of it before DLSS 5 can reach it. dgVoodoo2 turns it into Direct3D 11; DXVK turns it into Vulkan. Neither is better everywhere -- some games only draw under one of them (Assassin's Creed II shows a black screen under dgVoodoo2 and runs under DXVK). On a 32-bit game, DXVK also needs ReShade's 32-bit Vulkan layer, which asks for administrator permission and is installed for the whole PC.</p>
+          <div class="field-row">
+            <select id="game-layer-select"></select>
+          </div>
+          <span id="game-layer-status" class="status-line"></span>
+        </div>
         <div id="game-lumaue-section" class="hidden">
           <label class="field-label" data-i18n>Luma UE (adds DLSS to this game)</label>
           <p class="field-hint" data-i18n>This game has no DLSS of its own -- <a href="https://github.com/Filoppi/Luma-Framework" target="_blank" rel="noopener">Luma Framework's</a> Unreal Engine mod replaces its stock TAA with DLAA, which is what gives OptiScaler's Neural Rendering pass a real DLSS call to hook. Untested by this app against a real install -- built from Luma's actual release files and the OptiScaler wiki's setup page for this game, not guessed, but never run against the game.</p>

@@ -126,3 +126,13 @@ redistribution, so the manager only links to the release page and fetches the mo
   (2026-09-17), and the `connectors` rejection re-confirmed the same day. A fresh-session
   Routine that needs GitHub has to be created from the claude.ai Routines UI, where the
   repository and its access can be attached.
+- **DXVK on the 32-bit helper route needs ReShade's 32-bit Vulkan layer, and the app installs it.**
+  Assassin's Creed II (2026-09-18): under DXVK nothing loads the game-folder ReShade dxgi.dll, so
+  the Feeder add-on never starts. The swap parks that proxy (legacy.js parkReShadeProxy) and runs
+  ReShade's own setup elevated: `ReShade_Setup_6.8.0_Addon.exe "<exe>" --api vulkan --headless
+  --elevated` (setup/MainWindow.xaml.cs, v6.8.0). Two traps from that source: a headless Vulkan
+  install refuses while a ReShade.ini sits beside the exe, so ours is held aside for the run; and
+  the setup's own elevation relaunch drops `--headless` and does not wait, so it has to be started
+  elevated (elevate.js). At runtime the layer takes the EXE's folder as its base and only starts
+  when a ReShade.ini is there (source/dll_main.cpp) -- the Apps= list is what the setup maintains.
+  Remove takes the exe off Apps= and never uninstalls the machine-wide layer.

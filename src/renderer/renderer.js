@@ -359,6 +359,7 @@ async function renderGrid() {
         <div class="card-menu hidden">
           <button class="btn btn-ghost btn-edit">${escapeHtml(t('Settings'))}</button>
           <button class="btn btn-ghost btn-help has-tip" data-tip="${escapeHtml(t('Checks this game\'s setup and its last run, applies the fix when the app has one, tells you plainly when DLSS 5 is not available here, and can save a bundle to share or ask an AI.'))}">${escapeHtml(t('Game Help'))}</button>
+          <button class="btn btn-ghost btn-swap-layer hidden"></button>
           <button class="btn btn-ghost btn-open">${escapeHtml(t('Open folder'))}</button>
           <button class="btn btn-ghost btn-danger btn-install">${escapeHtml(backends.optiscaler ? t('Uninstall OptiScaler') : (backends.leftovers || []).length ? t('Remove leftovers') : t('Install OptiScaler'))}</button>
           ${(status.foreign || []).length ? `<button class="btn btn-ghost btn-danger btn-remove-foreign">${escapeHtml(t('Remove the other DLSS 5 toolchain…'))}</button>` : ''}
@@ -543,6 +544,7 @@ async function renderGrid() {
     cardsByExe.set(game.exePath, card);
     applyRunningState(card, runningGames.has(game.exePath));
     card.querySelector('.btn-open').addEventListener('click', () => window.api.openFolder(game.exePath));
+    card.querySelector('.btn-swap-layer').addEventListener('click', (e) => applyLayerSwap(game, e.currentTarget.dataset.fix));
     card.querySelector('.btn-edit').addEventListener('click', () => openGameModal(game));
     card.querySelector('.btn-remove').addEventListener('click', () => removeGame(game));
     card.querySelector('.btn-flip-cancel').addEventListener('click', () => card.classList.remove('flipped'));
@@ -698,6 +700,12 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   }
 
   line.innerHTML = chips.join(' ');
+
+  // The DXVK <-> dgVoodoo2 swap, in the overflow as well as in Game Help and Edit (layerSwapFor).
+  const swapBtn = card.querySelector('.btn-swap-layer');
+  const swap = layerSwapFor(route);
+  swapBtn.classList.toggle('hidden', !swap);
+  if (swap) { swapBtn.textContent = swap.label; swapBtn.dataset.fix = swap.id; }
 
   // What detection found beside the exe that the person should know before installing: none
   // of these block anything, all of them have bitten real installs. The card shows a few words
@@ -884,6 +892,15 @@ function helpWords(diag) {
     case 'vulkan-layer-app-not-listed': return t('ReShade\'s Vulkan layer with add-on support is installed, but {exe} is not on its app list (ReShadeApps.ini next to the layer), so the layer stays inert in this game: no overlay, no DLSS5 Feeder, no log. ReShade\'s own installer adds it -- run it, pick this exact exe, choose Vulkan and keep "Enable loading of add-ons" ticked -- then launch again.', v);
     case 'opti-proxy-name': return t('The DLSS5 Feeder ran and reported OptiScaler as not present: it is installed here as {from}, and nothing in this game loads a DLL of that name (a DirectX 9, Vulkan or OpenGL game never loads a dxgi.dll from its folder), so the Feeder fed plain DLAA with no neural pass. This game loads {to}. Reconfigure moves OptiScaler to that name.', v);
     case 'dgvoodoo-no-dlss': return t('The game ran and nothing called DLSS. On this route dgVoodoo2 is the layer that has to present a swapchain for OptiScaler to hook, so when a run has no DLSS in it at all -- including a game that runs but shows a black screen -- the wrapper is the first suspect, not the last. DXVK does the same job through Vulkan instead of Direct3D 11. Neither is better everywhere, and nothing here can tell which way it went until you run the game again.', v);
+    case 'dxvk-no-dlss': return t('The game ran under DXVK and nothing called DLSS. DXVK was the other layer to try, and it did no better here, so dgVoodoo2 is worth having back -- or, if dgVoodoo2 could not draw this game either, Remove puts the folder back as it was. Nothing here can tell which layer suits a game until it is run.', v);
+    case 'dxvk-crash-swap': return t('The game crashed as it started, inside DXVK\'s {dll}. dgVoodoo2 does the same job through Direct3D 11 instead of Vulkan; Fix it puts it back in DXVK\'s place, with whatever DXVK displaced handed back first.', v);
+    case 'dxvk-crash': return t('The game still crashes inside {dll} with either layer in front of it. Remove puts the folder back as it was.', v);
+    case 'dxvk-layer-missing': return t('DXVK presents this game through Vulkan, so ReShade -- and the DLSS5 Feeder add-on that rides on it -- can only reach it as ReShade\'s 32-bit Vulkan layer. That layer is {why} for {exe}, so the add-on never loads and DLSS 5 cannot run. Fix it runs ReShade\'s own setup again (it asks for administrator permission and installs the layer for the whole PC, switched on for this game).', { ...v, why: v.why === 'no-addon' ? t('a build without add-on support') : v.why === 'not-listed' ? t('installed but not switched on') : t('not installed') });
+    case 'dxvk-reshade-ini-missing': return t('DXVK presents this game through Vulkan, and ReShade\'s Vulkan layer only starts in a game whose folder has a ReShade.ini -- this one has none any more, so the DLSS5 Feeder add-on cannot load. Install puts the Feeder\'s files, ReShade.ini among them, back.');
+    case 'dxvk-two-reshades': return t('{file} beside the game is ReShade again, while DXVK sends the game through ReShade\'s Vulkan layer too. Two ReShades in one game fight over the frame. Swap back to dgVoodoo2, or move {file} out of the folder.', v);
+    case 'dxvk-addon-not-loaded': return t('The game ran under DXVK and ReShade\'s Vulkan layer loaded (it wrote ReShade.log), but the DLSS5 Feeder add-on did not: dlss5-feed.log has not been written since the swap. Open ReShade\'s overlay in the game (Home) and look at its Add-ons tab for DLSS 5 Feed and any error beside it; ReShade.log in the game folder names add-ons it refused. If it is not there at all, swap back to dgVoodoo2.', v);
+    case 'dxvk-needs-run': return t('DXVK is in front of the game in place of dgVoodoo2, and it has not been run since. Launch it, reach gameplay, play a minute and quit. If ReShade.log and dlss5-feed.log in the game folder are still older than the swap after that, ReShade\'s Vulkan layer did not attach to this game.');
+    case 'dxvk-panel-fullscreen': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run. But the game was in exclusive fullscreen when the DLSS5 Feeder started its helper, so the helper has no window and the Alt+Home panel has nothing to show -- under dgVoodoo2 this app held the game borderless, and DXVK has no such setting. Switch the game to borderless or windowed in its own options and restart it for the panel.', v);
     case 'nr-model-only': return t('The game never loaded OptiScaler ({file}), and it does not need to: this game ships its own DLSS, so Neural Rendering only wants the model file beside the exe -- the game\'s own Streamline loads it and the driver dispatches the pass. Taking OptiScaler out removes the one thing this app put into the game\'s loader, which is what a game that will not start with it needs. The cost is the in-game panel and the DLSS 5 controls that live on it; Install puts them back.', v);
     case 'opti-not-loaded': return t('The DLSS5 Feeder ran and reported OptiScaler as not present: the game never loaded {file}, so the Feeder\'s DLSS calls went to the driver and no neural pass ran. OptiScaler has to sit under a DLL name this exe imports at start (winmm.dll or version.dll suit most games; never dxgi.dll on a Vulkan, OpenGL or DirectX 9 game). Rename it in the game folder, then launch again -- or save the bundle so the name can be picked from the exe.', v);
     case 'opti-not-fork': return t('The DLSS5 Feeder found a stock OptiScaler in this game, not the DLSS-NR fork: it takes the DLSS calls and upscales, and no neural pass can ever run. Install puts the fork this app ships back in its place.');
@@ -988,6 +1005,14 @@ function helpSteps(diag) {
     case 'opti-proxy-name': return fixIt(t('Press Fix it (moves OptiScaler to {to})', v));
     case 'opti-not-routed': return fixIt(t('Press Fix it (restores the NGX redirect keys)'));
     case 'dgvoodoo-no-dlss': return [t('Press Fix it -- DXVK goes in where dgVoodoo2 was'), launch, ...report];
+    case 'dxvk-no-dlss': return [t('Press Fix it -- dgVoodoo2 goes back in where DXVK is'), launch, ...report];
+    case 'dxvk-crash-swap': return [t('Press Fix it to swap DXVK back for dgVoodoo2'), launch];
+    case 'dxvk-layer-missing': return [t('Press Fix it and allow the administrator prompt'), launch];
+    case 'dxvk-reshade-ini-missing': return [t('Press Install on the card'), launch];
+    case 'dxvk-two-reshades': return [t('Swap back to dgVoodoo2 (More…), or move the extra ReShade out'), launch];
+    case 'dxvk-addon-not-loaded': return [t('In the game, press Home and check ReShade\'s Add-ons tab for DLSS 5 Feed'), t('Read ReShade.log in the game folder'), ...report];
+    case 'dxvk-needs-run': return [t('Launch the game'), t('Play a minute of actual gameplay, then quit'), t('Come back here')];
+    case 'dxvk-panel-fullscreen': return [t('Set the game to borderless or windowed in its own options'), t('Restart it and press Alt+Home')];
     case 'nr-model-only': return [t('Press Fix it -- OptiScaler comes out and the model goes in'), t('Turn DLSS on in the game\'s own video settings'), launch, ...report];
     case 'opti-not-loaded': return [t('Rename OptiScaler in the game folder to a DLL this exe imports (winmm.dll or version.dll)'), launch, ...report];
     case 'feed-vulkan-interop': return [t('Launch through the Feeder\'s layer\\run-with-feed-layer.bat'), ...report];
@@ -1055,6 +1080,15 @@ function helpShort(diag) {
     case 'opti-proxy-name': return t('OptiScaler is under a name this game never loads ({from})', v);
     case 'nr-model-only': return t('OptiScaler never loaded -- this game has its own DLSS');
     case 'dgvoodoo-no-dlss': return t('Nothing called DLSS -- dgVoodoo2 is the likely reason');
+    case 'dxvk-no-dlss': return t('Nothing called DLSS under DXVK either -- try dgVoodoo2 again');
+    case 'dxvk-crash-swap': return t('DXVK crashes this game -- dgVoodoo2 is worth another try');
+    case 'dxvk-crash': return t('Both layers crash this game');
+    case 'dxvk-layer-missing': return t('ReShade\'s 32-bit Vulkan layer is missing for this game');
+    case 'dxvk-reshade-ini-missing': return t('No ReShade.ini -- ReShade\'s Vulkan layer will not start');
+    case 'dxvk-two-reshades': return t('Two ReShades in the game');
+    case 'dxvk-addon-not-loaded': return t('ReShade loaded under DXVK, the DLSS5 Feeder did not');
+    case 'dxvk-needs-run': return t('Run the game once under DXVK, then check again');
+    case 'dxvk-panel-fullscreen': return t('Working -- but exclusive fullscreen hides the panel');
     case 'opti-not-loaded': return t('The game never loaded OptiScaler ({file})', v);
     case 'opti-not-fork': return t('A stock OptiScaler, not the DLSS-NR fork');
     case 'opti-not-routed': return t('The driver answered instead of OptiScaler');
@@ -1068,6 +1102,7 @@ function helpFixLabel(id) {
   switch (id) {
     case 'nr-model-only': return t('Add Neural Rendering without OptiScaler');
     case 'swap-to-dxvk': return t('Try DXVK instead');
+    case 'swap-to-dgvoodoo': return t('Try dgVoodoo2 instead');
     case 'remove-foreign': return t('Remove the other toolchain');
     case 'remove-feeder': return t('Remove the Feeder');
     case 'remove-luma': return t('Remove Luma UE');
@@ -1202,11 +1237,24 @@ async function openHelp(game) {
     // The DXVK swap was reachable only from a 'wrapper-crash' verdict: the game had to crash INSIDE
     // the dgVoodoo2 DLL this app deployed, and be classified as that. A game that merely renders
     // wrong under dgVoodoo2, or that has not been run yet, could never ask for the other layer --
-    // Assassin's Creed II is the case that found it. The APIs are DXVK's own file sets
-    // (translation.js DXVK_FILES_FOR_API), and deployDxvk handles x32, so a 32-bit game qualifies.
-    const dxvkApis = ['dx8', 'dx9', 'dx10', 'dx11'];
-    const dxvkOk = !!(r && r.legacy && r.legacy.supported && dxvkApis.includes(r.legacy.api));
-    $('#help-dxvk').classList.toggle('hidden', !dxvkOk);
+    // Assassin's Creed II is the case that found it.
+    //
+    // Only where dgVoodoo2 is the plan (a DirectX 8/9 game): DXVK is offered in its place and
+    // nowhere else. It used to show for a 32-bit DirectX 10/11 game too, whose ReShade proxy holds
+    // the dxgi.dll DXVK's D3D11 set needs -- the swap placed d3d11.dll, refused dxgi.dll and called
+    // that success (review of 2.2.3, 2026-09-18). Once DXVK is in, the same button offers the way
+    // back, so the swap is never one-way.
+    const layerSwap = layerSwapFor(r);
+    const dgPlan = !!layerSwap;
+    const swapId = layerSwap ? layerSwap.id : 'swap-to-dxvk';
+    const btn = $('#help-dxvk');
+    btn.dataset.fix = swapId;
+    btn.textContent = helpFixLabel(swapId);
+    if (btn.dataset.tipDxvk === undefined) btn.dataset.tipDxvk = btn.dataset.tip || '';
+    btn.dataset.tip = swapId === 'swap-to-dgvoodoo'
+      ? t('Puts dgVoodoo2 back in place of DXVK, handing back whatever DXVK displaced. On a 32-bit game the game-folder ReShade returns with it; ReShade\'s Vulkan layer stays installed on the PC.')
+      : btn.dataset.tipDxvk;
+    btn.classList.toggle('hidden', !dgPlan);
   } catch {
     $('#help-native').classList.add('hidden');
     $('#help-dxvk').classList.add('hidden');
@@ -1214,7 +1262,8 @@ async function openHelp(game) {
 }
 
 $('#help-dxvk').addEventListener('click', () => {
-  applyHelpFix(helpGame, { fix: { id: 'swap-to-dxvk' }, run: helpDiag && helpDiag.run }, { modal: true });
+  const id = $('#help-dxvk').dataset.fix === 'swap-to-dgvoodoo' ? 'swap-to-dgvoodoo' : 'swap-to-dxvk';
+  applyHelpFix(helpGame, { fix: { id }, run: helpDiag && helpDiag.run }, { modal: true });
 });
 
 $('#help-native').addEventListener('click', () => {
@@ -1498,11 +1547,15 @@ async function installGame(game) {
   // Experimental DirectX 8/9 routes: dgVoodoo2 goes in first. The main process fetches it without
   // asking and only offers a zip of the user's own if that fails; a cancel there stops the install
   // here with nothing placed.
-  if (route.legacy && route.legacy.dgVoodoo && !route.dgVoodooDeployed) {
-    toast(t('Setting up dgVoodoo2 first…'));
+  // DXVK chosen instead (card menu, Edit or Game Help) goes in at the same step, from the same handler.
+  const dxvkChosen = route.wrapperPreference === 'dxvk' || route.dxvkDeployed;
+  if (route.legacy && route.legacy.dgVoodoo && !route.dgVoodooDeployed && !route.dxvkDeployed) {
+    toast(dxvkChosen ? t('Setting up DXVK first…') : t('Setting up dgVoodoo2 first…'));
     const dg = await window.api.legacyDgVoodoo(game.exePath, game.detectedPath);
     if (!dg.ok) {
-      toast(t('dgVoodoo2 could not be set up: {error}', { error: dg.error }));
+      toast(dxvkChosen
+        ? t('DXVK could not be set up: {error}', { error: dg.error })
+        : t('dgVoodoo2 could not be set up: {error}', { error: dg.error }));
       renderGrid();
       return;
     }
@@ -1525,9 +1578,12 @@ async function installGame(game) {
       nrDllPath: settings.nrDllPath,
       mvProviderId: provider ? provider.id : null,
     });
-    toast(res32.ok
-      ? t('Installed. No splash or menu appears in the game on this route -- Game Help shows how to reach it.')
-      : t('Install failed: {error}', { error: res32.error }));
+    toast(!res32.ok
+      ? t('Install failed: {error}', { error: res32.error })
+      // Under DXVK, DLSS 5 needs ReShade's 32-bit Vulkan layer, which Install sets up last.
+      : res32.dxvkLayer && !res32.dxvkLayer.ok
+        ? t('Installed, but ReShade\'s 32-bit Vulkan layer is not set up ({error}), so DLSS 5 cannot run under DXVK yet. Game Help can try again.', { error: res32.dxvkLayer.error })
+        : t('Installed. No splash or menu appears in the game on this route -- Game Help shows how to reach it.'));
     renderGrid();
     return;
   }
@@ -1863,6 +1919,7 @@ async function openGameModal(game) {
   updateBannerPreview();
   gameModal.classList.remove('hidden');
   await loadRouteStatus(game);
+  await loadLayerSection(game);
   await loadApiSection(game);
   await loadEngineProfileStatus(game);
   await loadFrameGenSection(game);
@@ -2259,6 +2316,70 @@ $('#btn-amdnr-run-setup').addEventListener('click', async () => {
   const game = games.find((x) => x.id === editingGameId);
   const res = await window.api.amdNrRunSetup(game.exePath);
   toast(res.ok ? t('Opened its installer in a console -- follow its prompts, then reopen Edit to re-check.') : res.error);
+});
+
+// ── Translation layer: dgVoodoo2 or DXVK ─────────────────────────────────────────────────────────
+//
+// The swap between the two lived only in Game Help's More row, and players never found it -- while
+// Assassin's Creed II (2026-09-18) cannot be drawn by dgVoodoo2 at all and needs DXVK from the start.
+// So it is on the card's overflow and in Edit too, and all three go through the one main-process
+// swap (game:help-apply 'swap-to-dxvk' / 'swap-to-dgvoodoo'): its confirm dialog, ReShade's 32-bit
+// Vulkan layer and its administrator prompt, and -- on a game with nothing installed yet -- the
+// recorded choice Install acts on.
+
+// Which way the swap goes for this route, or null when the game has no dgVoodoo2 plan (DXVK is only
+// offered in dgVoodoo2's place: a DirectX 8/9 game).
+function layerSwapFor(route) {
+  if (!(route && route.legacy && route.legacy.supported && route.legacy.dgVoodoo)) return null;
+  const onDxvk = !!route.dxvkDeployed || route.wrapperPreference === 'dxvk';
+  return onDxvk
+    ? { id: 'swap-to-dgvoodoo', label: t('Switch back to dgVoodoo2'), current: 'dxvk' }
+    : { id: 'swap-to-dxvk', label: t('Try DXVK instead of dgVoodoo2'), current: 'dgvoodoo' };
+}
+
+async function applyLayerSwap(game, id) {
+  if (!game || (id !== 'swap-to-dxvk' && id !== 'swap-to-dgvoodoo')) return null;
+  const res = await window.api.gameHelpApply(game.exePath, id);
+  if (!res.ok) toast(t('The fix failed: {error}', { error: res.error }));
+  else toast(res.done ? t('Done: {text}', { text: res.text }) : t('Not done: {text}', { text: res.text }));
+  await renderGrid();
+  return res;
+}
+
+async function loadLayerSection(game) {
+  const section = $('#game-layer-section');
+  const select = $('#game-layer-select');
+  const status = $('#game-layer-status');
+  if (!game || !game.exePath) { section.classList.add('hidden'); return; }
+  const route = await window.api.gameRoute(game.exePath, game.detectedPath);
+  const swap = layerSwapFor(route);
+  if (!swap) { section.classList.add('hidden'); return; }
+  section.classList.remove('hidden');
+  select.innerHTML = '';
+  for (const [value, label] of [['dgvoodoo', t('dgVoodoo2 (Direct3D 11)')], ['dxvk', t('DXVK (Vulkan)')]]) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    select.appendChild(opt);
+  }
+  select.value = swap.current;
+  status.className = 'status-line';
+  status.textContent = route.dxvkDeployed
+    ? t('DXVK is in front of this game.')
+    : route.wrapperPreference === 'dxvk'
+      ? t('DXVK is chosen: Install puts it in front of the game.')
+      : route.dgVoodooDeployed ? t('dgVoodoo2 is in front of this game.') : '';
+}
+
+$('#game-layer-select').addEventListener('change', async (e) => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  const id = e.target.value === 'dxvk' ? 'swap-to-dxvk' : 'swap-to-dgvoodoo';
+  $('#game-layer-status').textContent = t('Applying…');
+  await applyLayerSwap(game, id);
+  // A cancelled confirm leaves the layer as it was, so the select is re-read rather than trusted.
+  await loadRouteStatus(game);
+  await loadLayerSection(game);
 });
 
 // The per-game graphics API choice -- see game:setApiOverride in main.js for what it drives.

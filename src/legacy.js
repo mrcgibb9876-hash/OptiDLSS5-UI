@@ -47,12 +47,16 @@ const fsp = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { openZip, findEntry, extractEntry } = require('./zip');
+const os = require('node:os');
 const { setIniKey, getIniKey } = require('./ini-merge');
 const { configureFeedCfg } = require('./feeder');
+const translation = require('./translation');
 
 const MARKER = '.dlss5ui-legacy.json';
 const HOST_DIR = 'host64';
 const BACKUP_SUFFIX = '.dlss5ui-orig';
+// The game-side ReShade proxy while DXVK is in front of a 32-bit game (parkReShadeProxy).
+const PARK_SUFFIX = '.dlss5ui-parked';
 
 const DGVOODOO = {
   version: '2.87.4',
@@ -408,9 +412,25 @@ async function deployDgVoodoo(dir, plan, source) {
   const conf = read('dgVoodoo.conf');
   const cpl = read('dgVoodooCpl.exe');
   if (!dll || !conf || !cpl) throw new Error(`the dgVoodoo2 files have no ${dllRel.replace(/\//g, '\\')}`);
+
+  // Through the same gate as DXVK (translation.js canDeploy), so the two layers can never share the
+  // folder. This deploy used to go straight in: on a game swapped to DXVK, Install -- or the
+  // 'dgvoodoo-missing' rule behind it -- put dgVoodoo2's D3D9.dll over DXVK's, backed DXVK up as "the
+  // game's own", and left a DXVK manifest claiming a layer that was no longer live. A layer this app
+  // placed is purged first; one the player placed is refused.
+  const gate = translation.canDeploy(dir, 'dgvoodoo');
+  if (!gate.ok) throw Object.assign(new Error(gate.reason), { code: 'translation-conflict' });
+  if (gate.purgeFirst && gate.conflict && gate.conflict !== 'dgvoodoo') {
+    await translation.purgeTranslationLayer(dir, { layer: gate.conflict });
+  }
+  // DXVK out means ReShade's dxgi.dll proxy is what presents the Feeder again.
+  await unparkReShadeProxy(dir);
+
   const marker = emptyMarker(readMarker(dir));
   const rec = recorder(dir, marker);
-  const isDg = (p) => fileMentions(p, 'dgVoodoo');
+  // By contents in both encodings: dgVoodoo2's D3D9.dll names itself only in UTF-16 (its version
+  // resource), so a latin1 search never recognised it (Assassin's Creed II's D3D9.dll, 2026-09-18).
+  const isDg = (p) => translation.identifyWrapper(p) === 'dgvoodoo';
   await rec.write(path.join(dir, plan.dgVoodoo.dll), dll, { ours: isDg });
   await rec.write(path.join(dir, 'dgVoodooCpl.exe'), cpl, { ours: isDg });
   const confPath = path.join(dir, 'dgVoodoo.conf');
@@ -419,6 +439,16 @@ async function deployDgVoodoo(dir, plan, source) {
   marker.dgVoodoo = { arch: plan.dgVoodoo.arch, dll: plan.dgVoodoo.dll, source: path.basename(source) };
   marker.placedAt = new Date().toISOString();
   writeMarker(dir, marker);
+  // And the translation manifest, so activeLayer answers from a record for dgVoodoo2 just as it does
+  // for DXVK. Only dgVoodoo2's own names: the rest of the marker is the helper route's.
+  const dgNames = [plan.dgVoodoo.dll, 'dgVoodooCpl.exe', 'dgVoodoo.conf'];
+  translation.writeManifest(dir, translation.newManifest({
+    layer: 'dgvoodoo',
+    arch: plan.dgVoodoo.arch,
+    source: path.basename(source),
+    files: dgNames.filter((n) => marker.files.includes(n)),
+    backups: marker.backups.filter((b) => dgNames.includes(b.rel)),
+  }));
   // Antivirus can take the wrapper out of the game folder just as it can out of the cache.
   if (!(await stillThere(path.join(dir, plan.dgVoodoo.dll)))) {
     throw Object.assign(new Error(
@@ -458,8 +488,15 @@ async function deployHost32(dir, plan, deps) {
   };
   const isReShade = (p) => fileMentions(p, 'ReShade');
 
-  // Beside the 32-bit game.
-  await rec.write(path.join(dir, plan.reshadeName), need(reshadeZip, ENTRY.reshade32, 'ReShade32.dll'), { ours: isReShade });
+  // Beside the 32-bit game. While DXVK is in front of it the proxy stays parked (parkReShadeProxy):
+  // a re-install refreshes the parked copy rather than bringing a second ReShade back beside the
+  // Vulkan layer's.
+  const parkedProxy = (marker.parked || []).find((p) => p.rel === plan.reshadeName);
+  if (parkedProxy && fs.existsSync(path.join(dir, parkedProxy.parked))) {
+    await fsp.writeFile(path.join(dir, parkedProxy.parked), need(reshadeZip, ENTRY.reshade32, 'ReShade32.dll'));
+  } else {
+    await rec.write(path.join(dir, plan.reshadeName), need(reshadeZip, ENTRY.reshade32, 'ReShade32.dll'), { ours: isReShade });
+  }
   await rec.write(path.join(dir, 'dlss5-feed.addon32'), need(feederZip, ENTRY.addon32, 'dlss5-feed.addon32'), { ours: () => true });
   await rec.write(path.join(dir, 'reshade-shaders', 'Shaders', 'DLSS5_Feed.fx'), need(feederZip, ENTRY.feedFx, 'DLSS5_Feed.fx'), { ours: () => true });
   if (!marker.dirs.includes('reshade-shaders')) marker.dirs.push('reshade-shaders');
@@ -536,12 +573,205 @@ async function deployHost32(dir, plan, deps) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// DXVK in front of a 32-bit game: the ReShade that carries the Feeder has to change shape
+//
+// On the helper route the 32-bit Feeder add-on rides on ReShade, and ReShade gets into the game as
+// its dxgi.dll proxy -- which works because dgVoodoo2 turns Direct3D 9 into Direct3D 11 and so
+// loads dxgi.dll. DXVK turns it into Vulkan instead, nothing loads dxgi.dll any more, and the Feeder
+// silently never starts: DLSS 5 just stops, with nothing in any log. Assassin's Creed II
+// (2026-09-18) is the game this was worked out on -- dgVoodoo2 cannot draw it, DXVK can.
+//
+// Under Vulkan ReShade can only be its Vulkan layer, and for a 32-bit game that means the 32-bit
+// layer. So the swap does three things, all recorded here and all undone by Remove:
+//
+//   1. the dxgi.dll proxy is parked under another name, so a DXVK dxgi.dll or a later wrapper can
+//      never load a second ReShade next to the layer's (and ReShade's own setup refuses to install
+//      the layer while a ReShade proxy sits beside the exe);
+//   2. ReShade's own setup registers the 32-bit Vulkan layer and puts this exe on its app list
+//      (setUpVulkanLayer32), elevated, because both live under HKLM and C:\ProgramData;
+//   3. whether this app added the exe to that list is journaled, so Remove takes the exe off again
+//      -- and only that: the layer itself is machine-wide and may serve other games.
+//
+// What the layer then loads is still this folder's: ReShade's DllMain, when loaded as a layer (a
+// module not named d3d*/dxgi/opengl32), takes the EXECUTABLE's folder as its base path and only
+// initialises when a ReShade.ini exists there (source/dll_main.cpp get_base_path and the "not
+// enabled" check, v6.8.0). So the game-folder ReShade.ini, dlss5-feed.addon32 and reshade-shaders\
+// are what it uses, exactly as the proxy did. The 32-bit add-on supports this transport itself: its
+// own description reads "32-bit D3D10, D3D11, OpenGL and Vulkan (DXVK) games".
+
+async function parkReShadeProxy(dir) {
+  const marker = readMarker(dir);
+  if (!marker || !marker.host32) return { parked: null, reason: 'not a 32-bit helper install' };
+  const name = marker.host32.reshadeName || 'dxgi.dll';
+  const cur = path.join(dir, name);
+  if (!fs.existsSync(cur)) return { parked: null, reason: `${name} is not there` };
+  if (translation.identifyWrapper(cur) !== 'reshade') return { parked: null, reason: `${name} is not ReShade` };
+  const parked = `${name}${PARK_SUFFIX}`;
+  await fsp.rm(path.join(dir, parked), { force: true });
+  await fsp.rename(cur, path.join(dir, parked));
+  marker.parked = [...(marker.parked || []).filter((p) => p.rel !== name), { rel: name, parked }];
+  writeMarker(dir, marker);
+  return { parked: name, as: parked };
+}
+
+// Puts a parked proxy back under its own name. A name something else has taken since is left as it
+// is and the record kept, rather than overwriting a file this app cannot account for.
+async function unparkReShadeProxy(dir) {
+  const marker = readMarker(dir);
+  if (!marker || !Array.isArray(marker.parked) || !marker.parked.length) return { restored: [], kept: [] };
+  const restored = [];
+  const kept = [];
+  for (const p of marker.parked) {
+    const bak = path.join(dir, p.parked);
+    const cur = path.join(dir, p.rel);
+    if (!fs.existsSync(bak)) continue;
+    if (fs.existsSync(cur)) { kept.push(p); continue; }
+    await fsp.rename(bak, cur);
+    restored.push(p.rel);
+  }
+  marker.parked = kept;
+  if (!kept.length) delete marker.parked;
+  writeMarker(dir, marker);
+  return { restored, kept };
+}
+
+const RESHADE_COMMON_DIR = () => path.join(process.env.ProgramData || 'C:\\ProgramData', 'ReShade');
+
+// ReShade's own setup, run headless and elevated, registering its Vulkan layer for this exe.
+//
+// The command line, from setup/MainWindow.xaml.cs (v6.8.0):
+//
+//   ReShade_Setup_<ver>_Addon.exe "<game exe>" --api vulkan --headless --elevated
+//
+//   "<game exe>"   any argument naming an existing file is the target
+//   --api vulkan   skips its own API analysis and goes straight to the install
+//   --headless     no window; Environment.Exit(0) on success and 1 on any failure
+//   --elevated     it already has admin, so it does not relaunch itself -- a relaunch drops
+//                  --headless and does not wait, which is why this is started elevated
+//                  (elevate.js) rather than left to elevate itself
+//
+// It installs BOTH layers into C:\ProgramData\ReShade (ReShade32/64.dll + .json), registers
+// ReShade32.json under HKLM\Software\Wow6432Node\Khronos\Vulkan\ImplicitLayers on 64-bit Windows,
+// and adds the exe's full path to Apps= in C:\ProgramData\ReShade\ReShadeApps.ini.
+//
+// Two of its own refusals shape what happens around the run. A headless Vulkan install stops with
+// "Existing ReShade installation found" when a ReShade.ini already sits beside the exe -- and ours
+// does, holding the add-on path and the overlay keys -- so it is held aside for the run and put back
+// byte for byte afterwards (the setup writes a default one of its own). And any ReShade-branded
+// d3d9/dxgi/... proxy beside the exe makes it refuse, or delete it, which parkReShadeProxy has
+// already dealt with.
+//
+// deps: setupPath (the cached ReShade setup), runElevated(file, args) -> { ok, code, cancelled,
+// output }, layerStatus() -> feeder.vulkanLayerStatus({ bitness: 32, exePath }).
+async function setUpVulkanLayer32(dir, exePath, { setupPath, runElevated, layerStatus }) {
+  const before = await layerStatus();
+  const good = (s) => !!(s && s.registered && s.addon && s.appListed !== false);
+  let ran = null;
+  if (!good(before) || before.appListed !== true) {
+    if (!setupPath || !fs.existsSync(setupPath)) return { ok: false, error: 'ReShade\'s setup is not in the cache', before };
+    const iniPath = path.join(dir, 'ReShade.ini');
+    const held = `${iniPath}.dlss5ui-hold`;
+    let iniText = null;
+    if (fs.existsSync(iniPath)) {
+      iniText = fs.readFileSync(iniPath);
+      await fsp.rm(held, { force: true });
+      await fsp.rename(iniPath, held);
+    }
+    try {
+      ran = await runElevated(setupPath, [exePath, '--api', 'vulkan', '--headless', '--elevated']);
+    } finally {
+      if (iniText !== null) {
+        try {
+          fs.writeFileSync(iniPath, iniText);
+          await fsp.rm(held, { force: true });
+        } catch {
+          // The setup's own ini could not be overwritten: put ours back by name instead.
+          try { await fsp.rm(iniPath, { force: true }); await fsp.rename(held, iniPath); } catch {}
+        }
+      }
+    }
+  }
+  const after = await layerStatus();
+  const marker = readMarker(dir);
+  if (marker) {
+    const prev = marker.vulkanLayer || {};
+    marker.vulkanLayer = {
+      exe: exePath,
+      appsPath: after.appsPath || prev.appsPath || path.join(RESHADE_COMMON_DIR(), 'ReShadeApps.ini'),
+      // Sticky: once this app has put the exe on the list, Remove owes taking it off.
+      listedByUs: !!prev.listedByUs || (before.appListed !== true && after.appListed === true),
+      layerInstalledByUs: !!prev.layerInstalledByUs || (!before.registered && !!after.registered),
+      at: new Date().toISOString(),
+    };
+    writeMarker(dir, marker);
+  }
+  if (good(after)) return { ok: true, ran: !!ran, before, after };
+  let error;
+  if (ran && ran.cancelled) error = 'the administrator prompt was declined';
+  else if (!after.registered) error = `the 32-bit layer is not registered${ran && !ran.ok ? ` (ReShade's setup exited with ${ran.code === null ? 'an error' : `code ${ran.code}`})` : ''}`;
+  else if (!after.addon) error = `the registered 32-bit layer (${after.dllPath || after.manifestPath}) is a build without add-on support`;
+  else error = `${path.basename(exePath)} is not on the layer's app list (${after.appsPath})`;
+  return { ok: false, error, ran: !!ran, before, after };
+}
+
+function vulkanLayerRecord(dir) {
+  const marker = readMarker(dir);
+  return marker && marker.vulkanLayer ? marker.vulkanLayer : null;
+}
+
+// Takes one exe off ReShade's Vulkan app list and nothing else: the layer stays registered, since it
+// is machine-wide and may be serving other games. The file is admin-owned (the setup creates it
+// elevated in C:\ProgramData), so a plain write is tried first and an elevated copy is the fallback.
+async function unlistVulkanLayerApp(record, { runElevatedPowerShell = null } = {}) {
+  if (!record || !record.exe) return { ok: true, changed: false };
+  const appsPath = record.appsPath || path.join(RESHADE_COMMON_DIR(), 'ReShadeApps.ini');
+  let text;
+  try { text = fs.readFileSync(appsPath, 'utf8'); } catch { return { ok: true, changed: false }; }
+  const want = path.resolve(record.exe).replace(/[\\/]+$/, '').toLowerCase();
+  const eol = /\r\n/.test(text) ? '\r\n' : '\n';
+  let changed = false;
+  const lines = text.split(/\r?\n/).map((line) => {
+    const m = /^(\uFEFF?\s*Apps\s*=)(.*)$/i.exec(line);
+    if (!m) return line;
+    const apps = m[2].split(',').map((s) => s.trim()).filter(Boolean);
+    const keep = apps.filter((a) => a.replace(/[\\/]+$/, '').toLowerCase() !== want);
+    if (keep.length === apps.length) return line;
+    changed = true;
+    return `${m[1]}${keep.join(',')}`;
+  });
+  if (!changed) return { ok: true, changed: false };
+  const next = lines.join(eol);
+  try {
+    fs.writeFileSync(appsPath, next, 'utf8');
+    return { ok: true, changed: true, elevated: false };
+  } catch (error) {
+    if (!runElevatedPowerShell) return { ok: false, changed: false, error: error.message };
+    const tmp = path.join(os.tmpdir(), `dlss5ui-ReShadeApps-${process.pid}-${Date.now()}.ini`);
+    fs.writeFileSync(tmp, next, 'utf8');
+    const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
+    const r = await runElevatedPowerShell(`Copy-Item -LiteralPath ${q(tmp)} -Destination ${q(appsPath)} -Force`);
+    try { fs.rmSync(tmp, { force: true }); } catch {}
+    let now = '';
+    try { now = fs.readFileSync(appsPath, 'utf8'); } catch {}
+    const done = now === next;
+    return done
+      ? { ok: true, changed: true, elevated: true }
+      : { ok: false, changed: false, elevated: true, error: r && r.cancelled ? 'the administrator prompt was declined' : (r && r.output) || 'the elevated copy did not take' };
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
 // Removing
 
 function removalPlan(dir) {
   const marker = readMarker(dir);
   if (!marker) return { remove: [], restore: [] };
   const remove = [...(marker.files || [])].filter((rel) => fs.existsSync(path.join(dir, ...rel.split('/'))));
+  // A proxy parked while DXVK was in front of the game is ours too; Remove puts it back and then
+  // takes it with the rest, so the preview names it under its own name.
+  for (const p of marker.parked || []) {
+    if (fs.existsSync(path.join(dir, p.parked)) && !remove.includes(p.rel)) remove.push(p.rel);
+  }
   for (const d of marker.dirs || []) if (d === HOST_DIR && fs.existsSync(path.join(dir, d))) remove.push(`${d}/`);
   const restore = (marker.backups || []).filter((b) => fs.existsSync(path.join(dir, ...b.backup.split('/')))).map((b) => b.rel);
   return { remove, restore };
@@ -567,6 +797,16 @@ async function removeLegacy(dir) {
   const removed = [];
   const restored = [];
   if (!marker) return { removed, restored };
+  // The parked ReShade proxy goes back under its name first, so the file list below takes it like
+  // any other file it placed. One whose name something else took meanwhile is ours all the same.
+  const unparked = await unparkReShadeProxy(dir);
+  for (const p of unparked.kept) {
+    await fsp.rm(path.join(dir, p.parked), { force: true });
+    removed.push(p.parked);
+  }
+  // dgVoodoo2's translation manifest describes files this marker also lists and is about to remove.
+  const tl = translation.readManifest(dir);
+  if (tl && tl.layer === 'dgvoodoo' && !tl.fromLegacyMarker) await fsp.rm(path.join(dir, translation.MANIFEST), { force: true });
   for (const rel of marker.files || []) {
     const p = path.join(dir, ...rel.split('/'));
     if (fs.existsSync(p)) { await fsp.rm(p, { force: true }); removed.push(rel); }
@@ -597,6 +837,7 @@ async function removeLegacy(dir) {
 }
 
 module.exports = {
-  MARKER, HOST_DIR, DGVOODOO, planFor, status, readMarker, ensureDgVoodoo, importDgVoodooZip, cachedDgVoodoo,
+  MARKER, HOST_DIR, DGVOODOO, PARK_SUFFIX, planFor, status, readMarker, ensureDgVoodoo, importDgVoodooZip, cachedDgVoodoo,
   isDgVoodooZip, configureDgVoodoo, ensureDgVoodooWindowed, ensureCastKey, deployDgVoodoo, deployHost32, removalPlan, removeLegacy,
+  parkReShadeProxy, unparkReShadeProxy, setUpVulkanLayer32, vulkanLayerRecord, unlistVulkanLayerApp,
 };

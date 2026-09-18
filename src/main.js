@@ -36,6 +36,7 @@ const pdplugin = require('./pdplugin');
 const rtxmfg = require('./rtxmfg');
 const legacy = require('./legacy');
 const translation = require('./translation');
+const elevate = require('./elevate');
 const panelwindow = require('./panelwindow');
 let electronAutoUpdater = null;
 try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
@@ -780,6 +781,58 @@ function legacyPlanFor(dir, exePath, detected) {
   return legacy.planFor(effectiveDetection(dir, exePath, detected || {}));
 }
 
+// The plan the DXVK <-> dgVoodoo2 swaps work from: the game's own API, never the one a wrapper this
+// app deployed made it look like. Detection already keeps a 32-bit game's own API under our DXVK
+// (detect.js ourTranslationLayer); this also covers a detection stored before that rule, or a
+// 64-bit game, where the wrapper's 'vulkan' would otherwise leave "not a legacy game" and no way
+// back to dgVoodoo2 (Assassin's Creed II, 2026-09-18).
+function wrapperPlanFor(dir, exePath, detected) {
+  const effective = effectiveDetection(dir, exePath, detected || {});
+  const tl = translation.readManifest(dir);
+  const own = (effective.legacyApis || []).find((a) => a === 'dx8' || a === 'dx9');
+  if (effective.api === 'vulkan' && tl && tl.layer === 'dxvk' && own) return legacy.planFor({ ...effective, api: own });
+  return legacy.planFor(effective);
+}
+
+// DXVK in front of a game, from the pinned release. A refused file is a failed deploy (deployDxvk is
+// all-or-nothing now, and this says so either way). { ok, deployed, backedUp, text }.
+async function deployDxvkFor(dir, plan) {
+  let sourceDir;
+  try {
+    sourceDir = await translation.ensureDxvk(dxvkCacheDir(), { headers: GITHUB_HEADERS });
+  } catch (error) {
+    return { ok: false, text: `could not fetch DXVK: ${error && error.message ? error.message : error}` };
+  }
+  const r = await translation.deployDxvk(dir, { sourceDir, api: plan.api, bitness: plan.host32 ? 32 : 64 });
+  invalidateDetection(dir);
+  if (!r.ok || (r.refused || []).length) {
+    const why = (r.refused || []).map((x) => `${x.file} (${x.reason})`).join(', ');
+    return { ok: false, text: `DXVK was not deployed: ${why || 'refused'}` };
+  }
+  return { ok: true, deployed: r.deployed, backedUp: r.backedUp };
+}
+
+// The 32-bit helper route under DXVK: the game-folder ReShade proxy parked and ReShade's own setup
+// run elevated for its 32-bit Vulkan layer (legacy.js has the why and the command line). Shared by
+// the swap and by Install, which is where a DXVK chosen before installing gets its layer.
+async function dxvkHost32LayerStep(dir, exePath) {
+  const parked = await legacy.parkReShadeProxy(dir);
+  const parkedNote = parked.parked ? `; the game-folder ReShade (${parked.parked}) is set aside as ${parked.as}` : '';
+  let setupPath;
+  try {
+    setupPath = await feeder.downloadToCache(feeder.RESHADE_SETUP_URL, feederCacheDir(), path.basename(feeder.RESHADE_SETUP_URL), GITHUB_HEADERS);
+  } catch (error) {
+    return { ok: false, parkedNote, error: `ReShade's setup could not be fetched (${error && error.message ? error.message : error})` };
+  }
+  const layer = await legacy.setUpVulkanLayer32(dir, exePath, {
+    setupPath,
+    runElevated: (file, args) => elevate.runElevated(file, args, { execFileAsync }),
+    layerStatus: () => feeder.vulkanLayerStatus({ execFileAsync, exePath, bitness: 32 }),
+  });
+  invalidateDetection(dir);
+  return { ok: layer.ok, ran: layer.ran, error: layer.error || null, parkedNote };
+}
+
 // dgVoodoo2 in front of a DirectX 8/9 game. Fetched like every other component, with no prompt:
 // the zip Defender flags is never written (legacy.js). Only when that fetch fails -- offline, a
 // checksum mismatch, a scanner taking one of the files -- is the user offered a zip of their own.
@@ -790,6 +843,17 @@ ipcMain.handle('legacy:dgvoodoo', async (_evt, { exePath, detected } = {}) => {
     const plan = legacyPlanFor(dir, exePath, detected);
     if (!plan.supported || !plan.dgVoodoo) return { ok: true, skipped: true };
     if (legacy.status(dir).dgVoodoo && fs.existsSync(path.join(dir, plan.dgVoodoo.dll))) return { ok: true, already: true };
+    // DXVK swapped in from Game Help does this job here; Install must not quietly swap it back.
+    const tl = translation.readManifest(dir);
+    if (tl && tl.layer === 'dxvk') return { ok: true, already: true, via: 'dxvk' };
+    // DXVK chosen before anything was installed (card menu, Edit or Game Help): it goes in here,
+    // where dgVoodoo2 would have.
+    if (translation.readPreference(dir) === 'dxvk') {
+      const r = await deployDxvkFor(dir, plan);
+      if (!r.ok) throw new Error(r.text);
+      translation.writePreference(dir, null);
+      return { ok: true, via: 'dxvk', deployed: true, dll: (r.deployed || []).join(', ') };
+    }
     let source;
     try {
       source = await legacy.ensureDgVoodoo(feederCacheDir(), { headers: GITHUB_HEADERS });
@@ -850,7 +914,8 @@ ipcMain.handle('legacy:installHost32', async (_evt, { exePath, detected, release
     const dir = gameDir(exePath);
     const plan = legacyPlanFor(dir, exePath, detected);
     if (!plan.supported || !plan.host32) throw new Error(`this game does not take the 32-bit route (${plan.reason || 'not 32-bit'})`);
-    if (plan.dgVoodoo && !legacy.status(dir).dgVoodoo) throw new Error('dgVoodoo2 has to be in place first');
+    const dxvkInstead = (translation.readManifest(dir) || {}).layer === 'dxvk';
+    if (plan.dgVoodoo && !legacy.status(dir).dgVoodoo && !dxvkInstead) throw new Error('dgVoodoo2 has to be in place first');
     const root = releaseFolder && findReleaseRoot(releaseFolder);
     if (!root || !hasDlssNrSection(root)) throw new Error('OptiScaler release folder not set, or not the DLSS-NR build');
     if (!nrDllPath || !fs.existsSync(nrDllPath)) throw new Error('DLSS NR model file not found -- check Settings');
@@ -867,7 +932,12 @@ ipcMain.handle('legacy:installHost32', async (_evt, { exePath, detected, release
     });
     try { applyPanelLanguage(path.join(dir, legacy.HOST_DIR)); } catch {}
     try { applyNrStartDefault(path.join(dir, legacy.HOST_DIR)); } catch {}
-    return { ok: true, ...res, feederVersion: asset.tag, api: plan.api };
+    // DXVK in dgVoodoo2's place: the ReShade that just went in as dxgi.dll is parked and ReShade's
+    // 32-bit Vulkan layer set up instead -- the same step the swap runs. It asks for admin only when
+    // the layer is not already registered and switched on for this exe.
+    let dxvkLayer = null;
+    if (dxvkInstead) dxvkLayer = await dxvkHost32LayerStep(dir, exePath);
+    return { ok: true, ...res, feederVersion: asset.tag, api: plan.api, dxvkLayer };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -2076,7 +2146,7 @@ function keptAsIs(dir) {
   return fs.existsSync(path.join(dir, KEEP_AS_IS_MARKER));
 }
 
-const APP_MARKERS = ['.dlss5ui-lossless.json', '.dlss5ui-framegen.json', '.dlss5ui-api.json', '.dlss5ui-optifg-enabled', '.optiscaler-manager-install.json', reengine.REFRAMEWORK_BUILD_MARKER, engines.ENGINE_MARKER, KEEP_AS_IS_MARKER];
+const APP_MARKERS = ['.dlss5ui-lossless.json', '.dlss5ui-framegen.json', '.dlss5ui-api.json', '.dlss5ui-optifg-enabled', '.optiscaler-manager-install.json', reengine.REFRAMEWORK_BUILD_MARKER, engines.ENGINE_MARKER, KEEP_AS_IS_MARKER, translation.PREFERENCE];
 const LEGACY_PAYLOAD = [
   'OptiScaler_DlssNr.addon64', 'OptiScaler_DlssNr.exp', 'OptiScaler_DlssNr.lib', 'OptiScaler_DlssNr.pdb', 'OptiScaler_DlssNr.dll',
   '.optdlss5-active-manifest.json', 'Verify-DLSS5Feeder.ps1', 'Run-DLSS5-Feeder-Install.bat', 'Remove_OptiScaler.bat',
@@ -2103,6 +2173,27 @@ async function uninstallEverything(dir) {
   if (feeder.feederDeployed(dir)) {
     const r = await feeder.removeFeederStack(dir, { keepReShade: false });
     removed.push(...r.removed); kept.push(...r.kept);
+  }
+  // The translation layer this app put in front of the game (translation.js), before the legacy
+  // marker goes: DXVK's d3d9.dll and .dlss5ui-translation.json used to survive Remove altogether,
+  // because nothing here called translation.js (review of the 2.2.3 swap, 2026-09-18). Only a layer
+  // the manifest says is ours -- a DXVK the player installed by hand is theirs to keep. A dgVoodoo2
+  // purge rewrites the legacy marker without its own entries rather than deleting it, so
+  // removeLegacy below still finds host64\ and the ReShade proxy. The ReShade Vulkan layer's app
+  // list loses this exe if the DXVK swap put it there; the layer itself stays (machine-wide).
+  {
+    const vkApp = legacy.vulkanLayerRecord(dir);
+    const tl = translation.activeLayer(dir);
+    if (tl.ours) {
+      const r = await translation.purgeTranslationLayer(dir, { layer: tl.layer });
+      removed.push(...r.removed); restored.push(...r.restored);
+    }
+    if (vkApp && vkApp.listedByUs) {
+      const r = await legacy.unlistVulkanLayerApp(vkApp, {
+        runElevatedPowerShell: (command) => elevate.runElevatedPowerShell(command, { execFileAsync }),
+      });
+      if (!r.ok) kept.push(`${path.basename(vkApp.exe)} on ReShade's Vulkan app list (${r.error}) -- the layer ignores it once this folder has no ReShade.ini`);
+    }
   }
   // The experimental legacy routes: dgVoodoo2, the 32-bit Feeder and its host64\ helper.
   if (legacy.readMarker(dir)) {
@@ -2214,6 +2305,15 @@ async function planUninstall(dir) {
   const journal = readInstallMarker(dir) || {};
   const feederMarker = readJson(path.join(dir, '.dlss5ui-feeder-deploy.json'), null);
   const lumaMarker = readJson(path.join(dir, '.dlss5ui-lumaue-deploy.json'), null);
+  {
+    const tl = translation.activeLayer(dir);
+    if (tl.ours) {
+      const r = await translation.purgeTranslationLayer(dir, { layer: tl.layer, dryRun: true });
+      for (const rel of r.removed) add(rel);
+      restore.push(...r.restored);
+      add(translation.MANIFEST);
+    }
+  }
   if (legacy.readMarker(dir)) {
     const lp = legacy.removalPlan(dir);
     for (const rel of lp.remove) remove.add(rel);
@@ -2539,6 +2639,42 @@ ipcMain.handle('report:send', async (_evt, { exePath, detected, title, body } = 
 // Everything gamehelp.diagnose() looks at, gathered from what the app already computes for the
 // card: the cached detection (with the API override), the route, the last run, other
 // toolchains, the registry's known-bad note, REFramework, and whether NR is on in the ini.
+// A 32-bit helper-route game with DXVK in dgVoodoo2's place (Assassin's Creed II, 2026-09-18): what
+// the DLSS 5 half needs there and nothing else shows. ReShade only reaches the game as its 32-bit
+// Vulkan layer, which starts only when a ReShade.ini sits beside the exe (ReShade's dll_main.cpp), and
+// the add-on's log is the one sign it loaded. Logs are compared against the swap's own timestamp,
+// because the folder still holds dlss5-feed.log and ReShade.log from the dgVoodoo2 days.
+async function dxvkHost32Status(dir, exePath) {
+  const layer = await feeder.vulkanLayerStatus({ execFileAsync, exePath, bitness: 32 });
+  const manifest = translation.readManifest(dir);
+  const swapAt = manifest && manifest.placedAt ? Date.parse(manifest.placedAt) : 0;
+  const since = (rel) => {
+    try { return fs.statSync(path.join(dir, rel)).mtimeMs > swapAt; } catch { return false; }
+  };
+  const marker = legacy.readMarker(dir);
+  const proxyName = marker && marker.host32 && marker.host32.reshadeName ? marker.host32.reshadeName : 'dxgi.dll';
+  const proxyPath = path.join(dir, proxyName);
+  const proxyBack = fs.existsSync(proxyPath) && translation.identifyWrapper(proxyPath) === 'reshade' ? proxyName : null;
+  const feedLogSinceSwap = since('dlss5-feed.log');
+  let feedExclusive = false;
+  if (feedLogSinceSwap) {
+    try {
+      // The 32-bit add-on's own lines (dlss5-feed.addon32, Feeder 1.16.0-beta.4).
+      const text = fs.readFileSync(path.join(dir, 'dlss5-feed.log'), 'latin1');
+      feedExclusive = /swapchain is exclusive fullscreen at start|host runs without a window because the game was exclusive fullscreen/i.test(text);
+    } catch {}
+  }
+  return {
+    exe: path.basename(exePath),
+    layerRegistered: !!layer.registered, layerAddon: !!layer.addon, appListed: layer.appListed,
+    reshadeIni: fs.existsSync(path.join(dir, 'ReShade.ini')),
+    proxyBack,
+    ranSinceSwap: since('ReShade.log'),
+    feedLogSinceSwap,
+    feedExclusive,
+  };
+}
+
 async function helpContext(exePath, detected, fixesTried = []) {
   const dir = gameDir(exePath);
   const effective = effectiveDetection(dir, exePath, detected || {});
@@ -2566,6 +2702,9 @@ async function helpContext(exePath, detected, fixesTried = []) {
       };
     } catch {}
   }
+  const dxvkHost32 = route.route === 'feeder32' && route.dxvkDeployed
+    ? await dxvkHost32Status(dir, exePath).catch(() => null)
+    : null;
   // The proxy name this app installed OptiScaler under, and the one the game would load if that
   // differs (wantedProxyFor): the Feeder's "OptiScaler: not present" is that mismatch on a Vulkan,
   // OpenGL or DirectX 9 game, and Reconfigure moves the file (migrateProxyIfNeeded).
@@ -2574,7 +2713,7 @@ async function helpContext(exePath, detected, fixesTried = []) {
   let wantedProxy = null;
   try { wantedProxy = optiProxy ? await wantedProxyFor(dir, exePath) : null; } catch {}
   return {
-    dir, exePath, detected: effective, route, run, fixesTried, vulkanFeeder, optiProxy, wantedProxy,
+    dir, exePath, detected: effective, route, run, fixesTried, vulkanFeeder, dxvkHost32, optiProxy, wantedProxy,
     foreign: foreignToolchains(dir),
     backends: detectInstalledBackends(dir),
     lumaKnownBad: route.lumaDeployed ? lumaue.lumaUeKnownBad(exePath) : null,
@@ -2745,51 +2884,136 @@ async function applyHelpFix(exePath, fixId) {
       // 32-bit DirectX 9 game whose plan is plainly supported, is what showed it (2026-09-18).
       // Every other legacyPlanFor caller passes the detection the renderer already has.
       const detectedForPlan = await detectFor(dir, exePath);
-      const plan = legacyPlanFor(dir, exePath, detectedForPlan);
+      const plan = wrapperPlanFor(dir, exePath, detectedForPlan);
       if (!plan || !plan.supported) {
         return {
           done: false,
           text: `this game has no translation-layer route (${plan && plan.reason ? plan.reason : 'unsupported'})`,
         };
       }
-      if (!['dx8', 'dx9', 'dx10', 'dx11'].includes(plan.api)) {
-        return { done: false, text: `DXVK has no file set for ${plan.api || 'an unknown API'}` };
+      // DXVK is offered in dgVoodoo2's place, and only there. A 32-bit DirectX 10/11 game on the helper
+      // route has ReShade as its dxgi.dll -- the very name DXVK's D3D11 set needs -- so the swap used to
+      // put d3d11.dll in, refuse dxgi.dll and still report success (review of 2.2.3, 2026-09-18).
+      if (!plan.dgVoodoo) {
+        return { done: false, text: `DXVK is offered here only in place of dgVoodoo2, for a DirectX 8 or 9 game; this one is ${plan.api || 'an unknown API'}` };
       }
+      const layerNow = translation.activeLayer(dir);
+      const dxvkIn = layerNow.ours && layerNow.layer === 'dxvk';
       // The wording cannot assume a crash any more: this is reachable from Game Help's More row as a
       // choice, not only from a 'wrapper-crash' verdict, so it has to read correctly for a game that
       // is merely misbehaving -- or that has dgVoodoo2 nowhere near it yet.
       const hasDgVoodoo = legacy.status(dir).dgVoodoo;
+      const helperInstalled = !!(legacy.readMarker(dir) || {}).host32;
+      // The 32-bit helper route needs ReShade's 32-bit Vulkan layer under DXVK (legacy.js explains
+      // why), and installing it takes an administrator prompt and changes the whole PC. Said before,
+      // not discovered after.
+      const layerNote = plan.host32
+        ? '\n\nThis game\'s DLSS 5 runs through ReShade, and under DXVK ReShade has to be its 32-bit Vulkan layer. '
+          + 'ReShade\'s own setup installs that now: Windows will ask for administrator permission, and the layer is '
+          + 'installed for the whole PC (C:\\ProgramData\\ReShade) and switched on for this game only. The game-folder '
+          + 'ReShade (dxgi.dll) is set aside while DXVK is in, and comes back with dgVoodoo2. Remove takes this game off '
+          + 'the layer\'s list but leaves the layer for any other game that uses it.'
+        : '';
       const answer = await dialog.showMessageBox({
         type: 'question',
-        buttons: ['Try DXVK', 'Cancel'],
+        buttons: [dxvkIn ? 'Set up the layer' : 'Try DXVK', 'Cancel'],
         defaultId: 0,
         cancelId: 1,
         noLink: true,
         title: 'Try the other compatibility layer',
-        message: hasDgVoodoo ? 'Swap dgVoodoo2 for DXVK in this game?' : 'Use DXVK as this game\'s compatibility layer?',
-        detail: (hasDgVoodoo
-          ? 'dgVoodoo2 and DXVK do the same job by different routes -- dgVoodoo2 through Direct3D 11, DXVK '
-            + 'through Vulkan -- so when a game will not behave under one, the other is worth a try.\n\n'
-            + 'Whatever dgVoodoo2 displaced is handed back first, so this can be undone.'
-          : 'DXVK translates this game\'s old Direct3D to Vulkan, which is what gives OptiScaler something '
-            + 'modern to hook.\n\nAnything it displaces is backed up first, so this can be undone.')
-          + '\n\nNeither layer is better everywhere: the swap can make a nearly-working game worse, and '
-          + 'nothing here can tell which way it went until you run the game. Run it afterwards and check here again.',
+        message: dxvkIn
+          ? 'Set up ReShade\'s 32-bit Vulkan layer for this game again?'
+          : hasDgVoodoo ? 'Swap dgVoodoo2 for DXVK in this game?' : 'Use DXVK as this game\'s compatibility layer?',
+        detail: (dxvkIn
+          ? 'DXVK is already in front of this game. This runs ReShade\'s setup for it once more.'
+          : (hasDgVoodoo
+            ? 'dgVoodoo2 and DXVK do the same job by different routes -- dgVoodoo2 through Direct3D 11, DXVK '
+              + 'through Vulkan -- so when a game will not behave under one, the other is worth a try.\n\n'
+              + 'Whatever dgVoodoo2 displaced is handed back first, so this can be undone.'
+            : 'DXVK translates this game\'s old Direct3D to Vulkan, which is what gives OptiScaler something '
+              + 'modern to hook.\n\nAnything it displaces is backed up first, so this can be undone.')
+            + '\n\nNeither layer is better everywhere: the swap can make a nearly-working game worse, and '
+            + 'nothing here can tell which way it went until you run the game. Run it afterwards and check here again.')
+          + layerNote,
       });
       if (answer.response !== 0) return { done: false, text: 'cancelled by the user' };
-      let sourceDir;
+
+      let said;
+      if (dxvkIn) {
+        said = 'DXVK was already in front of the game';
+      } else if (plan.host32 && !helperInstalled && !hasDgVoodoo) {
+        // Nothing installed yet: the choice is recorded and Install acts on it (legacy:dgvoodoo puts
+        // DXVK in, legacy:installHost32 sets up the layer). Deploying now would put DXVK in front of
+        // a game whose ReShade proxy Install is about to add -- two ReShades.
+        translation.writePreference(dir, 'dxvk');
+        return { done: true, text: 'DXVK is chosen for this game: Install puts it in front of the game instead of dgVoodoo2, then sets up ReShade\'s 32-bit Vulkan layer (asking for administrator permission)' };
+      } else {
+        const r = await deployDxvkFor(dir, plan);
+        if (!r.ok) return { done: false, text: r.text };
+        // Said from what happened, not assumed: dgVoodoo2 may never have been here.
+        const files = (r.deployed || []).join(', ');
+        const kept = (r.backedUp || []).map((b) => `${b.rel} kept as ${b.backup}`).join(', ');
+        said = hasDgVoodoo ? `DXVK (${files}) replaced dgVoodoo2` : `DXVK (${files}) is in front of the game`;
+        if (kept) said += `; the game's own ${kept}`;
+      }
+      translation.writePreference(dir, null);
+      if (!plan.host32) {
+        return { done: true, text: `${said} -- run the game and check again` };
+      }
+      if (!helperInstalled) {
+        return { done: true, text: `${said}; Install sets up the rest, ReShade's 32-bit Vulkan layer included` };
+      }
+      const layer = await dxvkHost32LayerStep(dir, exePath);
+      if (!layer.ok) {
+        return { done: false, text: `${said}${layer.parkedNote}, but ReShade's 32-bit Vulkan layer is NOT set up: ${layer.error}. DLSS 5 will not run under DXVK until it is -- try again from Game Help, or swap back to dgVoodoo2.` };
+      }
+      return { done: true, text: `${said}${layer.parkedNote}; ReShade's 32-bit Vulkan layer is ${layer.ran ? 'now' : 'already'} set up for ${path.basename(exePath)} -- run the game (borderless or windowed, for the panel) and check again` };
+    }
+    // Back from DXVK to dgVoodoo2: the other half of the swap above, offered when a DXVK run did no
+    // better. deployDgVoodoo purges the DXVK this app placed through the same exclusivity gate and
+    // puts the parked ReShade proxy back, so this does not unwind anything by hand. ReShade's Vulkan
+    // layer stays registered: it is machine-wide, and without Vulkan in the game it never attaches.
+    case 'swap-to-dgvoodoo': {
+      const detectedForPlan = await detectFor(dir, exePath);
+      const plan = wrapperPlanFor(dir, exePath, detectedForPlan);
+      if (!plan || !plan.supported || !plan.dgVoodoo) {
+        return { done: false, text: `this game has no dgVoodoo2 route (${plan && plan.reason ? plan.reason : plan && plan.api ? plan.api : 'unsupported'})` };
+      }
+      const layerNow = translation.activeLayer(dir);
+      if (!(layerNow.ours && layerNow.layer === 'dxvk')) {
+        // DXVK only chosen, not placed yet: going back is forgetting the choice.
+        if (translation.readPreference(dir) === 'dxvk') {
+          translation.writePreference(dir, null);
+          return { done: true, text: 'dgVoodoo2 it is again: Install puts dgVoodoo2 in front of this game' };
+        }
+        return { done: false, text: 'DXVK is not a layer this app put in front of this game, so there is nothing to swap back from' };
+      }
+      const answer = await dialog.showMessageBox({
+        type: 'question',
+        buttons: ['Swap back', 'Cancel'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+        title: 'Try the other compatibility layer',
+        message: 'Swap DXVK back for dgVoodoo2 in this game?',
+        detail: 'DXVK comes out and dgVoodoo2 goes back in, with whatever DXVK displaced handed back first.'
+          + (plan.host32 ? ' The game-folder ReShade (dxgi.dll) returns with it; ReShade\'s Vulkan layer stays installed on the PC.' : '')
+          + '\n\nRun the game afterwards and check here again.',
+      });
+      if (answer.response !== 0) return { done: false, text: 'cancelled by the user' };
+      let source;
       try {
-        sourceDir = await translation.ensureDxvk(dxvkCacheDir(), { headers: GITHUB_HEADERS });
+        source = await legacy.ensureDgVoodoo(feederCacheDir(), { headers: GITHUB_HEADERS });
       } catch (error) {
-        return { done: false, text: `could not fetch DXVK: ${error && error.message ? error.message : error}` };
+        return { done: false, text: `could not fetch dgVoodoo2: ${error && error.message ? error.message : error}` };
       }
-      const r = await translation.deployDxvk(dir, { sourceDir, api: plan.api, bitness: plan.host32 ? 32 : 64 });
+      const hadParked = !!((legacy.readMarker(dir) || {}).parked || []).length;
+      translation.writePreference(dir, null);
+      await legacy.deployDgVoodoo(dir, plan, source);
       invalidateDetection(dir);
-      if (!r.ok) {
-        const why = (r.refused || []).map((x) => `${x.file} (${x.reason})`).join(', ');
-        return { done: false, text: `DXVK was not deployed: ${why || 'refused'}` };
-      }
-      return { done: true, text: `DXVK is in place of dgVoodoo2 (${(r.deployed || []).length} file(s)) -- run the game and check again` };
+      const stillParked = !!((legacy.readMarker(dir) || {}).parked || []).length;
+      const proxy = hadParked && !stillParked ? '; the game-folder ReShade is back' : stillParked ? '; the game-folder ReShade could not go back under its name (something else holds it)' : '';
+      return { done: true, text: `dgVoodoo2 (${plan.dgVoodoo.dll}) is back in place of DXVK${proxy} -- run the game and check again` };
     }
     // The route RHI takes on a game that ships its own DLSS: no proxy at all, just the model beside
     // the exe for the game's own Streamline to load. It is the fallback for the case the proxy route

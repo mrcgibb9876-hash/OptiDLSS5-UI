@@ -54,6 +54,11 @@ const LAYERS = {
     owns: ['d3d8.dll', 'd3d9.dll', 'd3d10core.dll', 'd3d11.dll', 'dxgi.dll'],
     configs: ['dxvk.conf'],
     logs: ['dxvk.log', 'd3d9.log', 'd3d11.log', 'dxgi.log'],
+    // DXVK names its logs after the exe that loaded it: <exe>_d3d9.log, <exe>_d3d11.log,
+    // <exe>_dxgi.log. The bare names above are what a DXVK_LOG_PATH-less older build wrote. The
+    // Assassin's Creed II folder (2026-09-18) held AssassinsCreedIIGame_d3d9.log from a DXVK try the
+    // purge never saw, because only the bare names were on the list.
+    logPattern: /^.+_(d3d8|d3d9|d3d10core|d3d11|dxgi)\.log$/i,
     signature: 'DXVK',
   },
   dgvoodoo: {
@@ -69,9 +74,17 @@ const LAYERS = {
 
 const LAYER_IDS = Object.keys(LAYERS);
 
-// Read far enough into a DLL to catch its name string without pulling a 26 MB OptiScaler into
-// memory for every card render. The signatures below all sit in the headers or the import table.
-const SNIFF_BYTES = 512 * 1024;
+// The whole file is read, in chunks, and in both encodings a name can be stored in. The first 512 KB
+// in latin1 used to be enough in theory ("the signatures all sit in the headers") and in practice
+// recognised nothing real. Measured on the Assassin's Creed II folder and the DXVK 3.1.1 release
+// (2026-09-18): 'ReShade' first appears at 3.46 MB in ReShade's own DLL, 'DXVK' at 2.3 MB in DXVK's
+// d3d9.dll, 'OptiScaler' at 24.8 MB in OptiScaler, and dgVoodoo2's D3D9.dll carries its name ONLY
+// as UTF-16 (its version resource, at 480 KB). So every identification returned null, and the guard
+// in deployDxvk that keeps DXVK off a name OptiScaler or ReShade is loading under never fired.
+const SCAN_CHUNK = 4 * 1024 * 1024;
+// Past this a file is not a translation layer or a proxy DLL; it is left unidentified rather than
+// streamed for every card render. OptiScaler is the largest thing that can sit here (26 MB).
+const SCAN_MAX_BYTES = 128 * 1024 * 1024;
 
 // Things that are never a translation layer and must survive any purge, checked before the layer
 // signatures because they share filenames with them. OptiScaler installs as dxgi.dll (and winmm,
@@ -96,21 +109,48 @@ function indexDir(dir) {
   return byLower;
 }
 
-function sniff(file) {
+// In priority order: the protected tools first, because they carry the layers' names too (the
+// OptiScaler_DLSSNR build mentions both 'ReShade' and 'DXVK'), then the layers.
+const SIGNATURES = [
+  ...PROTECTED.map((p) => ({ id: p.id, text: p.signature })),
+  ...LAYER_IDS.map((id) => ({ id, text: LAYERS[id].signature })),
+].map((s) => ({ ...s, variants: [Buffer.from(s.text, 'latin1'), Buffer.from(s.text, 'utf16le')] }));
+const SCAN_OVERLAP = Math.max(...SIGNATURES.flatMap((s) => s.variants.map((v) => v.length)));
+
+// Which signatures a file carries, streamed through one fixed buffer. Stops early only once the
+// top-priority signature is found, since nothing can outrank it.
+function scanSignatures(file, size) {
+  const found = new Set();
   let fd;
   try {
-    const size = fs.statSync(file).size;
-    if (!size) return null;
     fd = fs.openSync(file, 'r');
-    const buf = Buffer.alloc(Math.min(size, SNIFF_BYTES));
-    fs.readSync(fd, buf, 0, buf.length, 0);
-    return buf;
+    const buf = Buffer.allocUnsafe(SCAN_CHUNK + SCAN_OVERLAP);
+    let carry = 0;
+    let pos = 0;
+    while (pos < size) {
+      const bytesRead = fs.readSync(fd, buf, carry, SCAN_CHUNK, pos);
+      if (bytesRead <= 0) break;
+      const view = buf.subarray(0, carry + bytesRead);
+      for (const s of SIGNATURES) {
+        if (found.has(s.id)) continue;
+        if (s.variants.some((v) => view.includes(v))) found.add(s.id);
+      }
+      if (found.has(SIGNATURES[0].id)) break;
+      pos += bytesRead;
+      carry = Math.min(SCAN_OVERLAP, view.length);
+      view.copy(buf, 0, view.length - carry, view.length);
+    }
   } catch {
     return null;
   } finally {
     if (fd !== undefined) try { fs.closeSync(fd); } catch {}
   }
+  return found;
 }
+
+// Keyed by path, size and mtime: activeLayer runs for a card render (native-dlss.js), and a 7 MB
+// DXVK d3d9.dll does not change between two renders.
+const identityCache = new Map();
 
 // What a file actually is: 'dxvk', 'dgvoodoo', 'optiscaler', 'reshade', or null when nothing in it
 // says. Contents only -- the name is what got this wrong in the first place.
@@ -119,15 +159,16 @@ function identifyWrapper(file) {
   for (const id of LAYER_IDS) {
     if (LAYERS[id].configs.includes(base)) return id;
   }
-  const buf = sniff(file);
-  if (!buf) return null;
-  for (const p of PROTECTED) {
-    if (buf.includes(Buffer.from(p.signature, 'latin1'))) return p.id;
-  }
-  for (const id of LAYER_IDS) {
-    if (buf.includes(Buffer.from(LAYERS[id].signature, 'latin1'))) return id;
-  }
-  return null;
+  let st;
+  try { st = fs.statSync(file); } catch { return null; }
+  if (!st.isFile() || !st.size || st.size > SCAN_MAX_BYTES) return null;
+  const key = `${path.resolve(file)}|${st.size}|${st.mtimeMs}`;
+  if (identityCache.has(key)) return identityCache.get(key);
+  const found = scanSignatures(file, st.size);
+  const id = found ? (SIGNATURES.find((s) => found.has(s.id)) || {}).id || null : null;
+  if (identityCache.size > 512) identityCache.clear();
+  identityCache.set(key, id);
+  return id;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -139,22 +180,59 @@ function readManifest(dir) {
     if (m && LAYERS[m.layer]) return m;
   } catch {}
   // A dgVoodoo2 deploy from before this module: legacy.js's marker, read as one.
+  //
+  // Only dgVoodoo2's own entries are taken from it. That marker is also the one record of the whole
+  // 32-bit helper install -- the game-side ReShade dxgi.dll, the add-on, host64\ -- and handing ALL
+  // of its files and backups to a purge meant a dgVoodoo2 purge took the ReShade proxy (unidentified
+  // at the time, so "ours by the manifest") and then deleted the marker itself. A dry run on the
+  // real Assassin's Creed II folder (2026-09-18) listed dxgi.dll for removal exactly that way.
   try {
-    const old = JSON.parse(fs.readFileSync(path.join(dir, LEGACY_MARKER), 'utf8'));
+    const old = readLegacyMarker(dir);
     if (old && old.dgVoodoo) {
+      const mine = dgVoodooNames(old);
       return {
         version: 1,
         layer: 'dgvoodoo',
         arch: old.dgVoodoo.arch || null,
         source: old.dgVoodoo.source || null,
         placedAt: old.placedAt || null,
-        files: old.files || [],
-        backups: old.backups || [],
+        files: (old.files || []).filter((f) => mine.has(String(f).toLowerCase())),
+        backups: (old.backups || []).filter((b) => b && mine.has(String(b.rel).toLowerCase())),
         fromLegacyMarker: true,
       };
     }
   } catch {}
   return null;
+}
+
+function readLegacyMarker(dir) {
+  try { return JSON.parse(fs.readFileSync(path.join(dir, LEGACY_MARKER), 'utf8')); } catch { return null; }
+}
+
+// The names legacy.js's deployDgVoodoo writes: the wrapper DLL it chose, its control panel and its
+// config. Nothing else in that marker is dgVoodoo2's.
+function dgVoodooNames(marker) {
+  const dll = marker && marker.dgVoodoo && marker.dgVoodoo.dll ? String(marker.dgVoodoo.dll) : 'D3D9.dll';
+  return new Set([dll, 'dgVoodooCpl.exe', 'dgVoodoo.conf'].map((n) => n.toLowerCase()));
+}
+
+// Takes dgVoodoo2 out of legacy.js's marker and leaves every other record in it. The marker is
+// rewritten, never deleted, while it still records anything -- it is how Remove finds host64\ and
+// the ReShade proxy. Only a marker with nothing else left in it goes.
+function stripDgVoodooFromLegacyMarker(dir) {
+  const marker = readLegacyMarker(dir);
+  if (!marker || !marker.dgVoodoo) return false;
+  const mine = dgVoodooNames(marker);
+  const next = { ...marker };
+  delete next.dgVoodoo;
+  next.files = (marker.files || []).filter((f) => !mine.has(String(f).toLowerCase()));
+  next.backups = (marker.backups || []).filter((b) => !(b && mine.has(String(b.rel).toLowerCase())));
+  const markerPath = path.join(dir, LEGACY_MARKER);
+  const { version, placedAt, ...rest } = next;
+  const holdsNothing = Object.entries(rest).every(([, v]) => (Array.isArray(v) ? v.length === 0 : !v));
+  if (holdsNothing) fs.rmSync(markerPath, { force: true });
+  else fs.writeFileSync(markerPath, JSON.stringify(next, null, 2), 'utf8');
+  return true;
 }
 
 function writeManifest(dir, manifest) {
@@ -250,7 +328,9 @@ async function purgeTranslationLayer(dir, { layer = null, dryRun = false } = {})
       if (!candidates.has(lower)) candidates.set(lower, { logOf: null });
     }
     // A log carries no signature to read, so its name is what assigns it.
-    for (const lower of spec.logs) {
+    const logNames = [...spec.logs];
+    if (spec.logPattern) for (const lower of index.keys()) if (spec.logPattern.test(lower)) logNames.push(lower);
+    for (const lower of logNames) {
       const seen = candidates.get(lower);
       if (seen) seen.logOf = seen.logOf || id;
       else candidates.set(lower, { logOf: id });
@@ -292,9 +372,13 @@ async function purgeTranslationLayer(dir, { layer = null, dryRun = false } = {})
     }
     if (!dryRun) {
       await fsp.rm(path.join(dir, MANIFEST), { force: true });
-      if (manifest.fromLegacyMarker) await fsp.rm(path.join(dir, LEGACY_MARKER), { force: true });
     }
   }
+  // dgVoodoo2's entries in legacy.js's marker go with it -- whether the manifest was read from that
+  // marker or dgVoodoo2 also wrote one of its own (deployDgVoodoo does both now). Left in, the marker
+  // would go on saying dgVoodoo2 is deployed after its files were gone, and Install would put it
+  // straight back over whatever replaced it.
+  if (!dryRun && targets.includes('dgvoodoo') && manifest && manifest.layer === 'dgvoodoo') stripDgVoodooFromLegacyMarker(dir);
 
   return { layer, removed, restored, skipped, wasActive: manifest ? manifest.layer : null };
 }
@@ -445,31 +529,46 @@ async function deployDxvk(dir, { sourceDir, api, bitness }) {
 
   const gate = canDeploy(dir, 'dxvk');
   if (!gate.ok) return { deployed: [], backedUp: [], refused: [{ file: gate.conflict, reason: gate.reason }], ok: false };
-  if (gate.purgeFirst) await purgeTranslationLayer(dir, { layer: gate.conflict || 'dxvk' });
 
   const arch = archDir(bitness);
-  const index = indexDir(dir);
-  const deployed = [];
-  const backedUp = [];
-  const refused = [];
 
+  // Every name is judged BEFORE anything is purged or copied, and one refusal stops the whole
+  // deploy. Refusing per file used to leave half a DXVK: a 32-bit DirectX 11 game on the helper
+  // route has ReShade as its dxgi.dll, so dxgi.dll was refused, d3d11.dll went in anyway, dgVoodoo2
+  // (had there been one) was already purged, and the swap reported success. D3D11 without DXVK's
+  // dxgi.dll is not a working DXVK. (Review of the 2.2.3 swap, 2026-09-18.)
+  const before = indexDir(dir);
+  const refused = [];
   for (const name of wanted) {
     const src = path.join(sourceDir, arch, name);
     if (!fs.existsSync(src)) {
       refused.push({ file: name, reason: `the cached DXVK release has no ${arch}/${name}` });
       continue;
     }
+    const existingName = before.get(name);
+    if (!existingName) continue;
+    const identity = identifyWrapper(path.join(dir, existingName));
+    if (identity === 'optiscaler' || identity === 'reshade') {
+      refused.push({
+        file: existingName,
+        reason: `${existingName} is ${identity === 'optiscaler' ? 'OptiScaler' : 'ReShade'}, which loads under that name here. `
+          + 'Moving it would break its own install record, so DXVK was not put in on top of it.',
+      });
+    }
+  }
+  if (refused.length) return { deployed: [], backedUp: [], refused, ok: false };
+
+  if (gate.purgeFirst) await purgeTranslationLayer(dir, { layer: gate.conflict || 'dxvk' });
+
+  const index = indexDir(dir);
+  const deployed = [];
+  const backedUp = [];
+
+  for (const name of wanted) {
+    const src = path.join(sourceDir, arch, name);
     const existingName = index.get(name);
     if (existingName) {
       const identity = identifyWrapper(path.join(dir, existingName));
-      if (identity === 'optiscaler' || identity === 'reshade') {
-        refused.push({
-          file: existingName,
-          reason: `${existingName} is ${identity === 'optiscaler' ? 'OptiScaler' : 'ReShade'}, which loads under that name here. `
-            + 'Moving it would break its own install record, so DXVK was not put in on top of it.',
-        });
-        continue;
-      }
       if (identity !== 'dxvk') {
         // The game's own, or something unidentifiable: preserved under the suffix a purge restores from.
         const backup = `${existingName}${BACKUP_SUFFIX}`;
@@ -495,8 +594,39 @@ async function deployDxvk(dir, { sourceDir, api, bitness }) {
   return { deployed, backedUp, refused, ok: true };
 }
 
+// ---------------------------------------------------------------------------------------------
+// The player's choice of layer, before there is anything to swap
+//
+// The swap was reachable only from Game Help, and only once a layer was in -- so a player who
+// already knew a game wanted DXVK (Assassin's Creed II: dgVoodoo2 cannot draw it, 2026-09-18) had
+// to install dgVoodoo2 first just to swap it out. Choosing DXVK on a game with nothing installed
+// records the choice here instead, and Install places DXVK where it would have placed dgVoodoo2.
+// Remove deletes it with the other markers.
+const PREFERENCE = '.dlss5ui-wrapper-choice.json';
+
+function readPreference(dir) {
+  try {
+    const p = JSON.parse(fs.readFileSync(path.join(dir, PREFERENCE), 'utf8'));
+    return p && LAYERS[p.layer] ? p.layer : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePreference(dir, layer) {
+  const file = path.join(dir, PREFERENCE);
+  if (!layer) { fs.rmSync(file, { force: true }); return null; }
+  if (!LAYERS[layer]) throw new Error(`unknown translation layer: ${layer}`);
+  fs.writeFileSync(file, JSON.stringify({ layer, chosenAt: new Date().toISOString() }, null, 2), 'utf8');
+  return layer;
+}
+
 module.exports = {
   MANIFEST,
+  PREFERENCE,
+  readPreference,
+  writePreference,
+  stripDgVoodooFromLegacyMarker,
   LEGACY_MARKER,
   BACKUP_SUFFIX,
   LAYERS,
