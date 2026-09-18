@@ -222,3 +222,46 @@ test('the window size rides on the borderless switch and is written as the engin
   assert.equal(getIniKey(fs.readFileSync(ini, 'utf8'), 'DlssNr', 'BorderlessWidth'), 'auto');
   assert.equal(getIniKey(fs.readFileSync(ini, 'utf8'), 'DlssNr', 'BorderlessHeight'), 'auto');
 });
+
+// [DlssNr] PanelKey. Alt+Home has always been rebindable in the engine and this app never offered
+// it, so #50's reporter asked for a feature that already existed. The trap in exposing it as a
+// picker is the bind that is NOT on the list: read that back as "default" and the dialog is lying
+// about the player's own key, and the first edit of any other field looks like it moved it.
+test('the panel hotkey reads back whatever is set, listed or not', () => {
+  const dir = scratchDir('dlssnr-panelkey');
+  const ini = path.join(dir, 'OptiScaler.ini');
+  const panelKey = (text) => {
+    write(dir, 'OptiScaler.ini', text);
+    return dlssnr.readSettings(ini).find((f) => f.key === 'PanelKey');
+  };
+
+  const VK_HOME = 0x24, ALT = 0x0100, CTRL = 0x0200, SHIFT = 0x0400;
+
+  const unset = panelKey('[DlssNr]\nPanelKey=auto\n');
+  assert.equal(unset.value, null, 'auto is auto, not the default written out');
+  assert.equal(unset.default, VK_HOME | ALT, 'the default is Alt+Home, as the engine has it');
+
+  const plainHome = panelKey(`[DlssNr]\nPanelKey=${VK_HOME}\n`);
+  assert.equal(plainHome.value, VK_HOME);
+  assert.ok(plainHome.options.some(([v, l]) => v === VK_HOME && l === 'Home'));
+
+  // Ctrl+Shift+F7: a real bind the list does not offer.
+  const custom = 0x76 | CTRL | SHIFT;
+  const chosen = panelKey(`[DlssNr]\nPanelKey=${custom}\n`);
+  assert.equal(chosen.value, custom, "a key the player chose is not read back as the default");
+  const extra = chosen.options.find(([v]) => v === custom);
+  assert.ok(extra, 'an unlisted bind gets an option of its own so the picker can show it');
+  assert.match(extra[1], /^Ctrl\+Shift\+/, 'and it is named by its modifiers');
+
+  // The engine writes hex for these (Config.cpp GetIntValue with the hex flag), so both forms read.
+  const hex = panelKey('[DlssNr]\nPanelKey=0x124\n');
+  assert.equal(hex.value, VK_HOME | ALT, 'hex reads the same as decimal, as the engine writes it');
+});
+
+test('the panel hotkey is offered where the dialog can reach it', () => {
+  // The Settings dialog renders only the Display group (renderer.js EDITABLE_GROUPS). A hotkey in
+  // any other group would be in the file and reachable from nowhere.
+  const field = dlssnr.readSettings(path.join(scratchDir('dlssnr-panelkey-group'), 'none.ini'))
+    .find((f) => f.key === 'PanelKey');
+  assert.equal(field.group, 'Display');
+});

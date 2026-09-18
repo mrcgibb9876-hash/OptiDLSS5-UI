@@ -21,6 +21,25 @@ const { setIniKey, getIniKey } = require('./ini-merge');
 
 const SECTION = 'DlssNr';
 
+// Virtual-key codes and the engine's modifier bits (OptiScaler Config.h). Only the keys the panel
+// hotkey list offers -- this is not meant to become a full VK table.
+const VK = { HOME: 0x24, END: 0x23, INSERT: 0x2D, DELETE: 0x2E, F10: 0x79 };
+const MOD = { ALT: 0x0100, CTRL: 0x0200, SHIFT: 0x0400 };
+const VK_NAME = { 0x24: 'Home', 0x23: 'End', 0x2D: 'Insert', 0x2E: 'Delete', 0x79: 'F10' };
+
+// A bind the list does not offer -- set in the in-game panel, or by hand -- still has to read back
+// honestly. Without this the dialog would show "Alt+Home (default)" over an ini that says
+// something else, and the first edit of any other field would look like it had moved the key.
+function describeKeybind(code) {
+  const vk = code & 0x00FF;
+  const parts = [];
+  if (code & MOD.CTRL) parts.push('Ctrl');
+  if (code & MOD.ALT) parts.push('Alt');
+  if (code & MOD.SHIFT) parts.push('Shift');
+  parts.push(VK_NAME[vk] || `key 0x${vk.toString(16).toUpperCase().padStart(2, '0')}`);
+  return parts.join('+');
+}
+
 const PRESETS = [[0, 'Default'], [1, 'Model A'], [2, 'Model B'], [3, 'Model C']];
 const STYLES = [[0, 'Default (standard)'], [1, 'Natural'], [2, 'Cinematic']];
 const DOWNSCALERS = [[0, 'FSR1'], [1, 'Bicubic'], [2, 'Catmull-Rom'], [3, 'Lanczos2'], [4, 'Lanczos3'], [5, 'Kaiser2'], [6, 'Kaiser3'], [7, 'MAGIC']];
@@ -67,6 +86,29 @@ const FIELDS = [
   { key: 'BorderlessHeight', type: 'int', default: 0, min: 0, max: 4320, step: 1, group: 'Display',
     label: 'Window height', dependsOn: { key: 'ForceBorderless', is: true },
     help: "The borderless window's height in pixels; 0 (the default) means the monitor's full height. Set both width and height or neither -- one alone is ignored. See Window width." },
+
+  // [DlssNr] PanelKey. A virtual-key code in the low byte with modifier bits above it, the same
+  // encoding the engine uses (Config.h: KeyVkMask 0x00FF, Alt 0x0100, Ctrl 0x0200, Shift 0x0400).
+  //
+  // This has always been rebindable in the engine and in its own panel, and this app never said so.
+  // The reporter on #50 asked for "re-assignment of ALT+HOME" because theirs did nothing -- some
+  // other program on that machine holds the chord, which is exactly what this is for. Offered as a
+  // list rather than a key capture: the point is to escape a key something else has taken, and a
+  // short list of alternatives does that without another input-capture widget to get wrong.
+  { key: 'PanelKey', type: 'enum', default: VK.HOME | MOD.ALT, group: 'Display', keybind: true,
+    label: 'DLSS 5 panel hotkey',
+    options: [
+      [VK.HOME | MOD.ALT, 'Alt+Home'],
+      [VK.HOME, 'Home'],
+      [VK.HOME | MOD.ALT | MOD.SHIFT, 'Shift+Alt+Home'],
+      [VK.HOME | MOD.CTRL, 'Ctrl+Home'],
+      [VK.INSERT | MOD.ALT, 'Alt+Insert'],
+      [VK.END | MOD.ALT, 'Alt+End'],
+      [VK.DELETE | MOD.ALT, 'Alt+Delete'],
+      [VK.F10, 'F10'],
+      [VK.F10 | MOD.ALT, 'Alt+F10'],
+    ],
+    help: "Opens OptiScaler's own DLSS 5 panel inside the game. Alt+Home by default.\n\nChange it when something else on the machine already holds that chord -- an overlay, a capture tool, a keyboard macro -- and the panel never appears. Nothing here can tell you which program took it; the symptom is simply that the key does nothing.\n\nThis is the panel drawn INSIDE the game. It is not this app's own pop-out panel, whose hotkey lives in Settings and is Alt+Shift+Home by default. On the 32-bit route the panel is drawn by the 64-bit helper and shown over the game, and this key still reaches it." },
 
   { key: 'LocalStructure', type: 'float', default: 1.0, min: 0, max: 1, step: 0.01, group: 'Global Controls',
     label: 'Structure Intensity', help: "The model's structure-synthesis strength across the whole frame." },
@@ -210,6 +252,9 @@ function parseValue(field, raw) {
   if (!Number.isFinite(n)) return null;
   if (field.type === 'int' || field.type === 'enum') {
     const v = Math.round(n);
+    // A keybind is an enum for the sake of the picker, but its real range is every key on the
+    // keyboard. Rejecting an unlisted one would read the player's own chord back as "default".
+    if (field.keybind) return v;
     if (field.type === 'enum' && field.options && !field.options.some(([o]) => o === v)) return null;
     if (field.type === 'int') return Math.min(field.max, Math.max(field.min, v));
     return v;
@@ -227,6 +272,13 @@ function formatValue(field, value) {
 
 // Everything the form needs for one game: each field, its stored value (null = auto) and the
 // default that applies when it is auto.
+function widenKeybindOptions(field, value) {
+  const options = field.options || [];
+  if (value === null || value === undefined) return options;
+  if (options.some(([o]) => o === value)) return options;
+  return [...options, [value, describeKeybind(value)]];
+}
+
 function readSettings(iniPath) {
   let text = '';
   try { text = fs.readFileSync(iniPath, 'utf8'); } catch { text = ''; }
@@ -236,7 +288,9 @@ function readSettings(iniPath) {
     label: f.label,
     help: f.help,
     type: f.type,
-    options: f.options || null,
+    // A keybind set outside the offered list gets an entry of its own, named, so the picker shows
+    // what the ini really holds instead of falling back to the default.
+    options: f.keybind ? widenKeybindOptions(f, parseValue(f, getIniKey(text, SECTION, f.key))) : (f.options || null),
     min: f.min === undefined ? null : f.min,
     max: f.max === undefined ? null : f.max,
     step: f.step === undefined ? null : f.step,
@@ -250,6 +304,7 @@ function readSettings(iniPath) {
     percent: f.percent || false,
     default: f.default,
     value: parseValue(f, getIniKey(text, SECTION, f.key)),
+    keybind: f.keybind || false,
   }));
 }
 
