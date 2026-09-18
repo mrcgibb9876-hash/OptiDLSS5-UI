@@ -117,10 +117,15 @@ function headHash(exePath) {
   }
 }
 
-function fingerprint(exePath) {
+// prev: the last fingerprint of this exe. When size and mtime still match it, its header hash is
+// reused rather than the exe opened again -- a sync pass may read no game exe it has already seen
+// (project perf rule; test/perf-library.test.js). A same-size, same-mtime rewrite is not something an
+// update or a Steam verify produces, and a Steam update still shows through the buildid.
+function fingerprint(exePath, prev = null) {
   let st;
   try { st = fs.statSync(exePath); } catch { return null; }
-  return { size: st.size, mtimeMs: st.mtimeMs, head: headHash(exePath), steam: steamBuild(exePath) };
+  const same = prev && prev.head && prev.size === st.size && prev.mtimeMs === st.mtimeMs;
+  return { size: st.size, mtimeMs: st.mtimeMs, head: same ? prev.head : headHash(exePath), steam: steamBuild(exePath) };
 }
 
 // Whether two fingerprints describe different executables. A Steam buildid that moved is an update
@@ -157,7 +162,7 @@ function ourFiles(dir, extra = []) {
 function inspect(file, exePath, dir) {
   const store = readStore(file);
   const prev = store[keyFor(exePath)] || null;
-  const now = fingerprint(exePath);
+  const now = fingerprint(exePath, prev && prev.exe);
   const changed = !!prev && exeChanged(prev.exe, now);
   const missing = prev
     ? (prev.files || []).filter((rel) => !fs.existsSync(path.join(dir, ...rel.split('/'))))
