@@ -51,6 +51,7 @@ const translation = require('./translation');
 const rtxmfg = require('./rtxmfg');
 const routeExplain = require('./route-explain');
 const nrmodelonly = require('./nrmodelonly');
+const engines = require('./engines');
 const catalog = require('./catalog');
 const layerdefault = require('./layerdefault');
 const routescore = require('./routescore');
@@ -275,6 +276,14 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
   // OptiScaler is still the route it could have -- so this is what tells the card that the in-game panel
   // is gone until Install puts it back (route-explain.js).
   const nrModelOnly = !optiInstalled && !!nrmodelonly.readMarker(dir);
+  // Which engine build this game is on, for one question only: does that build draw a panel inside
+  // the game? wilsjo2's Pre-SR fork does not, so Alt+Home is a dead key there and the explanation has
+  // to say the break-away panel instead (route-explain.js). Read from the game's own marker, so it
+  // follows the build actually installed here rather than the default; with no marker it is ours.
+  const engineMarker = engines.readEngineMarker(dir);
+  const enginePanel = engineMarker && engineMarker.engine
+    ? engines.engine(engineMarker.engine).panel !== false
+    : true;
   // shipsNativeDlss: the game's own Streamline/DLSS files (beside the exe or in an Unreal
   // plugin tree) -- evidence no deploy of ours can fake, so it wins over the markers. Otherwise
   // needsFeeder() is the inverse of hasNativeDlss() and flips the moment a Feeder or Luma
@@ -302,7 +311,7 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
       complete: steps.length > 0 && !next,
       nextStep: next ? next.label : null,
       // The short "How this route works" text for the card and Edit (route-explain.js).
-      explain: routeExplain.explainRoute({ route, nrModelOnly, emulator: extra.emulator || null, legacy: extra.legacy || null }, api),
+      explain: routeExplain.explainRoute({ route, nrModelOnly, enginePanel, emulator: extra.emulator || null, legacy: extra.legacy || null }, api),
       layerExplain: extra.legacy ? { ...routeExplain.LAYERS } : null,
     };
   };

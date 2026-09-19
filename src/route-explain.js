@@ -29,6 +29,12 @@
 // and until now it was named only in Settings and in Edit, never where the panel fails to open.
 const PANEL = 'Press Alt+Home in the game for the DLSS 5 panel. Run the game windowed or borderless: Windows will not draw it over exclusive fullscreen. If the game will not show it, press Alt+Shift+Home for this app\'s own panel window, which needs nothing from the game.';
 
+// The engine build a game is on can be one that draws no panel inside the game at all (engines.js
+// `panel: false`, wilsjo2's Pre-SR fork). Alt+Home is then a key that does nothing, so this replaces
+// the line rather than qualifying it -- the break-away panel is the whole answer there, and it works
+// because it edits the ini instead of drawing anything.
+const PANEL_NO_INGAME = 'This engine build draws no panel inside the game, so Alt+Home does nothing on it. Press Alt+Shift+Home for this app\'s own panel window: it edits the same settings live and needs nothing from the game.';
+
 const ROUTES = {
   optiscaler: {
     does: 'Uses the game\'s own DLSS. OptiScaler adds DLSS 5 on top of it.',
@@ -134,7 +140,10 @@ function explainRoute(route, api = null) {
   if (!key) return null;
   const e = ROUTES[key];
   const vars = route.emulator ? { name: route.emulator.name || '' } : null;
-  return { key, does: e.does, limits: e.limits, panel: e.panel, vars };
+  // A route with no panel of its own to promise keeps its own words: on the model-only route nothing
+  // of ours is in the game to draw one whatever the build, and its line already points at Install.
+  const noInGamePanel = route.enginePanel === false && e.panel && key !== 'nr-model-only';
+  return { key, does: e.does, limits: e.limits, panel: noInGamePanel ? PANEL_NO_INGAME : e.panel, vars };
 }
 
 function explainLayer(layer) {
@@ -143,7 +152,9 @@ function explainLayer(layer) {
 
 // Every English string this module can hand the renderer, for the translation tests.
 function allStrings() {
-  const out = new Set([PANEL]);
+  // PANEL_NO_INGAME is handed over by explainRoute rather than sitting in a ROUTES entry, so it has to
+  // be listed here by hand or the locale test would not know to demand a translation for it.
+  const out = new Set([PANEL, PANEL_NO_INGAME]);
   for (const e of Object.values(ROUTES)) for (const s of [e.does, e.limits, e.panel]) if (s) out.add(s);
   for (const s of Object.values(LAYERS)) out.add(s);
   return [...out];

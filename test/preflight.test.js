@@ -154,3 +154,29 @@ test('gather reads the folder and the anti-cheat helpers, and survives a registr
   const none = await pf.readGpuPrefs(async () => { throw Object.assign(new Error('x'), { stderr: 'ERROR: The system was unable to find the specified registry key or value.' }); });
   assert.deepEqual([...none], []);
 });
+
+// Asked for on 2026-09-19: "add support for 30 series" turned out to need no support added. The model
+// this app deploys (ShortFuse's 310.8.SF-v2) already covers RTX 20/30/40 and the engine's NR path has
+// no architecture check, so a 30-series card installs and runs today -- it is the cost that surprises
+// people. Warn, never block: the user's call, on their own frame rate.
+test('a pre-Blackwell NVIDIA card is warned about the neural pass cost, and never blocked', () => {
+  const withCard = (name) => base({ gpuInfo: { ...base().gpuInfo, name } });
+
+  const [ampere] = pf.evaluate(withCard('NVIDIA GeForce RTX 3080'));
+  assert.equal(ampere.id, 'nr-cost-pre-ada');
+  assert.equal(ampere.severity, 'warn', 'a warning, not a block');
+  assert.deepEqual(ampere.vars, { card: 'NVIDIA GeForce RTX 3080' });
+  assert.match(ampere.text, /138 FPS to 4/, 'the reported figure, attributed as a report');
+
+  // Ada pays less than Ampere, so it gets its own milder wording rather than that figure.
+  const [ada] = pf.evaluate(withCard('NVIDIA GeForce RTX 4070 Laptop GPU'));
+  assert.equal(ada.id, 'nr-cost-ada');
+  assert.equal(ada.severity, 'info');
+  assert.doesNotMatch(ada.text, /138/);
+
+  // The card the model was built for, a card too old to be an RTX at all, and a non-NVIDIA machine:
+  // nothing to say in any of the three.
+  assert.deepEqual(ids(withCard('NVIDIA GeForce RTX 5090')), []);
+  assert.deepEqual(ids(withCard('NVIDIA GeForce GTX 1080')), []);
+  assert.deepEqual(ids(base({ gpuInfo: { ...base().gpuInfo, vendor: 'amd', name: 'AMD Radeon RX 9070 XT' } })), []);
+});

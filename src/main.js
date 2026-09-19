@@ -5600,7 +5600,12 @@ ipcMain.handle('update:check', async (_evt, { engine } = {}) => {
   try {
     // The pinned release (package.json engineVersion) is what this app version was tested with;
     // a newer "latest" is only reported. No pin: latest, as before.
-    const pin = engines.pinnedEngineTag();
+    //
+    // The pin names a release of OUR fork -- the one release.yml bundles -- so it means nothing in
+    // another author's repository, where that tag does not exist. Asking for it there 404s, and
+    // getJson throws, which would fail the whole check and leave the second build uninstallable. A
+    // build this app does not bundle is offered its own latest instead.
+    const pin = engines.engine(id).bundled ? engines.pinnedEngineTag() : null;
     const getJson = async (url) => {
       const r = await fetch(url, { headers: GITHUB_HEADERS });
       if (!r.ok) throw new Error(`GitHub API returned ${r.status}`);

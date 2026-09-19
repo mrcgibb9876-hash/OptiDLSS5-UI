@@ -7,6 +7,7 @@ const { REPO, scratchDir, write, fakeExe } = require('./helpers');
 const route = require(path.join(REPO, 'src', 'route'));
 const explain = require(path.join(REPO, 'src', 'route-explain'));
 const nrmodelonly = require(path.join(REPO, 'src', 'nrmodelonly'));
+const engines = require(path.join(REPO, 'src', 'engines'));
 
 test('every route id recommendRoute can return has an explanation, and the RE Engine id shares the Present one', () => {
   for (const id of ['optiscaler', 'feeder', 'feeder32', 'lumaue', 'amdnr', 'unsupported', 'unknown', 'present', 'reframework-pd']) {
@@ -135,4 +136,44 @@ test('a game left on the model-only route says the panel is gone, not "press Alt
   assert.match(after.explain.panel, /No panel on this route/);
   assert.doesNotMatch(after.explain.panel, /Press Alt\+Home/);
   assert.match(after.explain.does, /loads the Neural Rendering model by itself/);
+});
+
+// The second engine build came back on 2026-09-19 (engines.js presr, wilsjo2's Pre-SR fork). It draws
+// no panel inside the game, so a game on it must not be told to press Alt+Home -- the break-away panel
+// is the whole answer there. Same failure this file already guards for the model-only route.
+test('a game on an engine build with no in-game panel is pointed at Alt+Shift+Home only', () => {
+  const dir = scratchDir('explain-presr');
+  const exe = fakeExe(dir, 'FakeGame.exe');
+  write(dir, 'nvngx_dlss.dll', 'the game\'s own DLSS');
+  const det = { api: 'dx12', apis: ['dx12'], bitness: 64 };
+
+  const ours = route.recommendRoute(dir, exe, det, 'nvidia');
+  assert.match(ours.explain.panel, /Press Alt\+Home/, 'our build draws one');
+
+  write(dir, engines.ENGINE_MARKER, JSON.stringify({ engine: 'presr' }));
+  const presr = route.recommendRoute(dir, exe, det, 'nvidia');
+  assert.equal(presr.explain.key, 'optiscaler', 'the route is unchanged -- only the panel line moves');
+  assert.doesNotMatch(presr.explain.panel, /Press Alt\+Home/);
+  assert.match(presr.explain.panel, /Alt\+Home does nothing/);
+  assert.match(presr.explain.panel, /Alt\+Shift\+Home/);
+
+  // A marker naming a build that does draw one, and a marker naming nothing we ship, both get ours.
+  write(dir, engines.ENGINE_MARKER, JSON.stringify({ engine: 'dlssnr' }));
+  assert.match(route.recommendRoute(dir, exe, det, 'nvidia').explain.panel, /Press Alt\+Home/);
+  write(dir, engines.ENGINE_MARKER, JSON.stringify({ engine: 'nonsense' }));
+  assert.match(route.recommendRoute(dir, exe, det, 'nvidia').explain.panel, /Press Alt\+Home/);
+});
+
+// The model-only route has no OptiScaler in the game at all, so the build it once used is irrelevant:
+// its own line (press Install) must survive a stale engine marker rather than being replaced.
+test('the model-only line is not overwritten by a panel-less build marker', () => {
+  const dir = scratchDir('explain-presr-modelonly');
+  const exe = fakeExe(dir, 'FakeGame.exe');
+  write(dir, 'nvngx_dlss.dll', 'the game\'s own DLSS');
+  write(dir, 'nvngx_dlssnr.dll', 'the model');
+  write(dir, nrmodelonly.NRMODEL_MARKER, JSON.stringify({ target: '.', placed: true }));
+  write(dir, engines.ENGINE_MARKER, JSON.stringify({ engine: 'presr' }));
+  const r = route.recommendRoute(dir, exe, { api: 'dx12', apis: ['dx12'], bitness: 64 }, 'nvidia');
+  assert.equal(r.explain.key, 'nr-model-only');
+  assert.match(r.explain.panel, /Press Install/);
 });
