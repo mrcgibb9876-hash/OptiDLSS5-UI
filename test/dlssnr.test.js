@@ -51,7 +51,12 @@ test('every field is described well enough to build a control from', () => {
       if (f.default !== null) assert.ok(f.default >= f.min && f.default <= f.max, `${f.key} default is outside its own range`);
     }
     // A dependency has to name a field that exists, or a control greys itself out forever.
-    if (f.dependsOn) assert.ok(dlssnr.FIELDS.some((o) => o.key === f.dependsOn.key), `${f.key} depends on a field that is not there`);
+    // { all: [...] } names several (Adaptive resolution's targets need it on AND the matching mode).
+    if (f.dependsOn) {
+      for (const d of Array.isArray(f.dependsOn.all) ? f.dependsOn.all : [f.dependsOn]) {
+        assert.ok(dlssnr.FIELDS.some((o) => o.key === d.key), `${f.key} depends on a field that is not there`);
+      }
+    }
   }
 });
 

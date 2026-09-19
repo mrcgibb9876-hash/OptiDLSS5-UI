@@ -140,9 +140,31 @@ const FIELDS = [
     dependsOn: { key: 'Passes', atLeast: 3 }, help: "Left on default, pass 3 uses the model above." },
   { key: 'Pass3Style', type: 'enum', default: null, options: STYLES, group: 'Cost', label: 'Pass 3 style',
     dependsOn: { key: 'Passes', atLeast: 3 }, help: "Left on default, pass 3 uses the style above." },
+  // Greyed while Adaptive resolution drives it, as the in-game panel does: the value moving is what the
+  // controller is doing, and a hand-set number would be overwritten at its next step anyway.
   { key: 'WorkingScale', type: 'float', default: 1.0, min: 0.25, max: 2, step: 0.01, percent: true, group: 'Cost',
-    label: 'Model resolution',
+    label: 'Model resolution', dependsOn: { key: 'AutoScale', is: false },
     help: "What fraction of the frame the model works at. Cost falls with the square of this, so half resolution is roughly a quarter of the time. Below 100 the frame itself is never reduced -- only the model's own contribution is computed small and enlarged. Applied when the handle is let go, not while it is moving." },
+  // Adaptive resolution (engine v2.1: DlssNr_Menu.cpp DrawAutoScale, DlssNrBudget.h). Labels, ranges and
+  // help are the in-game panel's own; its help is hard-wrapped there and reflowed here, like every other
+  // help text in this file. AutoScalePrebuild is not a panel row in the engine either, so it is not here.
+  { key: 'AutoScale', type: 'bool', default: false, group: 'Cost', label: 'Adjust it for me',
+    help: "Moves Model resolution up and down while you play, so the pass costs what you asked it to cost instead of what one number chosen before the game started happens to cost in this scene.\n\nIt only ever changes the MODEL's resolution. The frame is never reduced, so this cannot soften the picture the way a dynamic render resolution does -- the most it can cost is some of the model's own detail.\n\nIt steps between four settings a few seconds apart at most, because each change rebuilds the model and rebuilding it every frame would be slower than doing nothing." },
+  { key: 'AutoScaleMode', type: 'enum', default: 2, options: [[0, 'Share of the frame'], [1, 'Milliseconds'], [2, 'Frame rate']],
+    group: 'Cost', label: 'Aim at', dependsOn: { key: 'AutoScale', is: true },
+    help: "Frame rate: aim at a number of frames per second. The one most people want, and the only one that can fall short -- the pass can give back what it costs and no more, so if the game itself cannot reach the number, the panel says so.\n\nMilliseconds: hold the pass under a flat time. Exactly what the cost line above measures, with no arithmetic in between.\n\nShare of the frame: let the pass take at most a percentage of each frame. This one looks after itself as the frame rate moves - 15% is 2.5 ms at 60 fps and 1.25 at 120." },
+  { key: 'AutoScaleFps', type: 'int', default: 60, min: 30, max: 240, step: 1, group: 'Cost', label: 'Frame rate',
+    dependsOn: { all: [{ key: 'AutoScale', is: true }, { key: 'AutoScaleMode', is: 2 }] },
+    help: "The frame rate to aim at. Applied live - there is nothing to rebuild for a change of target, only for a change of model resolution it leads to." },
+  { key: 'AutoScaleMs', type: 'float', default: 2.0, min: 0.5, max: 10, step: 0.1, group: 'Cost', label: 'Cost ceiling',
+    dependsOn: { all: [{ key: 'AutoScale', is: true }, { key: 'AutoScaleMode', is: 1 }] },
+    help: "The most the pass may cost, in milliseconds. Compare it with the cost shown at the top of this panel, which is the same measurement." },
+  { key: 'AutoScaleShare', type: 'int', default: 15, min: 2, max: 50, step: 1, group: 'Cost', label: 'Share of the frame',
+    dependsOn: { all: [{ key: 'AutoScale', is: true }, { key: 'AutoScaleMode', is: 0 }] },
+    help: "How much of each frame the pass may take." },
+  { key: 'AutoScaleFloor', type: 'float', default: 0.55, min: 0.55, max: 1, step: 0.01, percent: true, group: 'Cost',
+    label: 'Never go below', dependsOn: { key: 'AutoScale', is: true },
+    help: "The lowest model resolution this may choose. Raise it to keep more of the model's detail and let the frame rate give way instead.\n\nIt stops here because this is where the trade changes character: above it the model is simply working on a smaller picture, and below it fine detail - hair, foliage, thin edges - starts to break down rather than soften." },
   { key: 'ScalingDownscaler', type: 'enum', default: 4, options: DOWNSCALERS, group: 'Cost', label: 'Downscaler',
     dependsOn: { key: 'WorkingScale', above: 1 },
     help: "The filter that averages the model's above-native answer back to display size -- this is what turns supersampling into LESS noise rather than more. Sharper filters (Lanczos3, Kaiser3) keep the most detail; softer ones (Bicubic, Catmull-Rom) are gentler on ringing. Independent of the Output Scaling downscaler, so the two can differ and run at the same time." },

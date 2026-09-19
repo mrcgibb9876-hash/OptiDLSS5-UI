@@ -2020,6 +2020,62 @@ ipcMain.handle('panel:timing', async (_evt, exePath) => {
   }
 });
 
+// Live numbers for the break-away panel: fps, frame time, VRAM, whether DLSS 5 is running, Adaptive
+// resolution's state and frame generation's -- what the in-game panel shows from inside the process.
+// The engine (feat/panel-live-stats, DlssNr_Live.cpp) writes OptiScaler.live.json beside
+// OptiScaler.ini about twice a second, but only while OptiScaler.live.request there is younger than
+// 10 s, so a game nobody is watching gets no disk traffic at all. This keeps the request fresh while
+// the panel asks and reads the answer back. An engine without the writer never answers, and the panel
+// falls back to the log timing above.
+const LIVE_REQUEST = 'OptiScaler.live.request';
+const LIVE_FILE = 'OptiScaler.live.json';
+const LIVE_TOUCH_MS = 2000;
+// Older than this and the numbers are not what is on screen now: the game stopped, or the writer did.
+const LIVE_STALE_MS = 3000;
+const liveTouched = new Map();
+
+function liveDirFor(exePath) {
+  return optiScalerDirFor(gameDir(exePath));
+}
+
+ipcMain.handle('panel:live', async (_evt, exePath) => {
+  if (!exePath || !fs.existsSync(exePath)) return { ok: false, reason: 'no-game' };
+  const dir = liveDirFor(exePath);
+  if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: false, reason: 'not-installed' };
+  const now = Date.now();
+  const last = liveTouched.get(dir) || 0;
+  if (now - last >= LIVE_TOUCH_MS) {
+    try {
+      const req = path.join(dir, LIVE_REQUEST);
+      if (fs.existsSync(req)) fs.utimesSync(req, new Date(now), new Date(now));
+      else fs.writeFileSync(req, 'OptiDLSS5-UI pop-out panel\n');
+      liveTouched.set(dir, now);
+    } catch {
+      return { ok: false, reason: 'request-failed' };
+    }
+  }
+  let live;
+  try { live = JSON.parse(fs.readFileSync(path.join(dir, LIVE_FILE), 'utf8')); } catch { return { ok: false, reason: 'no-answer' }; }
+  if (!live || live.v !== 1 || typeof live.at !== 'number') return { ok: false, reason: 'unknown-format' };
+  if (now - live.at > LIVE_STALE_MS) return { ok: false, reason: 'stale', at: live.at };
+  return { ok: true, live };
+});
+
+// The panel moved to another game, was hidden, or the app is quitting: stop asking, so the engine
+// stops writing. It would stop on its own 10 s later; this makes it immediate and leaves no file behind.
+function stopLive(dir) {
+  liveTouched.delete(dir);
+  try { fs.rmSync(path.join(dir, LIVE_REQUEST), { force: true }); } catch {}
+}
+
+ipcMain.handle('panel:live-stop', async (_evt, exePath) => {
+  if (exePath && fs.existsSync(exePath)) stopLive(liveDirFor(exePath));
+  else for (const dir of [...liveTouched.keys()]) stopLive(dir);
+  return { ok: true };
+});
+
+app.on('will-quit', () => { for (const dir of [...liveTouched.keys()]) stopLive(dir); });
+
 // The store a game came from (library.storeFor), for the grid's filter. A game does not move between
 // stores, so it is worked out once per exe per session: the grid asks for every card on every render.
 const storeCache = new Map();

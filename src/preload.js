@@ -134,6 +134,8 @@ contextBridge.exposeInMainWorld('api', {
   // loadData's, because it also says which game is running -- that is what it opens on.
   panelTargets: () => ipcRenderer.invoke('panel:targets'),
   panelTiming: (exePath) => ipcRenderer.invoke('panel:timing', exePath),
+  panelLive: (exePath) => ipcRenderer.invoke('panel:live', exePath),
+  panelLiveStop: (exePath) => ipcRenderer.invoke('panel:live-stop', exePath),
   panelClose: () => ipcRenderer.invoke('panel:close'),
   panelOpen: () => ipcRenderer.invoke('panel:open'),
   panelHotkeyState: () => ipcRenderer.invoke('panel:hotkeyState'),

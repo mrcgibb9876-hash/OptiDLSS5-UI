@@ -2588,6 +2588,8 @@ function dlssNrValueOf(key) {
 function dlssNrDependencyMet(field) {
   const d = field.dependsOn;
   if (!d) return true;
+  // { all: [...] }: every condition, e.g. Adaptive resolution's "Frame rate" needs it on AND aimed at fps.
+  if (Array.isArray(d.all)) return d.all.every((c) => dlssNrDependencyMet({ dependsOn: c }));
   const v = dlssNrValueOf(d.key);
   if (d.is !== undefined) return v === d.is;
   if (d.atLeast !== undefined) return Number(v) >= d.atLeast;

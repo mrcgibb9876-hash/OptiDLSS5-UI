@@ -98,6 +98,8 @@ function setStatus(text, accent) {
 function dependencyMet(field) {
   const d = field.dependsOn;
   if (!d) return true;
+  // { all: [...] }: every condition, e.g. Adaptive resolution's "Frame rate" needs it on AND aimed at fps.
+  if (Array.isArray(d.all)) return d.all.every((c) => dependencyMet({ dependsOn: c }));
   const v = valueOf(d.key);
   if (d.is !== undefined) return v === d.is;
   if (d.atLeast !== undefined) return Number(v) >= d.atLeast;
@@ -288,6 +290,9 @@ function renderFields() {
       el.appendChild(helpMarker(held ? t(held) : t(field.help)));
       host.appendChild(el);
     }
+
+    // The in-game panel's order: Frame Generation sits between Models and Cost.
+    if (group === 'Models') renderFrameGen(host);
   }
 }
 
@@ -332,6 +337,7 @@ async function loadGame(exePath) {
 
   fields = res.fields || [];
   forced = res.forced || {};
+  await loadFrameGen();
   applyChrome();
   renderFields();
   setStatus(res.inHelper
@@ -350,6 +356,9 @@ const TIMING_STALE_MS = 30000;
 let timingTimer = null;
 
 function renderTiming(timing) {
+  // The live readout owns the box while the engine answers; the log timing is the fallback for an
+  // engine without the live writer, or a game that is not running.
+  if (lastLive) return;
   const box = $('#p-timing');
   if (!timing || !timing.ok || timing.msPerFrame === null) {
     // A game that is running but has not reached its first report yet is worth saying, because the
@@ -395,10 +404,14 @@ function startTimingPoll() {
   stopTimingPoll();
   refreshTiming();
   timingTimer = setInterval(refreshTiming, TIMING_POLL_MS);
+  refreshLive();
+  liveTimer = setInterval(refreshLive, LIVE_POLL_MS);
 }
 
 function stopTimingPoll() {
   if (timingTimer !== null) { clearInterval(timingTimer); timingTimer = null; }
+  if (liveTimer !== null) { clearInterval(liveTimer); liveTimer = null; }
+  stopLive();
 }
 
 // The panel is hidden rather than closed, so 'hidden' is the only signal that nobody is watching.
@@ -406,6 +419,212 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) stopTimingPoll();
   else if (current) startTimingPoll();
 });
+
+// ── Live ────────────────────────────────────────────────────────────────────────────────────────
+//
+// What the in-game panel shows from inside the process -- fps, VRAM, whether the pass is running,
+// Adaptive resolution's state, frame generation's -- read from OptiScaler.live.json, which the engine
+// writes about twice a second only while this panel asks (main.js panel:live). Half a second here
+// matches the writer; the log timing above stays as the fallback for an engine that never answers.
+const LIVE_POLL_MS = 500;
+let liveTimer = null;
+let lastLive = null;
+let liveFor = null;
+
+function stopLive() {
+  if (liveFor) window.api.panelLiveStop(liveFor).catch(() => {});
+  liveFor = null;
+  lastLive = null;
+}
+
+async function refreshLive() {
+  if (!current || !current.exePath) return;
+  const exePath = current.exePath;
+  let res = null;
+  try { res = await window.api.panelLive(exePath); } catch { res = null; }
+  if (!current || current.exePath !== exePath || liveTimer === null) return;
+  liveFor = exePath;
+  const had = !!lastLive;
+  lastLive = res && res.ok ? res.live : null;
+  if (lastLive) renderLive(lastLive);
+  else if (had) refreshTiming();
+  renderFrameGenStatus();
+}
+
+// The status line Adaptive resolution shows under its rows in the in-game panel, in the same words.
+function autoScaleText(a) {
+  if (!a || !a.on) return null;
+  if (a.state === 'settling' || a.scale === null) return t('Adaptive resolution: waiting for the pass to run');
+  const scale = Math.round(a.scale * 100);
+  if (a.state === 'short') return t('At {scale}% and still short of {fps} fps - the rest of the frame is the game\'s, not DLSS 5\'s.', { scale, fps: a.fps });
+  if (a.mode === 1) return t('Holding the pass under {ms} ms - model at {scale}%', { ms: Number(a.ms).toFixed(1), scale });
+  if (a.mode === 0) return t('Holding the pass to {share}% of the frame - model at {scale}%', { share: a.share, scale });
+  return t('Holding {fps} fps - model at {scale}%', { fps: a.fps, scale });
+}
+
+function renderLive(l) {
+  const box = $('#p-timing');
+  box.hidden = false;
+  box.classList.remove('is-stale');
+  $('#p-timing-ms').textContent = l.fps === null ? t('Measuring...') : t('{fps} fps', { fps: Math.round(l.fps) });
+
+  const main = [];
+  if (l.frameMs !== null) main.push(t('{ms} ms per frame', { ms: Number(l.frameMs).toFixed(1) }));
+  if (l.vramUsedGb !== null && l.vramBudgetGb !== null) {
+    main.push(t('VRAM {used} / {budget} GB', { used: Number(l.vramUsedGb).toFixed(1), budget: Number(l.vramBudgetGb).toFixed(1) }));
+  }
+  $('#p-timing-fps').textContent = main.join('  ·  ');
+
+  const sub = [];
+  const nr = l.nr || {};
+  if (!nr.enabled) sub.push(t('DLSS 5 off'));
+  else if (!nr.running) sub.push(t('DLSS 5 on, waiting for the game'));
+  else if (nr.modelMs !== null && nr.modelMs !== undefined) sub.push(t('DLSS 5 running, model {ms} ms', { ms: Number(nr.modelMs).toFixed(2) }));
+  else sub.push(t('DLSS 5 running'));
+  const adaptive = autoScaleText(l.autoScale);
+  if (adaptive) sub.push(adaptive);
+  $('#p-timing-sub').textContent = sub.join('  ·  ');
+}
+
+// ── Frame Generation ────────────────────────────────────────────────────────────────────────────
+//
+// The in-game panel's Frame Generation section, for a game with NVIDIA DLSS Frame Generation of its
+// own: the multiplier it asks the driver for, and Dynamic. Written through framegen:setMultiplier --
+// the same per-game marker the game card uses -- not straight into [DLSSG], because a sync re-applies
+// that marker and would undo a direct write. Turning FG on and off stays the game's own setting.
+let fgState = null;
+
+async function loadFrameGen() {
+  fgState = null;
+  if (!current || !current.exePath) return;
+  try { fgState = await window.api.frameGenMultiplier(current.exePath); } catch { fgState = null; }
+}
+
+function frameGenChoice() {
+  const m = fgState && fgState.marker;
+  const ini = (fgState && fgState.ini) || {};
+  const iniFrames = parseInt(ini.frames, 10);
+  const iniTarget = Number(ini.target);
+  return {
+    frames: m ? (m.frames || null) : (Number.isInteger(iniFrames) && iniFrames >= 1 ? iniFrames : null),
+    dynamic: m ? !!m.dynamic : /^(true|1)$/i.test(String(ini.dynamic || '')),
+    target: m ? (m.target || 0) : (Number.isFinite(iniTarget) ? iniTarget : 0),
+  };
+}
+
+async function setFrameGen(next) {
+  if (!current) return;
+  const res = await window.api.frameGenSetMultiplier({ exePath: current.exePath, ...next });
+  if (!res || !res.ok) {
+    setStatus(t('Could not save: {error}', { error: (res && res.error) || t('unknown') }));
+    return;
+  }
+  await loadFrameGen();
+  setStatus(current.running ? t('Saved. A running game picks it up within a second.') : t('Saved. Applies the next time the game starts.'), true);
+  renderFields();
+}
+
+function renderFrameGenStatus() {
+  const el = document.getElementById('p-fg-status');
+  if (!el) return;
+  const fg = lastLive && lastLive.fg;
+  if (!fg || !fg.gameDlssg) { el.hidden = true; return; }
+  el.hidden = false;
+  el.textContent = fg.liveMultiplier
+    ? t('Game\'s DLSS Frame Generation: running at {n}X', { n: fg.liveMultiplier })
+    : t('Game\'s DLSS Frame Generation: off in the game\'s video settings.');
+}
+
+function renderFrameGen(host) {
+  const cap = document.createElement('div');
+  cap.className = 'p-caption';
+  cap.textContent = t('Frame Generation');
+  host.appendChild(cap);
+
+  if (!fgState || !fgState.hasFrameGen) {
+    const note = document.createElement('div');
+    note.className = 'p-note';
+    note.textContent = t('This game has no NVIDIA DLSS Frame Generation of its own.');
+    host.appendChild(note);
+    return;
+  }
+
+  const status = document.createElement('div');
+  status.id = 'p-fg-status';
+  status.className = 'p-note is-accent';
+  status.hidden = true;
+  host.appendChild(status);
+  renderFrameGenStatus();
+
+  const choice = frameGenChoice();
+  const dmfgOk = !(lastLive && lastLive.fg && lastLive.fg.gameDlssg && lastLive.fg.gameDmfgSupported === false);
+
+  // Game / 2X..6X, as the in-game pills: 1 generated frame is 2X. Greyed while Dynamic is on.
+  const seg = document.createElement('div');
+  seg.className = `p-row is-seg${choice.dynamic ? ' is-off' : ''}`;
+  const ctl = document.createElement('span');
+  ctl.className = 'p-row-ctl';
+  const pills = document.createElement('span');
+  pills.className = 'p-seg';
+  const options = [[null, t('Game')], [1, '2X'], [2, '3X'], [3, '4X'], [4, '5X'], [5, '6X']];
+  for (const [frames, text] of options) {
+    const b = document.createElement('button');
+    b.textContent = text;
+    b.disabled = choice.dynamic;
+    if (choice.frames === frames) b.classList.add('on');
+    b.addEventListener('click', () => setFrameGen({ frames, dynamic: false, target: choice.target }));
+    pills.appendChild(b);
+  }
+  ctl.appendChild(pills);
+  seg.append(ctl, helpMarker(t('This game has NVIDIA DLSS Frame Generation of its own. Turn it on or off in the game\'s video settings as usual -- the row below only changes the multiplier it asks the driver for.')
+    + '\n\n' + t('Overrides how many extra frames the game\'s DLSS-G inserts between real ones. "Game" leaves it at whatever the game\'s own menu says. 2X inserts one, 3X inserts two, and so on. 3X and 4X need an RTX 50 series -- other cards are capped at 2X by the driver, whatever is picked here.\n\nGreyed out while Multi is on below -- the driver picks the count then.')));
+  host.appendChild(seg);
+
+  if (!dmfgOk) return;
+
+  const dyn = document.createElement('div');
+  dyn.className = 'p-row is-check';
+  const boxCtl = document.createElement('span');
+  boxCtl.className = 'p-row-ctl';
+  const box = document.createElement('button');
+  box.className = `p-check${choice.dynamic ? ' on' : ''}`;
+  box.addEventListener('click', () => setFrameGen({ frames: choice.frames, dynamic: !choice.dynamic, target: choice.target }));
+  boxCtl.appendChild(box);
+  const label = document.createElement('span');
+  label.className = 'p-row-label';
+  label.textContent = t('Multi (Dynamic Frame Generation)');
+  dyn.append(boxCtl, label, helpMarker(t('Lets NVIDIA\'s driver vary the multiplier itself, frame to frame, to hold the FPS target below -- instead of a fixed 2X/3X/4X.')));
+  host.appendChild(dyn);
+
+  if (!choice.dynamic) return;
+
+  // 0..200, 0 = the display's refresh rate -- the in-game slider's own range.
+  const tr = document.createElement('div');
+  tr.className = 'p-row';
+  const tl = document.createElement('span');
+  tl.className = 'p-row-label';
+  tl.textContent = t('DMFG FPS Target');
+  const tc = document.createElement('span');
+  tc.className = 'p-row-ctl';
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.className = 'p-slider';
+  slider.min = '0';
+  slider.max = '200';
+  slider.step = '1';
+  slider.value = String(Math.round(choice.target || 0));
+  const fill = () => slider.style.setProperty('--fill', `${(Number(slider.value) / 2).toFixed(1)}%`);
+  fill();
+  const tv = document.createElement('span');
+  tv.className = 'p-row-value';
+  const show = () => { tv.textContent = Number(slider.value) === 0 ? t('auto') : slider.value; };
+  show();
+  slider.addEventListener('input', () => { fill(); show(); });
+  slider.addEventListener('change', () => setFrameGen({ frames: null, dynamic: true, target: Number(slider.value) }));
+  tc.appendChild(slider);
+  tr.append(tl, tc, tv, helpMarker(t('0 auto-detects your display\'s refresh rate.')));
+  host.appendChild(tr);
+}
 
 async function refreshTargets() {
   const res = await window.api.panelTargets();
