@@ -195,8 +195,7 @@ test('dgVoodoo2: pinned release, its layout checked, configured in the right sec
   assert.match(conf, /\[Glide\]\r?\nVideoCard\s*=\s*voodoo_2/, 'the Glide card is not touched');
   assert.match(conf, /\[DirectX\][\s\S]*VideoCard\s*=\s*internal3D/);
   assert.match(conf, /DisableAndPassThru\s*=\s*false/);
-  // 2047, not 4096: 4096 MB is 2^32 bytes and wraps to 0 in a DirectX 9 game (Castlevania LoS2 demo).
-  assert.match(conf, /VRAM\s*=\s*2047\b/);
+  assert.match(conf, /VRAM\s*=\s*4096/);
   assert.match(conf, /dgVoodooWatermark\s*=\s*false/);
   assert.match(conf, /OutputAPI\s*=\s*d3d11_fl11_0/);
 
@@ -426,16 +425,8 @@ test('an older 32-bit install is brought to the borderless window once, and left
   assert.match(conf, /AppControlledScreenMode\s*=\s*false/);
   assert.match(conf, /WindowedAttributes\s*=\s*borderless, fullscreensize/);
   assert.match(conf, /ScalingMode\s*=\s*stretched_ar/, 'an older install gets the scaled image too');
-  assert.match(conf, /VRAM\s*=\s*2047\b/, 'the old 4096 default is brought down to 2047');
+  assert.match(conf, /VRAM\s*=\s*4096/, 'nothing else touched');
   assert.equal(legacy.ensureDgVoodooWindowed(game), false, 'already windowed: no rewrite');
-});
-
-test('a VRAM someone chose is left alone on sync', () => {
-  const game = scratchDir('legacy-vram-custom');
-  write(game, legacy.MARKER, JSON.stringify({ version: 1, files: ['D3D9.dll', 'dgVoodoo.conf'], backups: [], dirs: [], dgVoodoo: { arch: 'x86', dll: 'D3D9.dll' } }));
-  write(game, 'dgVoodoo.conf', '[General]\nScalingMode = stretched_ar\n\n[GeneralExt]\nWindowedAttributes = borderless, fullscreensize\nColorSpace = argb8888_srgb\n\n[DirectX]\nVRAM = 1024\n');
-  legacy.ensureDgVoodooWindowed(game);
-  assert.match(fs.readFileSync(path.join(game, 'dgVoodoo.conf'), 'utf8'), /VRAM\s*=\s*1024\b/);
 });
 
 test('the 32-bit in-game panel gets Alt+Home, and a key the player chose is left alone', () => {

@@ -271,15 +271,6 @@ function cachedDgVoodoo(cacheDir) {
 // 256 MB, and a DirectX 9 game at a modern resolution runs out in seconds (DLSS5-Swapper measured SWTOR
 // failing at 1024 MB); the number is a ceiling, not an allocation.
 //
-// 2047, not 4096: a DirectX 9 game reads video memory as a 32-bit count of bytes (D3D9's
-// GetAvailableTextureMem is a UINT), and 4096 MB is exactly 2^32 -- it wraps to 0. Castlevania: Lords
-// of Shadow 2 (demo, 2026-09-19) refused to start with "not enough video memory" at 4096 and ran at
-// 2047. A game that keeps the count signed breaks at 2048 too, so 2047 is the largest safe either way.
-const DG_VRAM_MB = '2047';
-// What installs before 2026-09-19 wrote. Only that exact value is migrated on sync: anything else in an
-// existing conf was chosen by someone, and is left alone.
-const DG_VRAM_OLD_DEFAULT = '4096';
-//
 // windowed (the 32-bit helper route): dgVoodoo2 presents the game as a borderless, screen-sized
 // window whatever the game asks for. In exclusive fullscreen the game loses focus the moment the
 // Feeder starts its 64-bit helper, minimises, and a game that pauses while inactive never comes back:
@@ -319,7 +310,7 @@ function configureDgVoodoo(text, { windowed = false } = {}) {
   out = setIniKey(out, 'General', 'CaptureMouse', 'false');
   out = setIniKey(out, 'DirectX', 'DisableAndPassThru', 'false');
   out = setIniKey(out, 'DirectX', 'VideoCard', 'internal3D');
-  out = setIniKey(out, 'DirectX', 'VRAM', DG_VRAM_MB);
+  out = setIniKey(out, 'DirectX', 'VRAM', '4096');
   out = setIniKey(out, 'DirectX', 'dgVoodooWatermark', 'false');
   for (const [section, key, value] of DG_DISPLAY) out = setIniKey(out, section, key, value);
   if (windowed) for (const [section, key, value] of DG_WINDOWED) out = setIniKey(out, section, key, value);
@@ -328,7 +319,7 @@ function configureDgVoodoo(text, { windowed = false } = {}) {
 
 // Brings an existing install's dgVoodoo.conf up to the current display settings: the scaled image on
 // every dgVoodoo2 route, and the borderless window on the 32-bit route (installs made before either
-// existed), and the old 4096 MB VRAM down to 2047 (see DG_VRAM_MB). Returns true when the file changed.
+// existed). Returns true when the file changed.
 function ensureDgVoodooWindowed(dir) {
   const marker = readMarker(dir);
   if (!marker || !marker.dgVoodoo) return false;
@@ -338,8 +329,6 @@ function ensureDgVoodooWindowed(dir) {
   let next = text;
   for (const [section, key, value] of DG_DISPLAY) next = setIniKey(next, section, key, value);
   if (marker.host32) for (const [section, key, value] of DG_WINDOWED) next = setIniKey(next, section, key, value);
-  const vram = getIniKey(next, 'DirectX', 'VRAM');
-  if (vram !== null && String(vram).trim() === DG_VRAM_OLD_DEFAULT) next = setIniKey(next, 'DirectX', 'VRAM', DG_VRAM_MB);
   if (next === text) return false;
   fs.writeFileSync(confPath, next, 'utf8');
   return true;
