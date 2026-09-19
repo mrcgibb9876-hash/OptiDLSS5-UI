@@ -1,6 +1,8 @@
 // Français. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("fr", {
+  "Clean-up before Ray Reconstruction": "Nettoyage avant Ray Reconstruction",
+  "The colour before Ray Reconstruction is the noisy ray-traced frame. At 1 the model reads a cleaned copy -- filtered along the game's depth and surface colour -- and only its edit goes back onto the original noise, so Ray Reconstruction still cleans the noise it was trained on, now around the model's detail.\n\n0 is the old behaviour: the model reads the raw noise and replaces it.": "La couleur avant Ray Reconstruction est l'image bruitée du ray tracing. À 1, le modèle lit une copie nettoyée -- filtrée selon la profondeur et la couleur de surface du jeu -- et seule sa modification revient sur le bruit d'origine, si bien que Ray Reconstruction nettoie toujours le bruit pour lequel il a été entraîné, désormais autour du détail du modèle.\n\n0 est l'ancien comportement : le modèle lit le bruit brut et le remplace.",
   "Older games run on DX9, DX8 or DX10: pick that if it is what the game uses, and the route puts dgVoodoo2 or the 32-bit helper in for it.": "Les jeux plus anciens tournent en DX9, DX8 ou DX10 : choisissez-le si c'est ce que le jeu utilise, et la route met dgVoodoo2 ou l'assistant 32 bits en place.",
   "Settings": "Paramètres",
   "Scan for Games": "Rechercher des jeux",

@@ -1,6 +1,8 @@
 // 简体中文. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("zh-CN", {
+  "Clean-up before Ray Reconstruction": "Ray Reconstruction 前清理",
+  "The colour before Ray Reconstruction is the noisy ray-traced frame. At 1 the model reads a cleaned copy -- filtered along the game's depth and surface colour -- and only its edit goes back onto the original noise, so Ray Reconstruction still cleans the noise it was trained on, now around the model's detail.\n\n0 is the old behaviour: the model reads the raw noise and replaces it.": "Ray Reconstruction 之前的颜色是带噪点的光线追踪画面。设为 1 时，模型读取一份沿游戏深度和表面颜色过滤过的干净副本，只有它的修改会叠回原始噪点上，因此 Ray Reconstruction 仍按训练的方式去除噪点，同时保留模型的细节。\n\n0 为旧行为：模型读取原始噪点并替换它。",
   "Older games run on DX9, DX8 or DX10: pick that if it is what the game uses, and the route puts dgVoodoo2 or the 32-bit helper in for it.": "较老的游戏使用 DX9、DX8 或 DX10：如果游戏用的是它，就选它，路线会为它放入 dgVoodoo2 或 32 位辅助程序。",
   "Settings": "设置",
   "Scan for Games": "扫描游戏",

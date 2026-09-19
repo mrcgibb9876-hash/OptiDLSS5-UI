@@ -1,6 +1,8 @@
 // 한국어. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("ko", {
+  "Clean-up before Ray Reconstruction": "Ray Reconstruction 전 정리",
+  "The colour before Ray Reconstruction is the noisy ray-traced frame. At 1 the model reads a cleaned copy -- filtered along the game's depth and surface colour -- and only its edit goes back onto the original noise, so Ray Reconstruction still cleans the noise it was trained on, now around the model's detail.\n\n0 is the old behaviour: the model reads the raw noise and replaces it.": "Ray Reconstruction 전의 색상은 노이즈가 있는 레이 트레이싱 프레임입니다. 1에서는 모델이 게임의 깊이와 표면 색상을 따라 필터링된 깨끗한 사본을 읽고, 그 편집만 원래 노이즈 위에 다시 더해집니다. 그래서 Ray Reconstruction은 학습된 대로 노이즈를 제거하며, 이제 모델의 디테일을 살립니다.\n\n0은 이전 동작입니다: 모델이 원시 노이즈를 읽고 그것을 대체합니다.",
   "Older games run on DX9, DX8 or DX10: pick that if it is what the game uses, and the route puts dgVoodoo2 or the 32-bit helper in for it.": "오래된 게임은 DX9, DX8 또는 DX10으로 실행됩니다: 게임이 그것을 쓴다면 선택하세요. 경로가 dgVoodoo2 또는 32비트 도우미를 넣어 줍니다.",
   "Settings": "설정",
   "Scan for Games": "게임 검색",
