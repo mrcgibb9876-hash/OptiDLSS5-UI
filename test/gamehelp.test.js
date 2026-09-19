@@ -127,10 +127,29 @@ const rows = [
   ['a legacy game that ran with no DLSS at all is offered the other wrapper',
     base({ route: { route: 'feeder32', complete: true, dgVoodooDeployed: true, legacy: { supported: true, api: 'dx9', host32: true, dgVoodoo: { arch: 'x86', dll: 'D3D9.dll' } } }, run: { ran: true, verdict: 'no-dlss' } }),
     { status: 'fix', code: 'dgvoodoo-no-dlss', fix: 'swap-to-dxvk' }],
-  // A missing DLSS runtime is a named file, not a guess about a layer: it still wins.
+  // A missing DLSS runtime is a named file, not a guess about a layer: it still wins. The Feeder is
+  // not deployed on this one, so Install is what would place the file.
   ['a missing nvngx_dlss.dll still outranks the wrapper swap',
     base({ route: { route: 'feeder32', complete: true, dgVoodooDeployed: true, legacy: { supported: true, api: 'dx9' } }, run: { ran: true, verdict: 'no-dlss', dlssRuntimeMissing: true } }),
-    { status: 'fix', code: 'dlss-runtime-missing', fix: 'reconfigure' }],
+    { status: 'fix', code: 'dlss-runtime-missing', fix: 'install' }],
+
+  // Who can put nvngx_dlss.dll back is the route's question, and Reconfigure is never the answer:
+  // it rewrites the ini and can rename the proxy, and has never placed a DLL on any route.
+  // Baldur's Gate 3 (#83) is what proved it -- "verdict: init-no-feature", "nvngx_dlss.dll: not
+  // beside the exe", Reconfigure applied, nothing moved, next run came back "fix-failed".
+  ['a Feeder game that lost its DLSS runtime re-runs the deploy that places it',
+    base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'no-dlss', dlssRuntimeMissing: true } }),
+    { status: 'fix', code: 'dlss-runtime-missing', fix: 'redeploy-feeder' }],
+  ['a Luma game that lost its DLSS runtime installs, which runs Luma\'s own deploy',
+    base({ route: { route: 'lumaue', lumaDeployed: true }, run: { ran: true, verdict: 'no-dlss', dlssRuntimeMissing: true } }),
+    { status: 'fix', code: 'dlss-runtime-missing', fix: 'install' }],
+  // The plain route: the file is the game's, nothing here deploys it, so there is no fix to offer.
+  ['a game on the plain route is told the runtime is its own to supply, not offered a fix',
+    base({ route: { route: 'optiscaler' }, run: { ran: true, verdict: 'init-no-feature', dlssRuntimeMissing: true } }),
+    { status: 'step', code: 'dlss-runtime-missing-native' }],
+  ['the same holds for the no-dlss verdict on the plain route',
+    base({ route: { route: 'optiscaler' }, run: { ran: true, verdict: 'no-dlss', dlssRuntimeMissing: true } }),
+    { status: 'step', code: 'dlss-runtime-missing-native' }],
   // Not ours to swap: a wrapper this app never deployed is left alone.
   ['a game with no dgVoodoo2 of ours keeps the old answer',
     base({ route: { route: 'feeder', feederDeployed: true, dgVoodooDeployed: false }, run: { ran: true, verdict: 'no-dlss' } }),
