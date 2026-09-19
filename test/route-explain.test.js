@@ -69,28 +69,34 @@ test('emulators name themselves, and on OpenGL the panel offered is this app\'s 
   // nothing when a working one was a keypress off.
   const gl = explain.explainRoute({ route: 'feeder', emulator: emu }, 'opengl');
   assert.equal(gl.key, 'emulator-opengl');
-  assert.match(gl.panel, /Alt\+Shift\+Home/);
-  assert.doesNotMatch(gl.panel, /Press Alt\+Home/);
+  assert.equal(gl.panel, null, 'nothing of OptiScaler is drawn in the game on OpenGL');
+  assert.equal(gl.popout, 'only', 'but it is in the process, so its ini can still be edited');
   assert.equal(explain.explainRoute({ route: 'feeder', legacy: { api: 'dx9' } }, 'dx9').key, 'dx9');
 });
 
-// "I need the in-game menu to work in all games": the overlay OptiScaler draws cannot be made
-// universal (a game can swallow the key, an anti-cheat can block the hook, the 32-bit route only
-// mirrors the helper's), but the break-away panel can -- it is our own window, on by default, and it
-// writes the ini the engine re-reads. So every route that has OptiScaler in the game names it.
-test('every route with OptiScaler in the game offers the break-away panel as the fallback', () => {
+// "I need the in-game menu to work in all games": the overlay OptiScaler draws cannot be made universal
+// (a game can swallow the key, an anti-cheat can block the hook, the 32-bit route only mirrors the
+// helper's), but the break-away panel can -- it is our own window and it writes the ini the engine
+// re-reads. So every route with OptiScaler in the game offers it. Whether its hotkey actually works is
+// the renderer's to decide (popoutHotkeyUsable), which is why this is a flag and not a sentence.
+test('every route with OptiScaler in the game offers the break-away panel, and the others offer nothing', () => {
   const withOptiScaler = ['optiscaler', 'feeder', 'feeder-vulkan', 'feeder-opengl', 'feeder32', 'dx9',
-    'emulator', 'emulator-opengl', 'present', 'lumaue'];
+    'emulator', 'present', 'lumaue'];
   for (const key of withOptiScaler) {
-    const e = explain.ROUTES[key];
-    assert.ok(e, `${key} exists`);
-    assert.match(e.panel, /Alt\+Shift\+Home/, `${key} names the break-away panel`);
+    const e = explain.explainRoute({ route: key === 'feeder-vulkan' || key === 'feeder-opengl' ? 'feeder' : key },
+      key === 'feeder-vulkan' ? 'vulkan' : key === 'feeder-opengl' ? 'opengl' : null);
+    assert.ok(e && e.panel, `${key} draws a panel in the game`);
+    assert.equal(e.popout, 'fallback', `${key} should offer the break-away panel as a fallback`);
   }
-  // The routes with no OptiScaler in the game must not promise either panel: there is nothing running
-  // to draw one or to take a setting.
-  for (const key of ['nr-model-only', 'amdnr']) {
-    assert.doesNotMatch(String(explain.ROUTES[key].panel || ''), /Alt\+Shift\+Home/,
-      `${key} has no OptiScaler, so no panel of either kind`);
+  // OpenGL in an emulator draws nothing, but OptiScaler is still there to be configured.
+  assert.equal(explain.explainRoute({ route: 'feeder', emulator: { name: 'x' } }, 'opengl').popout, 'only');
+
+  // No OptiScaler in the game: neither panel can reach it, so neither is promised.
+  for (const key of ['nr-model-only', 'amdnr', 'unsupported', 'unknown']) {
+    const e = key === 'nr-model-only'
+      ? explain.explainRoute({ route: 'optiscaler', nrModelOnly: true })
+      : explain.explainRoute({ route: key });
+    assert.equal(e.popout, null, `${key} has no OptiScaler, so no panel of either kind`);
   }
 });
 
@@ -152,10 +158,9 @@ test('a game on an engine build with no in-game panel is pointed at Alt+Shift+Ho
 
   write(dir, engines.ENGINE_MARKER, JSON.stringify({ engine: 'presr' }));
   const presr = route.recommendRoute(dir, exe, det, 'nvidia');
-  assert.equal(presr.explain.key, 'optiscaler', 'the route is unchanged -- only the panel line moves');
-  assert.doesNotMatch(presr.explain.panel, /Press Alt\+Home/);
-  assert.match(presr.explain.panel, /Alt\+Home does nothing/);
-  assert.match(presr.explain.panel, /Alt\+Shift\+Home/);
+  assert.equal(presr.explain.key, 'optiscaler', 'the route is unchanged -- only the panel changes');
+  assert.equal(presr.explain.panel, null, 'this build draws nothing in the game');
+  assert.equal(presr.explain.popout, 'only', 'so the break-away panel is the only way in');
 
   // A marker naming a build that does draw one, and a marker naming nothing we ship, both get ours.
   write(dir, engines.ENGINE_MARKER, JSON.stringify({ engine: 'dlssnr' }));

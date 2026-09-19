@@ -3106,13 +3106,35 @@ $('#game-api-select').addEventListener('change', async (e) => {
   renderGrid();
 });
 
+// The break-away panel, as the Panel row should describe it on this machine. route-explain.js says
+// whether the route offers it ('fallback' beside its own in-game panel, 'only' when nothing is drawn in
+// the game); this decides what to say about it, because only the renderer knows whether the hotkey
+// works -- it can be switched off in Settings, and Windows can refuse it to a program already holding
+// it. Naming it regardless is the 2026-09-18 bug renderer-dom.test.js guards against.
+function popoutPanelSentence(popout) {
+  if (!popout) return '';
+  if (popoutHotkeyUsable()) {
+    const vars = { hotkey: settings.panelHotkey || DEFAULT_PANEL_HOTKEY };
+    return popout === 'only'
+      ? t('Nothing is drawn inside the game here: press {hotkey} for this app\'s own panel window, which changes the same settings while the game runs.', vars)
+      : t('If the game will not show it, press {hotkey} for this app\'s own panel window, which needs nothing from the game.', vars);
+  }
+  // Off or refused. On 'fallback' the in-game panel is still the answer, so there is nothing to add;
+  // on 'only' there is no other way in, and saying so beats silence.
+  return popout === 'only'
+    ? t('Nothing is drawn inside the game here, and the pop-out panel is switched off -- turn it on in Settings to change these settings while a game runs.')
+    : '';
+}
+
 // A route's short explanation (route-explain.js) as three labelled lines: English templates from
 // main, translated here. '' when the route has none.
 function routeExplainHtml(explain) {
   if (!explain || !explain.does) return '';
-  const rows = [[t('What it does'), explain.does], [t('Limits'), explain.limits], [t('Panel'), explain.panel]];
+  const panel = [explain.panel ? t(explain.panel, explain.vars || undefined) : '', popoutPanelSentence(explain.popout)]
+    .filter(Boolean).join(' ');
+  const rows = [[t('What it does'), t(explain.does, explain.vars || undefined)], [t('Limits'), explain.limits ? t(explain.limits, explain.vars || undefined) : ''], [t('Panel'), panel]];
   return rows.filter(([, text]) => text)
-    .map(([label, text]) => `<div class="route-explain-row"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(t(text, explain.vars || undefined))}</div>`)
+    .map(([label, text]) => `<div class="route-explain-row"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(text)}</div>`)
     .join('');
 }
 
@@ -4979,40 +5001,51 @@ $('#btn-manager-restart').addEventListener('click', async () => {
 
 // Checks GitHub for a newer engine and installs it. Returns { ok, updated, tag } or
 // { ok: false, error }. Shared by the launch/6-hour check and the top bar's Check for Updates.
-async function updateEngineIfNewer() {
-  const res = await window.api.checkUpdate(DEFAULT_ENGINE_ID);
-  if (!res.ok) return { ok: false, error: res.error };
-  const installed = engineVersion();
+// Every build worth checking: the default one always (it is bundled, so it is always on disk) and any
+// other that has a folder here. A build nobody chose is never fetched just to check it for updates.
+function enginesInUse() {
+  return Object.keys(ENGINE_LABELS).filter((id) => id === DEFAULT_ENGINE_ID || !!engineFolder(id));
+}
+
+async function updateEngineIfNewer(id = DEFAULT_ENGINE_ID) {
+  id = engineIdOrDefault(id);
+  const res = await window.api.checkUpdate(id);
+  if (!res.ok) return { ok: false, engine: id, error: res.error };
+  const installed = engineVersion(id);
   // Never step backwards from the bundled engine because GitHub's "latest" lags behind it. The
   // offer is the engine this app version was tested with; a newer one is only mentioned.
-  if (installed && compareTags(installed, res.tag) >= 0) return { ok: true, updated: false, tag: installed, newerUntested: res.newerUntested };
-  const hadRelease = !!engineFolder();
+  if (installed && compareTags(installed, res.tag) >= 0) return { ok: true, engine: id, updated: false, tag: installed, newerUntested: res.newerUntested };
+  const hadRelease = !!engineFolder(id);
   const installRes = await window.api.installUpdate({
     downloadUrl: res.downloadUrl,
     assetName: res.assetName,
     tag: res.tag,
-    engine: DEFAULT_ENGINE_ID,
+    engine: id,
     sha256Url: res.sha256Url,
     sha256: res.sha256,
   });
-  if (!installRes.ok) return { ok: false, error: installRes.error, tag: res.tag };
-  setEngineState(DEFAULT_ENGINE_ID, installRes.folder, res.tag);
+  if (!installRes.ok) return { ok: false, engine: id, error: installRes.error, tag: res.tag };
+  setEngineState(id, installRes.folder, res.tag);
   await window.api.saveSettings(settings);
   refreshBannerVisibility();
   autoSyncStaleGames();
-  return { ok: true, updated: true, hadRelease, tag: res.tag, newerUntested: res.newerUntested };
+  return { ok: true, engine: id, updated: true, hadRelease, tag: res.tag, newerUntested: res.newerUntested };
 }
 
+// Sequential, not Promise.all: two builds updating at once would both write settings.json and race
+// each other's engine state, and one download at a time is kinder to a slow connection anyway.
 async function autoUpdateOptiScalerRelease() {
-  const res = await updateEngineIfNewer();
-  if (!res.ok) {
-    if (res.tag) toast(t('Auto-update to {tag} failed: {error}', { tag: res.tag, error: res.error }));
-    return;
+  for (const id of enginesInUse()) {
+    const res = await updateEngineIfNewer(id);
+    if (!res.ok) {
+      if (res.tag) toast(t('Auto-update to {tag} failed: {error}', { tag: res.tag, error: res.error }));
+      continue;
+    }
+    if (!res.updated) continue;
+    toast(res.hadRelease
+      ? t('{engine} auto-updated to {tag}.', { engine: engineLabel(id), tag: res.tag })
+      : t('Fetched {engine} {tag} automatically.', { engine: engineLabel(id), tag: res.tag }));
   }
-  if (!res.updated) return;
-  toast(res.hadRelease
-    ? t('{engine} auto-updated to {tag}.', { engine: engineLabel(), tag: res.tag })
-    : t('Fetched {engine} {tag} automatically.', { engine: engineLabel(), tag: res.tag }));
 }
 $('#btn-clean-folder').addEventListener('click', async () => {
   const statusEl = $('#clean-folder-status');
@@ -5048,16 +5081,27 @@ $('#btn-check-updates').addEventListener('click', async () => {
   btn.textContent = t('Checking…');
   const lines = [];
   try {
-    const [managerRes, engineRes] = await Promise.all([
+    // Every build in use, not just the default: a game left on the Pre-SR build was never offered its
+    // newer releases before this. One await for the whole sweep so the manager check runs alongside it.
+    const [managerRes, engineResults] = await Promise.all([
       window.api.checkManagerUpdate().catch((e) => ({ ok: false, error: String(e && e.message || e) })),
-      updateEngineIfNewer().catch((e) => ({ ok: false, error: String(e && e.message || e) })),
+      (async () => {
+        const out = [];
+        for (const id of enginesInUse()) {
+          out.push(await updateEngineIfNewer(id).catch((e) => ({ ok: false, engine: id, error: String(e && e.message || e) })));
+        }
+        return out;
+      })(),
     ]);
 
-    if (!engineRes.ok) lines.push(t('Update failed: {error}', { error: engineRes.error }));
-    else if (engineRes.updated) lines.push(t('OptiScaler engine updated to {tag}', { tag: engineRes.tag }) + '.');
-    else lines.push(t('{engine} up to date ({tag}).', { engine: engineLabel(), tag: engineRes.tag || '?' }));
-    if (engineRes.ok && engineRes.newerUntested) {
-      lines.push(t('{engine} {tag} is out, but this app version was not tested with it -- it comes with the next app update.', { engine: engineLabel(), tag: engineRes.newerUntested }));
+    for (const engineRes of engineResults) {
+      const name = engineLabel(engineRes.engine);
+      if (!engineRes.ok) lines.push(t('{engine} update failed: {error}', { engine: name, error: engineRes.error }));
+      else if (engineRes.updated) lines.push(t('{engine} updated to {tag}.', { engine: name, tag: engineRes.tag }));
+      else lines.push(t('{engine} up to date ({tag}).', { engine: name, tag: engineRes.tag || '?' }));
+      if (engineRes.ok && engineRes.newerUntested) {
+        lines.push(t('{engine} {tag} is out, but this app version was not tested with it -- it comes with the next app update.', { engine: name, tag: engineRes.newerUntested }));
+      }
     }
 
     // Toasts for itself when it fetches; a newer model reaches the games through the sync.

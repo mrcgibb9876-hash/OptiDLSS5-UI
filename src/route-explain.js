@@ -22,18 +22,16 @@
 //     because route.js keeps recommending `optiscaler` for a game that ships its own DLSS: without this
 //     entry the card showed that route's "Press Alt+Home" line on a game with no OptiScaler in it.
 
-// Every route that has OptiScaler in the game says both keys: Alt+Home for the panel OptiScaler draws
-// inside the game, and Alt+Shift+Home for this app's own window when the game will not show that one.
-// The break-away panel needs nothing from the game (panelwindow.js: the hotkey is the OS's, and the
-// controls write the ini the engine re-reads), which is exactly what a game refusing the overlay needs --
-// and until now it was named only in Settings and in Edit, never where the panel fails to open.
-const PANEL = 'Press Alt+Home in the game for the DLSS 5 panel. Run the game windowed or borderless: Windows will not draw it over exclusive fullscreen. If the game will not show it, press Alt+Shift+Home for this app\'s own panel window, which needs nothing from the game.';
-
-// The engine build a game is on can be one that draws no panel inside the game at all (engines.js
-// `panel: false`, wilsjo2's Pre-SR fork). Alt+Home is then a key that does nothing, so this replaces
-// the line rather than qualifying it -- the break-away panel is the whole answer there, and it works
-// because it edits the ini instead of drawing anything.
-const PANEL_NO_INGAME = 'This engine build draws no panel inside the game, so Alt+Home does nothing on it. Press Alt+Shift+Home for this app\'s own panel window: it edits the same settings live and needs nothing from the game.';
+// This module says what the ROUTE offers; whether the break-away panel (Alt+Shift+Home) can be
+// offered as well is a fact about the machine, not the route -- it can be switched off in Settings, and
+// Windows can refuse its hotkey to another program that already holds it. So `popout` below says
+// whether that panel is the fallback or the only answer, and the renderer, which knows through
+// popoutHotkeyUsable() whether the key works at all, supplies the sentence. Naming it unconditionally
+// here sent people to a dead key, which is the 2026-09-18 bug renderer-dom.test.js guards against.
+//   'fallback' the route draws its own panel in the game; the break-away one is the backup
+//   'only'     nothing is drawn in the game, but OptiScaler is there, so its ini can still be edited
+//   null       no panel of either kind: nothing of ours is in the game to draw one or take a setting
+const PANEL = 'Press Alt+Home in the game for the DLSS 5 panel. Run the game windowed or borderless: Windows will not draw it over exclusive fullscreen.';
 
 const ROUTES = {
   optiscaler: {
@@ -45,6 +43,7 @@ const ROUTES = {
     does: 'The game\'s own DLSS loads the Neural Rendering model by itself. Nothing this app installs is in the game\'s loader.',
     limits: 'Turn DLSS on in the game\'s own settings. Frame Generation is the game\'s own. Game Help offers this route for a game that will not start with OptiScaler in it.',
     panel: 'No panel on this route: OptiScaler is not in the game, so Alt+Home does nothing. Press Install to put OptiScaler and the panel back.',
+    popout: null,
   },
   feeder: {
     does: 'The game has no DLSS, so the DLSS5 Feeder makes a DLSS call from ReShade\'s depth and estimated motion vectors.',
@@ -64,7 +63,7 @@ const ROUTES = {
   feeder32: {
     does: 'Experimental. A 32-bit game cannot run DLSS itself, so each frame goes to a 64-bit helper beside the game, where OptiScaler runs DLSS 5.',
     limits: 'Not yet confirmed on many games. The helper needs the game windowed or borderless to show anything.',
-    panel: 'Press Alt+Home in the game for the DLSS 5 panel. The helper draws it over the game, and it takes clicks there. If it will not open, or opens and takes no clicks, press Alt+Shift+Home for this app\'s own panel window, which needs nothing from the game.',
+    panel: 'Press Alt+Home in the game for the DLSS 5 panel. The helper draws it over the game, and it takes clicks there.',
   },
   dx9: {
     does: 'Experimental. dgVoodoo2 turns DirectX 9 into DirectX 11, then the DLSS5 Feeder and OptiScaler work as on any DX11 game.',
@@ -79,7 +78,8 @@ const ROUTES = {
   'emulator-opengl': {
     does: 'Experimental. The DLSS5 Feeder makes a DLSS call inside {name}, for every game it runs.',
     limits: 'OptiScaler cannot draw anything over OpenGL. Use the emulator\'s Direct3D or Vulkan renderer if it has one.',
-    panel: 'There is no in-game panel on OpenGL: OptiScaler cannot draw over it. Press Alt+Shift+Home for this app\'s own panel window instead -- it needs nothing from the emulator and changes the same settings, live.',
+    panel: null,
+    popout: 'only',
   },
   present: {
     does: 'DLSS 5 runs at the end of each frame, on top of the game\'s own anti-aliasing. OptiScaler finds the depth itself: no Feeder, nothing to download.',
@@ -140,10 +140,15 @@ function explainRoute(route, api = null) {
   if (!key) return null;
   const e = ROUTES[key];
   const vars = route.emulator ? { name: route.emulator.name || '' } : null;
-  // A route with no panel of its own to promise keeps its own words: on the model-only route nothing
-  // of ours is in the game to draw one whatever the build, and its line already points at Install.
-  const noInGamePanel = route.enginePanel === false && e.panel && key !== 'nr-model-only';
-  return { key, does: e.does, limits: e.limits, panel: noInGamePanel ? PANEL_NO_INGAME : e.panel, vars };
+  // An engine build that draws nothing in the game (engines.js `panel: false`) takes the in-game line
+  // away and leaves the break-away panel as the only way in. The model-only route keeps its own words:
+  // nothing of ours is in that game whatever the build, so neither panel can reach it.
+  const buildDrawsNothing = route.enginePanel === false && key !== 'nr-model-only';
+  const panel = buildDrawsNothing ? null : e.panel;
+  // Default: a route that draws its own panel offers the break-away one as a fallback; a route that
+  // draws none offers nothing, unless its entry says OptiScaler is still there to be configured.
+  const popout = e.popout !== undefined ? e.popout : (panel ? 'fallback' : (buildDrawsNothing ? 'only' : null));
+  return { key, does: e.does, limits: e.limits, panel, popout, vars };
 }
 
 function explainLayer(layer) {
@@ -152,9 +157,7 @@ function explainLayer(layer) {
 
 // Every English string this module can hand the renderer, for the translation tests.
 function allStrings() {
-  // PANEL_NO_INGAME is handed over by explainRoute rather than sitting in a ROUTES entry, so it has to
-  // be listed here by hand or the locale test would not know to demand a translation for it.
-  const out = new Set([PANEL, PANEL_NO_INGAME]);
+  const out = new Set([PANEL]);
   for (const e of Object.values(ROUTES)) for (const s of [e.does, e.limits, e.panel]) if (s) out.add(s);
   for (const s of Object.values(LAYERS)) out.add(s);
   return [...out];
