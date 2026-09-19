@@ -57,16 +57,40 @@ test('a 32-bit game gets the helper explanation, Alt+Home, and the layer choices
   assert.ok(r.layerExplain && r.layerExplain.dgvoodoo && r.layerExplain.dxvk && r.layerExplain.native);
 });
 
-test('emulators name themselves, and on OpenGL there is no panel to promise', () => {
+test('emulators name themselves, and on OpenGL the panel offered is this app\'s own window', () => {
   const emu = { name: 'Dolphin', system: 'GameCube', hint: 'Graphics > Backend' };
   const d3d = explain.explainRoute({ route: 'feeder', emulator: emu }, 'dx11');
   assert.equal(d3d.key, 'emulator');
   assert.deepEqual(d3d.vars, { name: 'Dolphin' });
   assert.match(d3d.does, /\{name\}/);
+  // OptiScaler cannot draw over OpenGL, so there is no in-game panel -- but it is in the process, so
+  // the break-away panel edits its ini as anywhere else. Saying "no panel" sent people away with
+  // nothing when a working one was a keypress off.
   const gl = explain.explainRoute({ route: 'feeder', emulator: emu }, 'opengl');
   assert.equal(gl.key, 'emulator-opengl');
-  assert.equal(gl.panel, null);
+  assert.match(gl.panel, /Alt\+Shift\+Home/);
+  assert.doesNotMatch(gl.panel, /Press Alt\+Home/);
   assert.equal(explain.explainRoute({ route: 'feeder', legacy: { api: 'dx9' } }, 'dx9').key, 'dx9');
+});
+
+// "I need the in-game menu to work in all games": the overlay OptiScaler draws cannot be made
+// universal (a game can swallow the key, an anti-cheat can block the hook, the 32-bit route only
+// mirrors the helper's), but the break-away panel can -- it is our own window, on by default, and it
+// writes the ini the engine re-reads. So every route that has OptiScaler in the game names it.
+test('every route with OptiScaler in the game offers the break-away panel as the fallback', () => {
+  const withOptiScaler = ['optiscaler', 'feeder', 'feeder-vulkan', 'feeder-opengl', 'feeder32', 'dx9',
+    'emulator', 'emulator-opengl', 'present', 'lumaue'];
+  for (const key of withOptiScaler) {
+    const e = explain.ROUTES[key];
+    assert.ok(e, `${key} exists`);
+    assert.match(e.panel, /Alt\+Shift\+Home/, `${key} names the break-away panel`);
+  }
+  // The routes with no OptiScaler in the game must not promise either panel: there is nothing running
+  // to draw one or to take a setting.
+  for (const key of ['nr-model-only', 'amdnr']) {
+    assert.doesNotMatch(String(explain.ROUTES[key].panel || ''), /Alt\+Shift\+Home/,
+      `${key} has no OptiScaler, so no panel of either kind`);
+  }
 });
 
 test('every locale translates every route explanation, keeping its placeholders', () => {
