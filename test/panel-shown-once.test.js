@@ -71,9 +71,9 @@ test('a re-install of the 32-bit route keeps the engine\'s PanelShownOnce', { sk
   assert.equal(getIniKey(after, 'DlssNr', 'Enabled'), 'true', 'the install\'s own keys still go in');
 });
 
-test('sync, the panel language, the start default and the settings panel leave PanelShownOnce alone', async () => {
+test('sync, the panel language, DLSS 5 on at start and the settings panel leave PanelShownOnce alone', async () => {
   const { invoke, userData } = loadMain();
-  fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ language: 'de', nrStartDefault: 'on' }));
+  fs.writeFileSync(path.join(userData, 'settings.json'), JSON.stringify({ language: 'de' }));
   const game = scratchDir('panel-shown-once-sync');
   const exe = write(game, 'Game.exe', 'MZ fake');
   write(game, legacy.MARKER, JSON.stringify({ version: 1, files: [], backups: [], dirs: ['host64'], host32: { api: 'dx11', reshadeName: 'dxgi.dll' } }));

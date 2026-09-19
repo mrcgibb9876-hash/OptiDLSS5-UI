@@ -75,7 +75,7 @@ const HELP = {
   await page.addInitScript((D) => {
     const empty = async () => ({});
     const over = {
-      loadData: async () => ({ games: D.GAMES, settings: { releaseFolder: 'C:\\OptiScaler', nrDllPath: 'C:\\nvngx_dlssnr.dll', installedVersion: 'v2.1.0', nrStartDefault: 'game' } }),
+      loadData: async () => ({ games: D.GAMES, settings: { releaseFolder: 'C:\\OptiScaler', nrDllPath: 'C:\\nvngx_dlssnr.dll', installedVersion: 'v2.1.0' } }),
       gpuInfo: async () => ({ vendor: 'nvidia', name: 'NVIDIA GeForce RTX 5080', driver: '32.0.16.1692' }),
       // A MAP of exePath -> bool, which is what pollRunningGames reads.
       gamesRunning: async (paths) => ({ ok: true, running: Object.fromEntries(paths.map((p) => [p, p === D.RUNNING])) }),

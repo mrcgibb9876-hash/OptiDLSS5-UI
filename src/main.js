@@ -131,6 +131,7 @@ app.whenReady().then(() => {
     },
   });
   applyPanelHotkey();
+  applyNrOnEverywhere();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -172,16 +173,6 @@ ipcMain.handle('data:save-settings', (_evt, settings) => {
       }
     }
   }
-  // The same for DLSS 5 on/off at game start, in the game folder and, on the 32-bit route, the helper's.
-  if (process.env.OPTIDLSS5_NO_SYNC !== '1' && nrStartDefault(before) !== nrStartDefault(settings)) {
-    for (const game of readJson(gamesFile(), [])) {
-      if (!game || !game.exePath) continue;
-      const dir = gameDir(game.exePath);
-      for (const target of [dir, path.join(dir, legacy.HOST_DIR)]) {
-        try { applyNrStartDefault(target, settings); } catch {}
-      }
-    }
-  }
   // The break-away panel's hotkey is owned by the OS, not by a window, so a changed key (or the
   // panel being switched off) has to be handed back and re-taken here rather than at next launch.
   if (panelHotkeySignature(before) !== panelHotkeySignature(settings)) applyPanelHotkey(settings);
@@ -204,31 +195,32 @@ function panelLanguageValue(settings) {
   return lang === 'auto' ? 'auto' : lang.toLowerCase();
 }
 
-// DLSS 5 on in every game when it starts ([DlssNr] Enabled), from the top bar. 'game' leaves each
-// game's own choice alone -- what this app did before the setting existed. 'on' only reaches a folder
-// that has the model: switching the pass on with nothing to run crashed launches (see autoConfigureGame).
-// Applied to every installed game when it changes, and on every install and sync after that, so a game
-// switched in its own panel goes back to this at its next sync -- "at game start" is the promise.
+// DLSS 5 on in every game when it starts ([DlssNr] Enabled=true). Written on every install and sync,
+// and across all installed games when the app starts, so a game switched off in its own panel is back
+// on at its next launch -- the in-game panel only switches it for that session. Only a folder that has
+// the model: switching the pass on with nothing to run crashed launches (see autoConfigureGame).
 //
-// There is no 'off' any more, and a saved 'off' reads as 'game'. Writing Enabled=false into every game
-// at sync took the DLSS 5 panel away on the Present-route games (Resident Evil 2, 2026-09-18: the engine
-// only hooked Present when the pass was on at launch, and on RE Engine that hook is what draws the
-// panel), and it made the Auto Fix ladder judge every step on a run with the pass switched off
-// (Assassin's Creed II, 2026-09-17). Turning DLSS 5 off is a per-game choice, made in the game's panel.
-const NR_START_DEFAULTS = ['game', 'on'];
-
-function nrStartDefault(settings) {
-  const value = settings && settings.nrStartDefault;
-  return NR_START_DEFAULTS.includes(value) ? value : 'game';
-}
-
-function applyNrStartDefault(dir, settings = readJson(settingsFile(), {})) {
-  const mode = nrStartDefault(settings);
-  if (mode === 'game') return [];
+// There was a top-bar choice for this ('each game's own' / 'on') until 2026-09-19. With 'each game's
+// own', a pass switched off once in the panel stayed off, and the next run looked like DLSS 5 failing
+// to hook (Cyberpunk 2077, and #86 Flight Simulator 2024). Never write Enabled=false here: that took the
+// DLSS 5 panel away on the Present-route games (Resident Evil 2, 2026-09-18).
+function applyNrOn(dir) {
   const iniPath = path.join(dir, 'OptiScaler.ini');
   if (!fs.existsSync(iniPath)) return [];
-  if (mode === 'on' && !fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'))) return [];
+  if (!fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'))) return [];
   return ensureIniKey(iniPath, 'DlssNr', 'Enabled', 'true') ? [{ section: 'DlssNr', key: 'Enabled', value: 'true' }] : [];
+}
+
+// Every installed game, in its own folder and, on the 32-bit route, the helper's. At app start.
+function applyNrOnEverywhere() {
+  if (process.env.OPTIDLSS5_NO_SYNC === '1') return;
+  for (const game of readJson(gamesFile(), [])) {
+    if (!game || !game.exePath) continue;
+    const dir = gameDir(game.exePath);
+    for (const target of [dir, path.join(dir, legacy.HOST_DIR)]) {
+      try { applyNrOn(target); } catch {}
+    }
+  }
 }
 
 function applyPanelLanguage(dir, settings = readJson(settingsFile(), {})) {
@@ -1031,7 +1023,7 @@ ipcMain.handle('legacy:installHost32', async (_evt, { exePath, detected, release
       deployNvngxDlss: (hostDir) => feeder.deployNvngxDlss(hostDir, getRhiManifest, compareStreamlineVersions, feederCacheDir(), GITHUB_HEADERS),
     });
     try { applyPanelLanguage(path.join(dir, legacy.HOST_DIR)); } catch {}
-    try { applyNrStartDefault(path.join(dir, legacy.HOST_DIR)); } catch {}
+    try { applyNrOn(path.join(dir, legacy.HOST_DIR)); } catch {}
     // DXVK in dgVoodoo2's place: the ReShade that just went in as dxgi.dll is parked and ReShade's
     // 32-bit Vulkan layer set up instead -- the same step the swap runs. It asks for admin only when
     // the layer is not already registered and switched on for this exe.
@@ -5069,7 +5061,7 @@ async function autoConfigureGame(dir, exePath) {
   forced = [...forced, ...applyFrameGenMarker(dir)];
   forced = [...forced, ...applyEngineMarker(dir)];
   forced = [...forced, ...applyPanelLanguage(dir)];
-  forced = [...forced, ...applyNrStartDefault(dir)];
+  forced = [...forced, ...applyNrOn(dir)];
   return {
     api, applied: [...applied, ...forced], streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix,
     profile: dlss5Only ? (optiFgOn ? 'dlss5-only+optifg' : 'dlss5-only') : 'full',
@@ -5160,7 +5152,7 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
         nrUpdated = true;
       }
       try { applyPanelLanguage(hostDir); } catch {}
-      try { applyNrStartDefault(hostDir); } catch {}
+      try { applyNrOn(hostDir); } catch {}
       // Installs from before 32-bit DirectX 8/9 games were held in a borderless window (legacy.js
       // DG_WINDOWED): an exclusive-fullscreen game can freeze the moment the helper starts.
       let dgWindowed = false;
