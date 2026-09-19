@@ -2590,6 +2590,8 @@ function dlssNrDependencyMet(field) {
   if (!d) return true;
   // { all: [...] }: every condition, e.g. Adaptive resolution's "Frame rate" needs it on AND aimed at fps.
   if (Array.isArray(d.all)) return d.all.every((c) => dlssNrDependencyMet({ dependsOn: c }));
+  // { any: [...] }: one condition is enough, e.g. Enlargement matters whenever the model runs small.
+  if (Array.isArray(d.any)) return d.any.some((c) => dlssNrDependencyMet({ dependsOn: c }));
   const v = dlssNrValueOf(d.key);
   if (d.is !== undefined) return v === d.is;
   if (d.atLeast !== undefined) return Number(v) >= d.atLeast;

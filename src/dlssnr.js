@@ -72,6 +72,10 @@ const FIELDS = [
   { key: 'RunBeforeRR', type: 'bool', default: false, group: 'DLSS 5', label: "Ray Reconstruction at render cost",
     dependsOn: { key: 'RunBeforeSR', is: true },
     help: "For games with Ray Reconstruction: the pass costs what it would before Ray Reconstruction, without the damage. It runs after Ray Reconstruction, on its clean frame, with the model at the game's render resolution instead of the output's. Ray Reconstruction's own input is never touched, so nothing is smeared, and the model never sees ray-tracing noise. Model resolution and Adaptive resolution then count from the render resolution. Needs Before Super Resolution on." },
+  // Enlargement: under the render-cost toggle, which is what makes the model run small (moved from Cost).
+  { key: 'Transfer', type: 'enum', default: 3, options: [[0, 'Classic'], [1, 'Matched residual'], [2, 'Edge-aware'], [3, 'Full-size look']], group: 'DLSS 5',
+    label: 'Enlargement', dependsOn: { any: [{ key: 'WorkingScale', below: 1 }, { key: 'AutoScale', is: true }, { key: 'RunBeforeRR', is: true }] },
+    help: "How the model's work is brought back up when it ran below the frame's size.\n\nClassic composes the model's small picture directly against the full-size frame. Those two disagree by the shrink's blur as well as by the model's edit, and the composition cannot tell them apart.\n\nMatched residual enlarges only the model's edit, laid on the full-size frame.\n\nEdge-aware does the same, but never blends the edit across an outline -- which is what drew a thin halo round characters' heads.\n\nFull-size look (default) learns how the model re-grades each patch -- its contrast, colour and saturation -- and applies that to every full-size pixel, so a smaller model looks like the full-size one, without halos. D3D12; Vulkan uses Edge-aware.\n\nGreyed out at 100%, where there is nothing to enlarge." },
   // Adaptive resolution (engine v2.1: DlssNr_Menu.cpp DrawAutoScale, DlssNrBudget.h). Labels, ranges and
   // help are the in-game panel's own; its help is hard-wrapped there and reflowed here, like every other
   // help text in this file. AutoScalePrebuild is not a panel row in the engine either, so it is not here.
@@ -170,10 +174,6 @@ const FIELDS = [
   { key: 'Intensity', type: 'float', default: 1.0, min: 0, max: 2, step: 0.01, group: 'Models',
     label: 'Intensity', help: "The model's own strength control, applied inside it. Distinct from the Global Controls above, and from Detail strength below, which scales the result afterwards." },
 
-  { key: 'Transfer', type: 'enum', default: 3, options: [[0, 'Classic'], [1, 'Matched residual'], [2, 'Edge-aware'], [3, 'Full-size look']], group: 'Cost',
-    label: 'Enlargement', dependsOn: { key: 'WorkingScale', below: 1 },
-    help: "How the model's work is brought back up when it ran below the frame's size.\n\nClassic composes the model's small picture directly against the full-size frame. Those two disagree by the shrink's blur as well as by the model's edit, and the composition cannot tell them apart.\n\nMatched residual enlarges only the model's edit, laid on the full-size frame.\n\nEdge-aware does the same, but never blends the edit across an outline -- which is what drew a thin halo round characters' heads.\n\nFull-size look (default) learns how the model re-grades each patch -- its contrast, colour and saturation -- and applies that to every full-size pixel, so a smaller model looks like the full-size one, without halos. D3D12; Vulkan uses Edge-aware.\n\nGreyed out at 100%, where there is nothing to enlarge." },
-
   { key: 'TransferStrength', type: 'float', default: 1.0, min: 0, max: 2, step: 0.01, group: 'How much of it lands',
     label: 'Detail strength',
     help: "How far the frame moves toward the model's picture. 0 gives back exactly what the upscaler produced. 1 is the model's picture. Above 1 carries on past it in the same direction." },
@@ -209,6 +209,7 @@ const FIELDS = [
     options: [[0, 'Follow the game'], [1, 'Force normal'], [2, 'Force inverted']],
     label: 'Depth', help: "Which way round the model is told depth runs. The game states this in the flags it created its own DLSS feature with, and following it is right almost always -- but a game that states it wrongly needs correcting by hand.\n\nIf the pass looks worst where geometry meets sky, try forcing the other one." },
   { key: 'UICorrection', type: 'bool', default: true, group: 'Guide', label: 'UI correction',
+    dependsOn: { key: 'RunBeforeSR', is: false },
     help: "Lets the model account for a UI layer laid over the frame. On is its own default and right whenever a UI resource reaches it; turn it off if the correction is itself what looks wrong.\n\nRead when the model is built." },
   { key: 'OpticalFlow', type: 'bool', default: true, group: 'Guide', label: 'Optical flow',
     help: "Gives the model motion between frames. Off is a diagnostic." },
