@@ -180,3 +180,45 @@ test('a pre-Blackwell NVIDIA card is warned about the neural pass cost, and neve
   assert.deepEqual(ids(withCard('NVIDIA GeForce GTX 1080')), []);
   assert.deepEqual(ids(base({ gpuInfo: { ...base().gpuInfo, vendor: 'amd', name: 'AMD Radeon RX 9070 XT' } })), []);
 });
+
+// Every check's sentence reaches the renderer as data and is translated with t(variable), which
+// test/i18n-coverage.js cannot see -- so until 2026-09-19 none of this file's text had ever been
+// translated, and a German user read every pre-install warning in English. The texts are read back out
+// of the source here (by check id, both quote styles: one of them uses double quotes for "Nukem's"),
+// so a check added later fails this until its translation is in.
+function preflightTexts() {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'preflight.js'), 'utf8');
+  const lit = String.raw`(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*")`;
+  const re = new RegExp(String.raw`add\('([a-z0-9-]+)',\s*'(?:block|warn|info)',\s*((?:${lit}(?:\s*\+\s*)?)+)`, 'g');
+  const out = new Map();
+  for (const m of src.matchAll(re)) out.set(m[1], new Function(`return ${m[2]}`)());
+  return out;
+}
+
+test('every locale translates every preflight check, keeping its placeholders', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const texts = preflightTexts();
+  // Guards the extractor itself: a check whose text it cannot read would silently pass everything.
+  const ids = [...texts.keys()].sort();
+  assert.ok(ids.length >= 14, `extracted only ${ids.length} checks`);
+  for (const id of ['gpu-preference', 'driver-old', 'dlssg-to-fsr3', 'anti-cheat', 'nr-cost-pre-ada']) {
+    assert.ok(texts.has(id), `${id} was not extracted`);
+    assert.ok(texts.get(id).length > 40, `${id}'s text looks truncated`);
+  }
+
+  const dir = path.join(__dirname, '..', 'src', 'renderer', 'locales');
+  const norm = (s) => String(s).replace(/\s+/g, ' ').trim();
+  const marks = (s) => (String(s).match(/\{\w+\}/g) || []).sort().join();
+  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith('.js'))) {
+    let dict = null;
+    new Function('window', fs.readFileSync(path.join(dir, file), 'utf8'))({ I18N: { register: (_c, d) => { dict = d; } } });
+    const have = new Map(Object.entries(dict).map(([k, v]) => [norm(k), v]));
+    for (const [id, english] of texts) {
+      assert.ok(have.has(norm(english)), `${file} is missing the ${id} check`);
+      assert.equal(marks(have.get(norm(english))), marks(english), `${file} placeholders for ${id}`);
+    }
+  }
+});

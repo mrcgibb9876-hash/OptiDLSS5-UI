@@ -128,6 +128,20 @@
 
       <details id="edit-group-dlss5" class="edit-group" open>
         <summary data-i18n>Neural pass</summary>
+        <!-- Which OptiScaler fork this one game gets, overriding the Settings default. An install-time
+             choice, not a live [DlssNr] value, so it does not have the two-places-drift problem the
+             model's own controls had when they were here. -->
+        <div id="game-engine-section" class="advanced-only hidden">
+          <label class="field-label" data-i18n>OptiScaler build for this game</label>
+          <p class="field-hint" data-i18n>Overrides the build chosen in Settings, for this game only. The Pre-SR Multipass fork can run Neural Rendering before DLSS upscaling, which is faster at the same output resolution, but <strong>it draws no panel inside the game: Alt+Home does nothing on it, and the pop-out panel (Alt+Shift+Home) is the way to change these settings while the game runs.</strong> Takes effect when you press Install on this game.</p>
+          <div class="field-row">
+            <select id="game-engine-select">
+              <option value="dlssnr">OptiScaler_DLSSNR</option>
+              <option value="presr">OptiScaler-DLSSNR-PreSR-Multipass</option>
+            </select>
+          </div>
+          <span id="game-engine-status" class="status-line"></span>
+        </div>
         <!-- DirectX 8/9 games, and 32-bit DirectX 10/11 games (since 2026-09-18): which layer the game's
              Direct3D goes through before the DLSS5 Feeder rides on it. The same swap Game Help and the
              card's menu run (game:help-apply). -->

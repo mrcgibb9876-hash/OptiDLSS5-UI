@@ -2532,6 +2532,7 @@ async function openGameModal(game, opts = {}) {
   updateBannerPreview();
   gameModal.classList.remove('hidden');
   await loadRouteStatus(game);
+  await loadEngineSection(game);
   await loadLayerSection(game);
   await loadApiSection(game);
   await loadEngineProfileStatus(game);
@@ -2986,6 +2987,46 @@ async function applyLayerSwap(game, id) {
   await renderGrid();
   return res;
 }
+
+// Which OptiScaler build this one game gets, overriding the Settings default. The marker is what
+// carries it (engine:forGame / engine:setForGame in main), so a game keeps its build across a
+// re-install, and Install is what actually moves the files.
+async function loadEngineSection(game) {
+  const section = $('#game-engine-section');
+  const select = $('#game-engine-select');
+  const status = $('#game-engine-status');
+  if (!game || !game.exePath) { section.classList.add('hidden'); return; }
+  section.classList.remove('hidden');
+  const state = await window.api.engineForGame(game.exePath).catch(() => null);
+  const id = engineIdOrDefault((state && state.marker && state.marker.engine) || game.engine || settings.engine);
+  select.value = id;
+  status.textContent = ENGINES_WITHOUT_PANEL.has(id) ? popoutPanelSentence('only') : '';
+}
+
+$('#game-engine-select').addEventListener('change', async (e) => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  const id = engineIdOrDefault(e.target.value);
+  const status = $('#game-engine-status');
+  status.textContent = t('Saving…');
+  // Fetch it before recording the choice: a build that is not on disk would make the next Install
+  // stop to download it with no explanation.
+  const ready = await ensureEngine(id);
+  if (!ready.ok) {
+    status.textContent = t('Could not fetch {engine}: {error}', { engine: engineLabel(id), error: ready.error });
+    return;
+  }
+  const res = await window.api.engineSetForGame({ exePath: game.exePath, engine: id });
+  if (!res || !res.ok) {
+    status.textContent = t('Could not set the build: {error}', { error: (res && res.error) || '?' });
+    return;
+  }
+  game.engine = id;
+  window.api.saveGames(games);
+  await loadEngineSection(game);
+  await loadRouteStatus(game);
+  await renderGrid();
+});
 
 async function loadLayerSection(game) {
   const section = $('#game-layer-section');

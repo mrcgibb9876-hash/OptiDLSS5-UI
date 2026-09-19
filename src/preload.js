@@ -144,6 +144,7 @@ contextBridge.exposeInMainWorld('api', {
   checkUpdate: (engine) => ipcRenderer.invoke('update:check', { engine }),
   engineList: () => ipcRenderer.invoke('engine:list'),
   engineForGame: (exePath) => ipcRenderer.invoke('engine:forGame', exePath),
+  engineSetForGame: (args) => ipcRenderer.invoke('engine:setForGame', args),
   setGameEngine: (payload) => ipcRenderer.invoke('engine:setForGame', payload),
   installUpdate: (payload) => ipcRenderer.invoke('update:install', payload),
   checkManagerUpdate: () => ipcRenderer.invoke('update:checkManager'),
