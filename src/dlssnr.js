@@ -333,11 +333,28 @@ function readSettings(iniPath) {
 // Writes only what changed, and writes "auto" for anything set back to its default -- the same
 // thing the in-game panel's own save does, so the two agree about what a default looks like.
 // Returns the keys actually written.
+// Before Super Resolution and UI correction are one or the other, never both: the two together froze
+// inZOI on the spot (issue #55, 2026-09-19), and before SR the frame has no UI on it for the correction
+// to act on. Turning one on switches the other off in the same write -- the in-game panel does the same,
+// and engine v2.1.3 builds the model without UI correction whenever the pass runs before SR anyway.
+const EXCLUSIVE_ON = { runbeforesr: 'UICorrection', uicorrection: 'RunBeforeSR' };
+
+function withExclusions(values) {
+  const out = { ...(values || {}) };
+  for (const [key, wanted] of Object.entries(values || {})) {
+    const other = EXCLUSIVE_ON[String(key).toLowerCase()];
+    if (!other || Object.keys(out).some((k) => k.toLowerCase() === other.toLowerCase())) continue;
+    const field = BY_KEY.get(String(key).toLowerCase());
+    if (field && wanted !== null && wanted !== undefined && parseValue(field, wanted) === true) out[other] = false;
+  }
+  return out;
+}
+
 function writeSettings(iniPath, values) {
   let text;
   try { text = fs.readFileSync(iniPath, 'utf8'); } catch { return { ok: false, error: 'OptiScaler.ini not found', written: [] }; }
   const written = [];
-  for (const [key, wanted] of Object.entries(values || {})) {
+  for (const [key, wanted] of Object.entries(withExclusions(values))) {
     const field = BY_KEY.get(String(key).toLowerCase());
     if (!field) continue;
     let next = wanted === null || wanted === undefined ? null : parseValue(field, wanted);

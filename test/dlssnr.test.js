@@ -270,3 +270,22 @@ test('the panel hotkey is offered where the dialog can reach it', () => {
     .find((f) => f.key === 'PanelKey');
   assert.equal(field.group, 'Display');
 });
+
+// Issue #55 (inZOI, 2026-09-19): Before Super Resolution together with UI correction froze the game on
+// the spot. Turning either on switches the other off in the same write, as the in-game panel does.
+test('Before Super Resolution and UI correction are never both on', () => {
+  const file = freshIni('nr-exclusive');
+  dlssnr.writeSettings(file, { RunBeforeSR: true });
+  assert.equal(valueOf(file, 'RunBeforeSR'), true);
+  assert.equal(valueOf(file, 'UICorrection'), false, 'UI correction goes off with the pass before SR');
+
+  dlssnr.writeSettings(file, { UICorrection: true });
+  assert.notEqual(valueOf(file, 'RunBeforeSR'), true, 'Before SR goes off when UI correction comes back');
+  assert.notEqual(valueOf(file, 'UICorrection'), false);
+
+  // Turning one OFF leaves the other alone, and a write that names both keeps what it was given.
+  dlssnr.writeSettings(file, { UICorrection: false });
+  assert.notEqual(valueOf(file, 'RunBeforeSR'), true);
+  dlssnr.writeSettings(file, { RunBeforeSR: true, UICorrection: false });
+  assert.equal(valueOf(file, 'RunBeforeSR'), true);
+});
