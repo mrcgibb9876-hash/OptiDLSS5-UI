@@ -89,6 +89,21 @@ const FIELDS = [
   { key: 'AutoScaleFloor', type: 'float', default: 0.55, min: 0.55, max: 1, step: 0.01, percent: true, group: 'Adaptive resolution',
     label: 'Never go below', dependsOn: { key: 'AutoScale', is: true },
     help: "The lowest model resolution this may choose. Raise it to keep more of the model's detail and let the frame rate give way instead.\n\nIt stops here because this is where the trade changes character: above it the model is simply working on a smaller picture, and below it fine detail - hair, foliage, thin edges - starts to break down rather than soften." },
+  // Model passes right under Adaptive resolution, as in the in-game panel (2026-09-19): the two things that
+  // decide what the pass costs, together.
+  { key: 'Passes', type: 'int', default: 1, min: 1, max: 3, group: 'Adaptive resolution',
+    label: 'Model passes', help: "How many times the model runs before its answer is composed. Each extra layer is fed the previous layer's output and keeps its own temporal history.\n\nThe base frame stays untouched and the composition happens once at the end, so colour and transfer strength do not compound -- but the model is being asked to enhance its own output, which is outside what it was trained on.\n\nCost is very nearly linear: the model is almost the whole expense of the pass and every layer pays it again. Three is the ceiling because later layers converge while still costing full price." },
+  { key: 'ChainedHistory', type: 'bool', default: true, group: 'Adaptive resolution', label: 'Chained temporal history',
+    dependsOn: { key: 'Passes', atLeast: 2 },
+    help: "What the stacked passes do with their temporal history between frames.\n\nOn (default): every pass keeps its own history, so each layer accumulates the way pass one does. Off: passes 2+ are reset every frame -- stateless refinement, which cannot compound ghosting.\n\nThe trade is real both ways. Keeping history is richer and can compound ghosting behind fast movement; resetting every frame cannot, but NVIDIA documents reset-per-frame as a flicker and aliasing risk -- which is what shimmering on two or three passes usually is. Try the other setting when a stacked picture shimmers, and keep whichever the game looks better with.\n\nOnly does anything with more than one pass." },
+  { key: 'Pass2Preset', type: 'enum', default: null, options: PRESETS, group: 'Adaptive resolution', label: 'Pass 2 model',
+    dependsOn: { key: 'Passes', atLeast: 2 }, help: "Left on default, pass 2 uses the model above." },
+  { key: 'Pass2Style', type: 'enum', default: null, options: STYLES, group: 'Adaptive resolution', label: 'Pass 2 style',
+    dependsOn: { key: 'Passes', atLeast: 2 }, help: "Left on default, pass 2 uses the style above." },
+  { key: 'Pass3Preset', type: 'enum', default: null, options: PRESETS, group: 'Adaptive resolution', label: 'Pass 3 model',
+    dependsOn: { key: 'Passes', atLeast: 3 }, help: "Left on default, pass 3 uses the model above." },
+  { key: 'Pass3Style', type: 'enum', default: null, options: STYLES, group: 'Adaptive resolution', label: 'Pass 3 style',
+    dependsOn: { key: 'Passes', atLeast: 3 }, help: "Left on default, pass 3 uses the style above." },
 
   // [DlssNr] ForceBorderless. Lossless Scaling turns it on for its games (main.js applyLosslessMarker);
   // this is the same switch offered directly, for the pop-out panel's sake as much as anything --
@@ -142,19 +157,6 @@ const FIELDS = [
   { key: 'Intensity', type: 'float', default: 1.0, min: 0, max: 2, step: 0.01, group: 'Models',
     label: 'Intensity', help: "The model's own strength control, applied inside it. Distinct from the Global Controls above, and from Detail strength below, which scales the result afterwards." },
 
-  { key: 'Passes', type: 'int', default: 1, min: 1, max: 3, group: 'Cost',
-    label: 'Model passes', help: "How many times the model runs before its answer is composed. Each extra layer is fed the previous layer's output and keeps its own temporal history.\n\nThe base frame stays untouched and the composition happens once at the end, so colour and transfer strength do not compound -- but the model is being asked to enhance its own output, which is outside what it was trained on.\n\nCost is very nearly linear: the model is almost the whole expense of the pass and every layer pays it again. Three is the ceiling because later layers converge while still costing full price." },
-  { key: 'ChainedHistory', type: 'bool', default: true, group: 'Cost', label: 'Chained temporal history',
-    dependsOn: { key: 'Passes', atLeast: 2 },
-    help: "What the stacked passes do with their temporal history between frames.\n\nOn (default): every pass keeps its own history, so each layer accumulates the way pass one does. Off: passes 2+ are reset every frame -- stateless refinement, which cannot compound ghosting.\n\nThe trade is real both ways. Keeping history is richer and can compound ghosting behind fast movement; resetting every frame cannot, but NVIDIA documents reset-per-frame as a flicker and aliasing risk -- which is what shimmering on two or three passes usually is. Try the other setting when a stacked picture shimmers, and keep whichever the game looks better with.\n\nOnly does anything with more than one pass." },
-  { key: 'Pass2Preset', type: 'enum', default: null, options: PRESETS, group: 'Cost', label: 'Pass 2 model',
-    dependsOn: { key: 'Passes', atLeast: 2 }, help: "Left on default, pass 2 uses the model above." },
-  { key: 'Pass2Style', type: 'enum', default: null, options: STYLES, group: 'Cost', label: 'Pass 2 style',
-    dependsOn: { key: 'Passes', atLeast: 2 }, help: "Left on default, pass 2 uses the style above." },
-  { key: 'Pass3Preset', type: 'enum', default: null, options: PRESETS, group: 'Cost', label: 'Pass 3 model',
-    dependsOn: { key: 'Passes', atLeast: 3 }, help: "Left on default, pass 3 uses the model above." },
-  { key: 'Pass3Style', type: 'enum', default: null, options: STYLES, group: 'Cost', label: 'Pass 3 style',
-    dependsOn: { key: 'Passes', atLeast: 3 }, help: "Left on default, pass 3 uses the style above." },
   // Greyed while Adaptive resolution drives it, as the in-game panel does: the value moving is what the
   // controller is doing, and a hand-set number would be overwritten at its next step anyway.
   { key: 'WorkingScale', type: 'float', default: 1.0, min: 0.25, max: 2, step: 0.01, percent: true, group: 'Cost',

@@ -156,7 +156,9 @@ html, body { margin: 0; height: 100%; }
 .p-timing-main { font-size: 15px; color: var(--accent); font-variant-numeric: tabular-nums; }
 .p-timing-main b { font-weight: 600; }
 .p-timing-fps { font-size: 12px; color: var(--dim); }
-.p-timing-sub { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+/* Room for two lines whether or not it needs them: the live status changes length twice a second, and a box
+   that grew and shrank with it made every row below jump (2026-09-19). */
+.p-timing-sub { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; flex-basis: 100%; min-height: 2.8em; }
 .p-timing.is-stale .p-timing-main { color: var(--dim); }
 
 /* ── Rows ───────────────────────────────────────────────────────────────────────────────────── */
