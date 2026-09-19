@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const { REPO, scratchDir, write, fakeExe } = require('./helpers');
 const route = require(path.join(REPO, 'src', 'route'));
 const explain = require(path.join(REPO, 'src', 'route-explain'));
+const nrmodelonly = require(path.join(REPO, 'src', 'nrmodelonly'));
 
 test('every route id recommendRoute can return has an explanation, and the RE Engine id shares the Present one', () => {
   for (const id of ['optiscaler', 'feeder', 'feeder32', 'lumaue', 'amdnr', 'unsupported', 'unknown', 'present', 'reframework-pd']) {
@@ -56,16 +57,40 @@ test('a 32-bit game gets the helper explanation, Alt+Home, and the layer choices
   assert.ok(r.layerExplain && r.layerExplain.dgvoodoo && r.layerExplain.dxvk && r.layerExplain.native);
 });
 
-test('emulators name themselves, and on OpenGL there is no panel to promise', () => {
+test('emulators name themselves, and on OpenGL the panel offered is this app\'s own window', () => {
   const emu = { name: 'Dolphin', system: 'GameCube', hint: 'Graphics > Backend' };
   const d3d = explain.explainRoute({ route: 'feeder', emulator: emu }, 'dx11');
   assert.equal(d3d.key, 'emulator');
   assert.deepEqual(d3d.vars, { name: 'Dolphin' });
   assert.match(d3d.does, /\{name\}/);
+  // OptiScaler cannot draw over OpenGL, so there is no in-game panel -- but it is in the process, so
+  // the break-away panel edits its ini as anywhere else. Saying "no panel" sent people away with
+  // nothing when a working one was a keypress off.
   const gl = explain.explainRoute({ route: 'feeder', emulator: emu }, 'opengl');
   assert.equal(gl.key, 'emulator-opengl');
-  assert.equal(gl.panel, null);
+  assert.match(gl.panel, /Alt\+Shift\+Home/);
+  assert.doesNotMatch(gl.panel, /Press Alt\+Home/);
   assert.equal(explain.explainRoute({ route: 'feeder', legacy: { api: 'dx9' } }, 'dx9').key, 'dx9');
+});
+
+// "I need the in-game menu to work in all games": the overlay OptiScaler draws cannot be made
+// universal (a game can swallow the key, an anti-cheat can block the hook, the 32-bit route only
+// mirrors the helper's), but the break-away panel can -- it is our own window, on by default, and it
+// writes the ini the engine re-reads. So every route that has OptiScaler in the game names it.
+test('every route with OptiScaler in the game offers the break-away panel as the fallback', () => {
+  const withOptiScaler = ['optiscaler', 'feeder', 'feeder-vulkan', 'feeder-opengl', 'feeder32', 'dx9',
+    'emulator', 'emulator-opengl', 'present', 'lumaue'];
+  for (const key of withOptiScaler) {
+    const e = explain.ROUTES[key];
+    assert.ok(e, `${key} exists`);
+    assert.match(e.panel, /Alt\+Shift\+Home/, `${key} names the break-away panel`);
+  }
+  // The routes with no OptiScaler in the game must not promise either panel: there is nothing running
+  // to draw one or to take a setting.
+  for (const key of ['nr-model-only', 'amdnr']) {
+    assert.doesNotMatch(String(explain.ROUTES[key].panel || ''), /Alt\+Shift\+Home/,
+      `${key} has no OptiScaler, so no panel of either kind`);
+  }
 });
 
 test('every locale translates every route explanation, keeping its placeholders', () => {
@@ -84,4 +109,30 @@ test('every locale translates every route explanation, keeping its placeholders'
       assert.equal(got, want, `${file} placeholders for: ${k}`);
     }
   }
+});
+
+// Assassin's Creed Black Flag Resynced, 2026-09-19: "the in-game menu used to open and now it does not".
+// Game Help's model-only route had taken OptiScaler out of the game (the trade it states), but route.js
+// goes on recommending `optiscaler` for a game that ships its own DLSS -- so the card kept showing that
+// route's "Press Alt+Home for the DLSS 5 panel" line for a game with no OptiScaler left in it.
+test('a game left on the model-only route says the panel is gone, not "press Alt+Home"', () => {
+  const dir = scratchDir('explain-model-only');
+  const exe = fakeExe(dir, 'acblackflag.exe');
+  write(dir, 'nvngx_dlss.dll', 'the game\'s own DLSS');
+  const det = { api: 'dx12', apis: ['dx12'], bitness: 64 };
+
+  const before = route.recommendRoute(dir, exe, det, 'nvidia');
+  assert.equal(before.route, 'optiscaler');
+  assert.equal(before.explain.key, 'optiscaler');
+  assert.match(before.explain.panel, /Press Alt\+Home/);
+
+  // What the route leaves behind: the model, and the marker recording that we placed it.
+  write(dir, 'nvngx_dlssnr.dll', 'the model');
+  write(dir, nrmodelonly.NRMODEL_MARKER, JSON.stringify({ target: '.', placed: true }));
+  const after = route.recommendRoute(dir, exe, det, 'nvidia');
+  assert.equal(after.route, 'optiscaler', 'the route the game could have is unchanged');
+  assert.equal(after.explain.key, 'nr-model-only');
+  assert.match(after.explain.panel, /No panel on this route/);
+  assert.doesNotMatch(after.explain.panel, /Press Alt\+Home/);
+  assert.match(after.explain.does, /loads the Neural Rendering model by itself/);
 });

@@ -50,6 +50,7 @@ const legacy = require('./legacy');
 const translation = require('./translation');
 const rtxmfg = require('./rtxmfg');
 const routeExplain = require('./route-explain');
+const nrmodelonly = require('./nrmodelonly');
 const catalog = require('./catalog');
 const layerdefault = require('./layerdefault');
 const routescore = require('./routescore');
@@ -269,6 +270,11 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
   // the steps, the card, Edit and Install all read it the one way they already do.
   const effectivePreference = (choice) => (choice ? (choice.layer === choice.standard && choice.from !== 'hand' ? null : choice.layer) : wrapperPreference);
   const optiInstalled = optiScalerInstalled(dir) || (detected.bitness === 32 && legacyStatus.hostOptiScaler);
+  // Game Help's model-only route took our OptiScaler out and left only the NR model, which its marker
+  // records. The route recommended below does not change for it -- the game still ships DLSS, so
+  // OptiScaler is still the route it could have -- so this is what tells the card that the in-game panel
+  // is gone until Install puts it back (route-explain.js).
+  const nrModelOnly = !optiInstalled && !!nrmodelonly.readMarker(dir);
   // shipsNativeDlss: the game's own Streamline/DLSS files (beside the exe or in an Unreal
   // plugin tree) -- evidence no deploy of ours can fake, so it wins over the markers. Otherwise
   // needsFeeder() is the inverse of hasNativeDlss() and flips the moment a Feeder or Luma
@@ -296,7 +302,7 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
       complete: steps.length > 0 && !next,
       nextStep: next ? next.label : null,
       // The short "How this route works" text for the card and Edit (route-explain.js).
-      explain: routeExplain.explainRoute({ route, emulator: extra.emulator || null, legacy: extra.legacy || null }, api),
+      explain: routeExplain.explainRoute({ route, nrModelOnly, emulator: extra.emulator || null, legacy: extra.legacy || null }, api),
       layerExplain: extra.legacy ? { ...routeExplain.LAYERS } : null,
     };
   };

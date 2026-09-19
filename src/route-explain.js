@@ -16,14 +16,29 @@
 //   - Luma needs DirectX 11 and the game's own DLSS off (route.js lumaue).
 //   - DXVK on a 32-bit game needs ReShade's machine-wide 32-bit Vulkan layer (index.html, layer section);
 //     Assassin's Creed II draws black under dgVoodoo2 and runs under DXVK (CLAUDE.md).
+//   - Game Help's model-only route (nrmodelonly.js) takes OptiScaler out of the game's loader entirely,
+//     so Alt+Home reaches nothing there. The words are applyHelpFix's own dialog for it (main.js), which
+//     states the same trade before the route is taken. It is keyed off the state rather than the route id
+//     because route.js keeps recommending `optiscaler` for a game that ships its own DLSS: without this
+//     entry the card showed that route's "Press Alt+Home" line on a game with no OptiScaler in it.
 
-const PANEL = 'Press Alt+Home in the game for the DLSS 5 panel. Run the game windowed or borderless: Windows will not draw it over exclusive fullscreen.';
+// Every route that has OptiScaler in the game says both keys: Alt+Home for the panel OptiScaler draws
+// inside the game, and Alt+Shift+Home for this app's own window when the game will not show that one.
+// The break-away panel needs nothing from the game (panelwindow.js: the hotkey is the OS's, and the
+// controls write the ini the engine re-reads), which is exactly what a game refusing the overlay needs --
+// and until now it was named only in Settings and in Edit, never where the panel fails to open.
+const PANEL = 'Press Alt+Home in the game for the DLSS 5 panel. Run the game windowed or borderless: Windows will not draw it over exclusive fullscreen. If the game will not show it, press Alt+Shift+Home for this app\'s own panel window, which needs nothing from the game.';
 
 const ROUTES = {
   optiscaler: {
     does: 'Uses the game\'s own DLSS. OptiScaler adds DLSS 5 on top of it.',
     limits: 'Turn DLSS on in the game\'s own settings, or there is nothing to add to. Frame Generation is the game\'s own.',
     panel: PANEL,
+  },
+  'nr-model-only': {
+    does: 'The game\'s own DLSS loads the Neural Rendering model by itself. Nothing this app installs is in the game\'s loader.',
+    limits: 'Turn DLSS on in the game\'s own settings. Frame Generation is the game\'s own. Game Help offers this route for a game that will not start with OptiScaler in it.',
+    panel: 'No panel on this route: OptiScaler is not in the game, so Alt+Home does nothing. Press Install to put OptiScaler and the panel back.',
   },
   feeder: {
     does: 'The game has no DLSS, so the DLSS5 Feeder makes a DLSS call from ReShade\'s depth and estimated motion vectors.',
@@ -43,7 +58,7 @@ const ROUTES = {
   feeder32: {
     does: 'Experimental. A 32-bit game cannot run DLSS itself, so each frame goes to a 64-bit helper beside the game, where OptiScaler runs DLSS 5.',
     limits: 'Not yet confirmed on many games. The helper needs the game windowed or borderless to show anything.',
-    panel: 'Press Alt+Home in the game for the DLSS 5 panel. The helper draws it over the game, and it takes clicks there.',
+    panel: 'Press Alt+Home in the game for the DLSS 5 panel. The helper draws it over the game, and it takes clicks there. If it will not open, or opens and takes no clicks, press Alt+Shift+Home for this app\'s own panel window, which needs nothing from the game.',
   },
   dx9: {
     does: 'Experimental. dgVoodoo2 turns DirectX 9 into DirectX 11, then the DLSS5 Feeder and OptiScaler work as on any DX11 game.',
@@ -57,8 +72,8 @@ const ROUTES = {
   },
   'emulator-opengl': {
     does: 'Experimental. The DLSS5 Feeder makes a DLSS call inside {name}, for every game it runs.',
-    limits: 'OptiScaler cannot draw over OpenGL, so there is no panel here. Use the emulator\'s Direct3D or Vulkan renderer if it has one.',
-    panel: null,
+    limits: 'OptiScaler cannot draw anything over OpenGL. Use the emulator\'s Direct3D or Vulkan renderer if it has one.',
+    panel: 'There is no in-game panel on OpenGL: OptiScaler cannot draw over it. Press Alt+Shift+Home for this app\'s own panel window instead -- it needs nothing from the emulator and changes the same settings, live.',
   },
   present: {
     does: 'DLSS 5 runs at the end of each frame, on top of the game\'s own anti-aliasing. OptiScaler finds the depth itself: no Feeder, nothing to download.',
@@ -99,6 +114,8 @@ const LAYERS = {
 function explainKey(route, api = null) {
   if (!route || !route.route) return null;
   const r = route.route;
+  // The state, not the route id: route.js goes on recommending the route the game could have.
+  if (route.nrModelOnly) return 'nr-model-only';
   if (r === 'feeder') {
     if (route.emulator) return api === 'opengl' ? 'emulator-opengl' : 'emulator';
     if (route.legacy && route.legacy.api === 'dx9') return 'dx9';
