@@ -170,9 +170,9 @@ const FIELDS = [
   { key: 'Intensity', type: 'float', default: 1.0, min: 0, max: 2, step: 0.01, group: 'Models',
     label: 'Intensity', help: "The model's own strength control, applied inside it. Distinct from the Global Controls above, and from Detail strength below, which scales the result afterwards." },
 
-  { key: 'Transfer', type: 'enum', default: 2, options: [[0, 'Classic'], [1, 'Matched residual'], [2, 'Edge-aware']], group: 'Cost',
+  { key: 'Transfer', type: 'enum', default: 3, options: [[0, 'Classic'], [1, 'Matched residual'], [2, 'Edge-aware'], [3, 'Full-size look']], group: 'Cost',
     label: 'Enlargement', dependsOn: { key: 'WorkingScale', below: 1 },
-    help: "How the model's work is brought back up when it ran below the frame's size.\n\nClassic composes the model's small picture directly against the full-size frame. Those two disagree by the shrink's blur as well as by the model's edit, and the composition cannot tell them apart.\n\nMatched residual enlarges only the model's edit, laid on the full-size frame.\n\nEdge-aware (default) does the same, but never blends the edit across an outline -- which is what drew a thin halo round characters' heads.\n\nGreyed out at 100%, where there is nothing to enlarge." },
+    help: "How the model's work is brought back up when it ran below the frame's size.\n\nClassic composes the model's small picture directly against the full-size frame. Those two disagree by the shrink's blur as well as by the model's edit, and the composition cannot tell them apart.\n\nMatched residual enlarges only the model's edit, laid on the full-size frame.\n\nEdge-aware does the same, but never blends the edit across an outline -- which is what drew a thin halo round characters' heads.\n\nFull-size look (default) learns how the model re-grades each patch -- its contrast, colour and saturation -- and applies that to every full-size pixel, so a smaller model looks like the full-size one, without halos. D3D12; Vulkan uses Edge-aware.\n\nGreyed out at 100%, where there is nothing to enlarge." },
 
   { key: 'TransferStrength', type: 'float', default: 1.0, min: 0, max: 2, step: 0.01, group: 'How much of it lands',
     label: 'Detail strength',
