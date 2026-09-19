@@ -1,8 +1,6 @@
 // Русский. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("ru", {
-  "Clean-up before Ray Reconstruction": "Очистка перед Ray Reconstruction",
-  "The colour before Ray Reconstruction is the noisy ray-traced frame. At 1 the model reads a cleaned copy -- filtered along the game's depth and surface colour -- and only its edit goes back onto the original noise, so Ray Reconstruction still cleans the noise it was trained on, now around the model's detail.\n\n0 is the old behaviour: the model reads the raw noise and replaces it.": "Цвет перед Ray Reconstruction — это шумный кадр трассировки лучей. При 1 модель читает очищенную копию — отфильтрованную по глубине и цвету поверхностей игры, — и обратно на исходный шум ложится только её правка, так что Ray Reconstruction по-прежнему убирает шум, на котором обучен, теперь вокруг деталей модели.\n\n0 — прежнее поведение: модель читает сырой шум и заменяет его.",
   "Older games run on DX9, DX8 or DX10: pick that if it is what the game uses, and the route puts dgVoodoo2 or the 32-bit helper in for it.": "Старые игры работают на DX9, DX8 или DX10: выберите это, если игра использует именно его, и маршрут подставит dgVoodoo2 или 32-битный помощник.",
   "Settings": "Настройки",
   "Scan for Games": "Найти игры",

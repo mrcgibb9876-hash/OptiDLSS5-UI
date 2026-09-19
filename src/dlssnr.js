@@ -71,11 +71,6 @@ const FIELDS = [
   { key: 'RunBeforeRR', type: 'bool', default: false, group: 'DLSS 5', label: 'Before Ray Reconstruction (experimental)',
     dependsOn: { key: 'RunBeforeSR', is: true },
     help: "Also runs the pass before Ray Reconstruction, at render resolution, on the colour it is about to denoise and upscale -- far cheaper than after it.\n\nEXPERIMENTAL: that colour is the noisy ray-traced frame rather than a finished one, so the model may enhance noise and Ray Reconstruction may smear what it added. Try it, compare, and turn it off if it looks worse. Needs Before Super Resolution on." },
-  // [DlssNr] RayRecClean (engine v2.2): what the model reads before Ray Reconstruction. The panel's own label
-  // and help, reflowed.
-  { key: 'RayRecClean', type: 'float', default: 1.0, min: 0, max: 1, step: 0.05, group: 'DLSS 5', label: 'Clean-up before Ray Reconstruction',
-    dependsOn: { all: [{ key: 'RunBeforeSR', is: true }, { key: 'RunBeforeRR', is: true }] },
-    help: "The colour before Ray Reconstruction is the noisy ray-traced frame. At 1 the model reads a cleaned copy -- filtered along the game's depth and surface colour -- and only its edit goes back onto the original noise, so Ray Reconstruction still cleans the noise it was trained on, now around the model's detail.\n\n0 is the old behaviour: the model reads the raw noise and replaces it." },
   // Adaptive resolution (engine v2.1: DlssNr_Menu.cpp DrawAutoScale, DlssNrBudget.h). Labels, ranges and
   // help are the in-game panel's own; its help is hard-wrapped there and reflowed here, like every other
   // help text in this file. AutoScalePrebuild is not a panel row in the engine either, so it is not here.
