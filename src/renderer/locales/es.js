@@ -1355,4 +1355,5 @@ window.I18N.register("es", {
   "DLSS 5 running, model {ms} ms": "DLSS 5 en marcha, modelo {ms} ms",
   "DLSS 5 running": "DLSS 5 en marcha",
   "auto": "auto",
+  "Adaptive resolution": "Resolución adaptativa",
 });

@@ -1355,4 +1355,5 @@ window.I18N.register("ko", {
   "DLSS 5 running, model {ms} ms": "DLSS 5 실행 중, 모델 {ms} ms",
   "DLSS 5 running": "DLSS 5 실행 중",
   "auto": "자동",
+  "Adaptive resolution": "적응형 해상도",
 });

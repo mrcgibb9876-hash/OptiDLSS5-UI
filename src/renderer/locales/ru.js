@@ -1355,4 +1355,5 @@ window.I18N.register("ru", {
   "DLSS 5 running, model {ms} ms": "DLSS 5 работает, модель {ms} мс",
   "DLSS 5 running": "DLSS 5 работает",
   "auto": "авто",
+  "Adaptive resolution": "Адаптивное разрешение",
 });

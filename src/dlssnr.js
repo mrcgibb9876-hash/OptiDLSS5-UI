@@ -69,6 +69,26 @@ const FIELDS = [
   { key: 'RunBeforeRR', type: 'bool', default: false, group: 'DLSS 5', label: 'Before Ray Reconstruction (experimental)',
     dependsOn: { key: 'RunBeforeSR', is: true },
     help: "Also runs the pass before Ray Reconstruction, at render resolution, on the colour it is about to denoise and upscale -- far cheaper than after it.\n\nEXPERIMENTAL: that colour is the noisy ray-traced frame rather than a finished one, so the model may enhance noise and Ray Reconstruction may smear what it added. Try it, compare, and turn it off if it looks worse. Needs Before Super Resolution on." },
+  // Adaptive resolution (engine v2.1: DlssNr_Menu.cpp DrawAutoScale, DlssNrBudget.h). Labels, ranges and
+  // help are the in-game panel's own; its help is hard-wrapped there and reflowed here, like every other
+  // help text in this file. AutoScalePrebuild is not a panel row in the engine either, so it is not here.
+  { key: 'AutoScale', type: 'bool', default: false, group: 'Adaptive resolution', label: 'Adjust it for me',
+    help: "Moves Model resolution up and down while you play, so the pass costs what you asked it to cost instead of what one number chosen before the game started happens to cost in this scene.\n\nIt only ever changes the MODEL's resolution. The frame is never reduced, so this cannot soften the picture the way a dynamic render resolution does -- the most it can cost is some of the model's own detail.\n\nIt steps between four settings a few seconds apart at most, because each change rebuilds the model and rebuilding it every frame would be slower than doing nothing." },
+  { key: 'AutoScaleMode', type: 'enum', default: 2, options: [[0, 'Share of the frame'], [1, 'Milliseconds'], [2, 'Frame rate']],
+    group: 'Adaptive resolution', label: 'Aim at', dependsOn: { key: 'AutoScale', is: true },
+    help: "Frame rate: aim at a number of frames per second. The one most people want, and the only one that can fall short -- the pass can give back what it costs and no more, so if the game itself cannot reach the number, the panel says so.\n\nMilliseconds: hold the pass under a flat time. Exactly what the cost line above measures, with no arithmetic in between.\n\nShare of the frame: let the pass take at most a percentage of each frame. This one looks after itself as the frame rate moves - 15% is 2.5 ms at 60 fps and 1.25 at 120." },
+  { key: 'AutoScaleFps', type: 'int', default: 60, min: 30, max: 240, step: 1, group: 'Adaptive resolution', label: 'Frame rate',
+    dependsOn: { all: [{ key: 'AutoScale', is: true }, { key: 'AutoScaleMode', is: 2 }] },
+    help: "The frame rate to aim at. Applied live - there is nothing to rebuild for a change of target, only for a change of model resolution it leads to." },
+  { key: 'AutoScaleMs', type: 'float', default: 2.0, min: 0.5, max: 10, step: 0.1, group: 'Adaptive resolution', label: 'Cost ceiling',
+    dependsOn: { all: [{ key: 'AutoScale', is: true }, { key: 'AutoScaleMode', is: 1 }] },
+    help: "The most the pass may cost, in milliseconds. Compare it with the cost shown at the top of this panel, which is the same measurement." },
+  { key: 'AutoScaleShare', type: 'int', default: 15, min: 2, max: 50, step: 1, group: 'Adaptive resolution', label: 'Share of the frame',
+    dependsOn: { all: [{ key: 'AutoScale', is: true }, { key: 'AutoScaleMode', is: 0 }] },
+    help: "How much of each frame the pass may take." },
+  { key: 'AutoScaleFloor', type: 'float', default: 0.55, min: 0.55, max: 1, step: 0.01, percent: true, group: 'Adaptive resolution',
+    label: 'Never go below', dependsOn: { key: 'AutoScale', is: true },
+    help: "The lowest model resolution this may choose. Raise it to keep more of the model's detail and let the frame rate give way instead.\n\nIt stops here because this is where the trade changes character: above it the model is simply working on a smaller picture, and below it fine detail - hair, foliage, thin edges - starts to break down rather than soften." },
 
   // [DlssNr] ForceBorderless. Lossless Scaling turns it on for its games (main.js applyLosslessMarker);
   // this is the same switch offered directly, for the pop-out panel's sake as much as anything --
@@ -114,11 +134,6 @@ const FIELDS = [
     label: 'Structure Intensity', help: "The model's structure-synthesis strength across the whole frame." },
   { key: 'LocalTone', type: 'float', default: 1.0, min: 0, max: 1, step: 0.01, group: 'Global Controls',
     label: 'Tone Intensity', help: "The model's tone-remapping strength across the whole frame." },
-  { key: 'AutoMask', type: 'bool', default: true, group: 'Global Controls', label: 'Model Automask', caps: true,
-    help: "Lets the model find skin itself rather than treating the frame uniformly." },
-  { key: 'SkinStructure', type: 'float', default: -1.0, min: -1, max: 1, step: 0.01, group: 'Global Controls',
-    label: 'Structure Intensity', dependsOn: { key: 'AutoMask', is: true },
-    help: "-1 means follow the Global Controls Structure Intensity above, and is the model's own default. 0 and above set the masked region's structure independently of the rest of the frame.\n\nGreyed out while Model Automask is off -- there is no mask for it to shape without it." },
 
   { key: 'Preset', type: 'enum', default: 0, options: PRESETS, group: 'Models', segmented: true,
     label: 'Model', help: "Not the same scale as the super resolution or ray reconstruction presets -- the same letter means something different here.\n\nRead when the model is built, so a change rebuilds it after a moment." },
@@ -145,26 +160,6 @@ const FIELDS = [
   { key: 'WorkingScale', type: 'float', default: 1.0, min: 0.25, max: 2, step: 0.01, percent: true, group: 'Cost',
     label: 'Model resolution', dependsOn: { key: 'AutoScale', is: false },
     help: "What fraction of the frame the model works at. Cost falls with the square of this, so half resolution is roughly a quarter of the time. Below 100 the frame itself is never reduced -- only the model's own contribution is computed small and enlarged. Applied when the handle is let go, not while it is moving." },
-  // Adaptive resolution (engine v2.1: DlssNr_Menu.cpp DrawAutoScale, DlssNrBudget.h). Labels, ranges and
-  // help are the in-game panel's own; its help is hard-wrapped there and reflowed here, like every other
-  // help text in this file. AutoScalePrebuild is not a panel row in the engine either, so it is not here.
-  { key: 'AutoScale', type: 'bool', default: false, group: 'Cost', label: 'Adjust it for me',
-    help: "Moves Model resolution up and down while you play, so the pass costs what you asked it to cost instead of what one number chosen before the game started happens to cost in this scene.\n\nIt only ever changes the MODEL's resolution. The frame is never reduced, so this cannot soften the picture the way a dynamic render resolution does -- the most it can cost is some of the model's own detail.\n\nIt steps between four settings a few seconds apart at most, because each change rebuilds the model and rebuilding it every frame would be slower than doing nothing." },
-  { key: 'AutoScaleMode', type: 'enum', default: 2, options: [[0, 'Share of the frame'], [1, 'Milliseconds'], [2, 'Frame rate']],
-    group: 'Cost', label: 'Aim at', dependsOn: { key: 'AutoScale', is: true },
-    help: "Frame rate: aim at a number of frames per second. The one most people want, and the only one that can fall short -- the pass can give back what it costs and no more, so if the game itself cannot reach the number, the panel says so.\n\nMilliseconds: hold the pass under a flat time. Exactly what the cost line above measures, with no arithmetic in between.\n\nShare of the frame: let the pass take at most a percentage of each frame. This one looks after itself as the frame rate moves - 15% is 2.5 ms at 60 fps and 1.25 at 120." },
-  { key: 'AutoScaleFps', type: 'int', default: 60, min: 30, max: 240, step: 1, group: 'Cost', label: 'Frame rate',
-    dependsOn: { all: [{ key: 'AutoScale', is: true }, { key: 'AutoScaleMode', is: 2 }] },
-    help: "The frame rate to aim at. Applied live - there is nothing to rebuild for a change of target, only for a change of model resolution it leads to." },
-  { key: 'AutoScaleMs', type: 'float', default: 2.0, min: 0.5, max: 10, step: 0.1, group: 'Cost', label: 'Cost ceiling',
-    dependsOn: { all: [{ key: 'AutoScale', is: true }, { key: 'AutoScaleMode', is: 1 }] },
-    help: "The most the pass may cost, in milliseconds. Compare it with the cost shown at the top of this panel, which is the same measurement." },
-  { key: 'AutoScaleShare', type: 'int', default: 15, min: 2, max: 50, step: 1, group: 'Cost', label: 'Share of the frame',
-    dependsOn: { all: [{ key: 'AutoScale', is: true }, { key: 'AutoScaleMode', is: 0 }] },
-    help: "How much of each frame the pass may take." },
-  { key: 'AutoScaleFloor', type: 'float', default: 0.55, min: 0.55, max: 1, step: 0.01, percent: true, group: 'Cost',
-    label: 'Never go below', dependsOn: { key: 'AutoScale', is: true },
-    help: "The lowest model resolution this may choose. Raise it to keep more of the model's detail and let the frame rate give way instead.\n\nIt stops here because this is where the trade changes character: above it the model is simply working on a smaller picture, and below it fine detail - hair, foliage, thin edges - starts to break down rather than soften." },
   { key: 'ScalingDownscaler', type: 'enum', default: 4, options: DOWNSCALERS, group: 'Cost', label: 'Downscaler',
     dependsOn: { key: 'WorkingScale', above: 1 },
     help: "The filter that averages the model's above-native answer back to display size -- this is what turns supersampling into LESS noise rather than more. Sharper filters (Lanczos3, Kaiser3) keep the most detail; softer ones (Bicubic, Catmull-Rom) are gentler on ringing. Independent of the Output Scaling downscaler, so the two can differ and run at the same time." },
@@ -208,6 +203,8 @@ const FIELDS = [
     label: 'Depth', help: "Which way round the model is told depth runs. The game states this in the flags it created its own DLSS feature with, and following it is right almost always -- but a game that states it wrongly needs correcting by hand.\n\nIf the pass looks worst where geometry meets sky, try forcing the other one." },
   { key: 'UICorrection', type: 'bool', default: true, group: 'Guide', label: 'UI correction',
     help: "Lets the model account for a UI layer laid over the frame. On is its own default and right whenever a UI resource reaches it; turn it off if the correction is itself what looks wrong.\n\nRead when the model is built." },
+  { key: 'OpticalFlow', type: 'bool', default: true, group: 'Guide', label: 'Optical flow',
+    help: "Gives the model motion between frames. Off is a diagnostic." },
 
   { key: 'AutoCapture', type: 'bool', default: true, group: 'Inspect', label: 'Auto-capture once per session',
     help: "Writes one matched before/after set automatically, without anyone asking. The folder is cleared each run, so it holds a single session and never grows." },
@@ -230,15 +227,6 @@ const FIELDS = [
     label: 'Debug view',
     help: "Proxy is the picture handed to the model. Difference shows what the model actually changed, amplified twenty times and centred on grey." },
 
-  { key: 'PassRate', type: 'float', default: 1.0, min: 0.05, max: 1, step: 0.05, percent: true, group: 'Experimental',
-    label: 'Extra passes run on', dependsOn: { key: 'Passes', atLeast: 2 },
-    help: "How often the passes above the first actually run, as a share of frames. 100% is every frame, which is what this has always done; 50% is every other frame.\n\nWhat it buys is the ground between one pass and two. Two passes cost twice the model time and there is no step between them -- this makes one and a half reachable. Watch the frame rate: that is the whole point of it.\n\nWhat it costs is that a frame where the extra pass was skipped is genuinely less processed than one where it ran, so the picture alternates between two looks. Whether that reads as a pulse or as nothing depends on the game and on how much the extra layer was changing. Chained temporal history decides what the skipped frames do to that pass's history: on, it now has gaps in it.\n\nNeeds more than one pass to do anything, and needs engine v1.0.34 or newer." },
-  { key: 'ProxyProbe', type: 'bool', default: false, group: 'Experimental', label: 'Probe the driver',
-    help: "Asks the driver's nvngx.dll once per session whether it already knows the model. Writes the answer to the log and changes nothing else.\n\nRead when the model is built, so it applies from the next session." },
-  { key: 'UseProxy', type: 'bool', default: false, group: 'Experimental', label: 'Run through the driver',
-    help: "Drives the model through the driver's own nvngx.dll instead of the forwarder -- the way DLSS itself is called. If the picture matches, the forwarder is unnecessary.\n\nCompare before trusting it: turn on Compare above and look for a difference." },
-  { key: 'OpticalFlow', type: 'bool', default: true, group: 'Experimental', label: 'Optical flow',
-    help: "Gives the model motion between frames. Off is a diagnostic." },
 
   { key: 'LightTheme', type: 'bool', default: true, group: 'Appearance', label: 'Light panel',
     help: "Light is the default. The dark palette this panel was originally styled after put its dimmed text at 2.65:1 against the background, against the 4.5:1 that reads comfortably -- and an overlay is read at a glance, over a moving picture.\n\nUnticking restores NVIDIA's own colouring." },

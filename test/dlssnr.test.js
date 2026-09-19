@@ -28,7 +28,7 @@ const INI = [
   'Passes=auto',
   'TransferStrength=auto',
   'Preset=auto',
-  'AutoMask=auto',
+  'ChainedHistory=auto',
   'WorkingScale=auto',
   '',
   '[Log]',
@@ -66,7 +66,7 @@ test('auto reads as auto, not as a value', () => {
   assert.ok(fields.every((f) => f.value === null), 'a fresh ini has nothing set');
   // The default is carried alongside so the form can show what auto actually means.
   assert.equal(fields.find((f) => f.key === 'MaxRatio').default, 2.0);
-  assert.equal(fields.find((f) => f.key === 'AutoMask').default, true);
+  assert.equal(fields.find((f) => f.key === 'ChainedHistory').default, true);
 });
 
 test('a value set back to its default is stored as auto, the way the panel stores it', () => {
@@ -80,8 +80,8 @@ test('a value set back to its default is stored as auto, the way the panel store
   assert.equal(getIniKey(fs.readFileSync(file, 'utf8'), 'DlssNr', 'TransferStrength'), 'auto');
   assert.equal(valueOf(file, 'TransferStrength'), null, 'and reads back as auto');
 
-  dlssnr.writeSettings(file, { AutoMask: true });
-  assert.equal(getIniKey(fs.readFileSync(file, 'utf8'), 'DlssNr', 'AutoMask'), 'auto', 'bools too');
+  dlssnr.writeSettings(file, { ChainedHistory: true });
+  assert.equal(getIniKey(fs.readFileSync(file, 'utf8'), 'DlssNr', 'ChainedHistory'), 'auto', 'bools too');
 });
 
 test('out-of-range values are clamped rather than written as given', () => {

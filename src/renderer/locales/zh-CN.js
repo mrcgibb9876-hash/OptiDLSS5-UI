@@ -1355,4 +1355,5 @@ window.I18N.register("zh-CN", {
   "DLSS 5 running, model {ms} ms": "DLSS 5 正在运行，模型 {ms} 毫秒",
   "DLSS 5 running": "DLSS 5 正在运行",
   "auto": "自动",
+  "Adaptive resolution": "自适应分辨率",
 });
