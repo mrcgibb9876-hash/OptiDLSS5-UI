@@ -38,6 +38,33 @@ function diagnose(ctx) {
     return { status: 'fix', code, vars, fix: { id } };
   };
 
+  // nvngx_dlss.dll is missing and OptiScaler switched DLSS off for want of it. Which answer is
+  // right depends entirely on whose file it was supposed to be, and that is the route's question:
+  //
+  //   Feeder   deployFeederStack places it (feeder.js deployNvngxDlss), so re-running that deploy
+  //            puts it back. Not deployed yet, and Install is the step that would.
+  //   Luma     the same file, through Luma's own deploy, which calls feeder.js's copy of it.
+  //   anything else -- nothing this app deploys places that file. It belongs to the GAME, and
+  //            Reconfigure only rewrites the ini and can rename the proxy; it has never been able
+  //            to place a DLL on any route. Offering it here is a loop that cannot close, which is
+  //            exactly what Baldur's Gate 3 hit (#83, 2026-09-18): applied it, nothing moved, and
+  //            the next run returned the same verdict as "fix-failed".
+  //
+  // Only the three routes whose deploy provably places the file are re-pointed here, and only the
+  // plain OptiScaler route is told there is no fix. Every other route keeps Reconfigure: whether
+  // their install places this file has not been established, and changing an answer on a route
+  // nobody has evidence about is how a fix becomes a new bug.
+  const dlssRuntimeMissingAnswer = () => {
+    if (route.route === 'feeder' || route.route === 'feeder32') {
+      return route.feederDeployed
+        ? fix('dlss-runtime-missing', 'redeploy-feeder')
+        : fix('dlss-runtime-missing', 'install');
+    }
+    if (route.route === 'lumaue') return fix('dlss-runtime-missing', 'install');
+    if (route.route === 'optiscaler') return out('step', 'dlss-runtime-missing-native');
+    return fix('dlss-runtime-missing', 'reconfigure');
+  };
+
   // Hard stops first: nothing the app deploys can run in these. A 32-bit game has an experimental
   // route now (legacy.js); only one that route cannot serve (32-bit Vulkan) is a stop.
   if (d.bitness === 32 && route.route !== 'feeder32') return out('unavailable', 'bit32');
@@ -233,15 +260,15 @@ function diagnose(ctx) {
       if (ctx.nrEnabledInIni === false) return fix('nr-disabled', 'reconfigure');
       return out('unknown', 'dlss-no-nr');
     case 'init-no-feature':
-      if (run.dlssRuntimeMissing) return fix('dlss-runtime-missing', 'reconfigure');
+      if (run.dlssRuntimeMissing) return dlssRuntimeMissingAnswer();
       if (run.detail === 'feeder-technique-missing') return fix('feeder-technique', 'install');
       if (route.lumaDeployed) return out('step', 'luma-select-dlss', { prey: !!ctx.lumaPrey });
       return out('unknown', 'init-no-feature');
     case 'no-dlss':
       // OptiScaler said why itself, a line into the log: no nvngx_dlss.dll beside the exe, so it
       // switched DLSS off before the game drew anything. That turns "nothing called DLSS" -- which
-      // reads as a mystery -- into one missing file that Reconfigure puts back.
-      if (run.dlssRuntimeMissing) return fix('dlss-runtime-missing', 'reconfigure');
+      // reads as a mystery -- into one missing file, and the route decides who can put it back.
+      if (run.dlssRuntimeMissing) return dlssRuntimeMissingAnswer();
       if (route.lumaDeployed) return out('step', 'luma-select-dlss', { prey: !!ctx.lumaPrey });
       // Vulkan (Ryujinx, a player's bundle 2026-09-15): the Feeder is a ReShade add-on, and on Vulkan ReShade
       // is only ever the machine-wide Vulkan layer. No dlss5-feed.log at all means the add-on never loaded,
