@@ -16,6 +16,11 @@
 //   - Luma needs DirectX 11 and the game's own DLSS off (route.js lumaue).
 //   - DXVK on a 32-bit game needs ReShade's machine-wide 32-bit Vulkan layer (index.html, layer section);
 //     Assassin's Creed II draws black under dgVoodoo2 and runs under DXVK (CLAUDE.md).
+//   - Game Help's model-only route (nrmodelonly.js) takes OptiScaler out of the game's loader entirely,
+//     so Alt+Home reaches nothing there. The words are applyHelpFix's own dialog for it (main.js), which
+//     states the same trade before the route is taken. It is keyed off the state rather than the route id
+//     because route.js keeps recommending `optiscaler` for a game that ships its own DLSS: without this
+//     entry the card showed that route's "Press Alt+Home" line on a game with no OptiScaler in it.
 
 const PANEL = 'Press Alt+Home in the game for the DLSS 5 panel. Run the game windowed or borderless: Windows will not draw it over exclusive fullscreen.';
 
@@ -24,6 +29,11 @@ const ROUTES = {
     does: 'Uses the game\'s own DLSS. OptiScaler adds DLSS 5 on top of it.',
     limits: 'Turn DLSS on in the game\'s own settings, or there is nothing to add to. Frame Generation is the game\'s own.',
     panel: PANEL,
+  },
+  'nr-model-only': {
+    does: 'The game\'s own DLSS loads the Neural Rendering model by itself. Nothing this app installs is in the game\'s loader.',
+    limits: 'Turn DLSS on in the game\'s own settings. Frame Generation is the game\'s own. Game Help offers this route for a game that will not start with OptiScaler in it.',
+    panel: 'No panel on this route: OptiScaler is not in the game, so Alt+Home does nothing. Press Install to put OptiScaler and the panel back.',
   },
   feeder: {
     does: 'The game has no DLSS, so the DLSS5 Feeder makes a DLSS call from ReShade\'s depth and estimated motion vectors.',
@@ -99,6 +109,8 @@ const LAYERS = {
 function explainKey(route, api = null) {
   if (!route || !route.route) return null;
   const r = route.route;
+  // The state, not the route id: route.js goes on recommending the route the game could have.
+  if (route.nrModelOnly) return 'nr-model-only';
   if (r === 'feeder') {
     if (route.emulator) return api === 'opengl' ? 'emulator-opengl' : 'emulator';
     if (route.legacy && route.legacy.api === 'dx9') return 'dx9';

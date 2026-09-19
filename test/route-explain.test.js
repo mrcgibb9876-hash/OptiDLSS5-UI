@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const { REPO, scratchDir, write, fakeExe } = require('./helpers');
 const route = require(path.join(REPO, 'src', 'route'));
 const explain = require(path.join(REPO, 'src', 'route-explain'));
+const nrmodelonly = require(path.join(REPO, 'src', 'nrmodelonly'));
 
 test('every route id recommendRoute can return has an explanation, and the RE Engine id shares the Present one', () => {
   for (const id of ['optiscaler', 'feeder', 'feeder32', 'lumaue', 'amdnr', 'unsupported', 'unknown', 'present', 'reframework-pd']) {
@@ -84,4 +85,30 @@ test('every locale translates every route explanation, keeping its placeholders'
       assert.equal(got, want, `${file} placeholders for: ${k}`);
     }
   }
+});
+
+// Assassin's Creed Black Flag Resynced, 2026-09-19: "the in-game menu used to open and now it does not".
+// Game Help's model-only route had taken OptiScaler out of the game (the trade it states), but route.js
+// goes on recommending `optiscaler` for a game that ships its own DLSS -- so the card kept showing that
+// route's "Press Alt+Home for the DLSS 5 panel" line for a game with no OptiScaler left in it.
+test('a game left on the model-only route says the panel is gone, not "press Alt+Home"', () => {
+  const dir = scratchDir('explain-model-only');
+  const exe = fakeExe(dir, 'acblackflag.exe');
+  write(dir, 'nvngx_dlss.dll', 'the game\'s own DLSS');
+  const det = { api: 'dx12', apis: ['dx12'], bitness: 64 };
+
+  const before = route.recommendRoute(dir, exe, det, 'nvidia');
+  assert.equal(before.route, 'optiscaler');
+  assert.equal(before.explain.key, 'optiscaler');
+  assert.match(before.explain.panel, /Press Alt\+Home/);
+
+  // What the route leaves behind: the model, and the marker recording that we placed it.
+  write(dir, 'nvngx_dlssnr.dll', 'the model');
+  write(dir, nrmodelonly.NRMODEL_MARKER, JSON.stringify({ target: '.', placed: true }));
+  const after = route.recommendRoute(dir, exe, det, 'nvidia');
+  assert.equal(after.route, 'optiscaler', 'the route the game could have is unchanged');
+  assert.equal(after.explain.key, 'nr-model-only');
+  assert.match(after.explain.panel, /No panel on this route/);
+  assert.doesNotMatch(after.explain.panel, /Press Alt\+Home/);
+  assert.match(after.explain.does, /loads the Neural Rendering model by itself/);
 });
