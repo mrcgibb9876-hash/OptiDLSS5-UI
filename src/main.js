@@ -42,6 +42,7 @@ const legacy = require('./legacy');
 const gameupdate = require('./gameupdate');
 const probe = require('./probe');
 const preflight = require('./preflight');
+const gpupref = require('./gpupref');
 const verify = require('./verify');
 const translation = require('./translation');
 const catalog = require('./catalog');
@@ -1043,7 +1044,8 @@ ipcMain.handle('legacy:installHost32', async (_evt, { exePath, detected, release
       }
     }
     if (dxvkInstead) dxvkLayer = await dxvkHost32LayerStep(dir, exePath);
-    return { ok: true, ...res, feederVersion: asset.tag, api: plan.api, dxvkLayer };
+    const gpuPreference = await preferDiscreteGpu(dir, exePath);
+    return { ok: true, ...res, feederVersion: asset.tag, api: plan.api, dxvkLayer, gpuPreference };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -1793,6 +1795,36 @@ function probeFactsFor(exePath) {
   if (!exePath) return null;
   try { return probe.freshFacts(probeFactsFile(), exePath); } catch { return null; }
 }
+
+// ── High performance GPU on hybrid laptops (gpupref.js) ──────────────────────
+// One registry read shared by every game a sync pass touches (a reg.exe per game is the kind of
+// per-game process spawn that made sync slow before -- see the perf notes on detection).
+let gpuPrefsMemo = null;
+function sharedGpuPrefs() {
+  if (!gpuPrefsMemo || Date.now() - gpuPrefsMemo.at > 10000) {
+    gpuPrefsMemo = { at: Date.now(), value: preflight.readGpuPrefs(execFileAsync) };
+  }
+  return gpuPrefsMemo.value;
+}
+
+// The game's exes and, on the 32-bit route, the Feeder's helper, all on the NVIDIA card: a helper on
+// the integrated GPU cannot import the game's cross-process fence (Feeder #100). Never fails the caller.
+async function preferDiscreteGpu(dir, exePath, { onlyNew = false } = {}) {
+  try {
+    const gpuInfo = await getGpuInfo();
+    if (!preflight.isHybrid(gpuInfo)) return null;
+    let target = exePath;
+    try { target = launchTarget(exePath); } catch {}
+    const facts = probeFactsFor(exePath);
+    const r = await gpupref.ensureHighPerformance(dir, [exePath, target, facts && facts.realExe], {
+      execFileAsync, gpuInfo, onlyNew, readPrefs: sharedGpuPrefs,
+    });
+    if (r.set.length) gpuPrefsMemo = null;
+    return r;
+  } catch {
+    return null;
+  }
+}
 async function refreshLumaCatalog() {
   try {
     await lumacatalog.refresh({ cachePath: lumaCatalogFile(), headers: GITHUB_HEADERS });
@@ -2328,7 +2360,8 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
     invalidateDetection(dir);
     const { api, applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix, profile } = await autoConfigureGame(dir, exePath);
 
-    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, proxyRefreshError, foreignProxy, proxy, proxyError, feederGame, api, autoConfigured: applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix, profile, nvngxDlss };
+    const gpuPreference = await preferDiscreteGpu(dir, exePath);
+    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, proxyRefreshError, foreignProxy, proxy, proxyError, feederGame, api, autoConfigured: applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix, profile, nvngxDlss, gpuPreference };
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -2419,6 +2452,12 @@ async function uninstallEverything(dir) {
       if (!r.ok) kept.push(`${path.basename(vkApp.exe)} on ReShade's Vulkan app list (${r.error}) -- the layer ignores it once this folder has no ReShade.ini`);
     }
   }
+  // The High performance GPU choice this app made for the game's exes and the helper, put back to what
+  // it was (gpupref.js) -- while the marker that says what that was still exists.
+  try {
+    const r = await gpupref.restore(dir, { execFileAsync });
+    if (r.restored.length) restored.push(...r.restored.map((e) => `graphics preference of ${path.basename(e)}`));
+  } catch {}
   // The experimental legacy routes: dgVoodoo2, the 32-bit Feeder and its host64\ helper.
   if (legacy.readMarker(dir)) {
     const r = await legacy.removeLegacy(dir);
@@ -5234,6 +5273,8 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
       try { dgWindowed = legacy.ensureDgVoodooWindowed(dir); } catch {}
       // Installs from before the deploy gave the in-game panel its Alt+Home key (legacy.js ensureCastKey).
       try { legacy.ensureCastKey(dir); } catch {}
+      // Installs from before High performance was set for the helper (Feeder #100, 2026-09-19).
+      await preferDiscreteGpu(dir, exePath, { onlyNew: true });
       return { ok: true, updated: updated || nrUpdated, nrUpdated, dgWindowed, reason: 'legacy 32-bit route', autoConfigured: [] };
     }
     // A 64-bit DirectX 8/9 game behind dgVoodoo2 gets the same scaled-to-screen display (legacy.js DG_DISPLAY).
@@ -5245,6 +5286,7 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
     let feederUpdated = null;
     try { feederUpdated = await updateFeederIfStale(dir, exePath); } catch {}
     if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: true, updated: !!feederUpdated, feederUpdated, reason: 'not installed' };
+    await preferDiscreteGpu(dir, exePath, { onlyNew: true });
 
     const { api, applied: autoConfigured, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix } = await autoConfigureGame(dir, exePath);
 

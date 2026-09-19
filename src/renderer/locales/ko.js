@@ -1,6 +1,7 @@
 // 한국어. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("ko", {
+  "Older games run on DX9, DX8 or DX10: pick that if it is what the game uses, and the route puts dgVoodoo2 or the 32-bit helper in for it.": "오래된 게임은 DX9, DX8 또는 DX10으로 실행됩니다: 게임이 그것을 쓴다면 선택하세요. 경로가 dgVoodoo2 또는 32비트 도우미를 넣어 줍니다.",
   "Settings": "설정",
   "Scan for Games": "게임 검색",
   "+ Add Game": "+ 게임 추가",

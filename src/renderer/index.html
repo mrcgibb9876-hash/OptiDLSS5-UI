@@ -247,9 +247,10 @@
 
       <details id="edit-group-advanced" class="edit-group">
         <summary data-i18n>Advanced</summary>
-        <div id="game-api-section" class="advanced-only hidden">
+        <div id="game-api-section" class="hidden">
           <label class="field-label" data-i18n>Graphics API this game runs with</label>
           <p class="field-hint" data-i18n>Some games ship more than one renderer -- Where Winds Meet links DX11 in its exe and carries a DX12 path beside it -- and detection can only name one. The upscaler key, the DLSS5 Feeder, OptiScaler's own Frame Generation and DLSS NR on AMD all follow this, so pick what the game's own video settings actually use. Applied to OptiScaler.ini straight away if it is installed.</p>
+          <p class="field-hint" data-i18n>Older games run on DX9, DX8 or DX10: pick that if it is what the game uses, and the route puts dgVoodoo2 or the 32-bit helper in for it.</p>
           <div class="field-row">
             <select id="game-api-select"></select>
           </div>

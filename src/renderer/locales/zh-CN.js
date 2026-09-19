@@ -1,6 +1,7 @@
 // 简体中文. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("zh-CN", {
+  "Older games run on DX9, DX8 or DX10: pick that if it is what the game uses, and the route puts dgVoodoo2 or the 32-bit helper in for it.": "较老的游戏使用 DX9、DX8 或 DX10：如果游戏用的是它，就选它，路线会为它放入 dgVoodoo2 或 32 位辅助程序。",
   "Settings": "设置",
   "Scan for Games": "扫描游戏",
   "+ Add Game": "+ 添加游戏",

@@ -60,7 +60,10 @@ const routescore = require('./routescore');
 // primary, joins the list of APIs the game runs on (so keepGamesOwnDlss writes its upscaler key
 // too), and an "old API only" verdict is lifted, since the user is saying a modern path exists.
 // Pure so it can be tested; main.js reads the marker and calls this.
-const API_OVERRIDE_VALUES = ['dx11', 'dx12', 'vulkan', 'opengl'];
+// dx9/dx8/dx10 too (2026-09-19): The Godfather II, a 32-bit Direct3D 9 game, came out as DX12 and its
+// player had no way to say otherwise -- the list stopped at the modern APIs.
+const API_OVERRIDE_VALUES = ['dx11', 'dx12', 'vulkan', 'opengl', 'dx9', 'dx8', 'dx10'];
+const LEGACY_OVERRIDES = ['dx9', 'dx8', 'dx10'];
 const API_NAMES = { dx12: 'DX12', dx11: 'DX11', vulkan: 'Vulkan', opengl: 'OpenGL', dx9: 'DX9', dx8: 'DX8', dx10: 'DX10' };
 
 // The experimental routes' words, as fixed templates so the renderer can translate them; the parts
@@ -168,6 +171,24 @@ function withApiOverride(detected, override, opts = {}) {
 
   const base = preferDx12(raw);
   if (!chosen) return { ...base, apiOverride: null };
+  if (LEGACY_OVERRIDES.includes(chosen)) {
+    // The user says the game renders with an old Direct3D: that is the game's API, and any modern one on
+    // record was a wrapper's or a helper's. Shaped like detect.js's own legacy verdict, so the route is the
+    // same one a correct detection would have given: dgVoodoo2 for DX8/DX9, the Feeder's 32-bit add-on for
+    // DX10; a 64-bit DX8 or DX10 game has no path (there is no 64-bit D3D8 and no 64-bit DX10 add-on).
+    const reachable = chosen === 'dx9' || base.bitness === 32;
+    return {
+      ...base,
+      api: chosen,
+      apis: [chosen],
+      legacy: reachable,
+      legacyApis: [...new Set([chosen, ...(base.legacyApis || [])])],
+      experimental: true,
+      recommend: reachable ? 'optiscaler' : 'unsupported',
+      apiOverride: chosen,
+      detectedApi: base.api || null,
+    };
+  }
   const apis = [chosen, ...(base.apis || []).filter((a) => a !== chosen)];
   return {
     ...base,

@@ -395,6 +395,13 @@ function matchAll(names, table) {
   return [...out];
 }
 
+const OUR_PROCESSES = ['dlss5-feed-host64.exe', 'dlss5-feed-host.exe'];
+function isOurProcess(image) {
+  if (!image) return false;
+  const s = String(image).toLowerCase().replace(/\//g, '\\');
+  return OUR_PROCESSES.includes(path.win32.basename(s)) || s.includes('\\host64\\');
+}
+
 // trace: { processes, loads } (parseEtwXml / collectPoll / mergeTraces).
 // folderFiles: the names beside the exe right now, lower case -- to tell a proxy the game ignored
 // (present in the folder, loaded from System32) from one that simply is not there.
@@ -403,7 +410,10 @@ function analyzeTrace(trace, { exePath, gameDir = null, gameRoot = null, method 
   gameRoot = gameRoot || gameRootFor(exePath);
   const exeName = path.win32.basename(String(exePath || '')).toLowerCase();
   const tree = treePids(trace.processes, { gameRoot, names: exeName ? [exeName] : [] });
-  const procs = trace.processes.filter((p) => tree.has(p.pid));
+  // Our own processes are never the game's renderer: the 32-bit route's 64-bit helper
+  // (host64\dlss5-feed-host64.exe) sits under the game folder, wins the in-folder score and loads D3D12 --
+  // which made The Godfather II (32-bit Direct3D 9) read as a DX12 game (2026-09-19).
+  const procs = trace.processes.filter((p) => tree.has(p.pid) && !isOurProcess(p.image));
   const byPid = new Map();
   for (const l of [...trace.loads].sort((a, b) => a.seq - b.seq)) {
     if (!tree.has(l.pid)) continue;
@@ -541,6 +551,9 @@ function applyProbe(detected, facts) {
   const probeAt = Date.parse(facts.capturedAt || '') || 0;
   if (d.runtimeApi && d.runtimeLogMtime && d.runtimeLogMtime > probeAt) return keep('optiscaler-log-newer');
   const api = facts.api;
+  // A watched launch cannot outvote the executable's own build date: what it saw was a wrapper's or a
+  // helper's device (detect.js apiVetoes).
+  if (d.apiVetoes && d.apiVetoes[api]) return keep('predates-api');
   if (d.api === api && !d.uncertain) return { ...d, probeApi: api, probe: { ...probe, applied: true, agreed: true } };
 
   const legacyApi = ['dx8', 'dx9', 'dx10'].includes(api);
@@ -715,6 +728,7 @@ async function runProbe({
 }
 
 module.exports = {
+  isOurProcess,
   PROBE_VERSION, PROBE_SECONDS, API_LABEL, PROXY_NAMES, POLL_SCRIPT,
   pathKey, underDir, dosPath, gameRootFor, parseEtwXml, collectPoll, mergeTraces, treePids, apiFromModules, analyzeTrace,
   readStore, writeFacts, freshFacts, summary, applyProbe, proxyHint, exeStamp,

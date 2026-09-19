@@ -36,7 +36,7 @@ const rtxmfg = require('./rtxmfg');
 // experimental Feeder routes (legacy.js) instead of "unsupported".
 // 13: a DXVK this app deployed (translation.js manifest) no longer turns the game into a Vulkan
 // game -- the swap made Assassin's Creed II "32-bit Vulkan, unsupported" (2026-09-18).
-const DETECT_VERSION = 13;
+const DETECT_VERSION = 14;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
@@ -219,6 +219,86 @@ async function peBitness(filePath) {
   } finally {
     await fh.close();
   }
+}
+
+// When and with what the executable was built, from its own headers -- the one piece of evidence a game
+// cannot mention its way around. The Godfather II (2009, 32-bit, Direct3D 9) came out as DX12 (2026-09-19):
+// strings, a helper process and a sibling DLL can all say "D3D12"; a linker from 2008 cannot have built a
+// D3D12 renderer.
+//   linkTime  the COFF TimeDateStamp -- trusted only without a /Brepro build (a REPRO debug entry makes the
+//             stamp a hash, not a date) and only when it falls in a plausible range.
+//   linker    the optional header's MajorLinkerVersion; msvc: the DOS stub carries a Rich header, which
+//             only Microsoft's linker writes -- a MinGW or lld build has its own version numbering.
+async function peBuildFacts(filePath) {
+  let fh;
+  try { fh = await fsp.open(filePath, 'r'); } catch { return null; }
+  try {
+    const head = Buffer.alloc(4096);
+    const got = (await fh.read(head, 0, 4096, 0)).bytesRead;
+    if (got < 64 || head.readUInt16LE(0) !== 0x5a4d) return null;
+    const pe = head.readUInt32LE(60);
+    if (pe + 24 + 112 > got || head.readUInt32LE(pe) !== 0x4550) return null;
+    const sections = head.readUInt16LE(pe + 6);
+    const stamp = head.readUInt32LE(pe + 8);
+    const optSize = head.readUInt16LE(pe + 20);
+    const opt = pe + 24;
+    const magic = head.readUInt16LE(opt);
+    const linker = head.readUInt8(opt + 2);
+    const msvc = head.indexOf('Rich', 0x40) > 0 && head.indexOf('Rich', 0x40) < pe;
+    const dataDirs = opt + (magic === 0x20b ? 112 : 96);
+    const debugRva = head.readUInt32LE(dataDirs + 6 * 8);
+    const debugSize = head.readUInt32LE(dataDirs + 6 * 8 + 4);
+
+    // The debug directory, for a REPRO entry (type 16): /Brepro replaces the stamp with a hash.
+    let repro = false;
+    if (debugRva && debugSize && debugSize < 4096) {
+      const table = opt + optSize;
+      for (let i = 0; i < sections && table + (i + 1) * 40 <= got; i++) {
+        const sec = table + i * 40;
+        const va = head.readUInt32LE(sec + 12);
+        const vsize = Math.max(head.readUInt32LE(sec + 8), head.readUInt32LE(sec + 16));
+        const raw = head.readUInt32LE(sec + 20);
+        if (debugRva < va || debugRva >= va + vsize) continue;
+        const buf = Buffer.alloc(debugSize);
+        if ((await fh.read(buf, 0, debugSize, raw + (debugRva - va))).bytesRead === debugSize) {
+          for (let off = 0; off + 28 <= debugSize; off += 28) if (buf.readUInt32LE(off + 12) === 16) repro = true;
+        }
+        break;
+      }
+    }
+
+    const when = new Date(stamp * 1000);
+    const year = when.getUTCFullYear();
+    const trusted = !repro && year >= 1995 && when.getTime() <= Date.now() + 366 * 24 * 3600 * 1000;
+    return { linkTime: trusted ? when.toISOString().slice(0, 10) : null, linker, msvc, repro };
+  } catch {
+    return null;
+  } finally {
+    await fh.close();
+  }
+}
+
+// The APIs this executable cannot be using itself, and why. Evidence for them can only be about something
+// else: a wrapper (dgVoodoo2 outputs D3D11), a helper process, a string, a DLL beside it.
+//   dx12    linked before July 2015, or by an MSVC older than VS2015 (linker 14) -- no D3D12 SDK before either;
+//           or a 32-bit exe that does not import d3d12.dll itself (D3D12 on 32-bit is almost unheard of).
+//   vulkan  linked before February 2016 (Vulkan 1.0).
+//   dx11    linked before July 2008 (no D3D11 SDK to build against).
+const API_EPOCHS = { dx12: '2015-07-01', vulkan: '2016-02-01', dx11: '2008-07-01' };
+function apiVetoes(build, { bitness = null, imports = [] } = {}) {
+  const out = {};
+  if (build && build.linkTime) {
+    for (const [api, since] of Object.entries(API_EPOCHS)) {
+      if (build.linkTime < since) out[api] = `built ${build.linkTime}, before ${API_LABEL[api]} existed`;
+    }
+  }
+  if (build && build.msvc && build.linker > 0 && build.linker < 14 && !out.dx12) {
+    out.dx12 = `built by an MSVC linker ${build.linker}.x, older than any toolchain with Direct3D 12`;
+  }
+  if (bitness === 32 && !out.dx12 && Array.isArray(imports) && !imports.includes(API_DLL.dx12)) {
+    out.dx12 = 'a 32-bit executable that does not import d3d12.dll itself';
+  }
+  return out;
 }
 
 // A reader over a PE file's resource directory -- ported from DLSS5-Swapper's pe.js and widened
@@ -717,14 +797,18 @@ function folderApiEvidence(dir) {
   return found;
 }
 
-async function genericApiDetection(dir, exePath, exe) {
+async function genericApiDetection(dir, exePath, exe, vetoes = {}) {
+  // Evidence for an API the executable cannot be using is about something else (see apiVetoes): it is
+  // dropped before anything picks from it, so an old game's own Direct3D 9 is what remains.
+  const allowed = (set) => new Set([...set].filter((api) => !vetoes[api]));
+  exe = { ...exe, modern: allowed(exe.modern) };
   if (exe.modern.size > 0) {
     const named = apiFromFileName(exePath);
     const api = named && exe.modern.has(named) ? named : pickModern(exe.modern, exe.imports);
     const linked = exe.imports.includes(API_DLL[api]);
     const how = named === api ? 'named by the executable\'s file name' : linked ? 'linked by the executable' : 'referenced in the executable';
     return {
-      api, apis: [...new Set([api, ...exe.modern, ...folderApiEvidence(dir)])], old: [...exe.old], agility: exe.agility,
+      api, apis: [...new Set([api, ...exe.modern, ...allowed(folderApiEvidence(dir))])], old: [...exe.old], agility: exe.agility,
       reason: `${API_LABEL[api]} -- ${how}`,
     };
   }
@@ -734,6 +818,7 @@ async function genericApiDetection(dir, exePath, exe) {
   }
 
   const siblings = await scanSiblingDlls(dir, exePath);
+  siblings.modern = allowed(siblings.modern);
   if (siblings.modern.size > 0) {
     const api = pickModern(siblings.modern, siblings.imports);
     return {
@@ -1152,15 +1237,25 @@ async function detectGame(dir, exePath) {
     engine = engineFromEvidence(dir, exePath, exe.hits);
   }
 
+  // Bitness and the build facts come first now: they veto APIs before anything picks one.
+  const [bitness, hooks, build] = await Promise.all([peBitness(exePath), inspectHookDlls(dir), peBuildFacts(exePath)]);
+  const exeImports = exe ? exe.imports : bitness === 32 ? await peImports(exePath) : null;
+  const vetoes = apiVetoes(build, { bitness, imports: exeImports });
+
   let found;
   if (engine.id === 'unity') found = await detectUnity(dir, exePath);
   else if (engine.id === 'red') found = detectRedEngine(dir, exePath);
   else if (/^rdr2\.exe$/i.test(path.basename(exePath))) found = rdr2Renderer();
   if (!found) found = knownRenderer(exePath);
-  if (!found) found = await genericApiDetection(dir, exePath, exe || (await scanExecutable(exePath)));
+  if (!found) found = await genericApiDetection(dir, exePath, exe || (await scanExecutable(exePath)), vetoes);
   if (engine.id === 'unreal') found = unrealStaticApi(dir, found, engine);
-
-  const [bitness, hooks] = await Promise.all([peBitness(exePath), inspectHookDlls(dir)]);
+  // Whatever path picked it, an API the executable cannot be using is not the answer: the next one it
+  // can be using is, or its own legacy API when none is left.
+  if (found.api && vetoes[found.api]) {
+    const apis = (found.apis || []).filter((a) => !vetoes[a]);
+    const next = MODERN_APIS.find((a) => apis.includes(a)) || null;
+    found = { ...found, api: next, apis, vetoed: found.api, reason: `${found.reason}; not ${API_LABEL[found.api]}: ${vetoes[found.api]}` };
+  }
   // A DXVK this app put in front of the game (translation.js's manifest) is not evidence about the
   // game: it is the route the app chose for it, and the route has to be planned from the game's own
   // API, not from the wrapper's. Forcing 'vulkan' here turned Assassin's Creed II (32-bit DX9) into
@@ -1177,7 +1272,11 @@ async function detectGame(dir, exePath) {
     };
   }
 
-  const runtime = await optiScalerRuntimeApi(dir);
+  const runtimeRaw = await optiScalerRuntimeApi(dir);
+  // OptiScaler in the process saw a device the game cannot have made itself: a wrapper's (dgVoodoo2 turns
+  // Direct3D 9 into 11 or 12). The game's own API is what the route is planned from, so this is not it.
+  const runtime = runtimeRaw && vetoes[runtimeRaw.api] ? null : runtimeRaw;
+  if (runtimeRaw && !runtime) found = { ...found, runtimeIgnored: { api: runtimeRaw.api, why: vetoes[runtimeRaw.api] } };
   if (runtime) {
     found = {
       ...found,
@@ -1270,6 +1369,11 @@ async function detectGame(dir, exePath) {
     protectedLauncher: antiCheatStub(dir),
     oldShaderCompiler: oldShaderCompiler(dir),
     runtimeApi: found.runtimeApi || null,
+    // How the exe was built (peBuildFacts) and the APIs that rules out (apiVetoes), with why -- shown in
+    // Edit so a wrong-looking answer can be traced to its evidence.
+    build: build || null,
+    apiVetoes: vetoes,
+    runtimeIgnored: found.runtimeIgnored || null,
     // The legacy APIs the EXECUTABLE itself links (dx8/dx9/dx10), kept apart from `api` and `apis`
     // because a translation layer overwrites those. dgVoodoo2 presents D3D11 to a Direct3D 9 game,
     // OptiScaler's log then reports a D3D11 device, and the block above replaces the detected API
@@ -1537,4 +1641,4 @@ async function planForeignRemoval(dir, { ours = false } = {}) {
   return { found, del: [...del].sort(), restore, notes };
 }
 
-module.exports = { DETECT_VERSION, exeStamp, openPeResources, RT_ICON, RT_GROUP_ICON, RT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, pickModern, foreignToolchains, planForeignRemoval };
+module.exports = { DETECT_VERSION, peBuildFacts, apiVetoes, exeStamp, openPeResources, RT_ICON, RT_GROUP_ICON, RT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, pickModern, foreignToolchains, planForeignRemoval };

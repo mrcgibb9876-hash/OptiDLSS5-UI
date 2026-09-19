@@ -1,6 +1,7 @@
 // Español. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("es", {
+  "Older games run on DX9, DX8 or DX10: pick that if it is what the game uses, and the route puts dgVoodoo2 or the 32-bit helper in for it.": "Los juegos antiguos usan DX9, DX8 o DX10: elige eso si es lo que usa el juego, y la ruta pone dgVoodoo2 o el ayudante de 32 bits para ello.",
   "Settings": "Ajustes",
   "Scan for Games": "Buscar juegos",
   "+ Add Game": "+ Añadir juego",

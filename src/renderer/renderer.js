@@ -957,7 +957,7 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   // The route is only known now, and the poll may already have decided this card was running.
   if (runningGames.has(game.exePath)) applyRunningState(card, true);
 }
-const API_LABEL = { dx12: 'DX12', dx11: 'DX11', vulkan: 'Vulkan', opengl: 'OpenGL' };
+const API_LABEL = { dx12: 'DX12', dx11: 'DX11', vulkan: 'Vulkan', opengl: 'OpenGL', dx10: 'DX10', dx9: 'DX9', dx8: 'DX8' };
 
 // Remove, with the exact list first: Remove never surprises anyone with what it took. The card's own
 // Remove and the early-exit offer below both come here, so there is one implementation of it.
@@ -3085,12 +3085,9 @@ async function loadApiSection(game) {
     return;
   }
   const route = await window.api.gameRoute(game.exePath, game.detectedPath);
-  // Both DX12 and DX11: DX12 it is, nothing to choose (route.js preferDx12).
-  const apisSeen = route.detectedApis || [];
-  if (apisSeen.includes('dx12') && apisSeen.includes('dx11')) {
-    section.classList.add('hidden');
-    return;
-  }
+  // Shown for every game, DX12+DX11 ones included (2026-09-19): it used to hide there, on the grounds
+  // that DX12 is always the answer -- and a game detected as both by mistake (The Godfather II, really
+  // Direct3D 9) was left with no way to say what it is.
   section.classList.remove('hidden');
 
   const detectedLabel = (game.detectedPath && game.detectedPath.apiBadge) || t('not detected');
@@ -3099,7 +3096,7 @@ async function loadApiSection(game) {
   auto.value = '';
   auto.textContent = t('Auto (detected: {api})', { api: detectedLabel });
   select.appendChild(auto);
-  for (const api of ['dx12', 'dx11', 'vulkan', 'opengl']) {
+  for (const api of ['dx12', 'dx11', 'vulkan', 'opengl', 'dx10', 'dx9', 'dx8']) {
     const opt = document.createElement('option');
     opt.value = api;
     opt.textContent = API_LABEL[api];

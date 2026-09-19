@@ -1,6 +1,7 @@
 // Русский. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("ru", {
+  "Older games run on DX9, DX8 or DX10: pick that if it is what the game uses, and the route puts dgVoodoo2 or the 32-bit helper in for it.": "Старые игры работают на DX9, DX8 или DX10: выберите это, если игра использует именно его, и маршрут подставит dgVoodoo2 или 32-битный помощник.",
   "Settings": "Настройки",
   "Scan for Games": "Найти игры",
   "+ Add Game": "+ Добавить игру",
