@@ -58,7 +58,9 @@ const WHITE_POINT_SOURCES = [[0, 'Paper white only'], [1, "The game's own exposu
 // a live frame (Capture 8 frames, Anchor here, Show Mask) or state the engine owns, and a window
 // outside the process has nothing to write for them.
 const FIELDS = [
-  // The top block, above the first caption in the in-game panel.
+  // The top block, above the first caption in the in-game panel. Light panel first, as there (2026-09-19).
+  { key: 'LightTheme', type: 'bool', default: true, group: 'DLSS 5', label: 'Light panel',
+    help: "Light is the default. The dark palette this panel was originally styled after put its dimmed text at 2.65:1 against the background, against the 4.5:1 that reads comfortably -- and an overlay is read at a glance, over a moving picture.\n\nUnticking restores NVIDIA's own colouring." },
   { key: 'Enabled', type: 'bool', default: false, group: 'DLSS 5', label: 'DLSS ON', caps: true,
     help: "Synthesises detail in the upscaler's frame, before frame generation sees it.\n\nNeeds two similarly named files beside OptiScaler, one character apart: nvngx_dlssnr.dll       NVIDIA's model (~165 MB) -- you supply it nvngx.dll_dlssnr.dll   the forwarder (~13 KB) -- ships in this package Undocumented and driven directly, so none of this is officially supported." },
   { key: 'ApplyModel', type: 'bool', default: true, group: 'DLSS 5', label: 'Apply the model',
@@ -230,8 +232,6 @@ const FIELDS = [
     help: "Proxy is the picture handed to the model. Difference shows what the model actually changed, amplified twenty times and centred on grey." },
 
 
-  { key: 'LightTheme', type: 'bool', default: true, group: 'Appearance', label: 'Light panel',
-    help: "Light is the default. The dark palette this panel was originally styled after put its dimmed text at 2.65:1 against the background, against the 4.5:1 that reads comfortably -- and an overlay is read at a glance, over a moving picture.\n\nUnticking restores NVIDIA's own colouring." },
   { key: 'VendorColours', type: 'bool', default: true, group: 'Appearance', label: 'Vendor colours',
     help: "NVIDIA green, or AMD red on an AMD card. Off keeps green everywhere." },
   { key: 'Language', type: 'code', default: null, options: LANGUAGES, group: 'Appearance', label: 'Language',

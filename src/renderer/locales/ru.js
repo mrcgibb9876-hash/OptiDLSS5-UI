@@ -1356,4 +1356,6 @@ window.I18N.register("ru", {
   "DLSS 5 running": "DLSS 5 работает",
   "auto": "авто",
   "Adaptive resolution": "Адаптивное разрешение",
+  "{rendered} fps rendered, {shown} with frame generation": "{rendered} fps отрисовано, {shown} с Frame Generation",
+  "Heading for {fps} fps - now {now}, model at {scale}%": "Цель {fps} fps - сейчас {now}, модель {scale}%",
 });

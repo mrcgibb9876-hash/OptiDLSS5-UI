@@ -1366,4 +1366,6 @@ window.I18N.register("fr", {
   "DLSS 5 running": "DLSS 5 actif",
   "auto": "auto",
   "Adaptive resolution": "Résolution adaptative",
+  "{rendered} fps rendered, {shown} with frame generation": "{rendered} fps rendues, {shown} avec Frame Generation",
+  "Heading for {fps} fps - now {now}, model at {scale}%": "Vers {fps} fps - actuellement {now}, modèle à {scale}%",
 });

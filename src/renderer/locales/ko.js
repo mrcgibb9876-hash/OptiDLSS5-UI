@@ -1356,4 +1356,6 @@ window.I18N.register("ko", {
   "DLSS 5 running": "DLSS 5 실행 중",
   "auto": "자동",
   "Adaptive resolution": "적응형 해상도",
+  "{rendered} fps rendered, {shown} with frame generation": "렌더링 {rendered} fps, 프레임 생성 포함 {shown}",
+  "Heading for {fps} fps - now {now}, model at {scale}%": "{fps} fps 목표 - 현재 {now}, 모델 {scale}%",
 });

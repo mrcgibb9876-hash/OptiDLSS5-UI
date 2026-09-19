@@ -452,13 +452,17 @@ async function refreshLive() {
 }
 
 // The status line Adaptive resolution shows under its rows in the in-game panel, in the same words.
-function autoScaleText(a) {
+function autoScaleText(a, shownFps) {
   if (!a || !a.on) return null;
   if (a.state === 'settling' || a.scale === null) return t('Adaptive resolution: waiting for the pass to run');
   const scale = Math.round(a.scale * 100);
   if (a.state === 'short') return t('At {scale}% and still short of {fps} fps - the rest of the frame is the game\'s, not DLSS 5\'s.', { scale, fps: a.fps });
   if (a.mode === 1) return t('Holding the pass under {ms} ms - model at {scale}%', { ms: Number(a.ms).toFixed(1), scale });
   if (a.mode === 0) return t('Holding the pass to {share}% of the frame - model at {scale}%', { share: a.share, scale });
+  // "Holding" only when it is: below the target and not at the floor, the controller is still stepping down.
+  if (shownFps > 0 && shownFps < a.fps * 0.95) {
+    return t('Heading for {fps} fps - now {now}, model at {scale}%', { fps: a.fps, now: Math.round(shownFps), scale });
+  }
   return t('Holding {fps} fps - model at {scale}%', { fps: a.fps, scale });
 }
 
@@ -466,7 +470,17 @@ function renderLive(l) {
   const box = $('#p-timing');
   box.hidden = false;
   box.classList.remove('is-stale');
-  $('#p-timing-ms').textContent = l.fps === null ? t('Measuring...') : t('{fps} fps', { fps: Math.round(l.fps) });
+  // With frame generation on, the frames the game rendered and what reaches the screen are both shown -- a
+  // frame rate target means the second, and the two are easy to confuse (engine v2.1.4 "rates").
+  const r = l.rates || null;
+  if (r && r.multiplier >= 2 && r.rendered > 0) {
+    $('#p-timing-ms').textContent = t('{rendered} fps rendered, {shown} with frame generation', {
+      rendered: Math.round(r.rendered),
+      shown: (r.estimated ? '~' : '') + Math.round(r.shown),
+    });
+  } else {
+    $('#p-timing-ms').textContent = l.fps === null ? t('Measuring...') : t('{fps} fps', { fps: Math.round(l.fps) });
+  }
 
   const main = [];
   if (l.frameMs !== null) main.push(t('{ms} ms per frame', { ms: Number(l.frameMs).toFixed(1) }));
@@ -481,7 +495,7 @@ function renderLive(l) {
   else if (!nr.running) sub.push(t('DLSS 5 on, waiting for the game'));
   else if (nr.modelMs !== null && nr.modelMs !== undefined) sub.push(t('DLSS 5 running, model {ms} ms', { ms: Number(nr.modelMs).toFixed(2) }));
   else sub.push(t('DLSS 5 running'));
-  const adaptive = autoScaleText(l.autoScale);
+  const adaptive = autoScaleText(l.autoScale, r && r.shown > 0 ? r.shown : (l.fps || 0));
   if (adaptive) sub.push(adaptive);
   $('#p-timing-sub').textContent = sub.join('  ·  ');
 }

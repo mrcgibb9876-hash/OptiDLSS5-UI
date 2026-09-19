@@ -1356,4 +1356,6 @@ window.I18N.register("zh-CN", {
   "DLSS 5 running": "DLSS 5 正在运行",
   "auto": "自动",
   "Adaptive resolution": "自适应分辨率",
+  "{rendered} fps rendered, {shown} with frame generation": "渲染 {rendered} fps，帧生成后 {shown}",
+  "Heading for {fps} fps - now {now}, model at {scale}%": "目标 {fps} fps - 当前 {now}，模型 {scale}%",
 });
