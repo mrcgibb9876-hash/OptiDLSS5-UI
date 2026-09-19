@@ -1,6 +1,10 @@
 // 简体中文. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("zh-CN", {
+  "Ray Reconstruction at render cost": "以渲染分辨率开销运行 Ray Reconstruction",
+  "For games with Ray Reconstruction: the pass costs what it would before Ray Reconstruction, without the damage. It runs after Ray Reconstruction, on its clean frame, with the model at the game's render resolution instead of the output's. Ray Reconstruction's own input is never touched, so nothing is smeared, and the model never sees ray-tracing noise. Model resolution and Adaptive resolution then count from the render resolution. Needs Before Super Resolution on.": "适用于带 Ray Reconstruction 的游戏：开销与在 Ray Reconstruction 之前运行相同，但没有画质损伤。它在 Ray Reconstruction 之后、对其干净画面运行，模型使用游戏的渲染分辨率而非输出分辨率。Ray Reconstruction 自身的输入从不被改动，因此不会拖影，模型也不会看到光追噪点。模型分辨率和自适应分辨率随之以渲染分辨率为基准。需要开启 Super Resolution 之前。",
+  "Edge-aware": "边缘感知",
+  "How the model's work is brought back up when it ran below the frame's size.\n\nClassic composes the model's small picture directly against the full-size frame. Those two disagree by the shrink's blur as well as by the model's edit, and the composition cannot tell them apart.\n\nMatched residual enlarges only the model's edit, laid on the full-size frame.\n\nEdge-aware (default) does the same, but never blends the edit across an outline -- which is what drew a thin halo round characters' heads.\n\nGreyed out at 100%, where there is nothing to enlarge.": "模型在低于画面尺寸运行时，如何把它的结果放大回来。\n\n经典：把模型的小图直接与全尺寸画面合成。两者之间既有模型的修改，也有缩小带来的模糊，合成无法区分。\n\n匹配残差：只放大模型的修改，叠加到全尺寸画面上。\n\n边缘感知（默认）：同上，但绝不会把修改混过轮廓线 -- 角色头部周围的细光晕就是这样产生的。\n\n在 100% 时为灰色，此时没有需要放大的内容。",
   "Older games run on DX9, DX8 or DX10: pick that if it is what the game uses, and the route puts dgVoodoo2 or the 32-bit helper in for it.": "较老的游戏使用 DX9、DX8 或 DX10：如果游戏用的是它，就选它，路线会为它放入 dgVoodoo2 或 32 位辅助程序。",
   "Settings": "设置",
   "Scan for Games": "扫描游戏",

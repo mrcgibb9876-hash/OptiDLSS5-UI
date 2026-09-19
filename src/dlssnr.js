@@ -67,10 +67,11 @@ const FIELDS = [
     help: "Whether the model's edit is applied. Off shows the clean upscaler frame while the pass keeps running -- so with Hold frame, under Inspect, you can freeze a frame and toggle this to see the same frozen frame with and without Neural Rendering. Leave it on for normal use." },
   { key: 'RunBeforeSR', type: 'bool', default: false, group: 'DLSS 5', label: 'Before Super Resolution',
     help: "Where the pass sits. Off is the original placement: the model runs on the finished upscaled frame. On runs it at render resolution on the colour SR is about to consume, so SR then accumulates and upscales an already-enhanced picture.\n\nRay Reconstruction always stays on the post-upscale path -- its inputs are a different contract. A colour image padded inside a larger texture is staged at its real size; one offset from the corner still falls back after upscaling.\n\nD3D12 and its D3D11/Vulkan bridges only; native Vulkan keeps the old placement." },
-  // [DlssNr] RunBeforeRR (engine v1.0.38): the same placement for Ray Reconstruction, experimentally.
-  { key: 'RunBeforeRR', type: 'bool', default: false, group: 'DLSS 5', label: 'Before Ray Reconstruction (experimental)',
+  // [DlssNr] RunBeforeRR. Engine v1.0.38 ran the pass before Ray Reconstruction; since engine v2.2 it runs after
+  // it with the model at render resolution -- the cost without the smearing -- and the label says so.
+  { key: 'RunBeforeRR', type: 'bool', default: false, group: 'DLSS 5', label: "Ray Reconstruction at render cost",
     dependsOn: { key: 'RunBeforeSR', is: true },
-    help: "Also runs the pass before Ray Reconstruction, at render resolution, on the colour it is about to denoise and upscale -- far cheaper than after it.\n\nEXPERIMENTAL: that colour is the noisy ray-traced frame rather than a finished one, so the model may enhance noise and Ray Reconstruction may smear what it added. Try it, compare, and turn it off if it looks worse. Needs Before Super Resolution on." },
+    help: "For games with Ray Reconstruction: the pass costs what it would before Ray Reconstruction, without the damage. It runs after Ray Reconstruction, on its clean frame, with the model at the game's render resolution instead of the output's. Ray Reconstruction's own input is never touched, so nothing is smeared, and the model never sees ray-tracing noise. Model resolution and Adaptive resolution then count from the render resolution. Needs Before Super Resolution on." },
   // Adaptive resolution (engine v2.1: DlssNr_Menu.cpp DrawAutoScale, DlssNrBudget.h). Labels, ranges and
   // help are the in-game panel's own; its help is hard-wrapped there and reflowed here, like every other
   // help text in this file. AutoScalePrebuild is not a panel row in the engine either, so it is not here.
@@ -169,9 +170,9 @@ const FIELDS = [
   { key: 'Intensity', type: 'float', default: 1.0, min: 0, max: 2, step: 0.01, group: 'Models',
     label: 'Intensity', help: "The model's own strength control, applied inside it. Distinct from the Global Controls above, and from Detail strength below, which scales the result afterwards." },
 
-  { key: 'Transfer', type: 'enum', default: 1, options: [[0, 'Classic'], [1, 'Matched residual']], group: 'Cost',
+  { key: 'Transfer', type: 'enum', default: 2, options: [[0, 'Classic'], [1, 'Matched residual'], [2, 'Edge-aware']], group: 'Cost',
     label: 'Enlargement', dependsOn: { key: 'WorkingScale', below: 1 },
-    help: "How the model's work is brought back up when it ran below the frame's size.\n\nClassic composes the model's small picture directly against the full-size frame. Those two disagree by the shrink's blur as well as by the model's edit, and the composition cannot tell them apart.\n\nGreyed out at 100%, where there is nothing to enlarge." },
+    help: "How the model's work is brought back up when it ran below the frame's size.\n\nClassic composes the model's small picture directly against the full-size frame. Those two disagree by the shrink's blur as well as by the model's edit, and the composition cannot tell them apart.\n\nMatched residual enlarges only the model's edit, laid on the full-size frame.\n\nEdge-aware (default) does the same, but never blends the edit across an outline -- which is what drew a thin halo round characters' heads.\n\nGreyed out at 100%, where there is nothing to enlarge." },
 
   { key: 'TransferStrength', type: 'float', default: 1.0, min: 0, max: 2, step: 0.01, group: 'How much of it lands',
     label: 'Detail strength',
