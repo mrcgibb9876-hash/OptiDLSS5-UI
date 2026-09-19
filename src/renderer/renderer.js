@@ -1146,7 +1146,6 @@ function helpWords(diag) {
     case 'dlss-no-nr': return t('DLSS was created and Neural Rendering is on, yet the pass never ran. This is not a known case. Save the bundle to share, or ask the AI.');
     case 'foreign-optiscaler': return t('Another OptiScaler build is in this folder as {file}, and it is not the one this app installed. That copy is what the game loads and what answers the DLSS calls -- an upstream OptiScaler has no neural pass, so DLSS 5 can never run while it is there, however complete everything else looks. Delete {file} (it is not ours to remove for you), then press Install here.', v);
     case 'dlss-runtime-missing': return t('OptiScaler switched DLSS off a second into the run, because nvngx_dlss.dll is not beside the game exe -- its log says so in as many words. Nothing this app builds can make a DLSS call without it: not the Feeder\x27s synthesised one, not REFramework\x27s upscaler on a Resident Evil, not a DLSS 5 only profile. On this route the deploy fetches and places it, so running that again puts it back.');
-    case 'dlss-runtime-missing-native': return t('OptiScaler switched DLSS off a second into the run, because nvngx_dlss.dll is not beside the game exe. On this route that file is the GAME\x27s, not this app\x27s -- nothing here deploys it, so there is nothing to re-run. The game was put on this route because DLSS or Streamline files were found in its folders, but the one OptiScaler needs is not beside the exe. Either the game keeps its DLSS somewhere else, or what was found belongs to another mod. Copying the game\x27s own nvngx_dlss.dll next to the exe is what makes the call possible; saving the bundle lets someone check where it actually lives.');
     case 'feeder-technique': return t('DLSS initialised but the Feeder\'s shader technique was missing. Install again to redeploy the Feeder.');
     case 'luma-select-dlss': return t('Luma UE is deployed but no DLSS call happened. In-game, press Home for Luma\'s overlay and select DLSS as the upscaler, in gameplay. Then check again.');
     case 'init-no-feature': return t('DLSS initialised but no feature was ever created. This is not a known case. Save the bundle to share, or ask the AI.');
@@ -1257,7 +1256,6 @@ function helpSteps(diag) {
     case 'reframework-missing': case 'pd-temporal-on': case 'pd-build-missing': case 'd3d11-native':
     case 'nr-disabled': case 'dlss-runtime-missing': case 'feed-stopped':
       return fixIt(t('Press Fix it'));
-    case 'dlss-runtime-missing-native': return [t('Look for nvngx_dlss.dll in the game\x27s own folders -- beside the exe is where OptiScaler needs it'), t('Save the bundle to share so the folder listing can be read'), ...report];
     case 'feeder-mv-broken': case 'feed-no-motion': return fixIt(t('Press Fix it (redeploys the Feeder)'));
     case 'feed-no-motion-legacy': return [v.onLumenite ? t('Card menu > Motion vectors > change: pick VORT') : t('Card menu > Motion vectors > change: pick LumeniteFX'), launch];
     case 'feed-depth-flat': return fixIt(t('Press Fix it (switches the depth profile)'));
@@ -1333,7 +1331,6 @@ function helpShort(diag) {
     case 'nr-disabled': return t('Neural Rendering is switched off');
     case 'foreign-optiscaler': return t('Another OptiScaler loads first');
     case 'dlss-runtime-missing': return t('nvngx_dlss.dll is missing');
-    case 'dlss-runtime-missing-native': return t('nvngx_dlss.dll is missing -- and it is the game\x27s to supply');
     case 'feeder-technique': return t('Feeder shader missing');
     case 'luma-select-dlss': return t('Select DLSS in Luma\'s overlay (Home)');
     case 'ue-crash-luma': return t('Crashed with Luma UE');
@@ -1400,6 +1397,7 @@ function helpFixLabel(id) {
     case 'reconfigure': return t('Reconfigure');
     case 'remove-all': return t('Remove everything this app placed');
     case 'install': return t('Install OptiScaler');
+    case 'place-dlss': return t('Put nvngx_dlss.dll beside the exe');
     case 'switch-to-luma': return t('Switch to Luma');
     default: return id;
   }

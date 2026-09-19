@@ -143,13 +143,13 @@ const rows = [
   ['a Luma game that lost its DLSS runtime installs, which runs Luma\'s own deploy',
     base({ route: { route: 'lumaue', lumaDeployed: true }, run: { ran: true, verdict: 'no-dlss', dlssRuntimeMissing: true } }),
     { status: 'fix', code: 'dlss-runtime-missing', fix: 'install' }],
-  // The plain route: the file is the game's, nothing here deploys it, so there is no fix to offer.
-  ['a game on the plain route is told the runtime is its own to supply, not offered a fix',
+  // The plain route: place-dlss puts the game's own copy (or NVIDIA's from RHI) beside the exe.
+  ['a game on the plain route is offered the step that places the runtime',
     base({ route: { route: 'optiscaler' }, run: { ran: true, verdict: 'init-no-feature', dlssRuntimeMissing: true } }),
-    { status: 'step', code: 'dlss-runtime-missing-native' }],
+    { status: 'fix', code: 'dlss-runtime-missing', fix: 'place-dlss' }],
   ['the same holds for the no-dlss verdict on the plain route',
     base({ route: { route: 'optiscaler' }, run: { ran: true, verdict: 'no-dlss', dlssRuntimeMissing: true } }),
-    { status: 'step', code: 'dlss-runtime-missing-native' }],
+    { status: 'fix', code: 'dlss-runtime-missing', fix: 'place-dlss' }],
   // Not ours to swap: a wrapper this app never deployed is left alone.
   ['a game with no dgVoodoo2 of ours keeps the old answer',
     base({ route: { route: 'feeder', feederDeployed: true, dgVoodooDeployed: false }, run: { ran: true, verdict: 'no-dlss' } }),

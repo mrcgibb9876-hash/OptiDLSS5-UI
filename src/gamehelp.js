@@ -44,16 +44,15 @@ function diagnose(ctx) {
   //   Feeder   deployFeederStack places it (feeder.js deployNvngxDlss), so re-running that deploy
   //            puts it back. Not deployed yet, and Install is the step that would.
   //   Luma     the same file, through Luma's own deploy, which calls feeder.js's copy of it.
-  //   anything else -- nothing this app deploys places that file. It belongs to the GAME, and
-  //            Reconfigure only rewrites the ini and can rename the proxy; it has never been able
-  //            to place a DLL on any route. Offering it here is a loop that cannot close, which is
-  //            exactly what Baldur's Gate 3 hit (#83, 2026-09-18): applied it, nothing moved, and
-  //            the next run returned the same verdict as "fix-failed".
+  //   OptiScaler  place-dlss (main.js placeNvngxDlssBesideExe), which Install also runs: the game's
+  //            own copy from elsewhere in its tree, or NVIDIA's from RHI. Reconfigure was the old
+  //            answer and could never work -- it rewrites the ini and can rename the proxy, and has
+  //            never placed a DLL: Baldur's Gate 3 (#83, 2026-09-18) applied it, nothing moved, and
+  //            the next run came back "fix-failed".
   //
-  // Only the three routes whose deploy provably places the file are re-pointed here, and only the
-  // plain OptiScaler route is told there is no fix. Every other route keeps Reconfigure: whether
-  // their install places this file has not been established, and changing an answer on a route
-  // nobody has evidence about is how a fix becomes a new bug.
+  // Every other route keeps Reconfigure: whether their install places this file has not been
+  // established, and changing an answer on a route nobody has evidence about is how a fix becomes
+  // a new bug.
   const dlssRuntimeMissingAnswer = () => {
     if (route.route === 'feeder' || route.route === 'feeder32') {
       return route.feederDeployed
@@ -61,7 +60,7 @@ function diagnose(ctx) {
         : fix('dlss-runtime-missing', 'install');
     }
     if (route.route === 'lumaue') return fix('dlss-runtime-missing', 'install');
-    if (route.route === 'optiscaler') return out('step', 'dlss-runtime-missing-native');
+    if (route.route === 'optiscaler') return fix('dlss-runtime-missing', 'place-dlss');
     return fix('dlss-runtime-missing', 'reconfigure');
   };
 
@@ -442,6 +441,6 @@ function diagnose(ctx) {
 
 // The fixes in the order Game Help would try them, for the AI tier's tool list and the tests.
 // 'switch-to-luma' is applied by the renderer, which asks for Luma's licence first; main.js declines it.
-const FIX_IDS = ['remove-foreign', 'remove-feeder', 'remove-luma', 'redeploy-feeder', 'feeder-depth-profile', 'disable-agility-redist', 'reconfigure', 'remove-all', 'install', 'switch-to-luma', 'swap-to-dxvk', 'swap-to-dgvoodoo', 'swap-to-native', 'nr-model-only'];
+const FIX_IDS = ['place-dlss', 'remove-foreign', 'remove-feeder', 'remove-luma', 'redeploy-feeder', 'feeder-depth-profile', 'disable-agility-redist', 'reconfigure', 'remove-all', 'install', 'switch-to-luma', 'swap-to-dxvk', 'swap-to-dgvoodoo', 'swap-to-native', 'nr-model-only'];
 
 module.exports = { diagnose, FIX_IDS };

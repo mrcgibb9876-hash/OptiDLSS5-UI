@@ -2261,10 +2261,18 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
       foreignProxy = proxy.proxy;
     }
 
+    // Not fatal: OptiScaler still loads without it, and Game Help names the missing file after a run.
+    let nvngxDlss = null;
+    try {
+      nvngxDlss = await placeNvngxDlssBesideExe(dir);
+    } catch (err) {
+      nvngxDlss = { placed: false, error: String(err && err.message ? err.message : err) };
+    }
+
     invalidateDetection(dir);
     const { api, applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix, profile } = await autoConfigureGame(dir, exePath);
 
-    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, proxyRefreshError, foreignProxy, proxy, proxyError, feederGame, api, autoConfigured: applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix, profile };
+    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, proxyRefreshError, foreignProxy, proxy, proxyError, feederGame, api, autoConfigured: applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix, profile, nvngxDlss };
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -3391,6 +3399,17 @@ async function applyHelpFix(exePath, fixId) {
     }
     case 'install':
       return { done: false, text: 'Install runs from the card: press Install OptiScaler on this game' };
+    case 'place-dlss': {
+      const r = await placeNvngxDlssBesideExe(dir);
+      invalidateDetection(dir);
+      if (!r.placed) return { done: false, text: `nvngx_dlss.dll was not placed: ${r.reason}` };
+      return {
+        done: true,
+        text: r.source === 'game'
+          ? `copied the game's own nvngx_dlss.dll beside the exe (from ${r.from})`
+          : `placed NVIDIA's nvngx_dlss.dll ${r.version} beside the exe`,
+      };
+    }
     default:
       throw new Error(`unknown fix ${fixId}`);
   }
@@ -5393,6 +5412,46 @@ function readInstallMarker(dir) {
 function updateInstallJournal(dir, patch) {
   const current = readInstallMarker(dir) || {};
   writeJson(path.join(dir, INSTALL_MARKER), { ...current, ...patch });
+}
+
+// nvngx_dlss.dll beside the exe, on the plain OptiScaler route. OptiScaler looks for it there
+// ("Check for DLSS files") and switches DLSS off without it, so DLSS 5 has nothing to attach to.
+// The Feeder and Luma deploys already place it; this route had nothing, and a game that keeps its
+// DLSS elsewhere (Baldur's Gate 3, #83: the file was not beside bg3_dx11.exe) ran with DLSS off.
+//
+// Only for a game that ships DLSS or Streamline somewhere (shipsNativeDlss): the file beside the
+// exe makes hasNativeDlss true, and on a game that needs the Feeder that would flip its route to
+// plain OptiScaler before the Feeder is ever deployed. Feeder and Luma games are left to their own
+// deploys, which record the file in their own markers.
+//
+// Where it comes from, in order:
+//   1. the game's own copy, from elsewhere in its install tree -- the version the game shipped;
+//   2. otherwise NVIDIA's DLSS from RHI (RankFTW's manifest and rhi-repo releases, sha256-checked),
+//      the same fetch the Feeder and Luma deploys use.
+// Recorded in the install journal's added list, so Remove takes it away again.
+async function placeNvngxDlssBesideExe(dir, { fetchDlss = null } = {}) {
+  const dest = path.join(dir, 'nvngx_dlss.dll');
+  if (fs.existsSync(dest)) return { placed: false, reason: 'present' };
+  if (isFeederGame(dir) || lumaue.lumaUeDeployed(dir)) return { placed: false, reason: 'the Feeder or Luma deploy places it' };
+  if (!nativeDlss.shipsNativeDlss(dir)) return { placed: false, reason: 'the game ships no DLSS' };
+
+  let result;
+  const own = nativeDlss.findInGameTree(dir, ['nvngx_dlss.dll']);
+  if (own) {
+    await fsp.copyFile(own, dest);
+    result = { placed: true, source: 'game', from: own };
+  } else {
+    const r = fetchDlss
+      ? await fetchDlss(dir)
+      : await feeder.deployNvngxDlss(dir, getRhiManifest, compareStreamlineVersions, feederCacheDir(), GITHUB_HEADERS);
+    if (!r.deployed) return { placed: false, reason: r.reason };
+    result = { placed: true, source: 'rhi', version: r.version };
+  }
+  const journal = readInstallMarker(dir) || {};
+  const added = new Set(journal.added || []);
+  added.add('nvngx_dlss.dll');
+  updateInstallJournal(dir, { added: [...added], nvngxDlss: { ...result, at: new Date().toISOString() } });
+  return result;
 }
 
 const ORIG_BACKUP_SUFFIX = '.dlss5ui-orig';
