@@ -298,11 +298,17 @@ const DG_WINDOWED = [
 // the game running and nothing faulting -- and "argb8888_srgb" gave a picture, confirmed by a
 // screenshot in a windowed test. PresentationModel and DesktopResolution were tried there too and are
 // deliberately NOT set: both forced exclusive fullscreen.
+//
+// Taken back out on 2026-09-19: with ColorSpace=argb8888_srgb, the Castlevania: Lords of Shadow 2 demo
+// refused to start ("needs at least 512 MB of video and AGP memory"), and dgVoodoo2's default
+// "appdriven" made the warning go away -- reproduced both ways, every other key unchanged. The demo had
+// run on this route before the key existed. Assassin's Creed II, the one game it was for, was dropped.
+// Installs synced while it was in are put back to appdriven (DG_COLORSPACE_UNDO).
 const DG_DISPLAY = [
   ['General', 'ScalingMode', 'stretched_ar'],
   ['GeneralExt', 'WindowedAttributes', 'borderless, fullscreensize'],
-  ['GeneralExt', 'ColorSpace', 'argb8888_srgb'],
 ];
+const DG_COLORSPACE_UNDO = { from: 'argb8888_srgb', to: 'appdriven' };
 
 function configureDgVoodoo(text, { windowed = false } = {}) {
   let out = String(text || '');
@@ -329,6 +335,8 @@ function ensureDgVoodooWindowed(dir) {
   let next = text;
   for (const [section, key, value] of DG_DISPLAY) next = setIniKey(next, section, key, value);
   if (marker.host32) for (const [section, key, value] of DG_WINDOWED) next = setIniKey(next, section, key, value);
+  const colour = getIniKey(next, 'GeneralExt', 'ColorSpace');
+  if (colour !== null && String(colour).trim() === DG_COLORSPACE_UNDO.from) next = setIniKey(next, 'GeneralExt', 'ColorSpace', DG_COLORSPACE_UNDO.to);
   if (next === text) return false;
   fs.writeFileSync(confPath, next, 'utf8');
   return true;
