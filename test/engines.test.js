@@ -31,13 +31,25 @@ test('release assets: the zip is the zip, its .sha256 file is the checksum, neve
   assert.equal(engines.parseSha256Text('not a hash'), null);
 });
 
-test('engine ids fall back to the default; only explicit choices become ini edits', () => {
-  assert.equal(engines.normalizeEngine('presr'), 'dlssnr', 'the dropped Pre-SR build lands on ours');
+// The Pre-SR build was dropped in v1.64.0 and asked for again on 2026-09-19, so the assertions that
+// pinned it to ours are now the other way round. An id nobody ships still falls back.
+test('both builds are real choices; an unknown id falls back; only explicit choices become ini edits', () => {
+  assert.deepEqual(Object.keys(engines.ENGINES), ['dlssnr', 'presr']);
+  assert.equal(engines.normalizeEngine('presr'), 'presr', 'a choice again, not normalised away');
   assert.equal(engines.normalizeEngine('nonsense'), 'dlssnr');
   assert.equal(engines.normalizeEngine(undefined), 'dlssnr');
-  assert.deepEqual(Object.keys(engines.ENGINES), ['dlssnr']);
-  assert.match(engines.releasesApi('presr'), /mrcgibb9876-hash\/OptiScaler_DLSSNR\/releases\/latest$/);
   assert.match(engines.releasesApi('dlssnr'), /mrcgibb9876-hash\/OptiScaler_DLSSNR\/releases\/latest$/);
+  assert.match(engines.releasesApi('presr'), /wilsjo2\/OptiScaler-DLSSNR-PreSR-Multipass\/releases\/latest$/);
+  // The flag the rest of the app reads off a build: whether it draws an in-game panel at all. On the
+  // build that does not, the break-away panel is what the UI must point at (route-explain.js).
+  assert.equal(engines.engine('dlssnr').panel, true);
+  assert.equal(engines.engine('presr').panel, false);
+  assert.notEqual(engines.engine('presr').folderName, engines.engine('dlssnr').folderName,
+    'a build never shares a managed folder with the other');
+  // package.json's engineVersion pins a release of OUR fork only. main.js update:check reads this flag
+  // to decide whether the pin applies: asking wilsjo2's repo for our tag 404s and fails the check.
+  assert.equal(engines.engine('dlssnr').bundled, true);
+  assert.equal(engines.engine('presr').bundled, false);
   // Only explicit choices produce ini edits; a bare marker asks for nothing (our build's panel owns them).
   assert.deepEqual(engines.iniEditsFor({ engine: 'dlssnr' }), []);
   assert.deepEqual(engines.iniEditsFor({ engine: 'dlssnr', runBeforeSR: false, passes: 7 }), [
@@ -48,12 +60,17 @@ test('engine ids fall back to the default; only explicit choices become ini edit
     { section: 'DlssNr', key: 'RunBeforeSR', value: 'true' },
     { section: 'DlssNr', key: 'Passes', value: '3' },
   ]);
-  // Install adds nothing of its own; an old Pre-SR marker keeps the user's choice but names our build.
+  // Install adds nothing of its own, and keeps whatever the previous marker chose.
   assert.deepEqual(engines.markerForInstall(null, 'dlssnr'), { engine: 'dlssnr', pendingApply: true });
-  assert.deepEqual(engines.markerForInstall({ engine: 'presr', runBeforeSR: true }, 'presr'), { engine: 'dlssnr', pendingApply: true, runBeforeSR: true });
+  assert.deepEqual(engines.markerForInstall({ engine: 'presr', runBeforeSR: true }, 'presr'),
+    { engine: 'presr', pendingApply: true, runBeforeSR: true });
+  assert.deepEqual(engines.markerForInstall({ engine: 'presr' }, 'gibberish'),
+    { engine: 'dlssnr', pendingApply: true }, 'an id no build claims still lands on ours');
 });
 
-test('a game on the old Pre-SR build re-installs onto ours; Edit choices apply and survive a re-install', { skip: !onWindows }, async () => {
+// Windows only (it drives main.js's real install). With the Pre-SR build a choice again, installing
+// on it keeps it instead of being moved to ours; switching back to ours still works from Edit.
+test('a game installed on the Pre-SR build keeps it; Edit choices apply and survive a re-install', { skip: !onWindows }, async () => {
   const base = scratchDir('engine-install');
   const release = fakeReleaseFolder(base);
   const nr = fakeNrModel(base);
@@ -67,8 +84,8 @@ test('a game on the old Pre-SR build re-installs onto ours; Edit choices apply a
   const ini = path.join(game, 'OptiScaler.ini');
   assert.equal(iniValue(ini, 'RunBeforeSR'), 'true', 'the choice the old marker carried is kept');
   assert.equal(iniValue(ini, 'Passes'), null, 'nobody chose a pass count, so none is written');
-  assert.equal(JSON.parse(fs.readFileSync(path.join(game, engines.ENGINE_MARKER), 'utf8')).engine, 'dlssnr');
-  assert.equal((await invoke('game:status', exe)).engine, 'dlssnr', 'the card names our build');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(game, engines.ENGINE_MARKER), 'utf8')).engine, 'presr');
+  assert.equal((await invoke('game:status', exe)).engine, 'presr', 'the card names the build that went in');
 
   const set = await invoke('engine:setForGame', { exePath: exe, engine: 'dlssnr', runBeforeSR: false, passes: 3 });
   assert.equal(set.ok, true, set.error);

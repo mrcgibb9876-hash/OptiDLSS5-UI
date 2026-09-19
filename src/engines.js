@@ -2,9 +2,15 @@
 // DLSS 5 developer-controls panel on Alt+Home). It runs Neural Rendering before or after DLSS
 // upscaling ([DlssNr] RunBeforeSR) for 1-3 passes ([DlssNr] Passes), both editable in Edit Game.
 //
-// v1.54.0-1.63.x also offered wilsjo2's OptiScaler-DLSSNR-PreSR-Multipass as a second build. It was
-// dropped in v1.64.0 to keep the app simple: a marker or setting that still names it ('presr')
-// normalises to this build, so the next sync moves those games back onto ours.
+// wilsjo2's OptiScaler-DLSSNR-PreSR-Multipass is offered as a second build. It was here in
+// v1.54.0-1.63.x, dropped in v1.64.0 to keep the app simple, and asked for again on 2026-09-19. The
+// machinery never went away -- only this table's entry and the renderer's selector did -- so the
+// release fetch, the per-build managed folder and the per-game marker all still work by engine id.
+//
+// The difference that matters to a user: this build has no Alt+Home developer panel. Its DLSS 5
+// settings are reachable from the break-away panel instead (Alt+Shift+Home, panelwindow.js), which
+// edits OptiScaler.ini and so needs nothing drawn inside the game. `panel: false` is what tells the
+// rest of the app to say that rather than promising a key that does nothing (route-explain.js).
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
@@ -20,6 +26,15 @@ const ENGINES = {
     // Ships inside this app's installer (release.yml bundles it), then kept current from GitHub.
     bundled: true,
     panel: true,
+  },
+  presr: {
+    id: 'presr',
+    label: 'OptiScaler-DLSSNR-PreSR-Multipass',
+    repo: 'wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass',
+    // Its own folder, so switching a game between builds never mixes two releases' files.
+    folderName: 'OptiScalerRelease-presr',
+    bundled: false,
+    panel: false,
   },
 };
 

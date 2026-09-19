@@ -128,6 +128,20 @@
 
       <details id="edit-group-dlss5" class="edit-group" open>
         <summary data-i18n>Neural pass</summary>
+        <!-- Which OptiScaler fork this one game gets, overriding the Settings default. An install-time
+             choice, not a live [DlssNr] value, so it does not have the two-places-drift problem the
+             model's own controls had when they were here. -->
+        <div id="game-engine-section" class="advanced-only hidden">
+          <label class="field-label" data-i18n>OptiScaler build for this game</label>
+          <p class="field-hint" data-i18n>Overrides the build chosen in Settings, for this game only. The Pre-SR Multipass fork can run Neural Rendering before DLSS upscaling, which is faster at the same output resolution, but <strong>it draws no panel inside the game: Alt+Home does nothing on it, and the pop-out panel (Alt+Shift+Home) is the way to change these settings while the game runs.</strong> Takes effect when you press Install on this game.</p>
+          <div class="field-row">
+            <select id="game-engine-select">
+              <option value="dlssnr">OptiScaler_DLSSNR</option>
+              <option value="presr">OptiScaler-DLSSNR-PreSR-Multipass</option>
+            </select>
+          </div>
+          <span id="game-engine-status" class="status-line"></span>
+        </div>
         <!-- DirectX 8/9 games, and 32-bit DirectX 10/11 games (since 2026-09-18): which layer the game's
              Direct3D goes through before the DLSS5 Feeder rides on it. The same swap Game Help and the
              card's menu run (game:help-apply). -->
@@ -507,6 +521,16 @@
         <p class="field-hint" data-i18n>For a game that is no longer on the grid: pick its exe folder and everything this app ever put there is removed, with the game's own files left alone. Asks before deleting anything.</p>
         <button id="btn-clean-folder" class="btn btn-ghost" data-i18n>Clean a game folder…</button>
         <div id="clean-folder-status" class="status-line" style="margin-top: 4px;"></div>
+
+        <label class="field-label" data-i18n>OptiScaler build</label>
+        <p class="field-hint" data-i18n>Which OptiScaler fork goes into a game. OptiScaler_DLSSNR is this project's own and ships inside this app; it draws the DLSS 5 panel in the game on Alt+Home. The Pre-SR Multipass fork (wilsjo2) is fetched from its own releases and can run Neural Rendering before DLSS upscaling, which is faster at the same output resolution. <strong>The Pre-SR fork draws no panel inside the game, so Alt+Home does nothing on it — use the pop-out panel above (Alt+Shift+Home), which changes the same settings while the game runs.</strong> A game keeps the build it was installed with; press Install on its card to move that game to this one.</p>
+        <div class="field-row">
+          <select id="settings-engine">
+            <option value="dlssnr">OptiScaler_DLSSNR</option>
+            <option value="presr">OptiScaler-DLSSNR-PreSR-Multipass</option>
+          </select>
+        </div>
+        <div id="settings-engine-status" class="status-line"></div>
 
         <label class="field-label" data-i18n>Nvidia DLSS NR model file (nvngx_dlssnr.dll)</label>
         <p class="field-hint" data-i18n>Fetched automatically on first launch (from RHI's published package). One copy gets placed in each game's folder. Browse only if you want to supply your own copy from an NVIDIA driver.</p>

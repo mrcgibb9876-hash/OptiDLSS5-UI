@@ -18,6 +18,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const gpu = require('./gpu');
+// For gpuSeries only: "NVIDIA GeForce RTX 3080" -> 30. fgsuggest.js reads it from here too.
+const rtxmfg = require('./rtxmfg');
 
 const GPU_PREF_KEY = 'HKCU\\Software\\Microsoft\\DirectX\\UserGpuPreferences';
 const DPI_KEY = 'HKCU\\Control Panel\\Desktop\\WindowMetrics';
@@ -186,6 +188,29 @@ function evaluate(f) {
     add('driver-old', 'warn',
       'The NVIDIA driver is {branch}; DLSS 5 needs {minimum} or newer. OptiScaler installs, but Neural Rendering will not start until the driver is updated.',
       { branch: drv.branch, minimum: drv.minimum });
+  }
+
+  // f. What the neural pass will cost on this card. Nothing here blocks it, and nothing needs to:
+  // the model this app deploys is ShortFuse's 310.8.SF-v2, which supports RTX 20/30/40 (amdnr.js
+  // documents that choice), and the engine's NR path has no architecture check at all. So an RTX 30
+  // installs and runs -- it is the frame rate that is the problem, and only NVIDIA's model knows why.
+  // The numbers are other people's, from public reports rather than measured here, so the text says so.
+  // Split at the 40 series because the collapse reported on Ampere is a different order of magnitude
+  // from the cost on Ada; claiming one figure for both would be wrong in both directions.
+  const card = f.gpuInfo && f.gpuInfo.vendor === 'nvidia' ? (f.gpuInfo.name || '') : '';
+  const series = card ? rtxmfg.gpuSeries(card) : null;
+  if (series && series <= 30) {
+    add('nr-cost-pre-ada', 'warn',
+      'Neural Rendering does run on a {card} -- the model this app installs supports RTX 20/30/40 -- but the '
+      + 'neural pass costs far more on a card this old than on an RTX 50, which is what the model was built for. '
+      + 'An RTX 3080 has been publicly reported dropping from 138 FPS to 4 with it on. Nothing here stops you: '
+      + 'install it, and judge it on your own frame rate.',
+      { card });
+  } else if (series === 40) {
+    add('nr-cost-ada', 'info',
+      'Neural Rendering runs on a {card}, but the neural pass costs more than it does on an RTX 50, which is '
+      + 'what the model was built for. Expect to give up some frame rate for it.',
+      { card });
   }
 
   const rank = { block: 0, warn: 1, info: 2 };

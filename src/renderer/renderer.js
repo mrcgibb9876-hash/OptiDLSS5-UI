@@ -2532,6 +2532,7 @@ async function openGameModal(game, opts = {}) {
   updateBannerPreview();
   gameModal.classList.remove('hidden');
   await loadRouteStatus(game);
+  await loadEngineSection(game);
   await loadLayerSection(game);
   await loadApiSection(game);
   await loadEngineProfileStatus(game);
@@ -2987,6 +2988,46 @@ async function applyLayerSwap(game, id) {
   return res;
 }
 
+// Which OptiScaler build this one game gets, overriding the Settings default. The marker is what
+// carries it (engine:forGame / engine:setForGame in main), so a game keeps its build across a
+// re-install, and Install is what actually moves the files.
+async function loadEngineSection(game) {
+  const section = $('#game-engine-section');
+  const select = $('#game-engine-select');
+  const status = $('#game-engine-status');
+  if (!game || !game.exePath) { section.classList.add('hidden'); return; }
+  section.classList.remove('hidden');
+  const state = await window.api.engineForGame(game.exePath).catch(() => null);
+  const id = engineIdOrDefault((state && state.marker && state.marker.engine) || game.engine || settings.engine);
+  select.value = id;
+  status.textContent = ENGINES_WITHOUT_PANEL.has(id) ? popoutPanelSentence('only') : '';
+}
+
+$('#game-engine-select').addEventListener('change', async (e) => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  const id = engineIdOrDefault(e.target.value);
+  const status = $('#game-engine-status');
+  status.textContent = t('Saving…');
+  // Fetch it before recording the choice: a build that is not on disk would make the next Install
+  // stop to download it with no explanation.
+  const ready = await ensureEngine(id);
+  if (!ready.ok) {
+    status.textContent = t('Could not fetch {engine}: {error}', { engine: engineLabel(id), error: ready.error });
+    return;
+  }
+  const res = await window.api.engineSetForGame({ exePath: game.exePath, engine: id });
+  if (!res || !res.ok) {
+    status.textContent = t('Could not set the build: {error}', { error: (res && res.error) || '?' });
+    return;
+  }
+  game.engine = id;
+  window.api.saveGames(games);
+  await loadEngineSection(game);
+  await loadRouteStatus(game);
+  await renderGrid();
+});
+
 async function loadLayerSection(game) {
   const section = $('#game-layer-section');
   const select = $('#game-layer-select');
@@ -3106,13 +3147,35 @@ $('#game-api-select').addEventListener('change', async (e) => {
   renderGrid();
 });
 
+// The break-away panel, as the Panel row should describe it on this machine. route-explain.js says
+// whether the route offers it ('fallback' beside its own in-game panel, 'only' when nothing is drawn in
+// the game); this decides what to say about it, because only the renderer knows whether the hotkey
+// works -- it can be switched off in Settings, and Windows can refuse it to a program already holding
+// it. Naming it regardless is the 2026-09-18 bug renderer-dom.test.js guards against.
+function popoutPanelSentence(popout) {
+  if (!popout) return '';
+  if (popoutHotkeyUsable()) {
+    const vars = { hotkey: settings.panelHotkey || DEFAULT_PANEL_HOTKEY };
+    return popout === 'only'
+      ? t('Nothing is drawn inside the game here: press {hotkey} for this app\'s own panel window, which changes the same settings while the game runs.', vars)
+      : t('If the game will not show it, press {hotkey} for this app\'s own panel window, which needs nothing from the game.', vars);
+  }
+  // Off or refused. On 'fallback' the in-game panel is still the answer, so there is nothing to add;
+  // on 'only' there is no other way in, and saying so beats silence.
+  return popout === 'only'
+    ? t('Nothing is drawn inside the game here, and the pop-out panel is switched off -- turn it on in Settings to change these settings while a game runs.')
+    : '';
+}
+
 // A route's short explanation (route-explain.js) as three labelled lines: English templates from
 // main, translated here. '' when the route has none.
 function routeExplainHtml(explain) {
   if (!explain || !explain.does) return '';
-  const rows = [[t('What it does'), explain.does], [t('Limits'), explain.limits], [t('Panel'), explain.panel]];
+  const panel = [explain.panel ? t(explain.panel, explain.vars || undefined) : '', popoutPanelSentence(explain.popout)]
+    .filter(Boolean).join(' ');
+  const rows = [[t('What it does'), t(explain.does, explain.vars || undefined)], [t('Limits'), explain.limits ? t(explain.limits, explain.vars || undefined) : ''], [t('Panel'), panel]];
   return rows.filter(([, text]) => text)
-    .map(([label, text]) => `<div class="route-explain-row"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(t(text, explain.vars || undefined))}</div>`)
+    .map(([label, text]) => `<div class="route-explain-row"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(text)}</div>`)
     .join('');
 }
 
@@ -4421,6 +4484,8 @@ function openSettingsModal() {
   $('#settings-show-advanced').checked = !!settings.showAdvanced;
   $('#settings-advanced').classList.toggle('hidden', !settings.showAdvanced);
   $('#settings-feeder-prerelease').checked = !!settings.feederPrerelease;
+  $('#settings-engine').value = engineIdOrDefault(settings.engine);
+  showEngineChoiceState();
   $('#settings-panel-enabled').checked = panelEnabled();
   $('#settings-panel-hotkey').value = settings.panelHotkey || DEFAULT_PANEL_HOTKEY;
   showPanelHotkeyState();
@@ -4503,6 +4568,41 @@ $('#settings-show-advanced').addEventListener('change', async (e) => {
 $('#settings-feeder-prerelease').addEventListener('change', async (e) => {
   settings.feederPrerelease = !!e.target.checked;
   await window.api.saveSettings(settings);
+});
+
+// Which build a game gets on its next Install. Says what is on disk for the chosen build, and repeats
+// the thing a user most needs to know about the Pre-SR fork: Alt+Home draws nothing there.
+function showEngineChoiceState() {
+  const el = $('#settings-engine-status');
+  if (!el) return;
+  const id = engineIdOrDefault(settings.engine);
+  const version = engineVersion(id);
+  const ready = version
+    ? t('{engine} {version} is ready.', { engine: engineLabel(id), version })
+    : t('{engine} will be fetched the first time a game is installed with it.', { engine: engineLabel(id) });
+  if (!ENGINES_WITHOUT_PANEL.has(id)) { el.textContent = ready; return; }
+  // Naming the hotkey while the pop-out panel is switched off would send someone to a key that does
+  // nothing -- the 2026-09-18 bug renderer-dom.test.js guards against. Off, the honest answer is to
+  // say so, because on this build there is no other panel to fall back to.
+  el.textContent = `${ready} ${popoutHotkeyUsable()
+    ? t('No in-game panel on this build: press {hotkey} for the pop-out panel instead.', { hotkey: settings.panelHotkey || DEFAULT_PANEL_HOTKEY })
+    : t('No in-game panel on this build, and the pop-out panel is switched off -- turn it on above, or this build has no panel at all.')}`;
+}
+
+// Chosen here, fetched here: waiting until an Install would mean the first game on a new build sits
+// through a download with no explanation. A failure leaves the choice saved and says why.
+$('#settings-engine').addEventListener('change', async (e) => {
+  settings.engine = engineIdOrDefault(e.target.value);
+  await window.api.saveSettings(settings);
+  showEngineChoiceState();
+  const res = await ensureEngine(settings.engine);
+  if (!res.ok) {
+    $('#settings-engine-status').textContent = t('Could not fetch {engine}: {error}', { engine: engineLabel(settings.engine), error: res.error });
+    return;
+  }
+  showEngineChoiceState();
+  // The cards name the build and its panel key, so they are stale until they are drawn again.
+  await renderGrid();
 });
 
 // The pop-out DLSS 5 panel (src/panelwindow.js). Its hotkey belongs to the OS rather than to this
@@ -4752,51 +4852,76 @@ function compareTags(a, b) {
 
 // ── The OptiScaler build ──────────────────────────────────────────────────────
 //
-// One build: this project's own OptiScaler_DLSSNR fork. It ships inside the installer, is extracted
-// on first launch into the app's managed folder, and is kept current from GitHub -- nothing to
-// choose and no folder to point at. Until v1.64.0 a second build (wilsjo2's Pre-SR fork) and a
-// hand-set release folder were offered; both are gone, and settings or games that still name them
-// fall back to this build (see migrateEngineSettings).
+// Two builds (engines.js is the list in main): this project's own OptiScaler_DLSSNR fork, which ships
+// inside the installer and is extracted on first launch, and wilsjo2's Pre-SR Multipass fork, fetched
+// from its own releases the first time it is chosen. The choice was dropped in v1.64.0 and asked for
+// again on 2026-09-19.
+//
+// The default build keeps its state where it always was (settings.releaseFolder / installedVersion);
+// the other lives in settings.engines[id] = { folder, version }, so switching never mixes two releases'
+// files. A game may name its own build (game.engine, from its .dlss5ui-engine.json marker); otherwise
+// it follows settings.engine.
+//
+// The Pre-SR build draws no panel inside the game, so Alt+Home does nothing on it -- the break-away
+// panel (Alt+Shift+Home) is what reaches its settings, because that one edits the ini instead of
+// drawing. engines.js carries the fact as `panel`, and route-explain.js says it on the card.
 const ENGINE_LABELS = {
   dlssnr: 'OptiScaler_DLSSNR',
+  presr: 'OptiScaler-DLSSNR-PreSR-Multipass',
 };
 const DEFAULT_ENGINE_ID = 'dlssnr';
+// Builds with no in-game panel of their own, by id -- mirrors engines.js `panel: false`.
+const ENGINES_WITHOUT_PANEL = new Set(['presr']);
 
-function engineIdOrDefault() {
-  return DEFAULT_ENGINE_ID;
+function engineIdOrDefault(id) {
+  return Object.prototype.hasOwnProperty.call(ENGINE_LABELS, id) ? id : DEFAULT_ENGINE_ID;
 }
 
-function engineLabel() {
-  return ENGINE_LABELS[DEFAULT_ENGINE_ID];
+function engineLabel(id) {
+  return ENGINE_LABELS[engineIdOrDefault(id)];
 }
 
-function engineOf() {
-  return DEFAULT_ENGINE_ID;
+function engineOf(game) {
+  return engineIdOrDefault(game && game.engine ? game.engine : settings.engine);
 }
 
-function engineFolder() {
-  return settings.releaseFolder || '';
+function engineFolder(id) {
+  id = engineIdOrDefault(id);
+  if (id === DEFAULT_ENGINE_ID) return settings.releaseFolder || '';
+  return ((settings.engines || {})[id] || {}).folder || '';
 }
 
-function engineVersion() {
-  return settings.installedVersion || '';
+function engineVersion(id) {
+  id = engineIdOrDefault(id);
+  if (id === DEFAULT_ENGINE_ID) return settings.installedVersion || '';
+  return ((settings.engines || {})[id] || {}).version || '';
 }
 
-function setEngineState(_id, folder, version) {
-  settings.releaseFolder = folder;
-  settings.installedVersion = version;
+function setEngineState(id, folder, version) {
+  id = engineIdOrDefault(id);
+  if (id === DEFAULT_ENGINE_ID) {
+    settings.releaseFolder = folder;
+    settings.installedVersion = version;
+  } else {
+    settings.engines = { ...(settings.engines || {}), [id]: { folder, version } };
+  }
 }
 
 const normFolder = (p) => String(p || '').replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();
 // The release root can be a folder nested inside the managed one (a zip with a top-level folder).
 const insideFolder = (p, root) => normFolder(p) === normFolder(root) || normFolder(p).startsWith(normFolder(root) + '\\');
 
-// Settings written by an older build: a per-game or default Pre-SR choice, or a release folder
-// that is not the app's own. Cleared once, so every game syncs onto the managed build.
+// Settings written by a build that is no longer shipped, or a release folder that is not the app's
+// own (the hand-set folder, gone since v1.64.0). A choice naming a build this app still has is left
+// alone -- while the Pre-SR build was gone this cleared them all, and re-adding it without narrowing
+// this would silently throw the choice away on the next launch.
 async function migrateEngineSettings(bundled) {
   let changed = false;
-  if (settings.engine && settings.engine !== DEFAULT_ENGINE_ID) { settings.engine = DEFAULT_ENGINE_ID; changed = true; }
-  if (settings.engines && Object.keys(settings.engines).length) { settings.engines = {}; changed = true; }
+  const known = (id) => Object.prototype.hasOwnProperty.call(ENGINE_LABELS, id);
+  if (settings.engine && !known(settings.engine)) { settings.engine = DEFAULT_ENGINE_ID; changed = true; }
+  for (const id of Object.keys(settings.engines || {})) {
+    if (!known(id)) { delete settings.engines[id]; changed = true; }
+  }
   const managed = bundled && bundled.managedFolder;
   if (managed && settings.releaseFolder && !insideFolder(settings.releaseFolder, managed)) {
     settings.releaseFolder = '';
@@ -4806,32 +4931,34 @@ async function migrateEngineSettings(bundled) {
   if (changed) await window.api.saveSettings(settings);
   let gamesChanged = false;
   for (const game of games) {
-    if (game.engine) { delete game.engine; gamesChanged = true; }
+    if (game.engine && !known(game.engine)) { delete game.engine; gamesChanged = true; }
   }
   if (gamesChanged) window.api.saveGames(games);
 }
 
 // Makes sure the build is on disk: a valid folder is enough; otherwise its latest GitHub release is
 // fetched into the managed folder. Returns { ok } or { ok: false, error }.
-let engineFetch = null;
-async function ensureEngine() {
-  const folder = engineFolder();
+// One in-flight fetch per build, so choosing the second one does not cancel the first's.
+const engineFetches = new Map();
+async function ensureEngine(id = DEFAULT_ENGINE_ID) {
+  id = engineIdOrDefault(id);
+  const folder = engineFolder(id);
   if (folder && (await window.api.validateRelease(folder)).valid) return { ok: true };
-  if (!engineFetch) {
-    engineFetch = (async () => {
-      const res = await window.api.checkUpdate(DEFAULT_ENGINE_ID);
+  if (!engineFetches.has(id)) {
+    engineFetches.set(id, (async () => {
+      const res = await window.api.checkUpdate(id);
       if (!res.ok) return { ok: false, error: res.error };
-      toast(t('Fetching {engine} {tag}…', { engine: engineLabel(), tag: res.tag }));
-      const installRes = await window.api.installUpdate({ downloadUrl: res.downloadUrl, assetName: res.assetName, tag: res.tag, engine: DEFAULT_ENGINE_ID, sha256Url: res.sha256Url, sha256: res.sha256 });
+      toast(t('Fetching {engine} {tag}…', { engine: engineLabel(id), tag: res.tag }));
+      const installRes = await window.api.installUpdate({ downloadUrl: res.downloadUrl, assetName: res.assetName, tag: res.tag, engine: id, sha256Url: res.sha256Url, sha256: res.sha256 });
       if (!installRes.ok) return { ok: false, error: installRes.error };
-      setEngineState(DEFAULT_ENGINE_ID, installRes.folder, res.tag);
+      setEngineState(id, installRes.folder, res.tag);
       await window.api.saveSettings(settings);
       refreshBannerVisibility();
-      toast(t('Fetched {engine} {tag}.', { engine: engineLabel(), tag: res.tag }));
+      toast(t('Fetched {engine} {tag}.', { engine: engineLabel(id), tag: res.tag }));
       return { ok: true };
-    })().finally(() => { engineFetch = null; });
+    })().finally(() => { engineFetches.delete(id); }));
   }
-  return engineFetch;
+  return engineFetches.get(id);
 }
 
 // The installer carries the engine zip it was released with. Extract it whenever there is no
@@ -4915,40 +5042,51 @@ $('#btn-manager-restart').addEventListener('click', async () => {
 
 // Checks GitHub for a newer engine and installs it. Returns { ok, updated, tag } or
 // { ok: false, error }. Shared by the launch/6-hour check and the top bar's Check for Updates.
-async function updateEngineIfNewer() {
-  const res = await window.api.checkUpdate(DEFAULT_ENGINE_ID);
-  if (!res.ok) return { ok: false, error: res.error };
-  const installed = engineVersion();
+// Every build worth checking: the default one always (it is bundled, so it is always on disk) and any
+// other that has a folder here. A build nobody chose is never fetched just to check it for updates.
+function enginesInUse() {
+  return Object.keys(ENGINE_LABELS).filter((id) => id === DEFAULT_ENGINE_ID || !!engineFolder(id));
+}
+
+async function updateEngineIfNewer(id = DEFAULT_ENGINE_ID) {
+  id = engineIdOrDefault(id);
+  const res = await window.api.checkUpdate(id);
+  if (!res.ok) return { ok: false, engine: id, error: res.error };
+  const installed = engineVersion(id);
   // Never step backwards from the bundled engine because GitHub's "latest" lags behind it. The
   // offer is the engine this app version was tested with; a newer one is only mentioned.
-  if (installed && compareTags(installed, res.tag) >= 0) return { ok: true, updated: false, tag: installed, newerUntested: res.newerUntested };
-  const hadRelease = !!engineFolder();
+  if (installed && compareTags(installed, res.tag) >= 0) return { ok: true, engine: id, updated: false, tag: installed, newerUntested: res.newerUntested };
+  const hadRelease = !!engineFolder(id);
   const installRes = await window.api.installUpdate({
     downloadUrl: res.downloadUrl,
     assetName: res.assetName,
     tag: res.tag,
-    engine: DEFAULT_ENGINE_ID,
+    engine: id,
     sha256Url: res.sha256Url,
     sha256: res.sha256,
   });
-  if (!installRes.ok) return { ok: false, error: installRes.error, tag: res.tag };
-  setEngineState(DEFAULT_ENGINE_ID, installRes.folder, res.tag);
+  if (!installRes.ok) return { ok: false, engine: id, error: installRes.error, tag: res.tag };
+  setEngineState(id, installRes.folder, res.tag);
   await window.api.saveSettings(settings);
   refreshBannerVisibility();
   autoSyncStaleGames();
-  return { ok: true, updated: true, hadRelease, tag: res.tag, newerUntested: res.newerUntested };
+  return { ok: true, engine: id, updated: true, hadRelease, tag: res.tag, newerUntested: res.newerUntested };
 }
 
+// Sequential, not Promise.all: two builds updating at once would both write settings.json and race
+// each other's engine state, and one download at a time is kinder to a slow connection anyway.
 async function autoUpdateOptiScalerRelease() {
-  const res = await updateEngineIfNewer();
-  if (!res.ok) {
-    if (res.tag) toast(t('Auto-update to {tag} failed: {error}', { tag: res.tag, error: res.error }));
-    return;
+  for (const id of enginesInUse()) {
+    const res = await updateEngineIfNewer(id);
+    if (!res.ok) {
+      if (res.tag) toast(t('Auto-update to {tag} failed: {error}', { tag: res.tag, error: res.error }));
+      continue;
+    }
+    if (!res.updated) continue;
+    toast(res.hadRelease
+      ? t('{engine} auto-updated to {tag}.', { engine: engineLabel(id), tag: res.tag })
+      : t('Fetched {engine} {tag} automatically.', { engine: engineLabel(id), tag: res.tag }));
   }
-  if (!res.updated) return;
-  toast(res.hadRelease
-    ? t('{engine} auto-updated to {tag}.', { engine: engineLabel(), tag: res.tag })
-    : t('Fetched {engine} {tag} automatically.', { engine: engineLabel(), tag: res.tag }));
 }
 $('#btn-clean-folder').addEventListener('click', async () => {
   const statusEl = $('#clean-folder-status');
@@ -4984,16 +5122,27 @@ $('#btn-check-updates').addEventListener('click', async () => {
   btn.textContent = t('Checking…');
   const lines = [];
   try {
-    const [managerRes, engineRes] = await Promise.all([
+    // Every build in use, not just the default: a game left on the Pre-SR build was never offered its
+    // newer releases before this. One await for the whole sweep so the manager check runs alongside it.
+    const [managerRes, engineResults] = await Promise.all([
       window.api.checkManagerUpdate().catch((e) => ({ ok: false, error: String(e && e.message || e) })),
-      updateEngineIfNewer().catch((e) => ({ ok: false, error: String(e && e.message || e) })),
+      (async () => {
+        const out = [];
+        for (const id of enginesInUse()) {
+          out.push(await updateEngineIfNewer(id).catch((e) => ({ ok: false, engine: id, error: String(e && e.message || e) })));
+        }
+        return out;
+      })(),
     ]);
 
-    if (!engineRes.ok) lines.push(t('Update failed: {error}', { error: engineRes.error }));
-    else if (engineRes.updated) lines.push(t('OptiScaler engine updated to {tag}', { tag: engineRes.tag }) + '.');
-    else lines.push(t('{engine} up to date ({tag}).', { engine: engineLabel(), tag: engineRes.tag || '?' }));
-    if (engineRes.ok && engineRes.newerUntested) {
-      lines.push(t('{engine} {tag} is out, but this app version was not tested with it -- it comes with the next app update.', { engine: engineLabel(), tag: engineRes.newerUntested }));
+    for (const engineRes of engineResults) {
+      const name = engineLabel(engineRes.engine);
+      if (!engineRes.ok) lines.push(t('{engine} update failed: {error}', { engine: name, error: engineRes.error }));
+      else if (engineRes.updated) lines.push(t('{engine} updated to {tag}.', { engine: name, tag: engineRes.tag }));
+      else lines.push(t('{engine} up to date ({tag}).', { engine: name, tag: engineRes.tag || '?' }));
+      if (engineRes.ok && engineRes.newerUntested) {
+        lines.push(t('{engine} {tag} is out, but this app version was not tested with it -- it comes with the next app update.', { engine: name, tag: engineRes.newerUntested }));
+      }
     }
 
     // Toasts for itself when it fetches; a newer model reaches the games through the sync.

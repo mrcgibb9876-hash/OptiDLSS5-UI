@@ -150,3 +150,31 @@ test('the card\'s Fix it cannot run the same fix twice at once', () => {
   assert.match(block, /btn\.disabled = true/);
   assert.match(block, /finally \{\s*cardFixesInFlight\.delete\(game\.exePath\)/);
 });
+
+// The second engine build came back on 2026-09-19. Both update paths read the default build's folder
+// with no id, so a game left on the Pre-SR build would never have been offered its newer releases --
+// and nothing would have said so, since the default build's check kept reporting "up to date".
+test('both update paths sweep every engine build in use, not just the default', () => {
+  assert.match(js, /function enginesInUse\(\)/, 'no enginesInUse to sweep with');
+
+  const auto = js.slice(js.indexOf('async function autoUpdateOptiScalerRelease()'), js.indexOf("$('#btn-clean-folder')"));
+  assert.ok(auto.length > 0, 'could not find autoUpdateOptiScalerRelease');
+  assert.match(auto, /for \(const id of enginesInUse\(\)\)/, 'the 6-hourly auto-update covers the default build only');
+
+  const check = js.slice(js.indexOf("$('#btn-check-updates').addEventListener"), js.indexOf("const scanModal ="));
+  assert.ok(check.length > 0, 'could not find the Check for Updates handler');
+  assert.match(check, /for \(const id of enginesInUse\(\)\)/, 'Check for Updates covers the default build only');
+  // Every line names its build: with two of them, "up to date" on its own does not say which.
+  assert.match(check, /engineLabel\(engineRes\.engine\)/, 'the result lines do not name the build');
+});
+
+// The break-away panel's sentence lives here, not in route-explain.js, precisely so it can be withheld:
+// the pop-out panel can be switched off in Settings and Windows can refuse its hotkey. The Panel row
+// must therefore ask, not paste the route's text and hope.
+test('the card\'s Panel row asks whether the pop-out panel can actually be offered', () => {
+  const fn = js.slice(js.indexOf('function routeExplainHtml('), js.indexOf('async function loadRouteStatus('));
+  assert.ok(fn.length > 0, 'could not find routeExplainHtml');
+  assert.match(fn, /popoutPanelSentence\(explain\.popout\)/, 'the Panel row does not consult the pop-out state');
+  const sentence = js.slice(js.indexOf('function popoutPanelSentence('), js.indexOf('function routeExplainHtml('));
+  assert.match(sentence, /popoutHotkeyUsable\(\)/, 'popoutPanelSentence names the hotkey unconditionally');
+});
