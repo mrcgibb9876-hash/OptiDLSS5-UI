@@ -94,6 +94,23 @@ test('a curly apostrophe is the same name as a straight one', () => {
   );
 });
 
+test('a dotted acronym is the same name on both sides of the comparison', () => {
+  // The term ladder collapses "S.T.A.L.K.E.R." to "STALKER" so the store can find the game -- but
+  // the store answers with its own dotted spelling, and titleTokens was breaking that into seven
+  // single letters. Every identity word of the query then looked absent and the right game was
+  // refused, leaving the card with no art at all (found 2026-09-20).
+  assert.deepEqual(library.titleTokens('S.T.A.L.K.E.R.: Shadow of Chernobyl'), ['stalker', 'shadow', 'of', 'chernobyl']);
+  assert.equal(
+    pick('STALKER Shadow of Chernobyl', 'S.T.A.L.K.E.R.: Shadow of Chernobyl'),
+    'S.T.A.L.K.E.R.: Shadow of Chernobyl'
+  );
+  // And the sequel is still told apart from the first game, dots or no dots.
+  assert.equal(
+    pick('STALKER 2 Heart of Chornobyl', 'S.T.A.L.K.E.R.: Shadow of Chernobyl', 'S.T.A.L.K.E.R. 2: Heart of Chornobyl'),
+    'S.T.A.L.K.E.R. 2: Heart of Chornobyl'
+  );
+});
+
 test('nothing to choose from is answered, not thrown', () => {
   // pickBannerMatch is exported; a caller handing it an empty or absent result must get "no
   // match" rather than an exception that takes the whole render down.

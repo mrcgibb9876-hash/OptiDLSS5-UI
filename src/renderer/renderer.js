@@ -473,13 +473,29 @@ async function renderGrid() {
 
     setBannerWithFallback(game, card.querySelector('.card-banner'), card.querySelector('.card-banner-fallback'));
     const bannerEls = () => [card.querySelector('.card-banner'), card.querySelector('.card-banner-fallback')];
+    // SteamGridDB art (source 'steamgriddb') carries no appid on purpose -- its ids are its own, and
+    // bannerAppId is read elsewhere as "this game is on Steam". It is cached by its URL and lives on
+    // as a local path, like art picked by hand -- except that this one WAS auto-found, so bannerIsIcon
+    // stays false and it is shown cropped to fill like any other banner rather than centred like an icon.
+    // Returns whether the card actually got art, so a download that fails still falls through to the icon.
     const applyResolved = async (found) => {
+      if (found.source === 'steamgriddb') {
+        const localPath = await window.api.cacheUrlBanner(found.gridId, found.imageUrl);
+        if (!localPath) return false;
+        game.bannerAppId = null;
+        game.bannerLocalPath = localPath;
+        game.bannerIsIcon = false;
+        saveGamesSoon();
+        setBannerWithFallback(game, ...bannerEls());
+        return true;
+      }
       const localPath = await window.api.cacheSteamBanner(found.appid, found.tinyImage);
       game.bannerAppId = String(found.appid);
       game.bannerLocalPath = localPath || null;
       game.bannerIsIcon = false;
       saveGamesSoon();
       setBannerWithFallback(game, ...bannerEls());
+      return true;
     };
     // Nothing on the store knows this game, so fall back to what the game knows about itself.
     // Written once and then remembered like any other art; if that file later goes missing the
@@ -504,7 +520,20 @@ async function renderGrid() {
       // themselves was never auto-found, so none of this ever touches it.
       game.bannerSearchVersion = bannerSearchVersion;
       window.api.resolveBanner(game.exePath, game.name).then(async (found) => {
-        if (found && String(found.appid) !== String(game.bannerAppId)) await applyResolved(found);
+        // A SteamGridDB answer is never allowed to take over here: this card already has store art,
+        // which is the better source, and the fallback only ran because the store missed this time.
+        if (found && found.source !== 'steamgriddb' && String(found.appid) !== String(game.bannerAppId)) await applyResolved(found);
+        else saveGamesSoon();
+      });
+    } else if (game.bannerIsIcon && autoFound && staleSearch) {
+      // A card wearing its own exe icon is a card the search gave up on -- and that is exactly the
+      // set a new art source exists for. Without this it would never look again: the icon fills in
+      // bannerLocalPath, so every branch below reads the card as already having art and leaves it
+      // alone for good. Once per search version, like the others. The icon stays if nothing is found,
+      // and art the user picked by hand is not an icon and was never auto-found, so it is untouched.
+      game.bannerSearchVersion = bannerSearchVersion;
+      window.api.resolveBanner(game.exePath, game.name).then(async (found) => {
+        if (found) await applyResolved(found);
         else saveGamesSoon();
       });
     } else if (!game.bannerLocalPath && !game.bannerAppId && autoFound && !staleSearch) {
@@ -526,12 +555,12 @@ async function renderGrid() {
       game.bannerSearchAttempted = true;
       game.bannerSearchVersion = bannerSearchVersion;
       window.api.resolveBanner(game.exePath, game.name).then(async (found) => {
-        if (!found) {
+        // Nothing found, or the art that was found could not be downloaded: either way the card
+        // falls through to its own icon rather than staying blank.
+        if (!found || !(await applyResolved(found))) {
           await applyExeIcon(game, bannerEls);
           saveGamesSoon();
-          return;
         }
-        await applyResolved(found);
       });
     }
 
@@ -4483,6 +4512,7 @@ function openSettingsModal() {
   $('#settings-panel-hotkey').value = settings.panelHotkey || DEFAULT_PANEL_HOTKEY;
   showPanelHotkeyState();
   $('#settings-ai-key').value = settings.anthropicApiKey || '';
+  $('#settings-steamgrid-key').value = settings.steamGridDbKey || '';
   $('#settings-ai-model').value = settings.aiModel || 'claude-sonnet-5';
   $('#settings-nr-dll').value = settings.nrDllPath || '';
   checkNrDllStatus();
@@ -4545,6 +4575,21 @@ $('#settings-ai-key').addEventListener('change', async (e) => {
 $('#settings-ai-model').addEventListener('change', async (e) => {
   settings.aiModel = e.target.value || 'claude-sonnet-5';
   await window.api.saveSettings(settings);
+});
+// Saving a key is what makes the fallback exist, so the cards that gave up on art are sent back to
+// look straight away rather than after the next version bump: forgetting the search they already
+// did is exactly what "there is somewhere new to look" means. Only ever cards wearing an auto-found
+// icon -- art picked by hand carries no bannerSearchAttempted and is not touched.
+$('#settings-steamgrid-key').addEventListener('change', async (e) => {
+  const key = (e.target.value || '').trim();
+  const had = !!settings.steamGridDbKey;
+  settings.steamGridDbKey = key;
+  await window.api.saveSettings(settings);
+  if (key && !had) {
+    for (const g of games) if (g.bannerIsIcon && g.bannerSearchAttempted) g.bannerSearchVersion = 0;
+    await window.api.saveGames(games);
+    renderGrid();
+  }
 });
 
 // One switch for everything most people never need: Settings' expert fields, and Edit's Frame

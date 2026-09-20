@@ -514,6 +514,12 @@
           </select>
         </div>
 
+        <label class="field-label" style="margin-top: 12px;" data-i18n>Game art for older games (optional)</label>
+        <p class="field-hint" data-i18n>Cards get their art from Steam. A game Steam never sold, or has since delisted, ends up wearing its own exe icon instead. With a free SteamGridDB key here, those cards look there too — it is a community art database that covers old and console-ported games well. Get a key at steamgriddb.com/profile/preferences/api. Nothing is sent anywhere until a card needs art, and only the game's name is sent. Cards already wearing an icon look again once, after you save a key.</p>
+        <div class="field-row">
+          <input id="settings-steamgrid-key" type="password" data-i18n-placeholder placeholder="SteamGridDB API key (optional)" autocomplete="off" />
+        </div>
+
         <label class="field-label" style="margin-top: 12px;" data-i18n>Clean a game folder</label>
         <p class="field-hint" data-i18n>For a game that is no longer on the grid: pick its exe folder and everything this app ever put there is removed, with the game's own files left alone. Asks before deleting anything.</p>
         <button id="btn-clean-folder" class="btn btn-ghost" data-i18n>Clean a game folder…</button>

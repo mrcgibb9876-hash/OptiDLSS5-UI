@@ -30,6 +30,7 @@ const exeicon = require('./exeicon');
 const managerUpdate = require('./manager-update');
 const runlog = require('./runlog');
 const library = require('./library');
+const steamgrid = require('./steamgrid');
 const lumacatalog = require('./lumacatalog');
 const ghreport = require('./ghreport');
 const reportinfo = require('./reportinfo');
@@ -1284,7 +1285,7 @@ ipcMain.handle('pick:image', async () => {
 // handles dotted acronyms, a trailing "1", and dropping trailing words when nothing else hits.
 // 3: a Steam manifest beside the exe now decides the art, so cards whose auto-found art
 // disagrees with their manifest are corrected once.
-const BANNER_SEARCH_VERSION = 4;
+const BANNER_SEARCH_VERSION = 5;
 
 async function steamStoreSearch(term) {
   const url = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(term)}&l=english&cc=US`;
@@ -1335,6 +1336,14 @@ ipcMain.handle('banner:resolve', async (_evt, { exePath, name } = {}) => {
       const best = library.pickBannerMatch(t, items);
       if (best) return { appid: String(best.appid), name: best.name, tinyImage: best.tinyImage, source: 'search' };
     }
+    // Last network step before the exe icon: the community art database, on the user's own key.
+    // Only reached for a game the store could not name -- old, delisted, console-ported, or never
+    // sold on Steam -- which is exactly the set that was ending up wearing its own icon. No key
+    // set is not a failure, it is this step not existing (steamgrid.resolve returns null then).
+    // No appid comes back: a SteamGridDB id is not a Steam one, and bannerAppId is what this app
+    // reads as "this is a Steam game" (loadInjectorSection). The art arrives as a URL instead.
+    const sgdb = await steamgrid.resolve(name, (readJson(settingsFile(), {}) || {}).steamGridDbKey);
+    if (sgdb) return { appid: null, name: sgdb.name, imageUrl: sgdb.imageUrl, gridId: sgdb.gridId, source: 'steamgriddb' };
     return null;
   } catch {
     return null;
@@ -5729,6 +5738,25 @@ ipcMain.handle('banner:cache-steam', async (_evt, { appid, fallbackImageUrl }) =
     if (!res.ok) return null;
     const buf = Buffer.from(await res.arrayBuffer());
     await fsp.writeFile(dest, buf);
+    return dest;
+  } catch {
+    return null;
+  }
+});
+
+// Art that arrives as a plain URL rather than a Steam appid -- today that is SteamGridDB. Cached
+// under the id it came from, so the same card does not re-download it, and so Remove-and-re-add
+// finds the file already there. Same banners folder and same failure posture as the Steam cache:
+// anything that goes wrong is null, and the caller falls through to the exe icon.
+ipcMain.handle('banner:cache-url', async (_evt, { id, imageUrl }) => {
+  if (!id || !imageUrl) return null;
+  const ext = (path.extname(new URL(imageUrl).pathname) || '.png').slice(0, 5);
+  const dest = path.join(bannersDir(), `sgdb-${String(id).replace(/[^a-z0-9]/gi, '')}${ext}`);
+  if (fs.existsSync(dest)) return dest;
+  try {
+    const res = await fetch(imageUrl, { headers: { 'User-Agent': 'OptiDLSS5-UI' } });
+    if (!res.ok) return null;
+    await fsp.writeFile(dest, Buffer.from(await res.arrayBuffer()));
     return dest;
   } catch {
     return null;

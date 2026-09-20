@@ -418,6 +418,11 @@ function bannerSearchTerms(rawName) {
 function titleTokens(title) {
   return straightenQuotes(title)
     .replace(/[™®©]/g, '')
+    // Collapsed on this side too, and before the punctuation pass -- otherwise the store's own
+    // "S.T.A.L.K.E.R.: Shadow of Chernobyl" breaks into seven single letters and the search term
+    // "STALKER Shadow of Chernobyl", which the ladder went to the trouble of producing, matches
+    // nothing. The two sides have to be spelt the same way to be compared at all.
+    .replace(/\b(?:[A-Za-z]\.){2,}/g, (m) => m.replace(/\./g, ''))
     .replace(EDITION_WORDS, ' ')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')

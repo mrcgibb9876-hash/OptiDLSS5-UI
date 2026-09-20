@@ -119,6 +119,7 @@ contextBridge.exposeInMainWorld('api', {
   cleanFolder: (folder) => ipcRenderer.invoke('game:cleanFolder', { folder }),
 
   cacheSteamBanner: (appid, fallbackImageUrl) => ipcRenderer.invoke('banner:cache-steam', { appid, fallbackImageUrl }),
+  cacheUrlBanner: (id, imageUrl) => ipcRenderer.invoke('banner:cache-url', { id, imageUrl }),
   exeIconBanner: (exePath) => ipcRenderer.invoke('banner:exe-icon', exePath),
   gamesRunning: (exePaths) => ipcRenderer.invoke('games:running', exePaths),
   // A launch this app started is watched in main.js (launchwatch.js); an early exit or an
