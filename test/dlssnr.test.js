@@ -54,10 +54,14 @@ test('every field is described well enough to build a control from', () => {
     // { all: [...] } names several (Adaptive resolution's targets need it on AND the matching mode); { any: [...] }
     // too (Enlargement matters whenever the model runs small, whichever setting made it).
     if (f.dependsOn) {
-      const list = f.dependsOn.all || f.dependsOn.any || [f.dependsOn];
-      for (const d of list) {
+      // The groups nest, and both evaluators (panel.js, renderer.js) recurse, so this walk does too:
+      // Enlargement's third clause is an { all: [...] } inside the { any: [...] }.
+      const walk = (d) => {
+        const list = d.all || d.any;
+        if (list) { for (const c of list) walk(c); return; }
         assert.ok(dlssnr.FIELDS.some((o) => o.key === d.key), `${f.key} depends on a field that is not there`);
-      }
+      };
+      walk(f.dependsOn);
     }
   }
 });
