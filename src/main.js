@@ -4113,6 +4113,8 @@ ipcMain.handle('game:open-folder', (_evt, exePath) => {
 
 // The project's Discord server (top bar and Game Help). A permanent invite.
 const DISCORD_INVITE = 'https://discord.gg/HFZTDdSNmJ';
+// The project's Buy Me a Coffee page, in the top bar beside Discord. Already on the GitHub README.
+const BUY_ME_A_COFFEE = 'https://buymeacoffee.com/ripplingsnake';
 // The driver banner's "Get the driver" button (renderer.js). It opened nothing until 2026-09-18
 // because this page was missing from the allowlist below; test/renderer-dom.test.js checks the
 // renderer still asks for exactly this URL.
@@ -4121,7 +4123,7 @@ const NVIDIA_DRIVER_PAGE = 'https://www.nvidia.com/Download/index.aspx';
 ipcMain.handle('shell:openExternal', (_evt, url) => {
   // Only the project's own GitHub (the report button), its Discord invite, and the third-party pages a
   // route sends the user to (PureDark's Upscaler Base Plugin, reengine.js; RTXMFG): not a general opener.
-  if (typeof url === 'string' && (url.startsWith('https://github.com/mrcgibb9876-hash/') || url === DISCORD_INVITE || url === NVIDIA_DRIVER_PAGE || url === reengine.PD_PLUGIN_PAGE_URL || url === rtxmfg.PROJECT_PAGE)) shell.openExternal(url);
+  if (typeof url === 'string' && (url.startsWith('https://github.com/mrcgibb9876-hash/') || url === DISCORD_INVITE || url === BUY_ME_A_COFFEE || url === NVIDIA_DRIVER_PAGE || url === reengine.PD_PLUGIN_PAGE_URL || url === rtxmfg.PROJECT_PAGE)) shell.openExternal(url);
 });
 
 // Puts a saved support bundle on the clipboard as a file (the same thing Explorer's Copy does), so

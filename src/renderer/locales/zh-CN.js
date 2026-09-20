@@ -1,6 +1,8 @@
 // 简体中文. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("zh-CN", {
+  "Buy me a coffee": "Buy me a coffee",
+  "Buy me a coffee: support the project. Opens buymeacoffee.com in your browser.": "Buy me a coffee：支持这个项目。在浏览器中打开 buymeacoffee.com。",
   "nvngx_dlss.dll is not a real DLL": "nvngx_dlss.dll 不是真正的 DLL",
   "There is an nvngx_dlss.dll beside the game exe, but it is only {bytes} bytes -- far too small to be a DLL. It is a placeholder, a failed download, or a marker left by another DLSS tool. This is worse than the file being missing: OptiScaler checks the name, finds it, writes \"Enabling DLSS\" in its log and carries on, so everything downstream looks switched on while nothing can load it. Fix it deletes the placeholder and puts a real copy there.": "游戏 exe 旁边有一个 nvngx_dlss.dll，但它只有 {bytes} 字节 —— 远远不足以构成一个 DLL。它是占位文件、下载失败的残留，或是另一个 DLSS 工具留下的标记。这比文件缺失还糟糕：OptiScaler 只按名称检查，找到了就在日志里写下 \"Enabling DLSS\" 然后继续，于是后面一切看起来都是开启的，实际上没有任何东西能加载它。“修复”会删掉这个占位文件，并放一份真正的副本。",
   "Game art for older games (optional)": "较旧游戏的封面（可选）",

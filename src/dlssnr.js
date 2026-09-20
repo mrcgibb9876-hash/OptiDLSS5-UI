@@ -101,6 +101,23 @@ const FIELDS = [
   // decide what the pass costs, together.
   { key: 'Passes', type: 'int', default: 1, min: 1, max: 3, group: 'Adaptive resolution',
     label: 'Model passes', help: "How many times the model runs before its answer is composed. Each extra layer is fed the previous layer's output and keeps its own temporal history.\n\nThe base frame stays untouched and the composition happens once at the end, so colour and transfer strength do not compound -- but the model is being asked to enhance its own output, which is outside what it was trained on.\n\nCost is very nearly linear: the model is almost the whole expense of the pass and every layer pays it again. Three is the ceiling because later layers converge while still costing full price." },
+  // [DlssNr] PassRate. The engine has had this since the stacked passes did (DlssNr_Dx12.cpp, the
+  // credit accumulator by effectivePasses) and it has never been on screen anywhere -- not here and
+  // not in the in-game panel. It is what "a pass and a half" means: the stacked passes run on a
+  // fraction of frames, so their cost is paid partly.
+  //
+  // Whole passes are a blunt control -- one pass, two passes, and on a 2026-09-20 measurement of a
+  // game running at 80 fps on one pass, two took it to 50. Half the frames getting the second pass
+  // landed at 60, which is the point of this: somewhere to stand between them, and most valuable
+  // where frame generation and smooth motion are not available to make up the difference.
+  //
+  // Read every frame, not at create time, so it moves while the game runs and never rebuilds the
+  // model -- the features for every pass stay built whatever the rate is, and a skipped frame is one
+  // evaluate not made. That is also its honest cost: a skipped frame really is less processed than a
+  // run one, so the picture alternates between two looks. At a low enough rate that is visible.
+  { key: 'PassRate', type: 'float', default: 1.0, min: 0.05, max: 1, step: 0.05, percent: true,
+    group: 'Adaptive resolution', label: 'Extra-pass rate', dependsOn: { key: 'Passes', atLeast: 2 },
+    help: "How often the passes after the first actually run. 100% is every frame, which is what Model passes has always meant.\n\nThis is how you ask for half a pass. Model passes 2 with this at 50% is the \"1.5 passes\" idea: the second pass runs on every other frame, and costs about half of what a full second pass costs. Anywhere between is fair game -- 75% is a pass and three quarters.\n\nThe saving is real and so is the trade: a frame that skipped the extra pass is genuinely less processed than one that did not, so the picture alternates between two looks. The higher the framerate the less that shows. Come down from 100% until the cost is what you want, then back up if you can see it moving.\n\nApplied while the game runs -- it is read every frame and never rebuilds the model.\n\nOnly does anything with more than one pass." },
   { key: 'ChainedHistory', type: 'bool', default: true, group: 'Adaptive resolution', label: 'Chained temporal history',
     dependsOn: { key: 'Passes', atLeast: 2 },
     help: "What the stacked passes do with their temporal history between frames.\n\nOn (default): every pass keeps its own history, so each layer accumulates the way pass one does. Off: passes 2+ are reset every frame -- stateless refinement, which cannot compound ghosting.\n\nThe trade is real both ways. Keeping history is richer and can compound ghosting behind fast movement; resetting every frame cannot, but NVIDIA documents reset-per-frame as a flicker and aliasing risk -- which is what shimmering on two or three passes usually is. Try the other setting when a stacked picture shimmers, and keep whichever the game looks better with.\n\nOnly does anything with more than one pass." },

@@ -1,6 +1,8 @@
 // 한국어. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("ko", {
+  "Buy me a coffee": "Buy me a coffee",
+  "Buy me a coffee: support the project. Opens buymeacoffee.com in your browser.": "Buy me a coffee: 프로젝트를 후원합니다. 브라우저에서 buymeacoffee.com 을 엽니다.",
   "nvngx_dlss.dll is not a real DLL": "nvngx_dlss.dll이 진짜 DLL이 아닙니다",
   "There is an nvngx_dlss.dll beside the game exe, but it is only {bytes} bytes -- far too small to be a DLL. It is a placeholder, a failed download, or a marker left by another DLSS tool. This is worse than the file being missing: OptiScaler checks the name, finds it, writes \"Enabling DLSS\" in its log and carries on, so everything downstream looks switched on while nothing can load it. Fix it deletes the placeholder and puts a real copy there.": "게임 실행 파일 옆에 nvngx_dlss.dll이 있지만 크기가 {bytes}바이트뿐입니다 -- DLL이라기엔 너무 작습니다. 자리 표시용 파일이거나, 다운로드 실패, 또는 다른 DLSS 도구가 남긴 표시입니다. 파일이 아예 없는 것보다 더 나쁜데, OptiScaler는 이름만 확인하고 찾았다고 판단해 로그에 \"Enabling DLSS\"를 쓰고 계속 진행합니다. 그래서 그 뒤는 모두 켜진 것처럼 보이지만 실제로는 아무것도 로드할 수 없습니다. \"고치기\"를 누르면 이 파일을 지우고 진짜 사본을 넣습니다.",
   "Game art for older games (optional)": "오래된 게임의 아트 (선택)",

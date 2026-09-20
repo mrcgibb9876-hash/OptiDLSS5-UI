@@ -5155,6 +5155,11 @@ const DISCORD_INVITE = 'https://discord.gg/HFZTDdSNmJ';
 $('#btn-discord').addEventListener('click', () => window.api.openExternal(DISCORD_INVITE));
 $('#help-discord').addEventListener('click', () => window.api.openExternal(DISCORD_INVITE));
 
+// Beside Discord in the top bar. main.js allowlists this URL the same way it does the other two it
+// is willing to open -- openExternal refuses anything not on that list.
+const BUY_ME_A_COFFEE = 'https://buymeacoffee.com/ripplingsnake';
+$('#btn-coffee').addEventListener('click', () => window.api.openExternal(BUY_ME_A_COFFEE));
+
 $('#btn-check-updates').addEventListener('click', async () => {
   const btn = $('#btn-check-updates');
   const label = btn.textContent;

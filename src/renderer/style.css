@@ -163,6 +163,11 @@ body {
 .btn-discord { display: inline-flex; align-items: center; gap: 7px; background: #5865f2; border-color: #5865f2; color: #fff; font-weight: 600; }
 .btn-discord:hover { background: #4752c4; border-color: #4752c4; }
 .btn-discord .discord-logo { flex: none; }
+/* Buy Me a Coffee, beside Discord. Its own brand yellow, which is light enough to need dark text
+   rather than the white the rest of this bar uses. */
+.btn-coffee { display: inline-flex; align-items: center; gap: 7px; background: #ffdd00; border-color: #ffdd00; color: #1a1a1a; font-weight: 600; }
+.btn-coffee:hover { background: #e5c700; border-color: #e5c700; }
+.btn-coffee .coffee-logo { flex: none; }
 /* Launch is green on every theme, NVIDIA or AMD accent alike: it is the one button that starts the
    game rather than changing it, and green says go. */
 .btn-launch { background: #1f9d4d; border-color: #1f9d4d; color: #fff; font-weight: 600; }

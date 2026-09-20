@@ -1,6 +1,8 @@
 // Français. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("fr", {
+  "Buy me a coffee": "Buy me a coffee",
+  "Buy me a coffee: support the project. Opens buymeacoffee.com in your browser.": "Buy me a coffee : soutenez le projet. Ouvre buymeacoffee.com dans votre navigateur.",
   "nvngx_dlss.dll is not a real DLL": "nvngx_dlss.dll n'est pas une vraie DLL",
   "There is an nvngx_dlss.dll beside the game exe, but it is only {bytes} bytes -- far too small to be a DLL. It is a placeholder, a failed download, or a marker left by another DLSS tool. This is worse than the file being missing: OptiScaler checks the name, finds it, writes \"Enabling DLSS\" in its log and carries on, so everything downstream looks switched on while nothing can load it. Fix it deletes the placeholder and puts a real copy there.": "Il y a un nvngx_dlss.dll à côté de l'exe du jeu, mais il ne fait que {bytes} octets -- bien trop peu pour une DLL. C'est un fichier de remplacement, un téléchargement raté ou une marque laissée par un autre outil DLSS. C'est pire que si le fichier manquait : OptiScaler vérifie le nom, le trouve, écrit « Enabling DLSS » dans son journal et continue, donc tout paraît activé alors que rien ne peut le charger. « Réparer » supprime ce fichier et en met un vrai.",
   "Game art for older games (optional)": "Visuels pour les jeux plus anciens (facultatif)",
