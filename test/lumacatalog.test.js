@@ -89,7 +89,7 @@ test('Monster Hunter: World with its own DLSS 1.x takes the Luma route on Direct
   // real old DLL when one exists on the machine, and the "no native DLSS" case always.
   const r = route.recommendRoute(mhw, exe, { api: 'dx11', apis: ['dx11', 'dx12'], bitness: 64 }, 'nvidia', { lumaMod });
   assert.equal(r.route, 'lumaue');
-  assert.equal(r.label, 'OptiScaler + Luma');
+  assert.equal(r.label, 'DLSS 5 + Luma');
   assert.equal(r.experimental, true, 'not listed as working on Luma\'s wiki');
 
   const eff = route.withApiOverride({ api: 'dx12', apis: ['dx11', 'dx12'] }, null, { luma: true });

@@ -454,7 +454,7 @@ async function renderGrid() {
           <button class="btn btn-ghost btn-swap-layer hidden"></button>
           <button class="btn btn-ghost btn-mv-provider hidden"></button>
           <button class="btn btn-ghost btn-open">${escapeHtml(t('Open folder'))}</button>
-          <button class="btn btn-ghost btn-danger btn-install">${escapeHtml(backends.optiscaler ? t('Uninstall OptiScaler') : leftoverFiles.length ? t('Remove leftovers') : t('Install OptiScaler'))}</button>
+          <button class="btn btn-ghost btn-danger btn-install">${escapeHtml(backends.optiscaler ? t('Uninstall DLSS 5') : leftoverFiles.length ? t('Remove leftovers') : t('Install DLSS 5'))}</button>
           ${(status.foreign || []).length ? `<button class="btn btn-ghost btn-danger btn-remove-foreign">${escapeHtml(t('Remove the other DLSS 5 toolchain…'))}</button>` : ''}
           <button class="btn btn-ghost btn-danger btn-remove">${escapeHtml(t('Remove from list'))}</button>
         </div>
@@ -582,8 +582,8 @@ async function renderGrid() {
         // Installs fine, renders nothing new: OptiScaler's NR pass needs NVIDIA's NGX runtime.
         // Said before the click lands, not after, so an "OptiScaler" badge never reads as NR working.
         flipToConfirm(card, {
-          title: t('Install OptiScaler on this GPU?'),
-          detail: t('This is an {vendor} card: OptiScaler installs and its upscaler swap works, but its Neural Rendering will not run here (needs NVIDIA).', { vendor: gpu.vendor === 'amd' ? 'AMD' : 'Intel' }) +
+          title: t('Install DLSS 5 on this GPU?'),
+          detail: t('This is an {vendor} card: DLSS 5 installs and its upscaler swap works, but its Neural Rendering will not run here (needs NVIDIA).', { vendor: gpu.vendor === 'amd' ? 'AMD' : 'Intel' }) +
             (gpu.vendor === 'amd' ? ' ' + t('For NR on AMD, see "DLSS 5 Neural Rendering on AMD" under Edit.') : ''),
           onConfirm: () => installGame(game),
           confirmLabel: t('Install anyway'),
@@ -962,7 +962,7 @@ async function applyRecommendation(game, card, backends, generation = renderGene
     : route.optiInstalled && !popoutHotkeyUsable()
       ? {
           text: t('Press Alt+Home in the game for the DLSS 5 panel'),
-          title: t('OptiScaler\'s own menu, inside the game, with the DLSS 5 controls live on the frame. Needs the game windowed or borderless if it does not show. The pop-out panel\'s hotkey is off or taken by another program -- see Settings.'),
+          title: t('The DLSS 5 panel, inside the game, with its controls live on the frame. Needs the game windowed or borderless if it does not show. The pop-out panel\'s hotkey is off or taken by another program -- see Settings.'),
         }
     : route.optiInstalled
       ? {
@@ -976,8 +976,8 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   card._state.installed = !!route.optiInstalled || card._state.installed;
   // The menu entry and the primary button say the same thing, because on an uninstalled game the
   // primary IS Install and pressing it is pressing that entry.
-  if (canRecommendInstall && route.route === 'feeder' && !route.feederDeployed) install.textContent = t('Install OptiScaler + Feeder');
-  else if (canRecommendInstall && route.route === 'lumaue') install.textContent = t('Install OptiScaler (then Luma UE)');
+  if (canRecommendInstall && route.route === 'feeder' && !route.feederDeployed) install.textContent = t('Install DLSS 5 + Feeder');
+  else if (canRecommendInstall && route.route === 'lumaue') install.textContent = t('Install DLSS 5 (then Luma UE)');
   if (canRecommendInstall) card._state.installLabel = install.textContent;
   // Nothing here can drive DLSS 5: Install stays available but stops being the green thing to press.
   card._state.unsupported = detected.recommend === 'unsupported' || route.route === 'unsupported';
@@ -990,7 +990,7 @@ const API_LABEL = { dx12: 'DX12', dx11: 'DX11', vulkan: 'Vulkan', opengl: 'OpenG
 
 // Remove, with the exact list first: Remove never surprises anyone with what it took. The card's own
 // Remove and the early-exit offer below both come here, so there is one implementation of it.
-async function confirmRemoveOnCard(card, game, { title = t('Remove OptiScaler?'), lead = '', confirmLabel } = {}) {
+async function confirmRemoveOnCard(card, game, { title = t('Remove DLSS 5?'), lead = '', confirmLabel } = {}) {
   const plan = await window.api.uninstallPlan(game.exePath);
   const clip = (arr) => (arr.length > 12 ? arr.slice(0, 12).join(', ') + ' \u2026(+' + (arr.length - 12) + ')' : arr.join(', '));
   const preview = plan && plan.ok
@@ -1000,7 +1000,7 @@ async function confirmRemoveOnCard(card, game, { title = t('Remove OptiScaler?')
     : '';
   flipToConfirm(card, {
     title,
-    detail: (lead ? lead + ' ' : '') + t('Removes everything this app put in the game folder -- OptiScaler, the Feeder or Luma UE, Streamline, REFramework, swapped DLLs, its markers -- and puts back anything it renamed or replaced. No terminal.') + preview,
+    detail: (lead ? lead + ' ' : '') + t('Removes everything this app put in the game folder -- DLSS 5, the Feeder or Luma UE, Streamline, REFramework, swapped DLLs, its markers -- and puts back anything it renamed or replaced. No terminal.') + preview,
     ...(confirmLabel ? { confirmLabel } : {}),
     onConfirm: async () => {
       const res = await window.api.runUninstall(game.exePath);
@@ -1131,7 +1131,7 @@ const helpTriedFor = (game) => helpTriedByGame.get(game.exePath) || [];
 // A route key (route.js, routescore.js) as words, with its wrapper where it has one.
 function routeName(route, via = null) {
   const names = {
-    optiscaler: t('OptiScaler on the game\'s own DLSS'), 'nr-model-only': t('the model file alone'),
+    optiscaler: t('DLSS 5 on the game\'s own DLSS'), 'nr-model-only': t('the model file alone'),
     feeder: t('the DLSS5 Feeder'), feeder32: t('the 32-bit Feeder'), lumaue: t('Luma'),
     present: t('the Present route'), 'reframework-pd': t('the REFramework Present route'), amdnr: t('DLSS NR on AMD'),
   };
@@ -1155,7 +1155,7 @@ function helpWords(diag) {
     case 'foreign': return t('Another DLSS 5 toolchain is in this folder ({tool}). Two stacks hooking the same DLSS call crash the game. Remove it first.', v);
     case 'feeder-misdeployed': return t('The DLSS5 Feeder is deployed on a game that ships its own DLSS. Two DLSS DLLs load and the game crashes. Remove the Feeder; OptiScaler alone is the route here.');
     case 'luma-known-bad': return t('Luma UE is deployed here, and this game is known not to work with it ({reason}). Remove Luma UE.', v);
-    case 'not-installed': return t('OptiScaler is not installed on this game yet. Install it and the route\'s other steps follow.');
+    case 'not-installed': return t('DLSS 5 is not installed on this game yet. Install it and the route\'s other steps follow.');
     case 'feeder-missing': return t('This game has no DLSS of its own, so OptiScaler alone has nothing to hook. Install deploys the DLSS5 Feeder first.');
     case 'luma-missing': return t('This game gets its DLSS call from Luma, which is not set up yet. Fix it sets up OptiScaler and Luma together (after you confirm Luma\'s licence). Luma runs on DirectX 11.');
     case 'reframework-missing': return t('This is an RE Engine game and REFramework is missing. OptiScaler does nothing there without it. Reconfigure fetches and places it.');
@@ -1389,8 +1389,8 @@ function helpShort(diag) {
     case 'vulkan-layer-no-addon': return t('ReShade\'s Vulkan layer has no add-on support');
     case 'vulkan-layer-not-loaded': return t('ReShade\'s Vulkan layer did not load here');
     case 'vulkan-layer-app-not-listed': return t('{exe} is not on ReShade\'s Vulkan app list', v);
-    case 'opti-proxy-name': return t('OptiScaler is under a name this game never loads ({from})', v);
-    case 'nr-model-only': return t('OptiScaler never loaded -- this game has its own DLSS');
+    case 'opti-proxy-name': return t('DLSS 5 is under a name this game never loads ({from})', v);
+    case 'nr-model-only': return t('DLSS 5 never loaded -- this game has its own DLSS');
     case 'dxvk-blocked-game': return t('DXVK shakes this game -- go back to dgVoodoo2');
     case 'dgvoodoo-no-dlss': return t('Nothing called DLSS -- dgVoodoo2 is the likely reason');
     case 'dxvk-no-dlss': return t('Nothing called DLSS under DXVK either -- try dgVoodoo2 again');
@@ -1427,7 +1427,7 @@ function helpFixLabel(id) {
     case 'disable-agility-redist': return t('Move the game\'s D3D12 folder aside');
     case 'reconfigure': return t('Reconfigure');
     case 'remove-all': return t('Remove everything this app placed');
-    case 'install': return t('Install OptiScaler');
+    case 'install': return t('Install DLSS 5');
     case 'place-dlss': return t('Put nvngx_dlss.dll beside the exe');
     case 'switch-to-luma': return t('Switch to Luma');
     default: return id;
@@ -2046,7 +2046,7 @@ function analyseGame(game) {
     }
     if (s.handoff && s.realExe) addCheckItem('info', t('The launch hands off to {exe}: that is the process that really runs the game.', { exe: baseName(s.realExe) }));
     if ((s.ignoredProxies || []).length) addCheckItem('warn', t('{files} sits beside the exe, but the game loaded Windows\' own copy instead.', { files: s.ignoredProxies.join(', ') }));
-    if (res.proxyHint) addCheckItem('info', t('OptiScaler goes in as {name} for this game.', { name: res.proxyHint }));
+    if (res.proxyHint) addCheckItem('info', t('DLSS 5 goes in as {name} for this game.', { name: res.proxyHint }));
     if ((s.antiCheat || []).length) addCheckItem('warn', t('Anti-cheat seen: {list}.', { list: s.antiCheat.join(', ') }));
     if ((s.overlays || []).length) addCheckItem('warn', t('Overlays seen: {list}.', { list: s.overlays.join(', ') }));
     if (s.method === 'poll') addCheckItem('info', t('Watched without administrator rights, by listing modules once a second: a DLL that loads and unloads quickly, and most of a 32-bit game\'s modules, can be missed.'));
@@ -2103,7 +2103,7 @@ function verifyInstall(game) {
         // Offered, not done: the crash can have a cause that has nothing to do with the install, and
         // the files may be wanted for a report.
         addCheckItem('block', t('The game crashed during the check.') + (v.diag ? ' ' + helpWords(v.diag) : ''));
-        showChecksGo(t('Uninstall OptiScaler'), async () => {
+        showChecksGo(t('Uninstall DLSS 5'), async () => {
           if (!window.confirm(t('Remove everything this app put in the game folder?'))) return;
           $('#checks-go').disabled = true;
           const un = await window.api.runUninstall(game.exePath);
@@ -2483,7 +2483,7 @@ function describeUninstall(res) {
   const removed = (res.removed || []).length ? ' ' + t('Removed: {list}.', { list: res.removed.join(', ') }) : ' ' + t('Nothing left to remove.');
   const restored = (res.restored || []).length ? ' ' + t('Restored: {list}.', { list: res.restored.join(', ') }) : '';
   const kept = (res.kept || []).length ? ' ' + t('Left alone: {list}.', { list: res.kept.join('; ') }) : '';
-  return `${t('OptiScaler removed.')}${removed}${restored}${kept}`;
+  return `${t('DLSS 5 removed.')}${removed}${restored}${kept}`;
 }
 
 // The escape hatch. Installing no longer needs this -- the app does the rename itself -- but the
@@ -3242,7 +3242,7 @@ async function loadEngineProfileStatus(game) {
   // classList, not className: the element also carries advanced-only.
   if (res.known) {
     el.classList.add('status-ok');
-    el.textContent = t('OptiScaler has a known compatibility profile built in for this exe.');
+    el.textContent = t('DLSS 5 has a known compatibility profile built in for this exe.');
   } else {
     el.classList.remove('status-ok');
     el.textContent = t('No compiled-in compatibility profile for this exe -- default OptiScaler configuration.');
@@ -3787,7 +3787,7 @@ async function deployFeederStack(game, providerId, force) {
   if (res.ok) {
     toast(force
       ? t('Feeder stack updated.')
-      : t('Feeder stack deployed. Install OptiScaler normally (Install button) to finish -- not the injector.'));
+      : t('Feeder stack deployed. Install DLSS 5 normally (Install button) to finish -- not the injector.'));
   } else {
     toast(force ? t('Update failed: {error}', { error: res.error }) : t('Deploy failed: {error}', { error: res.error }));
     // Vulkan: the one step this app leaves to ReShade's own installer -- open it now, since
@@ -4305,7 +4305,7 @@ $('#btn-lumaue-deploy').addEventListener('click', async () => {
     if (result.feederRemoved) toast(t('DLSS5 Feeder removed ({list}).', { list: result.feederRemoved.removed.join(', ') }));
     toast(result.deployed ? t('Deployed Luma UE for this game.') : t('Luma UE was already deployed.'));
     if (!result.optiScalerInstalled) {
-      toast(t('OptiScaler is not installed for this game yet -- click Install on its card; Luma only loads through OptiScaler.'));
+      toast(t('DLSS 5 is not installed for this game yet -- click Install on its card; Luma only loads through it.'));
     } else if (result.autoConfigured && result.autoConfigured.some((e) => e.key === 'LoadReshade')) {
       toast(t('Set [Plugins] LoadReshade=true in OptiScaler.ini so OptiScaler loads Luma.'));
     }

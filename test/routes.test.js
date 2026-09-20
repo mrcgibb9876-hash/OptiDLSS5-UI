@@ -38,7 +38,7 @@ test('Prey (2017) takes the Luma route with the Prey mod; Prey (2006) does not',
   assert.equal(lumaue.lumaProfileFor(exe, cry).id, 'prey');
   const r = route.recommendRoute(dir, exe, cry, 'nvidia');
   assert.equal(r.route, 'lumaue');
-  assert.equal(r.label, 'OptiScaler + Luma');
+  assert.equal(r.label, 'DLSS 5 + Luma');
   const ready = lumaue.lumaUeReadiness(dir, exe, cry);
   assert.equal(ready.supported, true);
   assert.equal(ready.profile, 'prey');

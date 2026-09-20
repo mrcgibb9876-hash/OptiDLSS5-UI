@@ -69,8 +69,8 @@ const API_NAMES = { dx12: 'DX12', dx11: 'DX11', vulkan: 'Vulkan', opengl: 'OpenG
 // The experimental routes' words, as fixed templates so the renderer can translate them; the parts
 // that vary are placeholders filled from reasonVars.
 const ROUTE_TEXT = {
-  labelHost32: 'OptiScaler + Feeder (32-bit)',
-  labelDx9: 'OptiScaler + Feeder (DX9)',
+  labelHost32: 'DLSS 5 + Feeder (32-bit)',
+  labelDx9: 'DLSS 5 + Feeder (DX9)',
   stepDgVoodoo: 'Put dgVoodoo2 in front of the game',
   // After Game Help's "Try DXVK instead" (Assassin's Creed II, 2026-09-18).
   stepDxvk: 'DXVK is in front of the game (in place of dgVoodoo2)',
@@ -88,7 +88,7 @@ const ROUTE_TEXT = {
     'DXVK runs this game\'s {dx} on Vulkan here (chosen instead of native {dx}), and ReShade runs as its ' +
     '32-bit Vulkan layer. Run the game borderless or windowed: in exclusive fullscreen the Feeder starts its ' +
     'helper without a window, and the in-game panel is not available. ',
-  stepFeeder32: 'Deploy the 32-bit Feeder and its 64-bit helper with OptiScaler',
+  stepFeeder32: 'Deploy the 32-bit Feeder and its 64-bit helper with DLSS 5',
   // How to reach OptiScaler on this route, in the add-on's own words. Photographed on a live
   // install 2026-09-14: "OptiScaler has its own menu with every neural-rendering control ... It
   // opens with Insert in the host window: press 'Show the DLSS 5 panel in-game' above and then
@@ -104,7 +104,7 @@ const ROUTE_TEXT = {
     'Press Alt+Home in the game for the DLSS 5 panel, the same as any other game. It is drawn by the helper and shown over the game, and its controls take clicks there.',
   host32Lead:
     'Experimental. A 32-bit game cannot run DLSS in its own process -- NVIDIA ships no 32-bit version -- so the DLSS5 ' +
-    'Feeder\'s 32-bit add-on sends each frame to its 64-bit helper beside the game, and OptiScaler runs Neural Rendering ' +
+    'Feeder\'s 32-bit add-on sends each frame to its 64-bit helper beside the game, and DLSS 5 runs ' +
     'there. ',
   emulator:
     'Experimental. {name} emulates {system} and makes no DLSS call, so the DLSS5 Feeder synthesises one inside it, for ' +
@@ -122,13 +122,13 @@ const ROUTE_TEXT = {
     'Experimental. {name} emulates {system} and makes no DLSS call, so the DLSS5 Feeder synthesises one inside it, for ' +
     'every game it runs. Set its renderer first ({hint}) and pick the same API in Edit if it is not {api}. Depth is the ' +
     'weak point: ReShade often cannot see the console game\'s depth buffer inside an emulator, and Neural Rendering has ' +
-    'less to work with then. On OpenGL, ReShade goes in as the emulator\'s opengl32.dll -- but OptiScaler cannot draw ' +
+    'less to work with then. On OpenGL, ReShade goes in as the emulator\'s opengl32.dll -- but DLSS 5 cannot draw ' +
     'over OpenGL, so the DLSS 5 panel (Alt+Home) will not appear; use the emulator\'s Direct3D or Vulkan renderer ' +
     'if it has one.',
   dx9:
     'Experimental. DirectX 9 has no Feeder path of its own, so dgVoodoo2 turns it into DirectX 11, ' +
-    'then the DLSS5 Feeder synthesises the DLSS call and OptiScaler ' +
-    'runs Neural Rendering. The DLSS 5 panel (Alt+Home) opens over the game as usual. If dgVoodoo2 crashes the game, ' +
+    'then the DLSS5 Feeder synthesises the DLSS call and DLSS 5 ' +
+    'runs. The DLSS 5 panel (Alt+Home) opens over the game as usual. If dgVoodoo2 crashes the game, ' +
     'this route is not for it yet.',
 };
 
@@ -372,13 +372,13 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
   }
 
   if (feederMisdeployed) {
-    return finish('optiscaler', 'OptiScaler',
+    return finish('optiscaler', 'DLSS 5',
       'This game ships its own DLSS, but the DLSS5 Feeder was deployed here too (an older version of this app ' +
       'could not see DLSS kept under an Unreal plugin folder). The two crash together -- remove the Feeder from ' +
       'Edit, then OptiScaler alone adds Neural Rendering on top of the game\'s own DLSS.',
       [
         { key: 'feeder-remove', label: 'Remove the DLSS5 Feeder (Edit)', done: false },
-        { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
+        { key: 'optiscaler', label: 'Install DLSS 5', done: optiInstalled },
       ]);
   }
 
@@ -428,10 +428,10 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
   if (detected.emulator) {
     const emu = detected.emulator;
     const text = api === 'vulkan' ? ROUTE_TEXT.emulatorVulkan : api === 'opengl' ? ROUTE_TEXT.emulatorOpenGl : ROUTE_TEXT.emulator;
-    return finish('feeder', 'OptiScaler + Feeder', text,
+    return finish('feeder', 'DLSS 5 + Feeder', text,
       [
         { key: 'feeder', label: 'Deploy the DLSS5 Feeder', done: feederDeployed },
-        { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
+        { key: 'optiscaler', label: 'Install DLSS 5', done: optiInstalled },
       ],
       { name: emu.name, system: emu.system, hint: emu.hint, api: API_NAMES[api] || String(api || '').toUpperCase() },
       { experimental: true, emulator: emu });
@@ -453,7 +453,7 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
       [
         layerStep,
         { key: 'feeder', label: 'Deploy the DLSS5 Feeder', done: feederDeployed },
-        { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
+        { key: 'optiscaler', label: 'Install DLSS 5', done: optiInstalled },
       ], null, { experimental: true, legacy: plan, wrapperPreference, layerChoice });
   }
 
@@ -485,12 +485,12 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
   if (presentGame && (!feederDeployed || feederIsOurs) && (!kgRoute || kgRoute === 'reframework-pd')) {
     const reframeworkPresent = pd ? pd.reframeworkPresent : fs.existsSync(path.join(dir, 'dinput8.dll'));
     const temporalUpscalerOn = pd ? pd.temporalUpscalerOn : reengine.temporalUpscalerOn(dir);
-    return finish('reframework-pd', 'OptiScaler + REFramework',
+    return finish('reframework-pd', 'DLSS 5 + REFramework',
       'No DLSS of its own. DLSS 5 runs at the end of each frame on top of the game\'s own anti-aliasing, and ' +
       'OptiScaler finds the game\'s depth itself -- nothing to download by hand. Install places OptiScaler and ' +
       'REFramework and keeps REFramework\'s TemporalUpscaler off. Load a save: menus have no depth to work with.',
       [
-        { key: 'optiscaler', label: 'Install OptiScaler (and REFramework)', done: optiInstalled && reframeworkPresent && !temporalUpscalerOn && !feederDeployed },
+        { key: 'optiscaler', label: 'Install DLSS 5 (and REFramework)', done: optiInstalled && reframeworkPresent && !temporalUpscalerOn && !feederDeployed },
       ]);
   }
 
@@ -500,11 +500,11 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
   const iniPresent = presentroute.iniPresentGame(exePath) && (!feederDeployed || feederIsOurs);
   if (iniPresent && kgRoute && kgRoute !== 'present') steered = true;
   if (iniPresent && (!kgRoute || kgRoute === 'present')) {
-    return finish('present', 'OptiScaler',
+    return finish('present', 'DLSS 5',
       'No DLSS of its own. DLSS 5 runs at the end of each frame on top of the game\'s own anti-aliasing, and ' +
       'OptiScaler finds the game\'s depth itself -- no Feeder, nothing to download by hand. Install places ' +
       'OptiScaler. Load a save: menus have no depth to work with.',
-      [{ key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled && !feederDeployed }]);
+      [{ key: 'optiscaler', label: 'Install DLSS 5', done: optiInstalled && !feederDeployed }]);
   }
 
   // A Luma-Framework mod that adds DLSS to this game (lumacatalog.js, matched by name in main.js) beats both
@@ -523,25 +523,25 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
   const lumaWanted = lumaDeployed || lumaByCatalog;
 
   if (shippedDlss && !lumaWanted) {
-    return finish('optiscaler', 'OptiScaler',
+    return finish('optiscaler', 'DLSS 5',
       'This game ships its own DLSS, so OptiScaler only adds Neural Rendering on top of it (the DLSS 5 only ' +
       'profile) -- just Install. Frame Generation: the game\'s own DLSS Frame Generation in its video settings.',
-      [{ key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled }]);
+      [{ key: 'optiscaler', label: 'Install DLSS 5', done: optiInstalled }]);
   }
 
   if (lumaWanted) {
     const profile = lumaue.deployedProfile(dir) || lumaue.lumaProfileFor(exePath, detected, lumaMod);
     if (profile && profile.catalog) {
       if (feederDeployed && !lumaDeployed) {
-        return finish('feeder', 'OptiScaler + Feeder',
+        return finish('feeder', 'DLSS 5 + Feeder',
           'The DLSS5 Feeder deployed here is doing the job, but Luma-Framework has a mod for this game that adds real ' +
           'DLSS with the game\'s own motion vectors -- better than the Feeder\'s estimate. Game Help switches it over.',
           [
             { key: 'feeder', label: 'Deploy the DLSS5 Feeder', done: true },
-            { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
+            { key: 'optiscaler', label: 'Install DLSS 5', done: optiInstalled },
           ], null, { lumaAvailable: true });
       }
-      return finish('lumaue', 'OptiScaler + Luma',
+      return finish('lumaue', 'DLSS 5 + Luma',
         (nativeTooOld
           ? 'This game\'s own DLSS ({version}) is too old for Neural Rendering. '
           : 'No DLSS of its own. ') +
@@ -550,7 +550,7 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
         'DirectX 11: pick it in the game\'s settings and turn the game\'s own DLSS off. The app switches DLSS on in Luma ' +
         'for you.',
         [
-          { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
+          { key: 'optiscaler', label: 'Install DLSS 5', done: optiInstalled },
           { key: 'lumaue', label: 'Deploy Luma', done: lumaDeployed },
         ], { version: nativeVersion || '' }, { experimental: profile.status !== 'working', lumaMod: lumaMod ? lumaMod.key : (profile.id || null) });
     }
@@ -562,33 +562,33 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
     // actually in place and names the better option, rather than reporting a done setup as a
     // missing step. Luma's own readiness refuses while the Feeder is on, so the order is fixed.
     if (feederDeployed && !lumaDeployed) {
-      return finish('feeder', 'OptiScaler + Feeder',
+      return finish('feeder', 'DLSS 5 + Feeder',
         'No DLSS of its own; the DLSS5 Feeder deployed here is doing that job. Luma UE is the alternative for ' +
         'this game (it replaces the stock TAA with real DLAA, so no estimated motion vectors): remove the Feeder ' +
         'in Edit first, then deploy Luma UE there. Frame Generation: Lossless Scaling.',
         [
           { key: 'feeder', label: 'Deploy the DLSS5 Feeder', done: true },
-          { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
+          { key: 'optiscaler', label: 'Install DLSS 5', done: optiInstalled },
         ]);
     }
     // Prey (2017) gets Luma's own Prey mod (lumaue.js LUMA_PROFILES.prey): real DLSS with the engine's
     // motion vectors, better than anything the Feeder can estimate.
     if (lumaue.isPrey2017(exePath)) {
-      return finish('lumaue', 'OptiScaler + Luma',
+      return finish('lumaue', 'DLSS 5 + Luma',
         'No DLSS of its own. Luma\'s Prey mod adds real DLSS with the game\'s own motion vectors and depth, which ' +
         'gives OptiScaler a DLSS call to hook. Install sets up OptiScaler and Luma (after you confirm Luma\'s licence) ' +
         'and switches DLSS on in Luma for you.',
         [
-          { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
+          { key: 'optiscaler', label: 'Install DLSS 5', done: optiInstalled },
           { key: 'lumaue', label: 'Deploy Luma', done: lumaDeployed },
         ]);
     }
-    return finish('lumaue', 'OptiScaler + Luma UE',
+    return finish('lumaue', 'DLSS 5 + Luma UE',
       'No DLSS of its own. Luma UE replaces its stock TAA with DLAA, which gives OptiScaler a real DLSS call to ' +
-      'hook. Install OptiScaler here, then deploy Luma UE from Edit (it needs your licence confirmation). ' +
+      'hook. Install DLSS 5 here, then deploy Luma UE from Edit (it needs your licence confirmation). ' +
       'Frame Generation: Lossless Scaling.',
       [
-        { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
+        { key: 'optiscaler', label: 'Install DLSS 5', done: optiInstalled },
         { key: 'lumaue', label: 'Deploy Luma UE (Edit)', done: lumaDeployed },
       ]);
   }
@@ -603,13 +603,13 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
       : api === 'opengl'
         ? ' On OpenGL, ReShade goes in as the game\'s opengl32.dll.'
         : '';
-    return finish('feeder', 'OptiScaler + Feeder',
+    return finish('feeder', 'DLSS 5 + Feeder',
       'No DLSS of its own, so OptiScaler alone would have nothing to hook. The DLSS5 Feeder synthesises the DLSS ' +
       'call from ReShade\'s depth and motion vectors; Install deploys it first, then OptiScaler.' + how +
       ' Frame Generation: Lossless Scaling.',
       [
         { key: 'feeder', label: 'Deploy the DLSS5 Feeder', done: feederDeployed },
-        { key: 'optiscaler', label: 'Install OptiScaler', done: optiInstalled },
+        { key: 'optiscaler', label: 'Install DLSS 5', done: optiInstalled },
       ]);
   }
 

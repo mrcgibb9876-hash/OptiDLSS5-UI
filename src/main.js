@@ -3502,7 +3502,7 @@ async function applyHelpFix(exePath, fixId) {
       return { done: true, text: `removed ${(r.removed || []).length} item(s)${(r.restored || []).length ? ', restored ' + r.restored.length : ''} -- the game is back to how it was` };
     }
     case 'install':
-      return { done: false, text: 'Install runs from the card: press Install OptiScaler on this game' };
+      return { done: false, text: 'Install runs from the card: press Install DLSS 5 on this game' };
     case 'place-dlss': {
       const r = await placeNvngxDlssBesideExe(dir);
       invalidateDetection(dir);
@@ -3576,7 +3576,7 @@ ipcMain.handle('game:help-ai', async (evt, { exePath, detected, fixesTried = [] 
       onText: (text) => { try { sender.send('game:help-ai-text', { exePath, text }); } catch {} },
       applyFix: async (fix, why) => {
         if (!gamehelp.FIX_IDS.includes(fix)) return 'refused: not a known fix';
-        if (fix === 'install') return 'not possible from here: the user must press Install OptiScaler on the card; tell them so';
+        if (fix === 'install') return 'not possible from here: the user must press Install DLSS 5 on the card; tell them so';
         const res = await dialog.showMessageBox({
           type: 'question', buttons: ['Allow', 'Skip'], defaultId: 0, cancelId: 1,
           title: 'Game Help (AI) wants to make a change',

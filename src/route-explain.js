@@ -35,14 +35,14 @@ const PANEL = 'Press Alt+Home in the game for the DLSS 5 panel. Run the game win
 
 const ROUTES = {
   optiscaler: {
-    does: 'Uses the game\'s own DLSS. OptiScaler adds DLSS 5 on top of it.',
+    does: 'Uses the game\'s own DLSS, with DLSS 5 added on top of it.',
     limits: 'Turn DLSS on in the game\'s own settings, or there is nothing to add to. Frame Generation is the game\'s own.',
     panel: PANEL,
   },
   'nr-model-only': {
     does: 'The game\'s own DLSS loads the Neural Rendering model by itself. Nothing this app installs is in the game\'s loader.',
-    limits: 'Turn DLSS on in the game\'s own settings. Frame Generation is the game\'s own. Game Help offers this route for a game that will not start with OptiScaler in it.',
-    panel: 'No panel on this route: OptiScaler is not in the game, so Alt+Home does nothing. Press Install to put OptiScaler and the panel back.',
+    limits: 'Turn DLSS on in the game\'s own settings. Frame Generation is the game\'s own. Game Help offers this route for a game that will not start with DLSS 5 installed in it.',
+    panel: 'No panel on this route: DLSS 5 is not in the game, so Alt+Home does nothing. Press Install to put DLSS 5 and the panel back.',
     popout: null,
   },
   feeder: {
@@ -61,12 +61,12 @@ const ROUTES = {
     panel: PANEL,
   },
   feeder32: {
-    does: 'Experimental. A 32-bit game cannot run DLSS itself, so each frame goes to a 64-bit helper beside the game, where OptiScaler runs DLSS 5.',
+    does: 'Experimental. A 32-bit game cannot run DLSS itself, so each frame goes to a 64-bit helper beside the game, where DLSS 5 runs.',
     limits: 'Not yet confirmed on many games. The helper needs the game windowed or borderless to show anything.',
     panel: 'Press Alt+Home in the game for the DLSS 5 panel. The helper draws it over the game, and it takes clicks there.',
   },
   dx9: {
-    does: 'Experimental. dgVoodoo2 turns DirectX 9 into DirectX 11, then the DLSS5 Feeder and OptiScaler work as on any DX11 game.',
+    does: 'Experimental. dgVoodoo2 turns DirectX 9 into DirectX 11, then the DLSS5 Feeder and DLSS 5 work as on any DX11 game.',
     limits: 'If dgVoodoo2 crashes the game, this route is not for it yet. Motion vectors are estimated, so fast motion ghosts more.',
     panel: PANEL,
   },
@@ -77,17 +77,17 @@ const ROUTES = {
   },
   'emulator-opengl': {
     does: 'Experimental. The DLSS5 Feeder makes a DLSS call inside {name}, for every game it runs.',
-    limits: 'OptiScaler cannot draw anything over OpenGL. Use the emulator\'s Direct3D or Vulkan renderer if it has one.',
+    limits: 'DLSS 5 cannot draw its panel over OpenGL. Use the emulator\'s Direct3D or Vulkan renderer if it has one.',
     panel: null,
     popout: 'only',
   },
   present: {
-    does: 'DLSS 5 runs at the end of each frame, on top of the game\'s own anti-aliasing. OptiScaler finds the depth itself: no Feeder, nothing to download.',
+    does: 'DLSS 5 runs at the end of each frame, on top of the game\'s own anti-aliasing. It finds the depth itself: no Feeder, nothing to download.',
     limits: 'There are no motion vectors on this route, so fast motion may ghost. Menus have no depth: load a save to see it work.',
     panel: PANEL,
   },
   lumaue: {
-    does: 'A Luma-Framework mod adds real DLSS to the game, with its own motion vectors, and OptiScaler adds DLSS 5 on top.',
+    does: 'A Luma-Framework mod adds real DLSS to the game, with its own motion vectors, and DLSS 5 goes on top.',
     limits: 'Luma needs DirectX 11: pick it in the game\'s settings and turn the game\'s own DLSS off. Luma asks you to confirm its licence first.',
     panel: PANEL,
   },
