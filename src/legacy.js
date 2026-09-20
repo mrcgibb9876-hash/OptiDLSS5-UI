@@ -293,51 +293,99 @@ const DG_WINDOWED = [
 // breaks the 2D layout of some games, while scaling only makes what is drawn bigger. "fullscreensize"
 // also covers a game that opens its own small window on the 64-bit route.
 //
-// ColorSpace: plain SDR output. dgVoodoo2's shipped "appdriven" drew a black screen on an HDR laptop
-// panel (Lenovo DisplayHDR, 150% scaling) with dgVoodoo 2.87.x -- Assassin's Creed II, 2026-09-18,
-// the game running and nothing faulting -- and "argb8888_srgb" gave a picture, confirmed by a
-// screenshot in a windowed test. PresentationModel and DesktopResolution were tried there too and are
-// deliberately NOT set: both forced exclusive fullscreen.
+// ColorSpace: NOT SET, and never write "argb8888_srgb" here again. It is not a valid value in
+// dgVoodoo 2.87.4 -- the parser takes only 'appdriven', 'argb8888_sdr', 'argb2101010_sdr_wcg' and
+// 'argb16161616_hdr' -- even though dgVoodoo's OWN shipped dgVoodoo.conf comments still document the
+// old name. The value was renamed and the documentation was not, which is where this app got it.
 //
-// Taken back out on 2026-09-19: with ColorSpace=argb8888_srgb, the Castlevania: Lords of Shadow 2 demo
-// refused to start ("needs at least 512 MB of video and AGP memory"), and dgVoodoo2's default
-// "appdriven" made the warning go away -- reproduced both ways, every other key unchanged. The demo had
-// run on this route before the key existed.
+// A rejected value makes dgVoodoo ABANDON THE REST OF THE FILE. ColorSpace sits in [GeneralExt] at
+// about line 121; [DirectX] starts at 186. So writing it silently threw away VRAM, VideoCard,
+// AppControlledScreenMode, dgVoodooWatermark and DisableAndPassThru on every game that got it.
 //
-// PER GAME since 2026-09-20, which is what it should always have been. Global-on broke the Castlevania
-// demo; global-off put Assassin's Creed II straight back to a black screen the moment its install was
-// synced. One key, two games, opposite right answers -- so it is a fact about a game and belongs in a
-// list of them, not in a default. A game not on the list is left at dgVoodoo2's own "appdriven", and
-// one synced while the key was global is still put back (DG_COLORSPACE_UNDO).
+// That one string caused both of Assassin's Creed II's long-standing symptoms (root-caused
+// 2026-09-21 with a dgVoodoo DEBUG build + dbgviewcli; the release build logs nothing):
+//
+//   * The crash. VRAM=4096 never applied, so the emulated card stayed at its 256MB default. The game
+//     fills it, CreateTexture returns NULL, and AC2 dereferences NULL -- 0xC0000005 at 00BE89B7 is
+//     literally "cmp eax,0 / jne / xor eax,eax / jmp" into "mov ecx,[eax]" loading a vtable. Two days
+//     of eliminating ReShade, the hook point, the output API, fullscreen and RenoDX were all correct
+//     and all beside the point.
+//   * The black screen. "argb8888_srgb fixed the black screen" was wrong. What fixed it was the parse
+//     error switching off the keys BELOW it -- WindowedAttributes and AppControlledScreenMode. Give
+//     ColorSpace a valid value and the black screen comes back, because those start applying again.
+//
+// It also explains the old "dgVoodoo applies our settings inconsistently" note, and the watermark
+// that would not turn off.
+//
+// The lesson is general, not about one game: dgVoodoo reports a rejected value only to a debug build,
+// so a wrong string here disables everything after it in silence. Anything added to this file must be
+// a value the shipped binary actually accepts -- check the log of a debug build, not the .conf
+// comments. configureDgVoodoo repairs the bad value wherever it is still on disk.
 const DG_DISPLAY = [
   ['General', 'ScalingMode', 'stretched_ar'],
   ['GeneralExt', 'WindowedAttributes', 'borderless, fullscreensize'],
 ];
-const DG_COLORSPACE = { srgb: 'argb8888_srgb', appDriven: 'appdriven' };
-const DG_COLORSPACE_UNDO = { from: DG_COLORSPACE.srgb, to: DG_COLORSPACE.appDriven };
 
-// Keyed on an exe in the game's folder, because the dgVoodoo2 deploy is handed a directory and never
-// an exe. Add a game here only from a confirmed black screen that this key fixes: it changes what
-// dgVoodoo2 actually outputs, and the Castlevania demo is what happens when it is applied blind.
-const DG_SRGB_EXES = ['AssassinsCreedIIGame.exe'];
+// The invalid value this app used to write, kept only so an install that still carries it is repaired.
+// 'appdriven' is dgVoodoo's own shipped default, so this puts the file back to stock and, far more
+// importantly, lets the rest of it parse.
+// What the 2.87.4 BINARY accepts, taken from its own rejection message, not from the .conf comments
+// (which still list the pre-rename 'argb8888_srgb' and 'argb2101010_sdr'). Anything else in this key
+// -- ours or a value someone copied out of those comments -- silently voids the rest of the file, so
+// it is repaired to dgVoodoo's own default rather than left to break the install quietly.
+const DG_COLORSPACE_VALID = new Set(['appdriven', 'argb8888_sdr', 'argb2101010_sdr_wcg', 'argb16161616_hdr']);
+const DG_COLORSPACE_STOCK = 'appdriven';
 
-function needsSrgbColourSpace(dir) {
-  return DG_SRGB_EXES.some((exe) => {
-    try { return fs.existsSync(path.join(dir, exe)); } catch { return false; }
-  });
+// Returns the conf with a rejected ColorSpace put back to stock. A key that is absent, empty or
+// already valid is left exactly as it is: unspecified is a legitimate state, and a valid value is
+// somebody's choice.
+function repairColourSpace(text) {
+  const colour = getIniKey(text, 'GeneralExt', 'ColorSpace');
+  if (colour === null) return text;
+  const value = String(colour).trim();
+  if (value === '' || DG_COLORSPACE_VALID.has(value.toLowerCase())) return text;
+  return setIniKey(text, 'GeneralExt', 'ColorSpace', DG_COLORSPACE_STOCK);
 }
 
-function configureDgVoodoo(text, { windowed = false, srgb = false } = {}) {
+// Games whose picture the presentation keys break get OutputAPI and VRAM and NOTHING else -- no
+// ScalingMode, no WindowedAttributes and no forced windowing -- because
+// stock-plus-those-two is the exact configuration proven to work, and this is not the place to guess
+// which individual key a game dislikes.
+//
+// Assassin's Creed II (proven 2026-09-21): stock + OutputAPI=d3d11_fl11_0 + VRAM=4096 gives a picture
+// and 600+ DLSS 5 frames at 56.6 fps. Add the forced-window trio and the screen goes black.
+//
+// It is feeder.js's FULLSCREEN_ONLY_EXES because the same fact drives the other half of the decision
+// there -- a game left in exclusive fullscreen needs host_window=3 and cast_mode=1 to have a panel at
+// all. One list, so the two halves cannot drift apart.
+const needsMinimalDgVoodoo = feeder.needsFullscreenHost;
+
+function configureDgVoodoo(text, { windowed = false, minimal = false } = {}) {
   let out = String(text || '');
+
+  // First, always. Left in place a rejected value voids every key below it, including the VRAM line
+  // two sections down, so this has to happen whatever else does.
+  out = repairColourSpace(out);
+
+  // The two that earn their place on every dgVoodoo2 route. OutputAPI pins the D3D11 output the
+  // Feeder's add-on attaches to; VRAM raises the emulated card off its 256MB default, which a modern
+  // resolution exhausts -- and a game that runs out gets a NULL from CreateTexture, which is a crash
+  // in anything written when 256MB was a lot.
   out = setIniKey(out, 'General', 'OutputAPI', 'd3d11_fl11_0');
+  out = setIniKey(out, 'DirectX', 'VRAM', '4096');
+
+  // These two are safe on a minimal game as well. CaptureMouse sat ABOVE the poisoned ColorSpace line
+  // all along, so it is the one key here already proven not to disturb AC2; the watermark is an
+  // overlay rather than a presentation mode. Without it a minimal game would be the only one showing
+  // dgVoodoo's banner -- which it avoided before only by accident, when the whole file was voided.
   out = setIniKey(out, 'General', 'CaptureMouse', 'false');
+  out = setIniKey(out, 'DirectX', 'dgVoodooWatermark', 'false');
+  if (minimal) return out;
+
   out = setIniKey(out, 'DirectX', 'DisableAndPassThru', 'false');
   out = setIniKey(out, 'DirectX', 'VideoCard', 'internal3D');
-  out = setIniKey(out, 'DirectX', 'VRAM', '4096');
-  out = setIniKey(out, 'DirectX', 'dgVoodooWatermark', 'false');
   for (const [section, key, value] of DG_DISPLAY) out = setIniKey(out, section, key, value);
   if (windowed) for (const [section, key, value] of DG_WINDOWED) out = setIniKey(out, section, key, value);
-  if (srgb) out = setIniKey(out, 'GeneralExt', 'ColorSpace', DG_COLORSPACE.srgb);
   return out;
 }
 
@@ -351,18 +399,20 @@ function ensureDgVoodooWindowed(dir) {
   let text;
   try { text = fs.readFileSync(confPath, 'utf8'); } catch { return false; }
   let next = text;
-  for (const [section, key, value] of DG_DISPLAY) next = setIniKey(next, section, key, value);
-  if (marker.host32) for (const [section, key, value] of DG_WINDOWED) next = setIniKey(next, section, key, value);
-  // The colour space is this game's own answer, both ways round: set it where the game needs it, and
-  // take it back off anything that was synced while it was written globally.
-  if (needsSrgbColourSpace(dir))
+
+  // The repair comes first and applies to every install: while a rejected value is in the file,
+  // nothing below it in the file is being read at all.
+  next = repairColourSpace(next);
+
+  // An install made before the VRAM line could take effect still has the 256MB default written -- or
+  // nothing at all -- so bring it up here too. This is the line that stops the CreateTexture crash.
+  next = setIniKey(next, 'General', 'OutputAPI', 'd3d11_fl11_0');
+  next = setIniKey(next, 'DirectX', 'VRAM', '4096');
+
+  if (!needsMinimalDgVoodoo(dir))
   {
-    next = setIniKey(next, 'GeneralExt', 'ColorSpace', DG_COLORSPACE.srgb);
-  }
-  else
-  {
-    const colour = getIniKey(next, 'GeneralExt', 'ColorSpace');
-    if (colour !== null && String(colour).trim() === DG_COLORSPACE_UNDO.from) next = setIniKey(next, 'GeneralExt', 'ColorSpace', DG_COLORSPACE_UNDO.to);
+    for (const [section, key, value] of DG_DISPLAY) next = setIniKey(next, section, key, value);
+    if (marker.host32) for (const [section, key, value] of DG_WINDOWED) next = setIniKey(next, section, key, value);
   }
   if (next === text) return false;
   fs.writeFileSync(confPath, next, 'utf8');
@@ -489,7 +539,7 @@ async function deployDgVoodoo(dir, plan, source) {
   const confPath = path.join(dir, 'dgVoodoo.conf');
   const base = fs.existsSync(confPath) ? fs.readFileSync(confPath, 'utf8') : conf.toString('utf8');
   await rec.write(confPath,
-                  Buffer.from(configureDgVoodoo(base, { windowed: !!plan.host32, srgb: needsSrgbColourSpace(dir) }), 'utf8'),
+                  Buffer.from(configureDgVoodoo(base, { windowed: !!plan.host32, minimal: needsMinimalDgVoodoo(dir) }), 'utf8'),
                   { ours: () => true });
   marker.dgVoodoo = { arch: plan.dgVoodoo.arch, dll: plan.dgVoodoo.dll, source: path.basename(source) };
   marker.placedAt = new Date().toISOString();
@@ -1101,7 +1151,7 @@ async function removeLegacy(dir) {
 
 module.exports = {
   MARKER, HOST_DIR, DGVOODOO, PARK_SUFFIX, planFor, dxvkReplacesNative, status, readMarker, ensureDgVoodoo, importDgVoodooZip, cachedDgVoodoo,
-  isDgVoodooZip, configureDgVoodoo, ensureDgVoodooWindowed, ensureCastKey, deployDgVoodoo, deployHost32, removalPlan, removeLegacy,
+  isDgVoodooZip, configureDgVoodoo, DG_COLORSPACE_VALID, ensureDgVoodooWindowed, ensureCastKey, deployDgVoodoo, deployHost32, removalPlan, removeLegacy,
   parkReShadeProxy, unparkReShadeProxy, swapNativeToDxvk, swapDxvkToNative, setUpVulkanLayer32, vulkanLayerRecord, unlistVulkanLayerApp,
   currentMvProvider, deployLegacyShaders, setMvProvider,
 };

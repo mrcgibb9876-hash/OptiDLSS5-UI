@@ -1,7 +1,7 @@
 {
   "_readme": "The known-good catalog (src/catalog.js): per game exe, the setup PROVEN to run DLSS 5 and the setups known to be dead ends, each with its source. Only real evidence goes here -- a confirmed run on a real install, or a run log -- never a guess. After any edit run `node tools/catalog/build.js`: it checks every entry and rewrites sha256, and the app refuses the file while the hash does not match. `node tools/catalog/build.js --digest <issue body> --source \"issue #N\" --write` adds a report from an issue's Run digest.",
   "version": 1,
-  "sha256": "782a50b1f4ca5fff7a7b6bcefe11ea557cc2aa15f9761ae416396e672588c5b7",
+  "sha256": "f2114f84c5b93314f8ebc96ae91fa7c2ce887ab70b215579b6848b54242774ea",
   "entries": [
     {
       "exe": "ai.exe",
@@ -57,11 +57,13 @@
     {
       "exe": "assassinscreediigame.exe",
       "name": "Assassin's Creed II",
-      "status": "no-route",
-      "issue": "no working route yet (DXVK shakes the camera, ReShade on dgVoodoo2 crashes at the 3D menu); waits for the DLSS5 Feeder's Direct3D 9 backend (Feeder issue #64)",
-      "setup": {},
+      "status": "works",
+      "setup": {
+        "route": "feeder32",
+        "via": "dgvoodoo"
+      },
       "reports": {
-        "works": 0,
+        "works": 1,
         "fails": 2
       },
       "dead_ends": [
@@ -71,21 +73,13 @@
           "api": null,
           "verdict": null,
           "why": "DXVK makes the camera shake (a game bug, DXVK issue #2249)",
-          "source": "live test 2026-09-16/18; app blocks DXVK for early Assassin's Creed (842dccd)"
-        },
-        {
-          "route": "feeder32",
-          "via": "dgvoodoo",
-          "api": null,
-          "verdict": null,
-          "why": "ReShade on dgVoodoo2's Direct3D 11 crashes the game as the 3D menu starts (0xC0000005 at 00BE89B7)",
-          "source": "live test 2026-09-16/18, reproduced with the Feeder and every add-on disabled"
+          "source": "live test 2026-09-16/18; app blocks DXVK for early Assassin’s Creed (842dccd)"
         }
       ],
-      "updated": "2026-09-18",
-      "notes": "32-bit DirectX 9. Runs with ReShade on its native D3D9, which the Feeder cannot use yet. The game also dies on focus loss (DXVK issue #3653, a game bug).",
+      "updated": "2026-09-21",
+      "notes": "32-bit DirectX 9 on dgVoodoo2. The 00BE89B7 crash and the black screen were both this app writing ColorSpace=argb8888_srgb, which dgVoodoo rejects -- and a rejected value voids the rest of the config, so VRAM stayed at the 256MB default until the game ran out and CreateTexture returned NULL. Fixed 2026-09-21. This game is left in exclusive fullscreen (the forced-borderless keys black-screen it), so it runs with host_window=3 and cast_mode=1 and the panel opens on Alt+Home. It still dies on focus loss (a game bug).",
       "sources": [
-        "live test 2026-09-16/18, parked 2026-09-18"
+        "live test 2026-09-21: 600+ DLSS 5 frames at 56.6 fps, clean exit, panel confirmed"
       ]
     },
     {

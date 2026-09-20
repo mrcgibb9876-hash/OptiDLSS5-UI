@@ -1235,12 +1235,41 @@ function setLine(lines, key, value) {
   }
 }
 
+// Games that have to be left in EXCLUSIVE FULLSCREEN, because the dgVoodoo2 keys that would make them
+// borderless black-screen them instead. legacy.js reads this same list to decide to write a minimal
+// dgVoodoo.conf, so the two halves of the decision cannot drift apart.
+//
+// The consequence lands here: the compositor cast cannot draw over an exclusive-fullscreen swapchain,
+// so on such a game the helper starts windowless and dlss5-feed.log says "the in-game panel is
+// unavailable this session". host_window=3 keeps the helper's window even when the swapchain reports
+// fullscreen (Feeder #118), and cast_mode=1 brings the panel in as a texture drawn by the game's own
+// ReShade, which works in exclusive fullscreen (cast_mode=0, the compositor thumbnail, does not).
+//
+// Assassin's Creed II, confirmed 2026-09-21: minimal conf + these two = picture, DLSS 5, and Alt+Home
+// opens the panel.
+const FULLSCREEN_ONLY_EXES = ['AssassinsCreedIIGame.exe'];
+
+function needsFullscreenHost(dir) {
+  return FULLSCREEN_ONLY_EXES.some((exe) => {
+    try { return fs.existsSync(path.join(dir, exe)); } catch { return false; }
+  });
+}
+
 function configureFeedCfg(dir, { castKey = CAST_KEY_HOME, castMods = CAST_MODS_ALT } = {}) {
   const cfgPath = path.join(dir, 'dlss5-feed.cfg');
   const existing = fs.existsSync(cfgPath) ? fs.readFileSync(cfgPath, 'utf8') : '';
   const lines = existing ? existing.split(/\r?\n/) : [];
   const at = lines.findIndex((line) => /^\s*cast_key\s*=/i.test(line));
   const hasMods = lines.some((line) => /^\s*cast_mods\s*=/i.test(line));
+
+  // Before anything to do with the cast key, because these have to land even on an install whose key
+  // the user chose themselves -- without them that user simply has no panel. Neither is overwritten
+  // if it is already in the file: both are settings someone may have a reason to have changed.
+  let extra = false;
+  if (needsFullscreenHost(dir)) {
+    if (!lines.some((line) => /^\s*host_window\s*=/i.test(line))) { setLine(lines, 'host_window', 3); extra = true; }
+    if (!lines.some((line) => /^\s*cast_mode\s*=/i.test(line))) { setLine(lines, 'cast_mode', 1); extra = true; }
+  }
 
   if (at !== -1) {
     const current = Number(String(lines[at]).split('=')[1]);
@@ -1256,7 +1285,8 @@ function configureFeedCfg(dir, { castKey = CAST_KEY_HOME, castMods = CAST_MODS_A
         fs.writeFileSync(cfgPath, `${lines.join('\n')}\n`, 'utf8');
         return { configured: true, castKey: current, castMods, kept: true };
       }
-      return { configured: false, castKey: current, kept: true };
+      if (extra) fs.writeFileSync(cfgPath, `${lines.join('\n')}\n`, 'utf8');
+      return { configured: extra, castKey: current, kept: true };
     }
     lines[at] = `cast_key=${castKey}`;
   } else {
@@ -1533,6 +1563,8 @@ module.exports = {
   configurePreset,
   configureReShadeIni,
   configureFeedCfg,
+  needsFullscreenHost,
+  FULLSCREEN_ONLY_EXES,
   CAST_KEY_HOME,
   dxvkWrapperFile,
   readDxvkConf,
