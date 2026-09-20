@@ -1211,30 +1211,62 @@ function restoreDxvkConf(dir, record) {
 // chord as the engine's own panel on the 64-bit routes, so there is one thing to tell players
 // whatever route their game takes.
 //
-// Alt+Home rather than Home because the Feeder matches the bare virtual key, ignoring modifiers,
-// while ReShade's own overlay is Home with no modifier and matches the modifiers exactly. Holding
-// Alt therefore reaches the cast and leaves ReShade's overlay shut -- opening that overlay is what
-// broke the panel for Luma users before.
+// Alt+Home rather than Home because ReShade's own overlay is Home with no modifier and matches its
+// modifiers exactly. Holding Alt reaches the cast and leaves ReShade's overlay shut -- opening that
+// overlay is what broke the panel for Luma users before.
+//
+// `cast_mods` is why Alt gets there. Up to Feeder 1.16.0-beta.5 the cast matched the bare virtual key
+// and ignored modifiers, so cast_key alone was enough and Alt came free. beta.6 (jlrouzies-fr/
+// DLSS5-Feeder#118, 2026-09-20) makes the match exact in BOTH directions: with cast_mods absent or 0
+// the bare key toggles and Alt+Home does not. Writing the modifier keeps Alt+Home working -- which is
+// what every route text, the engine's panel and the docs tell players, on every route -- and it is
+// safe on older builds, which read only the keys they know and default the rest.
+//
+// 1 = Alt, 2 = Ctrl, 4 = Shift, added together.
 const CAST_KEY_HOME = 0x24;
+const CAST_MODS_ALT = 1;
 
-function configureFeedCfg(dir, { castKey = CAST_KEY_HOME } = {}) {
+function setLine(lines, key, value) {
+  const at = lines.findIndex((line) => new RegExp(`^\\s*${key}\\s*=`, 'i').test(line));
+  if (at !== -1) lines[at] = `${key}=${value}`;
+  else {
+    while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+    lines.push(`${key}=${value}`);
+  }
+}
+
+function configureFeedCfg(dir, { castKey = CAST_KEY_HOME, castMods = CAST_MODS_ALT } = {}) {
   const cfgPath = path.join(dir, 'dlss5-feed.cfg');
   const existing = fs.existsSync(cfgPath) ? fs.readFileSync(cfgPath, 'utf8') : '';
   const lines = existing ? existing.split(/\r?\n/) : [];
   const at = lines.findIndex((line) => /^\s*cast_key\s*=/i.test(line));
+  const hasMods = lines.some((line) => /^\s*cast_mods\s*=/i.test(line));
 
   if (at !== -1) {
     const current = Number(String(lines[at]).split('=')[1]);
     // A key the user picked in the Feeder's own panel is theirs; only "none" is ours to fill in.
-    if (Number.isFinite(current) && current > 0) return { configured: false, castKey: current, kept: true };
+    if (Number.isFinite(current) && current > 0) {
+      // ... except for the one upgrade the beta.6 change forces. An install this app made before
+      // cast_mods existed carries our own Home with no modifier line, and on beta.6 that means the
+      // cast answers to a BARE Home -- the very chord that opens ReShade's overlay instead. The
+      // modifier is added only when the key is still the one we wrote and nobody has set mods of
+      // their own; a user who chose their own key or their own modifiers is left alone entirely.
+      if (current === CAST_KEY_HOME && !hasMods) {
+        setLine(lines, 'cast_mods', castMods);
+        fs.writeFileSync(cfgPath, `${lines.join('\n')}\n`, 'utf8');
+        return { configured: true, castKey: current, castMods, kept: true };
+      }
+      return { configured: false, castKey: current, kept: true };
+    }
     lines[at] = `cast_key=${castKey}`;
   } else {
     while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
     lines.push(`cast_key=${castKey}`);
   }
+  if (!hasMods) setLine(lines, 'cast_mods', castMods);
 
   fs.writeFileSync(cfgPath, `${lines.join('\n')}\n`, 'utf8');
-  return { configured: true, castKey, kept: false };
+  return { configured: true, castKey, castMods, kept: false };
 }
 
 // --- update checking --------------------------------------------------------------------

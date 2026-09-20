@@ -431,9 +431,10 @@ test('an older 32-bit install is brought to the borderless window once, and left
 
 test('the 32-bit in-game panel gets Alt+Home, and a key the player chose is left alone', () => {
   // Without this the Feeder's cast_key ships as 0 -- "no key" -- so the only way to put the panel
-  // on screen is to find "Show the DLSS 5 panel in-game" in ReShade's add-on tab. 0x24 is VK_HOME:
-  // the Feeder matches the bare key and ignores modifiers, so Alt+Home reaches it, while ReShade's
-  // own overlay (Home, no modifier, matched exactly) stays shut.
+  // on screen is to find "Show the DLSS 5 panel in-game" in ReShade's add-on tab. 0x24 is VK_HOME,
+  // and cast_mods=1 is Alt: since Feeder 1.16.0-beta.6 the cast matches its modifiers exactly in
+  // both directions, so the modifier has to be written or Alt+Home stops reaching it -- and a BARE
+  // Home is what opens ReShade's own overlay instead.
   const game = scratchDir('legacy-cast-key');
   write(game, legacy.MARKER, JSON.stringify({ version: 1, files: [], backups: [], dirs: ['host64'], host32: { api: 'dx11', reshadeName: 'dxgi.dll' } }));
   write(game, 'dlss5-feed.cfg', 'enabled=1\nmode=2\ncast_key=0\ncast_scale=100\n');
@@ -441,22 +442,40 @@ test('the 32-bit in-game panel gets Alt+Home, and a key the player chose is left
   assert.equal(legacy.ensureCastKey(game), true);
   const cfg = fs.readFileSync(path.join(game, 'dlss5-feed.cfg'), 'utf8');
   assert.match(cfg, /^cast_key=36$/m);
+  assert.match(cfg, /^cast_mods=1$/m);
   assert.match(cfg, /^mode=2$/m, 'every other setting is left as it was');
   assert.match(cfg, /^cast_scale=100$/m);
 
   assert.equal(legacy.ensureCastKey(game), false, 'already set: no rewrite');
 
-  // A key chosen in the Feeder's own panel is the player's, not ours to replace.
+  // The upgrade beta.6 forces: an install this app made before cast_mods existed carries our own
+  // Home with no modifier line. Left alone, that cast would answer to a bare Home on beta.6.
+  write(game, 'dlss5-feed.cfg', 'enabled=1\ncast_key=36\ncast_scale=100\n');
+  assert.equal(legacy.ensureCastKey(game), true, 'our own key without mods is upgraded once');
+  const upgraded = fs.readFileSync(path.join(game, 'dlss5-feed.cfg'), 'utf8');
+  assert.match(upgraded, /^cast_key=36$/m, 'the key itself is not touched');
+  assert.match(upgraded, /^cast_mods=1$/m);
+  assert.equal(legacy.ensureCastKey(game), false, 'and only once');
+
+  // Modifiers the player chose in the Feeder's own panel are theirs, even on our key.
+  write(game, 'dlss5-feed.cfg', 'enabled=1\ncast_key=36\ncast_mods=6\n');
+  assert.equal(legacy.ensureCastKey(game), false);
+  assert.match(fs.readFileSync(path.join(game, 'dlss5-feed.cfg'), 'utf8'), /^cast_mods=6$/m);
+
+  // A key chosen in the Feeder's own panel is the player's, not ours to replace -- and neither are
+  // its modifiers, which stay the Feeder's own default rather than being given our Alt.
   write(game, 'dlss5-feed.cfg', 'enabled=1\ncast_key=45\n');
   assert.equal(legacy.ensureCastKey(game), false);
-  assert.match(fs.readFileSync(path.join(game, 'dlss5-feed.cfg'), 'utf8'), /^cast_key=45$/m);
+  const chosen = fs.readFileSync(path.join(game, 'dlss5-feed.cfg'), 'utf8');
+  assert.match(chosen, /^cast_key=45$/m);
+  assert.doesNotMatch(chosen, /^cast_mods=/m);
 
   // No cfg yet (the Feeder writes one on its first save): the key still lands, and the Feeder
   // defaults every key the file does not carry.
   const fresh = scratchDir('legacy-cast-key-fresh');
   write(fresh, legacy.MARKER, JSON.stringify({ version: 1, files: [], backups: [], dirs: ['host64'], host32: { api: 'dx11', reshadeName: 'dxgi.dll' } }));
   assert.equal(legacy.ensureCastKey(fresh), true);
-  assert.equal(fs.readFileSync(path.join(fresh, 'dlss5-feed.cfg'), 'utf8'), 'cast_key=36\n');
+  assert.equal(fs.readFileSync(path.join(fresh, 'dlss5-feed.cfg'), 'utf8'), 'cast_key=36\ncast_mods=1\n');
 
   // Not this route: a cast_key would toggle a picture of a host process that is not running.
   const other = scratchDir('legacy-cast-key-not-host32');
