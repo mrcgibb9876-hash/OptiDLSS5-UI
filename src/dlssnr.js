@@ -213,6 +213,12 @@ const FIELDS = [
   { key: 'MaxRatio', type: 'float', default: 2.0, min: 1, max: 8, step: 0.1, group: 'Colour',
     label: 'Highlight guard',
     help: "The most the pass may move any pixel, as a multiple of what it already was, in both directions -- a pixel may not be brightened past this nor darkened past its reciprocal. Lights are where the model has least to say and rescaling its answer does the most damage; 2x leaves detail intact while stopping a strip light turning into a string of coloured cells. Raise it only if bright areas look clipped." },
+  // [DlssNr] HaloGuard (engine v2.2.1). Under Highlight guard, as in the in-game panel: it is the
+  // other half of the same job and the half the guard cannot do -- the guard bounds a pixel against
+  // itself, this bounds it against its neighbours.
+  { key: 'HaloGuard', type: 'float', default: 0.0, min: 0, max: 1, step: 0.05, percent: true, group: 'Colour',
+    label: 'Halo suppression',
+    help: "The bright or dark rim the model can leave along a high-contrast edge.\n\nHighlight guard above cannot see one. It bounds a pixel against its own original, so a rim that doubles a dark pixel lying beside a bright edge is well inside 2x and still an obvious halo. A halo is not a property of a pixel -- it is a property of a pixel next to its neighbours.\n\nThis holds the model's edit inside the brightness range the frame's own neighbourhood already had. A real edge has both of its sides in that range and passes through untouched; only an overshoot beyond both is pulled back. 0% is off. 100% allows no overshoot at all.\n\nFlat areas are left alone at any setting, so the fine texture the model adds is not what this takes away -- it bites only where there is contrast for a halo to stand against.\n\nEnlargement already removes the halos made by running the model SMALLER than the frame. This is for the ones the model makes at any size, 100% included. Start around 50% and come up until the rim goes." },
 
   { key: 'ScanMeter', type: 'bool', default: false, group: 'Exposure scan', label: 'Show the light meter on screen',
     dependsOn: { key: 'WhitePointSource', is: 2 }, help: "A lamp in the corner: red for dark, green for full light, and the shades between, with the reading beside it.\n\nIt is how you see at a glance that the scan is TRACKING rather than merely running. Walk into shade and it should slide toward red; step out and it should go green. If it moves the wrong way, that is what \"the number runs the other way\" below is for.\n\nPurely a readout. It changes nothing." },
