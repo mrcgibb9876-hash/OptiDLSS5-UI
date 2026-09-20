@@ -302,15 +302,32 @@ const DG_WINDOWED = [
 // Taken back out on 2026-09-19: with ColorSpace=argb8888_srgb, the Castlevania: Lords of Shadow 2 demo
 // refused to start ("needs at least 512 MB of video and AGP memory"), and dgVoodoo2's default
 // "appdriven" made the warning go away -- reproduced both ways, every other key unchanged. The demo had
-// run on this route before the key existed. Assassin's Creed II, the one game it was for, was dropped.
-// Installs synced while it was in are put back to appdriven (DG_COLORSPACE_UNDO).
+// run on this route before the key existed.
+//
+// PER GAME since 2026-09-20, which is what it should always have been. Global-on broke the Castlevania
+// demo; global-off put Assassin's Creed II straight back to a black screen the moment its install was
+// synced. One key, two games, opposite right answers -- so it is a fact about a game and belongs in a
+// list of them, not in a default. A game not on the list is left at dgVoodoo2's own "appdriven", and
+// one synced while the key was global is still put back (DG_COLORSPACE_UNDO).
 const DG_DISPLAY = [
   ['General', 'ScalingMode', 'stretched_ar'],
   ['GeneralExt', 'WindowedAttributes', 'borderless, fullscreensize'],
 ];
-const DG_COLORSPACE_UNDO = { from: 'argb8888_srgb', to: 'appdriven' };
+const DG_COLORSPACE = { srgb: 'argb8888_srgb', appDriven: 'appdriven' };
+const DG_COLORSPACE_UNDO = { from: DG_COLORSPACE.srgb, to: DG_COLORSPACE.appDriven };
 
-function configureDgVoodoo(text, { windowed = false } = {}) {
+// Keyed on an exe in the game's folder, because the dgVoodoo2 deploy is handed a directory and never
+// an exe. Add a game here only from a confirmed black screen that this key fixes: it changes what
+// dgVoodoo2 actually outputs, and the Castlevania demo is what happens when it is applied blind.
+const DG_SRGB_EXES = ['AssassinsCreedIIGame.exe'];
+
+function needsSrgbColourSpace(dir) {
+  return DG_SRGB_EXES.some((exe) => {
+    try { return fs.existsSync(path.join(dir, exe)); } catch { return false; }
+  });
+}
+
+function configureDgVoodoo(text, { windowed = false, srgb = false } = {}) {
   let out = String(text || '');
   out = setIniKey(out, 'General', 'OutputAPI', 'd3d11_fl11_0');
   out = setIniKey(out, 'General', 'CaptureMouse', 'false');
@@ -320,6 +337,7 @@ function configureDgVoodoo(text, { windowed = false } = {}) {
   out = setIniKey(out, 'DirectX', 'dgVoodooWatermark', 'false');
   for (const [section, key, value] of DG_DISPLAY) out = setIniKey(out, section, key, value);
   if (windowed) for (const [section, key, value] of DG_WINDOWED) out = setIniKey(out, section, key, value);
+  if (srgb) out = setIniKey(out, 'GeneralExt', 'ColorSpace', DG_COLORSPACE.srgb);
   return out;
 }
 
@@ -335,8 +353,17 @@ function ensureDgVoodooWindowed(dir) {
   let next = text;
   for (const [section, key, value] of DG_DISPLAY) next = setIniKey(next, section, key, value);
   if (marker.host32) for (const [section, key, value] of DG_WINDOWED) next = setIniKey(next, section, key, value);
-  const colour = getIniKey(next, 'GeneralExt', 'ColorSpace');
-  if (colour !== null && String(colour).trim() === DG_COLORSPACE_UNDO.from) next = setIniKey(next, 'GeneralExt', 'ColorSpace', DG_COLORSPACE_UNDO.to);
+  // The colour space is this game's own answer, both ways round: set it where the game needs it, and
+  // take it back off anything that was synced while it was written globally.
+  if (needsSrgbColourSpace(dir))
+  {
+    next = setIniKey(next, 'GeneralExt', 'ColorSpace', DG_COLORSPACE.srgb);
+  }
+  else
+  {
+    const colour = getIniKey(next, 'GeneralExt', 'ColorSpace');
+    if (colour !== null && String(colour).trim() === DG_COLORSPACE_UNDO.from) next = setIniKey(next, 'GeneralExt', 'ColorSpace', DG_COLORSPACE_UNDO.to);
+  }
   if (next === text) return false;
   fs.writeFileSync(confPath, next, 'utf8');
   return true;
@@ -461,7 +488,9 @@ async function deployDgVoodoo(dir, plan, source) {
   await rec.write(path.join(dir, 'dgVoodooCpl.exe'), cpl, { ours: isDg });
   const confPath = path.join(dir, 'dgVoodoo.conf');
   const base = fs.existsSync(confPath) ? fs.readFileSync(confPath, 'utf8') : conf.toString('utf8');
-  await rec.write(confPath, Buffer.from(configureDgVoodoo(base, { windowed: !!plan.host32 }), 'utf8'), { ours: () => true });
+  await rec.write(confPath,
+                  Buffer.from(configureDgVoodoo(base, { windowed: !!plan.host32, srgb: needsSrgbColourSpace(dir) }), 'utf8'),
+                  { ours: () => true });
   marker.dgVoodoo = { arch: plan.dgVoodoo.arch, dll: plan.dgVoodoo.dll, source: path.basename(source) };
   marker.placedAt = new Date().toISOString();
   writeMarker(dir, marker);
