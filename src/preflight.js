@@ -164,8 +164,12 @@ function evaluate(f) {
         '{antiCheat} is part of this game. After Install, Launch starts the game without it (through {stub}\'s own exe) -- single-player only: online play will not work, and going online with these files in place can get the account banned.',
         { antiCheat: f.antiCheat, stub: f.antiCheatStub.stub });
     } else {
-      add('anti-cheat', 'block',
-        '{antiCheat} protects this game and there is no way to start it without it. It blocks the DLL every DLSS 5 route here relies on, and using one can get the account banned.',
+      // 'warn', not 'block'. Withholding Install made this app the one deciding. The facts have not
+      // changed -- the anti-cheat will very likely stop the DLL loading, and going online with it in
+      // place can get the account banned -- but they are the player's facts to weigh: their account,
+      // their game, and Remove puts it back. Stated as plainly as it can be, then left to them.
+      add('anti-cheat', 'warn',
+        '{antiCheat} protects this game and there is no way to start it without it, so it will very likely stop the DLL every DLSS 5 route relies on from loading at all -- often with no message at all. And going online with these files in place can get the account BANNED. Install only if you accept that; Remove puts the game back.',
         { antiCheat: f.antiCheat });
     }
   }
@@ -213,8 +217,13 @@ function evaluate(f) {
       { card });
   }
 
+  // Severity first, and within a severity the two anti-cheat checks come first. They stopped being
+  // 'block' when the decision was handed back to the player (2026-09-20), and sorting purely by
+  // severity then dropped the ban warning BELOW things like an RTSS overlay notice. Of everything
+  // this dialog can say, it is the only item that can cost somebody their account, so it leads.
   const rank = { block: 0, warn: 1, info: 2 };
-  return out.sort((a, b) => rank[a.severity] - rank[b.severity]);
+  const first = (c) => (c.id === 'anti-cheat' || c.id === 'anti-cheat-stub' ? 0 : 1);
+  return out.sort((a, b) => rank[a.severity] - rank[b.severity] || first(a) - first(b));
 }
 
 // ── IO ────────────────────────────────────────────────────────────────────────────────────────────

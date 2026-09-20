@@ -109,11 +109,17 @@ test('Smooth Motion is only claimed when a Feeder run saw it', () => {
   assert.deepEqual(ids(base({ run: { feedSmoothMotion: false } })), []);
 });
 
-test('anti-cheat: a stub to step around is a warning, none is a block, and blocks sort first', () => {
+test('anti-cheat warns either way and never withholds Install', () => {
+  // With no stub this used to be a 'block', the one severity that takes Install away -- which made
+  // this app the one deciding, about somebody else's account (2026-09-20). Both shapes warn now.
+  // What they SAY is the difference between them, and the facts in the text did not soften.
   const stub = pf.evaluate(base({ antiCheat: 'EasyAntiCheat', antiCheatStub: { stub: 'start_protected_game.exe', antiCheat: 'EasyAntiCheat' } }));
   assert.deepEqual(stub.map((c) => [c.id, c.severity]), [['anti-cheat-stub', 'warn']]);
   const hard = pf.evaluate(base({ antiCheat: 'Vanguard', running: new Set(['rtss.exe']) }));
-  assert.deepEqual(hard.map((c) => [c.id, c.severity]), [['anti-cheat', 'block'], ['overlay-rtss', 'warn']]);
+  assert.deepEqual(hard.map((c) => [c.id, c.severity]), [['anti-cheat', 'warn'], ['overlay-rtss', 'warn']]);
+  assert.ok(/BANNED/.test(hard[0].text), 'the ban risk is still stated, and stated loudly');
+  assert.ok(pf.evaluate(base({ antiCheat: 'Vanguard' })).every((c) => c.severity !== 'block'),
+    'nothing about anti-cheat blocks Install any more');
 });
 
 test('display scaling above 100% warns on the dgVoodoo2 route for DX8/DX9 only (Assassin\'s Creed II at 150%)', () => {

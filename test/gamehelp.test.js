@@ -48,7 +48,9 @@ test('a Vulkan Feeder game whose Feeder never loaded names the ReShade layer fau
 
 const rows = [
   ['a 32-bit game is unavailable', base({ detected: { bitness: 32 } }), { status: 'unavailable', code: 'bit32' }],
-  ['anti-cheat is unavailable', base({ detected: { antiCheat: 'Easy Anti-Cheat' } }), { status: 'unavailable', code: 'anticheat' }],
+  // Not 'unavailable' any more: the app states what anti-cheat will do and leaves the decision to
+  // whoever owns the account (2026-09-20). Install is offered; the warning is what changed, not the facts.
+  ['anti-cheat is the player’s call, not a closed door', base({ detected: { antiCheat: 'Easy Anti-Cheat' } }), { status: 'step', code: 'anticheat' }],
   ['a Vulkan game with no DLSS is unavailable', base({ route: { route: 'unsupported', reason: 'Vulkan' } }), { status: 'unavailable', code: 'unsupported' }],
   ['another toolchain: remove it first', base({ foreign: [{ tool: 'DLSS5-Swapper', files: ['x'] }] }), { status: 'fix', fix: 'remove-foreign' }],
   ['Feeder on a game that ships DLSS (Code Vein 2): remove the Feeder', base({ route: { feederDeployed: true, feederMisdeployed: true } }), { status: 'fix', fix: 'remove-feeder' }],
@@ -81,9 +83,9 @@ const rows = [
   ['a generator of ours with no Smooth Motion: nothing to say',
     base({ frameGen: ['Lossless Scaling'] }),
     { status: 'ok', code: 'ok' }],
-  ['anti-cheat still outranks it',
+  ['anti-cheat still outranks a working run',
     base({ detected: { antiCheat: 'EasyAntiCheat.exe' }, run: { ran: true, verdict: 'nr-ran', feedSmoothMotion: true }, frameGen: ['Lossless Scaling'] }),
-    { status: 'unavailable', code: 'anticheat' }],
+    { status: 'step', code: 'anticheat' }],
   ['another DLSS 5 toolchain still outranks it',
     base({ run: { ran: true, verdict: 'nr-ran', feedSmoothMotion: true }, frameGen: ['Lossless Scaling'], foreign: [{ tool: 'X' }] }),
     { status: 'fix', code: 'foreign' }],
@@ -257,16 +259,17 @@ test('Resident Evil 2: the Present route needs no plugin or DLSS DLL, only REFra
   assert.equal(diagnose(t3).status, 'ok');
 });
 
-test('anti-cheat is a hard stop only when there is no stub to step around', () => {
+test('anti-cheat is stated, not enforced -- and a stub to step around changes the answer', () => {
   const base = {
     detected: { bitness: 64, antiCheat: 'EasyAntiCheat' },
     route: { route: 'feeder', optiInstalled: true, feederDeployed: true },
     run: { ran: false, verdict: 'no-log' },
   };
-  // No stub: nothing this app installs can ever run, and saying so is the honest answer.
-  const blocked = diagnose(base);
-  assert.equal(blocked.status, 'unavailable');
-  assert.equal(blocked.code, 'anticheat');
+  // No stub: the DLL almost certainly will not load and going online risks a ban. Both are said;
+  // neither withholds Install any more, so this is a step to weigh rather than an unavailable verdict.
+  const warned = diagnose(base);
+  assert.equal(warned.status, 'step');
+  assert.equal(warned.code, 'anticheat');
 
   // A stub: the route stays open, and "no log at all" is explained rather than waited on -- that
   // launch cannot write a log, so Game Help points at the button that starts the game directly.

@@ -1149,7 +1149,7 @@ function helpWords(diag) {
     });
     case 'bit32': return t('DLSS 5 is not currently available for this game: it is a 32-bit game, and OptiScaler and the NR model are 64-bit only.');
     case 'dgvoodoo-missing': return t('This DirectX 9 game needs dgVoodoo2 in front of it before the DLSS5 Feeder can work. Install puts it there.');
-    case 'anticheat': return t('DLSS 5 is not currently available for this game: it runs under {antiCheat}, which blocks the DLL this app relies on. Using it there can also get an account banned.', v);
+    case 'anticheat': return t('This game runs under {antiCheat}. It will very likely stop the DLL every DLSS 5 route relies on from loading at all -- often with no message -- so there is a good chance nothing happens. And going online with these files in place can get the account BANNED.\n\nThe app no longer decides this for you: Install is offered, single-player only, and Remove puts the game back exactly as it was. Your account, your call.', v);
     case 'anticheat-launch-direct': return t('Nothing has been logged, and on this game that is expected: Steam starts it through {stub}, which starts {antiCheat} first, and {antiCheat} will not let the game run with OptiScaler\'s DLL in the folder -- it fails without writing a single log. Use this app\'s own Launch button: it starts the game\'s exe directly, so {antiCheat} never loads. Single-player works; online play and matchmaking do not, and going online with these files can get the account banned -- Remove puts the game back before you do.', v);
     case 'unsupported': return t('DLSS 5 is not currently available for this game: {reason}', v);
     case 'foreign': return t('Another DLSS 5 toolchain is in this folder ({tool}). Two stacks hooking the same DLSS call crash the game. Remove it first.', v);
@@ -1332,7 +1332,9 @@ function helpSteps(diag) {
     case 'wrapper-crash-swap': return [t('Press Fix it to swap dgVoodoo2 for DXVK'), t('Launch the game and reach gameplay'), t('Come back here -- if it still crashes, the next step is putting the game back')];
     case 'dgvoodoo-crash': return [t('Press Fix it (puts the game back as it was)')];
     case 'sr-backend-fallback': return [t("Check the game's own settings ask for DLSS"), ...report];
-    case 'bit32': case 'anticheat': case 'unsupported': case 'upscale-skipped': return [];
+    // Anti-cheat has steps now: it is a decision to take, not a door that is shut.
+    case 'anticheat': return [t('Decide first: single-player only, and going online risks a ban'), t('Install if you accept that -- Remove puts the game back'), launch, ...report];
+    case 'bit32': case 'unsupported': case 'upscale-skipped': return [];
     default: return report;
   }
 }
@@ -1342,7 +1344,7 @@ function helpShort(diag) {
   const v = diag.vars || {};
   switch (diag.code) {
     case 'bit32': return t('Not available: 32-bit game');
-    case 'anticheat': return t('Not available: anti-cheat ({antiCheat})', v);
+    case 'anticheat': return t('Anti-cheat ({antiCheat}) -- your call', v);
     case 'unsupported': return t('Not available here');
     case 'foreign': return t('Another DLSS 5 tool is in the folder');
     case 'anticheat-launch-direct': return t('Launch from here, not Steam');
