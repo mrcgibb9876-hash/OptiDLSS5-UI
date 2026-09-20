@@ -99,8 +99,10 @@ test('the card shows the run as numbers, and keeps the sentence for the tooltip'
 test('the DLSS 5 field table is not offered in two places at once', () => {
   // The in-game panel and Settings both write the same OptiScaler.ini, and the panel saves the
   // whole file whenever it changes something -- so a second copy of those controls in Settings
-  // does not just duplicate them, it loses edits. Only the Display group stays in the dialog.
-  assert.match(js, /const EDITABLE_GROUPS = \['Display'\]/);
+  // does not just duplicate them, it loses edits. Only the Window group stays in the dialog -- it was
+  // called Display until the 2026-09-20 regroup split the game's window from the panel's own
+  // appearance, which is the one merge that would have leaked Language and Font size in here.
+  assert.match(js, /const EDITABLE_GROUPS = \['Window'\]/);
   assert.ok(!html.includes('game-dlssnr-fields'), 'the old DLSS NR field host is still in the markup');
 });
 

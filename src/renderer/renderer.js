@@ -2748,9 +2748,13 @@ function showNumber(field, value) {
 
 // The whole [DlssNr] table used to be laid out here, a second copy of the in-game panel that a
 // player could set a value in while the panel had the same file open. Alt+Shift+Home is the panel,
-// live, over the frame it changes -- so only the Display group survives here, because the window a
+// live, over the frame it changes -- so only the Window group survives here, because the window a
 // game opens in is decided before there is a frame to see.
-const EDITABLE_GROUPS = ['Display'];
+//
+// It was called Display until the 2026-09-20 regroup, which split the game's window from the panel's
+// own appearance. They had been one section, and merging them would have put Language and Font size
+// in this dialog -- settings that mean nothing until there is a frame to look at.
+const EDITABLE_GROUPS = ['Window'];
 
 function renderDlssNrFields(game) {
   renderDlssNrEmulator(game);

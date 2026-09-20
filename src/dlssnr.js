@@ -59,47 +59,47 @@ const WHITE_POINT_SOURCES = [[0, 'Paper white only'], [1, "The game's own exposu
 // outside the process has nothing to write for them.
 const FIELDS = [
   // The top block, above the first caption in the in-game panel. Light panel first, as there (2026-09-19).
-  { key: 'LightTheme', type: 'bool', default: true, group: 'DLSS 5', label: 'Light panel',
+  { key: 'LightTheme', type: 'bool', default: true, group: 'Panel appearance', label: 'Light panel',
     help: "Light is the default. The dark palette this panel was originally styled after put its dimmed text at 2.65:1 against the background, against the 4.5:1 that reads comfortably -- and an overlay is read at a glance, over a moving picture.\n\nUnticking restores NVIDIA's own colouring." },
-  { key: 'Enabled', type: 'bool', default: false, group: 'DLSS 5', label: 'DLSS ON', caps: true,
+  { key: 'Enabled', type: 'bool', default: false, group: 'Turn it on', label: 'DLSS ON', caps: true,
     help: "Synthesises detail in the upscaler's frame, before frame generation sees it.\n\nNeeds two similarly named files beside OptiScaler, one character apart: nvngx_dlssnr.dll       NVIDIA's model (~165 MB) -- you supply it nvngx.dll_dlssnr.dll   the forwarder (~13 KB) -- ships in this package Undocumented and driven directly, so none of this is officially supported." },
-  { key: 'ApplyModel', type: 'bool', default: true, group: 'DLSS 5', label: 'Apply the model',
+  { key: 'ApplyModel', type: 'bool', default: true, group: 'Turn it on', label: 'Apply the model',
     help: "Whether the model's edit is applied. Off shows the clean upscaler frame while the pass keeps running -- so with Hold frame, under Inspect, you can freeze a frame and toggle this to see the same frozen frame with and without Neural Rendering. Leave it on for normal use." },
-  { key: 'RunBeforeSR', type: 'bool', default: false, group: 'DLSS 5', label: 'Before Super Resolution',
+  { key: 'RunBeforeSR', type: 'bool', default: false, group: 'Speed vs quality', label: 'Before Super Resolution',
     help: "Where the pass sits. Off is the original placement: the model runs on the finished upscaled frame. On runs it at render resolution on the colour SR is about to consume, so SR then accumulates and upscales an already-enhanced picture.\n\nRay Reconstruction always stays on the post-upscale path -- its inputs are a different contract. A colour image padded inside a larger texture is staged at its real size; one offset from the corner still falls back after upscaling.\n\nD3D12 and its D3D11/Vulkan bridges only; native Vulkan keeps the old placement." },
   // [DlssNr] RunBeforeRR. Engine v1.0.38 ran the pass before Ray Reconstruction; since engine v2.2 it runs after
   // it with the model at render resolution -- the cost without the smearing -- and the label says so.
-  { key: 'RunBeforeRR', type: 'bool', default: false, group: 'DLSS 5', label: "Ray Reconstruction at render cost",
+  { key: 'RunBeforeRR', type: 'bool', default: false, group: 'Speed vs quality', label: "Ray Reconstruction at render cost",
     dependsOn: { key: 'RunBeforeSR', is: true },
     help: "For games with Ray Reconstruction: the pass costs what it would before Ray Reconstruction, without the damage. It runs after Ray Reconstruction, on its clean frame, with the model at the game's render resolution instead of the output's. Ray Reconstruction's own input is never touched, so nothing is smeared, and the model never sees ray-tracing noise. Model resolution and Adaptive resolution then count from the render resolution. Needs Before Super Resolution on." },
   // Enlargement: under the render-cost toggle, which is what makes the model run small (moved from Cost).
-  { key: 'Transfer', type: 'enum', default: 3, options: [[0, 'Classic'], [1, 'Matched residual'], [2, 'Edge-aware'], [3, 'Full-size look']], group: 'DLSS 5',
-    label: 'Enlargement', dependsOn: { any: [{ key: 'WorkingScale', below: 1 }, { key: 'AutoScale', is: true },
+  { key: 'Transfer', type: 'enum', default: 3, options: [[0, 'Classic'], [1, 'Matched residual'], [2, 'Edge-aware'], [3, 'Full-size look']], group: 'Speed vs quality',
+    label: "Scaling method", dependsOn: { any: [{ key: 'WorkingScale', below: 1 }, { key: 'AutoScale', is: true },
       { all: [{ key: 'RunBeforeSR', is: true }, { key: 'RunBeforeRR', is: true }] }] },
     help: "How the model's work is brought back up when it ran below the frame's size.\n\nClassic composes the model's small picture directly against the full-size frame. Those two disagree by the shrink's blur as well as by the model's edit, and the composition cannot tell them apart.\n\nMatched residual enlarges only the model's edit, laid on the full-size frame.\n\nEdge-aware does the same, but never blends the edit across an outline -- which is what drew a thin halo round characters' heads.\n\nFull-size look (default) learns how the model re-grades each patch -- its contrast, colour and saturation -- and applies that to every full-size pixel, so a smaller model looks like the full-size one, without halos. D3D12; Vulkan uses Edge-aware.\n\nGreyed out at 100%, where there is nothing to enlarge." },
   // Adaptive resolution (engine v2.1: DlssNr_Menu.cpp DrawAutoScale, DlssNrBudget.h). Labels, ranges and
   // help are the in-game panel's own; its help is hard-wrapped there and reflowed here, like every other
   // help text in this file. AutoScalePrebuild is not a panel row in the engine either, so it is not here.
-  { key: 'AutoScale', type: 'bool', default: false, group: 'Adaptive resolution', label: 'Adjust it for me',
+  { key: 'AutoScale', type: 'bool', default: false, group: 'Speed vs quality', label: 'Adjust it for me',
     help: "Moves Model resolution up and down while you play, so the pass costs what you asked it to cost instead of what one number chosen before the game started happens to cost in this scene.\n\nIt only ever changes the MODEL's resolution. The frame is never reduced, so this cannot soften the picture the way a dynamic render resolution does -- the most it can cost is some of the model's own detail.\n\nIt steps between four settings a few seconds apart at most, because each change rebuilds the model and rebuilding it every frame would be slower than doing nothing." },
   { key: 'AutoScaleMode', type: 'enum', default: 2, options: [[0, 'Share of the frame'], [1, 'Milliseconds'], [2, 'Frame rate']],
-    group: 'Adaptive resolution', label: 'Aim at', dependsOn: { key: 'AutoScale', is: true },
+    group: 'Speed vs quality', label: 'Aim at', dependsOn: { key: 'AutoScale', is: true },
     help: "Frame rate: aim at a number of frames per second. The one most people want, and the only one that can fall short -- the pass can give back what it costs and no more, so if the game itself cannot reach the number, the panel says so.\n\nMilliseconds: hold the pass under a flat time. Exactly what the cost line above measures, with no arithmetic in between.\n\nShare of the frame: let the pass take at most a percentage of each frame. This one looks after itself as the frame rate moves - 15% is 2.5 ms at 60 fps and 1.25 at 120." },
-  { key: 'AutoScaleFps', type: 'int', default: 60, min: 30, max: 240, step: 1, group: 'Adaptive resolution', label: 'Frame rate',
+  { key: 'AutoScaleFps', type: 'int', default: 60, min: 30, max: 240, step: 1, group: 'Speed vs quality', label: 'Frame rate',
     dependsOn: { all: [{ key: 'AutoScale', is: true }, { key: 'AutoScaleMode', is: 2 }] },
     help: "The frame rate to aim at. Applied live - there is nothing to rebuild for a change of target, only for a change of model resolution it leads to." },
-  { key: 'AutoScaleMs', type: 'float', default: 2.0, min: 0.5, max: 10, step: 0.1, group: 'Adaptive resolution', label: 'Cost ceiling',
+  { key: 'AutoScaleMs', type: 'float', default: 2.0, min: 0.5, max: 10, step: 0.1, group: 'Speed vs quality', label: "Time budget per frame",
     dependsOn: { all: [{ key: 'AutoScale', is: true }, { key: 'AutoScaleMode', is: 1 }] },
     help: "The most the pass may cost, in milliseconds. Compare it with the cost shown at the top of this panel, which is the same measurement." },
-  { key: 'AutoScaleShare', type: 'int', default: 15, min: 2, max: 50, step: 1, group: 'Adaptive resolution', label: 'Share of the frame',
+  { key: 'AutoScaleShare', type: 'int', default: 15, min: 2, max: 50, step: 1, group: 'Speed vs quality', label: 'Share of the frame',
     dependsOn: { all: [{ key: 'AutoScale', is: true }, { key: 'AutoScaleMode', is: 0 }] },
     help: "How much of each frame the pass may take." },
-  { key: 'AutoScaleFloor', type: 'float', default: 0.55, min: 0.55, max: 1, step: 0.01, percent: true, group: 'Adaptive resolution',
+  { key: 'AutoScaleFloor', type: 'float', default: 0.55, min: 0.55, max: 1, step: 0.01, percent: true, group: 'Speed vs quality',
     label: 'Never go below', dependsOn: { key: 'AutoScale', is: true },
     help: "The lowest model resolution this may choose. Raise it to keep more of the model's detail and let the frame rate give way instead.\n\nIt stops here because this is where the trade changes character: above it the model is simply working on a smaller picture, and below it fine detail - hair, foliage, thin edges - starts to break down rather than soften." },
   // Model passes right under Adaptive resolution, as in the in-game panel (2026-09-19): the two things that
   // decide what the pass costs, together.
-  { key: 'Passes', type: 'int', default: 1, min: 1, max: 3, group: 'Adaptive resolution',
+  { key: 'Passes', type: 'int', default: 1, min: 1, max: 3, group: 'Speed vs quality',
     label: 'Model passes', help: "How many times the model runs before its answer is composed. Each extra layer is fed the previous layer's output and keeps its own temporal history.\n\nThe base frame stays untouched and the composition happens once at the end, so colour and transfer strength do not compound -- but the model is being asked to enhance its own output, which is outside what it was trained on.\n\nCost is very nearly linear: the model is almost the whole expense of the pass and every layer pays it again. Three is the ceiling because later layers converge while still costing full price." },
   // [DlssNr] PassRate. The engine has had this since the stacked passes did (DlssNr_Dx12.cpp, the
   // credit accumulator by effectivePasses) and it has never been on screen anywhere -- not here and
@@ -116,28 +116,28 @@ const FIELDS = [
   // evaluate not made. That is also its honest cost: a skipped frame really is less processed than a
   // run one, so the picture alternates between two looks. At a low enough rate that is visible.
   { key: 'PassRate', type: 'float', default: 1.0, min: 0.05, max: 1, step: 0.05, percent: true,
-    group: 'Adaptive resolution', label: 'Extra-pass rate', dependsOn: { key: 'Passes', atLeast: 2 },
+    group: 'Speed vs quality', label: "How often extra passes run", dependsOn: { key: 'Passes', atLeast: 2 },
     help: "How often the passes after the first actually run. 100% is every frame, which is what Model passes has always meant.\n\nThis is how you ask for half a pass. Model passes 2 with this at 50% is the \"1.5 passes\" idea: the second pass runs on every other frame, and costs about half of what a full second pass costs. Anywhere between is fair game -- 75% is a pass and three quarters.\n\nThe saving is real and so is the trade: a frame that skipped the extra pass is genuinely less processed than one that did not, so the picture alternates between two looks. The higher the framerate the less that shows. Come down from 100% until the cost is what you want, then back up if you can see it moving.\n\nApplied while the game runs -- it is read every frame and never rebuilds the model.\n\nOnly does anything with more than one pass." },
-  { key: 'ChainedHistory', type: 'bool', default: true, group: 'Adaptive resolution', label: 'Chained temporal history',
+  { key: 'ChainedHistory', type: 'bool', default: true, group: 'Speed vs quality', label: "Keep history between passes",
     dependsOn: { key: 'Passes', atLeast: 2 },
     help: "What the stacked passes do with their temporal history between frames.\n\nOn (default): every pass keeps its own history, so each layer accumulates the way pass one does. Off: passes 2+ are reset every frame -- stateless refinement, which cannot compound ghosting.\n\nThe trade is real both ways. Keeping history is richer and can compound ghosting behind fast movement; resetting every frame cannot, but NVIDIA documents reset-per-frame as a flicker and aliasing risk -- which is what shimmering on two or three passes usually is. Try the other setting when a stacked picture shimmers, and keep whichever the game looks better with.\n\nOnly does anything with more than one pass." },
-  { key: 'Pass2Preset', type: 'enum', default: null, options: PRESETS, group: 'Adaptive resolution', label: 'Pass 2 model',
+  { key: 'Pass2Preset', type: 'enum', default: null, options: PRESETS, group: 'Speed vs quality', label: 'Pass 2 model',
     dependsOn: { key: 'Passes', atLeast: 2 }, help: "Left on default, pass 2 uses the model above." },
-  { key: 'Pass2Style', type: 'enum', default: null, options: STYLES, group: 'Adaptive resolution', label: 'Pass 2 style',
+  { key: 'Pass2Style', type: 'enum', default: null, options: STYLES, group: 'Speed vs quality', label: 'Pass 2 style',
     dependsOn: { key: 'Passes', atLeast: 2 }, help: "Left on default, pass 2 uses the style above." },
-  { key: 'Pass3Preset', type: 'enum', default: null, options: PRESETS, group: 'Adaptive resolution', label: 'Pass 3 model',
+  { key: 'Pass3Preset', type: 'enum', default: null, options: PRESETS, group: 'Speed vs quality', label: 'Pass 3 model',
     dependsOn: { key: 'Passes', atLeast: 3 }, help: "Left on default, pass 3 uses the model above." },
-  { key: 'Pass3Style', type: 'enum', default: null, options: STYLES, group: 'Adaptive resolution', label: 'Pass 3 style',
+  { key: 'Pass3Style', type: 'enum', default: null, options: STYLES, group: 'Speed vs quality', label: 'Pass 3 style',
     dependsOn: { key: 'Passes', atLeast: 3 }, help: "Left on default, pass 3 uses the style above." },
   // Model resolution beside Model passes, as in the in-game panel (2026-09-20): those two are what the pass
   // costs, and the per cent was being hunted for down in Cost. Greyed while Adaptive resolution drives it,
   // again as the panel does -- the value moving is what the controller is doing, and a hand-set number would
   // be overwritten at its next step anyway.
   { key: 'WorkingScale', type: 'float', default: 1.0, min: 0.25, max: 2, step: 0.01, percent: true,
-    group: 'Adaptive resolution', label: 'Model resolution', dependsOn: { key: 'AutoScale', is: false },
+    group: 'Speed vs quality', label: 'Model resolution', dependsOn: { key: 'AutoScale', is: false },
     help: "What fraction of the frame the model works at. Cost falls with the square of this, so half resolution is roughly a quarter of the time. Below 100 the frame itself is never reduced -- only the model's own contribution is computed small and enlarged. Applied when the handle is let go, not while it is moving." },
-  { key: 'ScalingDownscaler', type: 'enum', default: 4, options: DOWNSCALERS, group: 'Adaptive resolution',
-    label: 'Downscaler', dependsOn: { key: 'WorkingScale', above: 1 },
+  { key: 'ScalingDownscaler', type: 'enum', default: 4, options: DOWNSCALERS, group: 'Speed vs quality',
+    label: "Downscale filter", dependsOn: { key: 'WorkingScale', above: 1 },
     help: "The filter that averages the model's above-native answer back to display size -- this is what turns supersampling into LESS noise rather than more. Sharper filters (Lanczos3, Kaiser3) keep the most detail; softer ones (Bicubic, Catmull-Rom) are gentler on ringing. Independent of the Output Scaling downscaler, so the two can differ and run at the same time." },
 
   // [DlssNr] ForceBorderless. Lossless Scaling turns it on for its games (main.js applyLosslessMarker);
@@ -146,14 +146,14 @@ const FIELDS = [
   // engine has no hold on the window: the 32-bit route (OptiScaler is in the helper) and OpenGL/Vulkan
   // (no DXGI swapchain). Safe on a game that is already windowed since engine v1.0.36; before that it
   // rewrote every swapchain's descriptor and put Monster Hunter: World in a title-barred window.
-  { key: 'ForceBorderless', type: 'bool', default: false, group: 'Display', label: 'Borderless window',
+  { key: 'ForceBorderless', type: 'bool', default: false, group: 'Window', label: 'Borderless window',
     help: "Keeps the game in a borderless window that fills its monitor, whatever its own display setting says. Exclusive fullscreen is refused when the game asks for it; a game that already runs windowed or borderless is left exactly as it is.\n\nWhat needs it: Lossless Scaling, which cannot capture exclusive fullscreen (configuring it turns this on), and the pop-out panel, which Windows cannot draw over an exclusive-fullscreen game.\n\nThis changes the window, not the picture: the game keeps rendering at its own resolution and is scaled to the monitor. Only where OptiScaler sits inside the game's process with a DirectX swapchain -- greyed out on the 32-bit route and on OpenGL or Vulkan, where it has no hold on the window." },
   // [DlssNr] BorderlessWidth / BorderlessHeight (engine v1.0.38). 0 is the monitor. Both must be set for
   // either to count, which the engine enforces (Util::BorderlessSizeRequested); the help says so.
-  { key: 'BorderlessWidth', type: 'int', default: 0, min: 0, max: 7680, step: 1, group: 'Display',
+  { key: 'BorderlessWidth', type: 'int', default: 0, min: 0, max: 7680, step: 1, group: 'Window',
     label: 'Window width', dependsOn: { key: 'ForceBorderless', is: true },
     help: "The borderless window's width in pixels; 0 (the default) means the monitor's full width. Set both width and height or neither -- one alone is ignored. Centred on the monitor.\n\nThe game is fitted into the window. Many games re-render at the window's size once they are windowed, so this then acts as a resolution; others keep their own render size and are scaled into it. Which you get is the game's own windowed-mode behaviour, not something this controls -- the frame-cost figure in this panel will tell you which happened.\n\nWith a size set, the window is also sized for a game that already runs windowed or borderless, which the switch above alone leaves untouched." },
-  { key: 'BorderlessHeight', type: 'int', default: 0, min: 0, max: 4320, step: 1, group: 'Display',
+  { key: 'BorderlessHeight', type: 'int', default: 0, min: 0, max: 4320, step: 1, group: 'Window',
     label: 'Window height', dependsOn: { key: 'ForceBorderless', is: true },
     help: "The borderless window's height in pixels; 0 (the default) means the monitor's full height. Set both width and height or neither -- one alone is ignored. See Window width." },
 
@@ -165,7 +165,7 @@ const FIELDS = [
   // other program on that machine holds the chord, which is exactly what this is for. Offered as a
   // list rather than a key capture: the point is to escape a key something else has taken, and a
   // short list of alternatives does that without another input-capture widget to get wrong.
-  { key: 'PanelKey', type: 'enum', default: VK.HOME | MOD.ALT, group: 'Display', keybind: true,
+  { key: 'PanelKey', type: 'enum', default: VK.HOME | MOD.ALT, group: 'Window', keybind: true,
     label: 'DLSS 5 panel hotkey',
     options: [
       [VK.HOME | MOD.ALT, 'Alt+Home'],
@@ -180,96 +180,127 @@ const FIELDS = [
     ],
     help: "Opens OptiScaler's own DLSS 5 panel inside the game. Alt+Home by default.\n\nChange it when something else on the machine already holds that chord -- an overlay, a capture tool, a keyboard macro -- and the panel never appears. Nothing here can tell you which program took it; the symptom is simply that the key does nothing.\n\nThis is the panel drawn INSIDE the game. It is not this app's own pop-out panel, whose hotkey lives in Settings and is Alt+Shift+Home by default. On the 32-bit route the panel is drawn by the 64-bit helper and shown over the game, and this key still reaches it." },
 
-  { key: 'LocalStructure', type: 'float', default: 1.0, min: 0, max: 1, step: 0.01, group: 'Global Controls',
-    label: 'Structure Intensity', help: "The model's structure-synthesis strength across the whole frame." },
-  { key: 'LocalTone', type: 'float', default: 1.0, min: 0, max: 1, step: 0.01, group: 'Global Controls',
-    label: 'Tone Intensity', help: "The model's tone-remapping strength across the whole frame." },
+  { key: 'LocalStructure', type: 'float', default: 1.0, min: 0, max: 1, step: 0.01, group: 'Picture',
+    label: "Texture detail", help: "The model's structure-synthesis strength across the whole frame." },
+  { key: 'LocalTone', type: 'float', default: 1.0, min: 0, max: 1, step: 0.01, group: 'Picture',
+    label: "Tone strength", help: "The model's tone-remapping strength across the whole frame." },
 
-  { key: 'Preset', type: 'enum', default: 0, options: PRESETS, group: 'Models', segmented: true,
+  { key: 'Preset', type: 'enum', default: 0, options: PRESETS, group: 'Picture', segmented: true,
     label: 'Model', help: "Not the same scale as the super resolution or ray reconstruction presets -- the same letter means something different here.\n\nRead when the model is built, so a change rebuilds it after a moment." },
-  { key: 'Style', type: 'enum', default: 0, options: STYLES, group: 'Models',
+  { key: 'Style', type: 'enum', default: 0, options: STYLES, group: 'Picture',
     label: 'Style', help: "The model's own processing profiles.\n\nDefault (standard): the strongest, and most likely to look 'stylised'. Natural: the same detail work with a gentler hand. Cinematic: tones down the shine and over-processing for a film-like look.\n\nThe names come from community testing, unlike the panel labels above -- NVIDIA ships no names for this control in the binaries." },
-  { key: 'Intensity', type: 'float', default: 1.0, min: 0, max: 2, step: 0.01, group: 'Models',
-    label: 'Intensity', help: "The model's own strength control, applied inside it. Distinct from the Global Controls above, and from Detail strength below, which scales the result afterwards." },
+  { key: 'Intensity', type: 'float', default: 1.0, min: 0, max: 2, step: 0.01, group: 'Picture',
+    label: "Model intensity", help: "The model's own strength control, applied inside it. Distinct from the Global Controls above, and from Detail strength below, which scales the result afterwards." },
 
-  { key: 'TransferStrength', type: 'float', default: 1.0, min: 0, max: 2, step: 0.01, group: 'How much of it lands',
+  { key: 'TransferStrength', type: 'float', default: 1.0, min: 0, max: 2, step: 0.01, group: 'Picture',
     label: 'Detail strength',
     help: "How far the frame moves toward the model's picture. 0 gives back exactly what the upscaler produced. 1 is the model's picture. Above 1 carries on past it in the same direction." },
-  { key: 'ColourStrength', type: 'float', default: 1.0, min: 0, max: 4, step: 0.01, group: 'How much of it lands',
+  { key: 'ColourStrength', type: 'float', default: 0.5, min: 0, max: 4, step: 0.01, group: 'Picture',
     label: 'Colour strength',
-    help: "Whether the model's colour arrives with its light. 0 keeps the game's own hue exactly -- every pixel the original colour, with only its brightness carrying the model's verdict. 1 brings the model's colour as well, in its own hue, clamped into AP1 so nothing unreachable is asked for.\n\nAbove 1 it over-saturates: the colour keeps its hue but grows more vivid, and rolls off at the edge of what the display can show rather than clipping into a flat blown patch. 1 is the model's own colour; push past it for punch." },
+    help: "Washed out, grey, colour sucked out of the game? This is the control, and the answer is to turn it DOWN.\n\nIt decides whose colour you see. 0 is the game's own, exactly: every pixel its original colour, with only the brightness carrying the model's verdict. 1 is the model's colour INSTEAD of the game's -- and the model's is usually the less saturated of the two, which is exactly what that washed-out look is. 0.5, the default, lets it contribute without overruling the game's art direction.\n\nAbove 1 goes the other way and makes the picture MORE colourful than the game ever was -- the same job a colourfulness shader does, done here instead. Hue is kept and only saturation grows, and it rolls off at the edge of what the display can show rather than clipping into a flat blown patch. Try 1.5 to 2 for punch." },
 
-  { key: 'ReversibleMode', type: 'enum', default: 0, options: REVERSIBLE, group: 'Colour', label: 'Reversible proxy',
+  { key: 'ReversibleMode', type: 'enum', default: 0, options: REVERSIBLE, group: 'Brightness & HDR', label: "Tone-mapping mode",
     help: "What the model is shown, and how its answer comes back. Experimental.\n\nOff (soft knee): the default, and byte-identical to before. It rolls highlights off so hard the model cannot resolve detail in them -- fine in soft-lit scenes, weak in bright ones.\n\nNeutwo composed: an unclipped curve, so the model sees highlight detail, then everything above it (strengths, highlight guard, palette). Wins in bright scenes, but the curve compresses midtones too, so soft-lit content can be worse than Off. It also shifts paper white -- re-check that when you switch.\n\nHybrid composed: the one to use. Identity in the midtones -- as good as Off there -- with the unclipped roll only in the highlights, so it recovers the detail Off crushes without giving up the midtones Neutwo does. Barely shifts paper white.\n\nReplace: the raw model straight back through the exact inverse, none of the composition -- no guard, no palette, no strengths. Gorgeous where there are no bright lights, but they FLASH in motion. A reference, not a daily setting.\n\nHybrid replace: Replace's raw model on the hybrid curve, so the flashing is confined to genuine highlights instead of everywhere. Most of Replace's detail, far more stable." },
-  { key: 'WhitePointSource', type: 'enum', default: 1, options: WHITE_POINT_SOURCES, group: 'Colour',
-    label: 'White point from',
+  { key: 'WhitePointSource', type: 'enum', default: 1, options: WHITE_POINT_SOURCES, group: 'Brightness & HDR',
+    label: "Brightness reference",
     help: "Paper white only -- the slider below and nothing else. Right for a game whose exposure never moves, wrong the moment it does: one constant cannot serve a cave and a field.\n\nThe game's own exposure -- read from the texture the game hands the upscaler. The best source there is, because it is decided upstream and nothing this pass does can move it. Not every game supplies one.\n\nA buffer the scan found -- for games that compute an exposure and never pass it on. A guess: candidates are matched by shape, and the anchor's ratio cancels the scale. Needs anchoring once, in the Experimental section, and checking after." },
-  { key: 'WhitePointTrim', type: 'float', default: 1.0, min: 0.25, max: 4, step: 0.01, log: true, group: 'Colour',
+  { key: 'WhitePointTrim', type: 'float', default: 1.0, min: 0.25, max: 4, step: 0.01, log: true, group: 'Brightness & HDR',
     label: "Trim (x the game's exposure)", dependsOn: { key: 'WhitePointSource', is: 1 },
     help: "A multiplier on the exposure the game supplied. 1.00x takes its number exactly, and that is the right answer here.\n\nThis is not a fudge factor. A game that needs the trim far from 1 to look right is evidence the exposure being read is wrong for that game, not that the game wants trimming. Roughly 0.8 to 1.25 is honest tuning; reaching for 4 means something upstream is broken and this is hiding it.\n\nYour manual paper white is kept separately and comes back untouched if you switch the source back." },
-  { key: 'WhitePointScale', type: 'float', default: 1.0, min: 0.25, max: 2000, step: 0.01, log: true, group: 'Colour',
+  { key: 'WhitePointScale', type: 'float', default: 1.0, min: 0.25, max: 2000, step: 0.01, log: true, group: 'Brightness & HDR',
     label: 'Paper white',
     help: "What the frame is divided by before the model sees it. There is no other white point; this is the whole of it. Above 1 the picture handed over is darker, so highlights sit lower on the curve." },
-  { key: 'MaxRatio', type: 'float', default: 2.0, min: 1, max: 8, step: 0.1, group: 'Colour',
-    label: 'Highlight guard',
+  { key: 'MaxRatio', type: 'float', default: 2.0, min: 1, max: 8, step: 0.1, group: 'Picture',
+    label: "Brightness limit",
     help: "The most the pass may move any pixel, as a multiple of what it already was, in both directions -- a pixel may not be brightened past this nor darkened past its reciprocal. Lights are where the model has least to say and rescaling its answer does the most damage; 2x leaves detail intact while stopping a strip light turning into a string of coloured cells. Raise it only if bright areas look clipped." },
   // [DlssNr] HaloGuard (engine v2.2.1). Under Highlight guard, as in the in-game panel: it is the
   // other half of the same job and the half the guard cannot do -- the guard bounds a pixel against
   // itself, this bounds it against its neighbours.
-  { key: 'HaloGuard', type: 'float', default: 0.0, min: 0, max: 1, step: 0.05, percent: true, group: 'Colour',
+  { key: 'HaloGuard', type: 'float', default: 0.0, min: 0, max: 1, step: 0.05, percent: true, group: 'Picture',
     label: 'Halo suppression',
     help: "The bright or dark rim the model can leave along a high-contrast edge.\n\nHighlight guard above cannot see one. It bounds a pixel against its own original, so a rim that doubles a dark pixel lying beside a bright edge is well inside 2x and still an obvious halo. A halo is not a property of a pixel -- it is a property of a pixel next to its neighbours.\n\nThis holds the model's edit inside the brightness range the frame's own neighbourhood already had. A real edge has both of its sides in that range and passes through untouched; only an overshoot beyond both is pulled back. 0% is off. 100% allows no overshoot at all.\n\nFlat areas are left alone at any setting, so the fine texture the model adds is not what this takes away -- it bites only where there is contrast for a halo to stand against.\n\nEnlargement already removes the halos made by running the model SMALLER than the frame. This is for the ones the model makes at any size, 100% included. Start around 50% and come up until the rim goes." },
 
-  { key: 'ScanMeter', type: 'bool', default: false, group: 'Exposure scan', label: 'Show the light meter on screen',
+  // [DlssNr] DepthEdge (engine v2.2.3). Beside Halo suppression because they look alike and are not:
+  // that one bounds how far the edit may go, this one stops it where the depth buffer says an object
+  // ends. Different faults, and only this one reaches the rim that estimated motion vectors leave.
+  { key: 'DepthEdge', type: 'float', default: 0.0, min: 0, max: 1, step: 0.05, percent: true, group: 'Picture',
+    label: 'Silhouette guard',
+    help: "A faint double image, or a pale outline, following characters and objects as they move?\n\nThis holds the model's edit back along an outline, using the DEPTH buffer to find it.\n\nIt is a different fault from the one Halo suppression fixes, which is why that control cannot touch it. Where a game makes no upscale call of its own, the pass has no engine motion vectors and has to estimate them -- and an estimate is at its worst exactly where one object ends and another begins. The model then draws on history from the wrong side of that edge, and what lands is a rim.\n\nThat edit is wrong in ORIGIN, not in size, so bounding how far it may go does nothing to it. Fading it out where the depth says an object ends does.\n\nDepth knows an outline even when brightness does not -- a dark coat against a dark wall is no contrast edge at all. 0% is off. Raise it until the rim goes; too far and outlines lose the detail the pass is adding everywhere else.\n\nD3D12 only, and only where the game's depth buffer can be read." },
+
+  { key: 'ScanMeter', type: 'bool', default: false, group: 'Brightness & HDR', label: 'Show the light meter on screen',
     dependsOn: { key: 'WhitePointSource', is: 2 }, help: "A lamp in the corner: red for dark, green for full light, and the shades between, with the reading beside it.\n\nIt is how you see at a glance that the scan is TRACKING rather than merely running. Walk into shade and it should slide toward red; step out and it should go green. If it moves the wrong way, that is what \"the number runs the other way\" below is for.\n\nPurely a readout. It changes nothing." },
-  { key: 'ScanTrim', type: 'float', default: 1.0, min: 0.25, max: 4, step: 0.01, log: true, group: 'Exposure scan',
+  { key: 'ScanTrim', type: 'float', default: 1.0, min: 0.25, max: 4, step: 0.01, log: true, group: 'Brightness & HDR',
     label: 'Trim (x the scan)', dependsOn: { key: 'WhitePointSource', is: 2 },
     help: "A multiplier on the scan's white point, and the control to adjust between anchor points: dial it until the picture looks right in the current light, then press Anchor under Experimental -- that captures the trimmed value as a new point and resets this to 1." },
-  { key: 'ScanInverted', type: 'bool', default: false, group: 'Exposure scan', label: 'The number runs the other way',
+  { key: 'ScanInverted', type: 'bool', default: false, group: 'Brightness & HDR', label: 'The number runs the other way',
     dependsOn: { key: 'WhitePointSource', is: 2 },
     help: "Flip this if the picture gets worse in the direction it should be getting better. Most engines store an exposure that falls as the scene brightens; some store its reciprocal, and a buffer found by shape does not say which. Add a second anchor point in different light and this is decided for you, so it disappears." },
 
-  { key: 'DepthConvention', type: 'enum', default: 0, group: 'Guide',
+  { key: 'DepthConvention', type: 'enum', default: 0, group: 'What the model is told',
     options: [[0, 'Follow the game'], [1, 'Force normal'], [2, 'Force inverted']],
-    label: 'Depth', help: "Which way round the model is told depth runs. The game states this in the flags it created its own DLSS feature with, and following it is right almost always -- but a game that states it wrongly needs correcting by hand.\n\nIf the pass looks worst where geometry meets sky, try forcing the other one." },
-  { key: 'UICorrection', type: 'bool', default: true, group: 'Guide', label: 'UI correction',
+    label: "Depth direction", help: "Which way round the model is told depth runs. The game states this in the flags it created its own DLSS feature with, and following it is right almost always -- but a game that states it wrongly needs correcting by hand.\n\nIf the pass looks worst where geometry meets sky, try forcing the other one." },
+  { key: 'UICorrection', type: 'bool', default: true, group: 'What the model is told', label: 'UI correction',
     dependsOn: { key: 'RunBeforeSR', is: false },
     help: "Lets the model account for a UI layer laid over the frame. On is its own default and right whenever a UI resource reaches it; turn it off if the correction is itself what looks wrong.\n\nRead when the model is built." },
-  { key: 'OpticalFlow', type: 'bool', default: true, group: 'Guide', label: 'Optical flow',
+  { key: 'OpticalFlow', type: 'bool', default: true, group: 'What the model is told', label: 'Optical flow',
     help: "Gives the model motion between frames. Off is a diagnostic." },
 
-  { key: 'AutoCapture', type: 'bool', default: true, group: 'Inspect', label: 'Auto-capture once per session',
+  { key: 'AutoCapture', type: 'bool', default: true, group: 'Compare & inspect', label: 'Auto-capture once per session',
     help: "Writes one matched before/after set automatically, without anyone asking. The folder is cleared each run, so it holds a single session and never grows." },
-  { key: 'HoldFrame', type: 'bool', default: false, group: 'Inspect', label: 'Hold frame',
+  { key: 'HoldFrame', type: 'bool', default: false, group: 'Compare & inspect', label: 'Hold frame',
     help: "Freezes the frame the model works on. While held, change paper white, the strengths, the reversible mode, the model preset -- anything below the upscaler -- and only that setting moves; the scene does not. Pairs with \"Apply the model\" at the top: freeze a frame, then toggle that to see it with and without.\n\nWhat it cannot show: upscaler presets or anything upstream of this pass (the upscaler is not re-run on a held frame), and the game's own HUD and post-processing, which run after this and keep updating. The white point stops being measured and holds its value, so it cannot drift and confound the comparison.\n\nClose the panel and it stays held. Untick to resume." },
-  { key: 'Compare', type: 'enum', default: 0, options: [[0, 'Off'], [1, 'Side by side'], [2, 'Wipe']], group: 'Inspect',
+  { key: 'Compare', type: 'enum', default: 0, options: [[0, 'Off'], [1, 'Side by side'], [2, 'Wipe']], group: 'Compare & inspect',
     label: 'Compare', help: "Shows the pass against itself. Side by side puts the whole frame in each half; wipe cuts a single frame at the split and plays normally. Neither needs the menu open to keep working." },
-  { key: 'CompareSwap', type: 'bool', default: false, group: 'Inspect', label: 'Swap sides',
+  { key: 'CompareSwap', type: 'bool', default: false, group: 'Compare & inspect', label: 'Swap sides',
     dependsOn: { key: 'Compare', atLeast: 1 }, help: "Which side is the frame with the pass on." },
-  { key: 'CompareTags', type: 'bool', default: false, group: 'Inspect', label: 'Labels',
+  { key: 'CompareTags', type: 'bool', default: false, group: 'Compare & inspect', label: 'Labels',
     dependsOn: { key: 'Compare', atLeast: 1 }, help: "Draws which side is which into the frame's own plane, so a screenshot still says it. Clipped per side, so the wipe reveals and hides them exactly as it does the images." },
-  { key: 'TagScale', type: 'float', default: 1.5, min: 0.5, max: 5, step: 0.1, group: 'Inspect', label: 'Label size',
+  { key: 'TagScale', type: 'float', default: 1.5, min: 0.5, max: 5, step: 0.1, group: 'Compare & inspect', label: 'Label size',
     dependsOn: { key: 'CompareTags', is: true }, help: "How large those labels are drawn." },
-  { key: 'CompareZoom', type: 'float', default: 1.0, min: 1, max: 2, step: 0.01, group: 'Inspect', label: 'Zoom',
+  { key: 'CompareZoom', type: 'float', default: 1.0, min: 1, max: 2, step: 0.01, group: 'Compare & inspect', label: 'Zoom',
     dependsOn: { key: 'Compare', atLeast: 1 }, help: "Magnifies both sides equally, so fine detail is visible at all." },
-  { key: 'CompareSplit', type: 'float', default: 0.5, min: 0, max: 1, step: 0.01, group: 'Inspect', label: 'Split',
+  { key: 'CompareSplit', type: 'float', default: 0.5, min: 0, max: 1, step: 0.01, group: 'Compare & inspect', label: 'Split',
     dependsOn: { key: 'Compare', is: 2 }, help: "Where the wipe sits across the frame." },
-  { key: 'DebugView', type: 'enum', default: 0, group: 'Inspect',
+  { key: 'DebugView', type: 'enum', default: 0, group: 'Compare & inspect',
     options: [[0, 'Off'], [1, 'Proxy (what the model sees)'], [2, 'Model output (raw)'], [3, 'Difference (amplified)']],
     label: 'Debug view',
     help: "Proxy is the picture handed to the model. Difference shows what the model actually changed, amplified twenty times and centred on grey." },
 
 
-  { key: 'VendorColours', type: 'bool', default: true, group: 'Appearance', label: 'Vendor colours',
+  { key: 'VendorColours', type: 'bool', default: true, group: 'Panel appearance', label: 'Vendor colours',
     help: "NVIDIA green, or AMD red on an AMD card. Off keeps green everywhere." },
-  { key: 'Language', type: 'code', default: null, options: LANGUAGES, group: 'Appearance', label: 'Language',
+  { key: 'Language', type: 'code', default: null, options: LANGUAGES, group: 'Panel appearance', label: 'Language',
     help: "The language this panel and the in-game one are written in. Default follows Windows. OptiScaler's own menu stays English. A language that needs its own font (Chinese, Korean) loads it from Windows on the next frame." },
-  { key: 'FontScale', type: 'float', default: 1.15, min: 0.75, max: 2, step: 0.05, group: 'Appearance',
+  { key: 'FontScale', type: 'float', default: 1.15, min: 0.75, max: 2, step: 0.05, group: 'Panel appearance',
     label: 'Font size', help: "This panel's text only -- OptiScaler's own menu keeps its [Menu] FontSize.\n\nRow widths are worked out from the font size, so far above 1.5x labels start running into their values." },
 ];
 
 const BY_KEY = new Map(FIELDS.map((f) => [f.key.toLowerCase(), f]));
-const GROUPS = [...new Set(FIELDS.map((f) => f.group))];
+// Sections in the order a player meets them, not the order the fields happen to sit in the array.
+//
+// It used to be first-appearance order, which was fine while the sections WERE the array's order.
+// The 2026-09-20 regroup broke that: the rows are grouped by what they affect now, so a field's
+// position no longer says anything about where its section belongs -- and Light panel being the
+// first field would have put "Panel & window" at the top of the dialog.
+//
+// Anything not named here falls in after, in the old first-appearance order, so a group added to
+// FIELDS and forgotten here still renders instead of vanishing.
+const GROUP_ORDER = [
+  'Turn it on',
+  'Picture',
+  'Speed vs quality',
+  'Brightness & HDR',
+  'What the model is told',
+  'Compare & inspect',
+  'Window',
+  'Panel appearance',
+];
+
+const GROUPS = (() => {
+  const present = [...new Set(FIELDS.map((f) => f.group))];
+  const ordered = GROUP_ORDER.filter((g) => present.includes(g));
+  return [...ordered, ...present.filter((g) => !ordered.includes(g))];
+})();
 
 const isAuto = (raw) => raw === null || raw === undefined || String(raw).trim() === '' || /^auto$/i.test(String(raw).trim());
 

@@ -188,8 +188,8 @@ test('the borderless window is a switch of its own, written the way the engine r
   assert.ok(field, 'the field exists');
   assert.equal(field.type, 'bool');
   assert.equal(field.default, false);
-  assert.equal(field.group, 'Display');
-  assert.ok(dlssnr.GROUPS.includes('Display'), 'its group is listed for the form');
+  assert.equal(field.group, 'Window');
+  assert.ok(dlssnr.GROUPS.includes('Window'), 'its group is listed for the form');
   assert.match(field.help, /not the picture/, 'the help says what it does not do: change render resolution');
 
   const ini = freshIni('dlssnr-borderless');
@@ -214,7 +214,7 @@ test('the window size rides on the borderless switch and is written as the engin
     assert.ok(f, 'both fields exist');
     assert.equal(f.type, 'int');
     assert.equal(f.default, 0);
-    assert.equal(f.group, 'Display');
+    assert.equal(f.group, 'Window');
     assert.deepEqual(f.dependsOn, { key: 'ForceBorderless', is: true });
     assert.match(f.help, /both width and height or neither/i, 'the help states the both-or-neither rule');
   }
@@ -274,7 +274,7 @@ test('the panel hotkey is offered where the dialog can reach it', () => {
   // any other group would be in the file and reachable from nowhere.
   const field = dlssnr.readSettings(path.join(scratchDir('dlssnr-panelkey-group'), 'none.ini'))
     .find((f) => f.key === 'PanelKey');
-  assert.equal(field.group, 'Display');
+  assert.equal(field.group, 'Window');
 });
 
 // Issue #55 (inZOI, 2026-09-19): Before Super Resolution together with UI correction froze the game on
