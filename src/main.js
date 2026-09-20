@@ -147,7 +147,16 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => panelwindow.unregisterHotkey());
 
 ipcMain.handle('data:load', () => {
-  const games = readJson(gamesFile(), []);
+  // A game whose recorded exe is not an executable repairs itself here rather than staying broken.
+  // An Xbox / Microsoft Store install could end up with its Content FOLDER stored as the exe (#93),
+  // and every install then went beside a folder: no API detected, nothing ever loaded, and the only
+  // symptom the user saw was "DLSS 5 makes no difference". A path that is merely missing is left
+  // alone -- that is an unplugged drive, and the card says so already.
+  const games = readJson(gamesFile(), []).map((game) => {
+    if (!game || !game.exePath) return game;
+    const fixed = discover.repairExePath(game.exePath);
+    return fixed === game.exePath ? game : { ...game, exePath: fixed };
+  });
   const settings = readJson(settingsFile(), {
     releaseFolder: '',
     nrDllPath: '',

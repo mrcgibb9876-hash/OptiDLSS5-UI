@@ -31,7 +31,32 @@ const SKIP_DIRS = new Set([
     '_dlss5_backup', 'reshade-shaders', 'node_modules', '.git',
 ]);
 
-function walkExes(root, maxDepth = 8) {
+// A Microsoft Store / Xbox install keeps the game itself under Content\ -- which is the one folder
+// name SKIP_DIRS exists to skip, because in an Unreal tree Content\ is nothing but assets. The two
+// meanings collided and the Store won nothing: walkExes could not see an Xbox game's executable at
+// all, so a Store game fell back to whatever was in its root -- gamelaunchhelper.exe, the Store's
+// stub, or nothing -- and the install landed beside a process that never renders.
+//
+// Microsoft Flight Simulator 2024 under C:\XboxGames is the report (#93, 2026-09-21): the app ended
+// up with the Content FOLDER itself recorded as the exe, put its dxgi.dll in the package root, could
+// not detect an API at all, and nothing ever loaded. The user reasonably read that as "DLSS 5 makes
+// no difference".
+//
+// MicrosoftGame.config is the authority when it is readable (xboxDeclaredExe), but a Store folder's
+// permissions can hide it, so the walker has to be able to find the exe on its own too.
+function isXboxInstall(dir) {
+    const hasConfig = (d) => {
+        try { return fs.readdirSync(d).some((f) => f.toLowerCase() === 'microsoftgame.config'); }
+        catch { return false; }
+    };
+    if (hasConfig(dir) || hasConfig(path.join(dir, 'Content'))) return true;
+    // The folder may be unreadable; the location still says what it is.
+    return /[\\/](?:xboxgames|windowsapps|modifiablewindowsapps)[\\/]/i.test(String(dir) + path.sep);
+}
+
+// keepContent defaults to "this looks like a Store install", so every existing caller -- the library
+// scan, Edit's candidate list -- gets the fix without being changed.
+function walkExes(root, maxDepth = 8, { keepContent = isXboxInstall(root) } = {}) {
     const out = [];
 
     const visit = (dir, depth) => {
@@ -48,7 +73,9 @@ function walkExes(root, maxDepth = 8) {
 
             if (entry.isFile() && /\.exe$/i.test(entry.name)) {
                 out.push(full);
-            } else if (entry.isDirectory() && depth > 0 && !SKIP_DIRS.has(entry.name.toLowerCase())) {
+            } else if (entry.isDirectory() && depth > 0
+                       && !(SKIP_DIRS.has(entry.name.toLowerCase())
+                            && !(keepContent && entry.name.toLowerCase() === 'content'))) {
                 visit(full, depth - 1);
             }
         }
@@ -134,6 +161,11 @@ function chooseExe(gameDir, gameName) {
 // exe this folder's own scan would pick, MicrosoftGame.config first. Anything else only gets the
 // launcher-stub swap it always had.
 function resolvePickedExe(picked) {
+    // Never hand back something that is not an executable. The picker filters to .exe, but this is
+    // also reached with paths from elsewhere, and a directory recorded as the exe is exactly the #93
+    // failure: everything downstream then installs next to a folder and quietly does nothing.
+    const inside = repairExePath(picked);
+    if (inside !== picked) return inside;
     if (picked && /^gamelaunchhelper\.exe$/i.test(path.basename(picked))) {
         const chosen = chooseExe(path.dirname(picked), '');
         if (chosen && chosen.exePath && !/^gamelaunchhelper\.exe$/i.test(path.basename(chosen.exePath))) return chosen.exePath;
@@ -181,4 +213,21 @@ function scanForGames({ extraFolders = [], scanDrives = false, excludedRoots = [
     return { games: found, roots };
 }
 
-module.exports = { scanForGames, chooseExe, walkExes, resolvePickedExe };
+// Turns a stored exe path that is not an executable back into one, and leaves a good path alone.
+// Used when the library is loaded, so a game recorded wrongly by an older build repairs itself
+// instead of sitting there installing into the wrong folder forever (#93).
+//
+// A path that simply does not exist is left exactly as it is: the game may be on a drive that is not
+// plugged in, and the card already says so. Only a path that exists and is NOT an .exe is rewritten.
+function repairExePath(exePath) {
+    if (!exePath) return exePath;
+    let stat;
+    try { stat = fs.statSync(exePath); } catch { return exePath; }
+    if (stat.isFile() && /\.exe$/i.test(exePath)) return exePath;
+    const dir = stat.isDirectory() ? exePath : path.dirname(exePath);
+    let chosen = null;
+    try { chosen = chooseExe(dir, path.basename(dir)); } catch { return exePath; }
+    return chosen && chosen.exePath ? chosen.exePath : exePath;
+}
+
+module.exports = { scanForGames, chooseExe, walkExes, resolvePickedExe, repairExePath, isXboxInstall };
