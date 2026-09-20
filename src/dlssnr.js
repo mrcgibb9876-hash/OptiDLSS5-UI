@@ -106,6 +106,16 @@ const FIELDS = [
     dependsOn: { key: 'Passes', atLeast: 3 }, help: "Left on default, pass 3 uses the model above." },
   { key: 'Pass3Style', type: 'enum', default: null, options: STYLES, group: 'Adaptive resolution', label: 'Pass 3 style',
     dependsOn: { key: 'Passes', atLeast: 3 }, help: "Left on default, pass 3 uses the style above." },
+  // Model resolution beside Model passes, as in the in-game panel (2026-09-20): those two are what the pass
+  // costs, and the per cent was being hunted for down in Cost. Greyed while Adaptive resolution drives it,
+  // again as the panel does -- the value moving is what the controller is doing, and a hand-set number would
+  // be overwritten at its next step anyway.
+  { key: 'WorkingScale', type: 'float', default: 1.0, min: 0.25, max: 2, step: 0.01, percent: true,
+    group: 'Adaptive resolution', label: 'Model resolution', dependsOn: { key: 'AutoScale', is: false },
+    help: "What fraction of the frame the model works at. Cost falls with the square of this, so half resolution is roughly a quarter of the time. Below 100 the frame itself is never reduced -- only the model's own contribution is computed small and enlarged. Applied when the handle is let go, not while it is moving." },
+  { key: 'ScalingDownscaler', type: 'enum', default: 4, options: DOWNSCALERS, group: 'Adaptive resolution',
+    label: 'Downscaler', dependsOn: { key: 'WorkingScale', above: 1 },
+    help: "The filter that averages the model's above-native answer back to display size -- this is what turns supersampling into LESS noise rather than more. Sharper filters (Lanczos3, Kaiser3) keep the most detail; softer ones (Bicubic, Catmull-Rom) are gentler on ringing. Independent of the Output Scaling downscaler, so the two can differ and run at the same time." },
 
   // [DlssNr] ForceBorderless. Lossless Scaling turns it on for its games (main.js applyLosslessMarker);
   // this is the same switch offered directly, for the pop-out panel's sake as much as anything --
@@ -159,14 +169,6 @@ const FIELDS = [
   { key: 'Intensity', type: 'float', default: 1.0, min: 0, max: 2, step: 0.01, group: 'Models',
     label: 'Intensity', help: "The model's own strength control, applied inside it. Distinct from the Global Controls above, and from Detail strength below, which scales the result afterwards." },
 
-  // Greyed while Adaptive resolution drives it, as the in-game panel does: the value moving is what the
-  // controller is doing, and a hand-set number would be overwritten at its next step anyway.
-  { key: 'WorkingScale', type: 'float', default: 1.0, min: 0.25, max: 2, step: 0.01, percent: true, group: 'Cost',
-    label: 'Model resolution', dependsOn: { key: 'AutoScale', is: false },
-    help: "What fraction of the frame the model works at. Cost falls with the square of this, so half resolution is roughly a quarter of the time. Below 100 the frame itself is never reduced -- only the model's own contribution is computed small and enlarged. Applied when the handle is let go, not while it is moving." },
-  { key: 'ScalingDownscaler', type: 'enum', default: 4, options: DOWNSCALERS, group: 'Cost', label: 'Downscaler',
-    dependsOn: { key: 'WorkingScale', above: 1 },
-    help: "The filter that averages the model's above-native answer back to display size -- this is what turns supersampling into LESS noise rather than more. Sharper filters (Lanczos3, Kaiser3) keep the most detail; softer ones (Bicubic, Catmull-Rom) are gentler on ringing. Independent of the Output Scaling downscaler, so the two can differ and run at the same time." },
   { key: 'Transfer', type: 'enum', default: 1, options: [[0, 'Classic'], [1, 'Matched residual']], group: 'Cost',
     label: 'Enlargement', dependsOn: { key: 'WorkingScale', below: 1 },
     help: "How the model's work is brought back up when it ran below the frame's size.\n\nClassic composes the model's small picture directly against the full-size frame. Those two disagree by the shrink's blur as well as by the model's edit, and the composition cannot tell them apart.\n\nGreyed out at 100%, where there is nothing to enlarge." },
