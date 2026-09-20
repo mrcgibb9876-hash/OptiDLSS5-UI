@@ -5538,7 +5538,14 @@ function updateInstallJournal(dir, patch) {
 // Recorded in the install journal's added list, so Remove takes it away again.
 async function placeNvngxDlssBesideExe(dir, { fetchDlss = null } = {}) {
   const dest = path.join(dir, 'nvngx_dlss.dll');
-  if (fs.existsSync(dest)) return { placed: false, reason: 'present' };
+  // A copy already there is the user's and is never replaced -- unless it cannot be a DLL at all.
+  // A PCSX2 report (#89) carried a twelve-byte one, which OptiScaler accepts by name and nothing
+  // can load, and "present" would have made this a no-op: the fix would report success, the next
+  // run would fail identically, and Game Help would say "fix did not help" -- exactly the dead
+  // button that #83 was about. A file under the threshold is a placeholder, not a copy.
+  const stubBytes = runlog.dlssRuntimeStubBytes(dir);
+  if (fs.existsSync(dest) && stubBytes === null) return { placed: false, reason: 'present' };
+  if (stubBytes !== null) await fsp.rm(dest, { force: true });
   if (isFeederGame(dir) || lumaue.lumaUeDeployed(dir)) return { placed: false, reason: 'the Feeder or Luma deploy places it' };
   if (!nativeDlss.shipsNativeDlss(dir)) return { placed: false, reason: 'the game ships no DLSS' };
 

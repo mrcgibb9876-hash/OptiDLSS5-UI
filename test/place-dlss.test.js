@@ -51,16 +51,37 @@ test('Remove takes the placed copy away and leaves the game\'s own', async () =>
   assert.ok(fs.existsSync(shipped));
 });
 
+// A DLL-sized copy. The fixture used to be the string "already here" -- twelve bytes, which is now
+// read as a placeholder rather than a copy, so the test was asserting the opposite of its own name.
+const dllSized = (text) => text + '\0'.repeat(128 * 1024);
+
 test('a copy already beside the exe is never replaced', async () => {
   const { invoke } = loadMain();
   const { exe, exeDir } = gameWithDlssElsewhere('place-dlss-present');
-  write(exeDir, 'nvngx_dlss.dll', 'already here');
+  write(exeDir, 'nvngx_dlss.dll', dllSized('already here'));
 
   const res = await invoke('game:help-apply', { exePath: exe, fixId: 'place-dlss' });
   assert.equal(res.done, false);
-  assert.equal(fs.readFileSync(path.join(exeDir, 'nvngx_dlss.dll'), 'utf8'), 'already here');
+  assert.equal(fs.readFileSync(path.join(exeDir, 'nvngx_dlss.dll'), 'utf8'), dllSized('already here'));
   const journal = JSON.parse(fs.readFileSync(path.join(exeDir, INSTALL_MARKER), 'utf8'));
   assert.ok(!journal.added.includes('nvngx_dlss.dll'), 'not claimed as ours');
+});
+
+test('a placeholder too small to be a DLL is replaced, not respected', async () => {
+  // #89 (2026-09-20): a PCSX2 folder carried a TWELVE-byte nvngx_dlss.dll. OptiScaler checks the
+  // name, finds it, logs "Enabling DLSS" and carries on, so the run never says the file is missing
+  // -- and "a copy is never replaced" would have made Fix it a no-op that reports success and
+  // changes nothing, which is precisely the dead button #83 was about.
+  const { invoke } = loadMain();
+  const { exe, exeDir } = gameWithDlssElsewhere('place-dlss-stub');
+  write(exeDir, 'nvngx_dlss.dll', 'not a dll!!!');
+
+  const res = await invoke('game:help-apply', { exePath: exe, fixId: 'place-dlss' });
+  assert.equal(res.done, true, res.text);
+  const placed = fs.readFileSync(path.join(exeDir, 'nvngx_dlss.dll'), 'utf8');
+  assert.notEqual(placed, 'not a dll!!!', 'the placeholder is gone');
+  const journal = JSON.parse(fs.readFileSync(path.join(exeDir, INSTALL_MARKER), 'utf8'));
+  assert.ok(journal.added.includes('nvngx_dlss.dll'), 'and the real copy is ours to remove again');
 });
 
 // The file beside the exe would make the game look like it ships DLSS, and a game that needs the

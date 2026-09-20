@@ -53,16 +53,24 @@ function diagnose(ctx) {
   // Every other route keeps Reconfigure: whether their install places this file has not been
   // established, and changing an answer on a route nobody has evidence about is how a fix becomes
   // a new bug.
-  const dlssRuntimeMissingAnswer = () => {
+  // `code` so the same route table can answer for both shapes of the fault: the file absent, and
+  // the file present but too small to be a DLL. The fixes are identical -- something has to put a
+  // real copy there, and the placer now overwrites a stub rather than calling it present -- but
+  // "it is there and it is junk" is a different sentence from "it is not there", and the user
+  // needs the one that is true. A stub does not even produce OptiScaler's missing-file line: it is
+  // satisfied by the name and logs "Enabling DLSS" (#89, a twelve-byte file, 2026-09-20).
+  const dlssRuntimeAnswer = (code, vars = {}) => {
     if (route.route === 'feeder' || route.route === 'feeder32') {
       return route.feederDeployed
-        ? fix('dlss-runtime-missing', 'redeploy-feeder')
-        : fix('dlss-runtime-missing', 'install');
+        ? fix(code, 'redeploy-feeder', vars)
+        : fix(code, 'install', vars);
     }
-    if (route.route === 'lumaue') return fix('dlss-runtime-missing', 'install');
-    if (route.route === 'optiscaler') return fix('dlss-runtime-missing', 'place-dlss');
-    return fix('dlss-runtime-missing', 'reconfigure');
+    if (route.route === 'lumaue') return fix(code, 'install', vars);
+    if (route.route === 'optiscaler') return fix(code, 'place-dlss', vars);
+    return fix(code, 'reconfigure', vars);
   };
+  const dlssRuntimeMissingAnswer = () => dlssRuntimeAnswer('dlss-runtime-missing');
+  const dlssRuntimeStubAnswer = () => dlssRuntimeAnswer('dlss-runtime-stub', { bytes: run.dlssRuntimeStub });
 
   // Hard stops first: nothing the app deploys can run in these. A 32-bit game has an experimental
   // route now (legacy.js); only one that route cannot serve (32-bit Vulkan) is a stop.
@@ -91,6 +99,13 @@ function diagnose(ctx) {
   }
   if (route.feederMisdeployed) return fix('feeder-misdeployed', 'remove-feeder');
   if (route.lumaDeployed && ctx.lumaKnownBad) return fix('luma-known-bad', 'remove-luma', { reason: ctx.lumaKnownBad });
+  // An nvngx_dlss.dll too small to be one. Judged here rather than under a verdict because it is a
+  // fact about the folder, not about the run, and it makes every verdict below meaningless: the
+  // file is there, so OptiScaler enables DLSS, and nothing can load it. #89 came in as
+  // opti-not-routed; the same twelve bytes would produce no-dlss or init-no-feature just as
+  // readily, and answering it three times over is how one of them gets missed. Only when the run
+  // did not work -- a pass that dispatched has plainly not been stopped by anything.
+  if (run.dlssRuntimeStub && run.verdict !== 'nr-ran') return dlssRuntimeStubAnswer();
 
   // Not installed, or the route's first step is missing: Install is the fix.
   if (!route.optiInstalled) return fix('not-installed', 'install');

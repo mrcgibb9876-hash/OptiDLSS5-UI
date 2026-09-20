@@ -1152,7 +1152,25 @@ const FOREIGN_TOOLCHAINS = [
   // finds a competing one "it does nothing at all for the whole session". OptiScaler's NR pass is a
   // competing one. Without this the user sees an install that reports success, a panel that opens,
   // and no picture change ever, with nothing anywhere saying why.
-  { tool: 'Deep Fried Chicken', files: ['deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg'] },
+  // The three names above are what it DEPLOYS. A PCSX2 report (#89, 2026-09-20) carried none of
+  // them and Deep Fried Chicken all the same: `.dfc-installer`, its three .cmd scripts, and two
+  // ReShade.ini backups of its own. Its installer is how it gets into a folder and `.dfc-installer`
+  // is the directory that installer keeps, so the folder is its whether or not the add-on is
+  // deployed at this moment -- and its ReShade.ini edits outlive the add-on either way. Its own
+  // uninstaller is one of the scripts, so finding them is never a reason to go hunting by hand.
+  {
+    tool: 'Deep Fried Chicken',
+    files: ['deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg',
+      '.dfc-installer', 'INSTALL-DEEP-FRIED-CHICKEN.cmd', 'UNINSTALL-DEEP-FRIED-CHICKEN.cmd', 'CHICKEN-ASSIST.cmd'],
+    pattern: /^ReShade\.ini\.deep-fried-chicken-backup-.*\.bak$/i,
+  },
+  // NVIDIA's NGX runtime, sitting beside a game that did not ship it and that we did not put it
+  // beside. Whichever tool left it, it is a second NGX in the process, and a second NGX is the
+  // thing that makes the DRIVER answer the probe instead of OptiScaler -- which is the exact
+  // failure #89 reported: "dxgi.dll is loaded but the DRIVER answered the NGX probe". Named for
+  // what it is rather than for a tool, because several distributions drop it and this app has
+  // never placed a file by that name.
+  { tool: 'another NGX runtime (nvngxruntime.dll)', files: ['nvngxruntime.dll'] },
 ];
 
 // What each recognised tool is known to place -- the explicit "remove the other toolchain"
@@ -1174,10 +1192,19 @@ const FOREIGN_REMOVALS = {
   },
   'DLSSNR-Cost-Scaler': { files: ['nvngx_dlssnr_proxy.dll'], patterns: [/cost[_ -]?scaler/i] },
   'a RenoDX DLSS 5 add-on': { patterns: [/renodx-dlss.*\.addon(64|32)?$/i, /^renodx.*\.ini$/i] },
-  // Only the three files Deep Fried Chicken ships. It places no backups and patches nothing, so
-  // there is nothing to restore -- and the log it writes beside them goes too. Offered rather than
-  // done: someone may be running it on purpose and want ours gone instead, which Remove already does.
-  'Deep Fried Chicken': { files: ['deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg', 'deep-fried-chicken.log'] },
+  // What Deep Fried Chicken ships, plus the installer footprint #89 turned up. It patches nothing
+  // of the game's, so there is nothing to restore -- but it DOES back up ReShade.ini before editing
+  // it, and those .bak copies are its own, not the game's, so they go with the rest. The backups
+  // are deleted rather than restored: one of them is a ReShade.ini from before this app's install
+  // as well, and putting that back would undo our own configuration to undo theirs. Offered rather
+  // than done: someone may be running it on purpose and want ours gone instead, which Remove does.
+  'Deep Fried Chicken': {
+    files: ['deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg', 'deep-fried-chicken.log',
+      '.dfc-installer', 'INSTALL-DEEP-FRIED-CHICKEN.cmd', 'UNINSTALL-DEEP-FRIED-CHICKEN.cmd', 'CHICKEN-ASSIST.cmd',
+      'LICENSE-Deep-Fried-Chicken.md'],
+    patterns: [/^ReShade\.ini\.deep-fried-chicken-backup-.*\.bak$/i],
+  },
+  'another NGX runtime (nvngxruntime.dll)': { files: ['nvngxruntime.dll'] },
 };
 // A backed-up name a game could legitimately own comes back from the backup; anything else that
 // only a DLSS 5 tool would put there is deleted along with its backup.

@@ -51,6 +51,21 @@ async function readHead(file, max = MAX_READ) {
 
 const count = (text, re) => (text.match(re) || []).length;
 
+// Below this, a file called nvngx_dlss.dll is not one. NVIDIA's is megabytes in every build that
+// has ever shipped; 64 KB leaves room for any of them to shrink beyond all reason and still fails
+// the twelve-byte placeholder and the Git LFS pointer. Shared with main.js, whose placer has to
+// agree that such a file is not a copy worth keeping.
+const DLSS_RUNTIME_MIN_BYTES = 64 * 1024;
+
+// The size when it is too small to load, else null. Used both to name the fault and to decide the
+// file may be overwritten.
+function dlssRuntimeStubBytes(dir) {
+  try {
+    const bytes = fs.statSync(path.join(dir, 'nvngx_dlss.dll')).size;
+    return bytes < DLSS_RUNTIME_MIN_BYTES ? bytes : null;
+  } catch { return null; }
+}
+
 // The end of a log, for the things that are only interesting as "the latest one". readHead is the
 // wrong tool for those: a long session writes past its 6 MB cap and the newest lines are exactly
 // what falls outside it.
@@ -238,6 +253,14 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   // (PureDark's plugin loads the runtime from the game folder), and a DLSS-5-only profile alike.
   // Seen in the wild on a Resident Evil 2 install whose log otherwise looked healthy.
   const dlssRuntimeMissing = /nvngx_dlss\.dll not found, disabling DLSS/.test(opti);
+  // The mirror of that check, and the nastier one: the file IS there and cannot possibly be a DLL.
+  // OptiScaler's load-time test only asks whether it exists, so it logs "Enabling DLSS" and carries
+  // on, and every NGX call after that goes nowhere -- which reads as "DLSS is switched on and doing
+  // nothing", the hardest shape to place. A PCSX2 report (#89, 2026-09-20) carried a TWELVE-byte
+  // nvngx_dlss.dll. The real file is megabytes; anything this small is a placeholder, a failed
+  // download or a Git LFS pointer left behind by some other tool. Read off the disk rather than out
+  // of the log, because nothing in the log can say it -- OptiScaler is satisfied by the name alone.
+  const dlssRuntimeStub = dlssRuntimeStubBytes(dir);
   const cleanExit = /DLL_PROCESS_DETACH/.test(opti);
   const shutdownFault = /faulted inside its own NVSDK_NGX_D3D12_Shutdown1/.test(opti);
   const logLevel = (/Log\.LogLevel: (\d)/.exec(opti) || [])[1];
@@ -438,6 +461,7 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     logLevel: logLevel ? Number(logLevel) : null,
     crash,
     dlssRuntimeMissing,
+    dlssRuntimeStub,
     srBackendFallback,
     srCreateResult,
     upscaleSkipped,
@@ -556,6 +580,7 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = 
     if (run.srBackendFallback) add('upscaler', `DLSS could not be created${run.srCreateResult ? ` (${run.srCreateResult})` : ''}, fell back to ${run.srBackendFallback.to}`);
     if (run.upscaleSkipped) add('upscaler', `${run.upscaleSkipped} dispatches skipped (root signature)`);
     if (run.dlssRuntimeMissing) add('nvngx_dlss.dll', 'not beside the exe -- OptiScaler disabled DLSS');
+    if (run.dlssRuntimeStub) add('nvngx_dlss.dll', run.dlssRuntimeStub + ' bytes -- too small to be a DLL, so nothing can load it');
     if (run.feedDriverOutdated !== null && run.feedDriverOutdated !== undefined) {
       add('driver', `reports feature 18 out of date${run.feedDriverOutdated ? `, needs ${run.feedDriverOutdated} or newer` : ''}`);
     }
@@ -706,4 +731,4 @@ async function collectSupportBundle(dir, { zipPath, extra = {}, execFileAsync, o
   return { zipPath, files: copied, run };
 }
 
-module.exports = { analyzeRun, collectSupportBundle, gatherSupportFiles, reportDigest, withDigest, DIGEST_MARKER, unrealCrashNear, nrTiming };
+module.exports = { analyzeRun, collectSupportBundle, gatherSupportFiles, reportDigest, withDigest, DIGEST_MARKER, unrealCrashNear, nrTiming, dlssRuntimeStubBytes, DLSS_RUNTIME_MIN_BYTES };
