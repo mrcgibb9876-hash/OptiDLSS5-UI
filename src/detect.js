@@ -1219,13 +1219,22 @@ const OUR_PAYLOAD = ['nvngx_dlssnr.dll', 'nvngx.dll_dlssnr.dll', 'OptiScaler.ini
 // extracted and journaled. The signature list is the first defence and this is the second, because
 // the next collision will be with a filename nobody has thought about yet.
 function filesWePlaced(dir) {
+  const ours = new Set();
+  const add = (list) => { for (const n of Array.isArray(list) ? list : []) ours.add(String(n).toLowerCase()); };
   try {
     const journal = JSON.parse(fs.readFileSync(path.join(dir, '.optiscaler-manager-install.json'), 'utf8'));
-    const added = Array.isArray(journal.added) ? journal.added : [];
-    return new Set(added.map((n) => String(n).toLowerCase()));
-  } catch {
-    return new Set();
-  }
+    add(journal.added);
+  } catch { /* no install of ours here */ }
+  // Deep Fried Chicken deployed as this game's chosen neural consumer (dfc.js) is ours, not a rival
+  // stack that wandered in. Its marker lists the exact names we placed, so only those stop counting
+  // as foreign: a Chicken the user installed with its own .cmd scripts has no marker and still
+  // reports, and its installer leftovers (.dfc-installer, CHICKEN-ASSIST.cmd, the ReShade.ini
+  // backups) are never in our list and so report even beside a deploy of ours.
+  try {
+    const dfcMarker = JSON.parse(fs.readFileSync(path.join(dir, '.dlss5ui-dfc.json'), 'utf8'));
+    add(dfcMarker.files);
+  } catch { /* no Chicken of ours here */ }
+  return ours;
 }
 
 function foreignToolchains(dir) {
