@@ -40,7 +40,9 @@ const rtxmfg = require('./rtxmfg');
 // 13 excepted only our own DXVK, so a player's own -- the standard thing to have in a Fallout:
 // New Vegas folder -- still read as "32-bit Vulkan, unsupported" (#101). A stored detection
 // carries the old api and detectFromStored would keep it, so this has to force a re-detect.
-const DETECT_VERSION = 15;
+// 16: an emulator is set up for its best renderer for this app, not the one its last run used, and
+// carries the renderer's name and menu path (emulators.js, #106).
+const DETECT_VERSION = 16;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
@@ -1450,17 +1452,19 @@ async function detectGame(dir, exePath) {
 }
 
 // EXPERIMENTAL. No exe scan: an emulator links every API it can render with, and which one runs
-// is a setting inside it. The profile's first API is assumed; once OptiScaler has run in it, its
-// log says what was really created, and an API chosen in Edit overrides both (route.js).
+// is a setting inside it. The route is always set up for the profile's best renderer for this app
+// (emulators.js), and the player is told to pick it in the emulator. What OptiScaler saw it create
+// last is kept as runtimeApi, so a run on another renderer is warned about rather than followed --
+// following it put Dolphin's last OpenGL run in charge of the route (#106). An API chosen in Edit
+// still overrides (route.js).
 async function detectEmulator(dir, exePath, emu) {
   const [bitness, hooks] = await Promise.all([peBitness(exePath), inspectHookDlls(dir)]);
-  let api = emu.apis[0];
-  let reason = `${emu.name} (${emu.system}) is an emulator, so its renderer is one of its own settings ` +
-    `(${emu.hint}); ${API_LABEL[api]} is assumed until you choose in Edit`;
+  const api = emu.apis[0];
+  let reason = `${emu.name} (${emu.system}) is an emulator, so its renderer is one of its own settings: ` +
+    `set up for ${emu.renderer || API_LABEL[api]}, the one that suits DLSS 5 best (${emu.hint})`;
   const runtime = await optiScalerRuntimeApi(dir);
-  if (runtime && emu.apis.includes(runtime.api)) {
-    api = runtime.api;
-    reason = `${emu.name} (${emu.system}) is an emulator; ${API_LABEL[api]} is what OptiScaler saw it create on its last run (${runtime.evidence})`;
+  if (runtime && runtime.api !== api) {
+    reason += ` -- but its last run used ${API_LABEL[runtime.api] || runtime.api} (${runtime.evidence})`;
   }
   const logStat = optiScalerLogStat(dir);
   const vulkan32 = bitness === 32 && api === 'vulkan';
@@ -1477,7 +1481,7 @@ async function detectEmulator(dir, exePath, emu) {
     uncertain: !runtime,
     bitness,
     experimental: true,
-    emulator: { key: emu.key, name: emu.name, system: emu.system, hint: emu.hint, apis: emu.apis },
+    emulator: { key: emu.key, name: emu.name, system: emu.system, hint: emu.hint, apis: emu.apis, renderer: emu.renderer, where: emu.where },
     vulkanWrapper: hooks.vulkanWrapper,
     reshadeProxy: hooks.reshadeProxy,
     // An OptiScaler loading under a proxy name that is not the build this app installed.
