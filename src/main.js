@@ -53,6 +53,7 @@ const launchwatch = require('./launchwatch');
 const defender = require('./defender');
 const elevate = require('./elevate');
 const saferemove = require('./saferemove');
+const dfc = require('./dfc');
 const panelwindow = require('./panelwindow');
 let electronAutoUpdater = null;
 try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
@@ -756,7 +757,7 @@ ipcMain.handle('lossless:setExePathInGameIni', (_evt, { exePath, losslessExePath
 // seen and confirmed that provider's real licence text in a dedicated dialog, never as a side
 // effect of the generic Deploy button. deployLumeniteFx() itself refuses without it regardless,
 // so a renderer bug can't turn this into a silent bypass.
-ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, licenseConfirmed, depthProfile }) => {
+ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, licenseConfirmed, depthProfile, consumer }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
@@ -786,6 +787,24 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
       execFileAsync,
       exePath,
     });
+    // Which neural consumer eats the contract the stack above manufactures. The Feeder allows
+    // exactly one (its v0.11.0-beta.1 notes), and its README's Chicken instructions are explicit
+    // that OptiScaler must not be in the folder: "Remove Deep Fried Chicken's three files and any
+    // renodx-dlss5*.addon64" is what it says to do for the OTHER direction. So this deploys
+    // Chicken and reports whether OptiScaler is still here, rather than quietly building a folder
+    // with two consumers in it -- which is the state that makes Chicken sit out the whole session.
+    //
+    // nvngx_dlssnr.dll and nvngx_dlss.dll are still required on this route ("Chicken does not
+    // bundle it"), and deployFeederStack has already placed both, so nothing changes there.
+    results.consumer = dfc.isConsumer(consumer) ? consumer : dfc.DEFAULT_CONSUMER;
+    if (results.consumer === 'dfc') {
+      results.dfc = await dfc.deployDfc(dir, dfcCacheDir());
+      results.optiScalerStillHere = !!(await findActiveOptiScalerFile(dir));
+    } else if (dfc.dfcOurs(dir)) {
+      // Switched back to our engine: the Chicken we deployed goes, or the two fight. One the user
+      // installed themselves is left alone -- removeDfc only touches what our marker lists.
+      results.dfcRemoved = await dfc.removeDfc(dir);
+    }
     return { ok: true, ...results };
   } catch (error) {
     return {
@@ -794,6 +813,55 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
       // The Vulkan case this app hands to ReShade's own installer (feeder.js, deployReShade).
       needsReShadeInstaller: !!(error && error.needsReShadeInstaller),
     };
+  }
+});
+
+// Where the user's own Deep Fried Chicken copy lives once they have supplied it. Beside the other
+// caches; never fetched into, only copied into from a file they picked.
+function dfcCacheDir() {
+  const dir = path.join(userDataDir(), 'dfc');
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+// Settings: the user points at Chicken's zip or the folder they unpacked it into, once, and every
+// game can use it after that. There is no download to offer -- see dfc.js for why.
+ipcMain.handle('dfc:supply', async (_evt, sourcePath) => {
+  try {
+    const picked = sourcePath || (await (async () => {
+      const r = await dialog.showOpenDialog({
+        title: 'Find your Deep Fried Chicken download',
+        message: 'Pick Chicken\'s zip, or the folder you unpacked it into',
+        properties: ['openFile', 'openDirectory'],
+        filters: [{ name: 'Deep Fried Chicken', extensions: ['zip'] }],
+      });
+      return r.canceled || !r.filePaths.length ? null : r.filePaths[0];
+    })());
+    if (!picked) return { ok: true, cancelled: true };
+    const r = await dfc.importDfcSource(picked, dfcCacheDir());
+    return { ok: true, ...r };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// What the UI needs to draw the choice: whether a copy has been supplied at all, and for one game,
+// whose Chicken is in the folder and what it last reported.
+ipcMain.handle('dfc:status', async (_evt, exePath) => {
+  try {
+    const supplied = dfc.cachedDfc(dfcCacheDir());
+    const out = { ok: true, supplied: !!supplied, suppliedFiles: supplied ? fs.readdirSync(supplied).sort() : [] };
+    if (exePath && fs.existsSync(exePath)) {
+      const dir = gameDir(exePath);
+      out.present = dfc.dfcPresent(dir);
+      out.ours = dfc.dfcOurs(dir);
+      out.state = dfc.readDfcState(dir);
+      out.cfg = dfc.readCfgText(dir);
+      out.optiScalerHere = !!(await findActiveOptiScalerFile(dir));
+    }
+    return out;
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
   }
 });
 
@@ -2502,6 +2570,16 @@ async function uninstallEverything(dir) {
   if (lumaue.lumaUeDeployed(dir)) {
     const r = await stage('the Luma UE stack', () => lumaue.removeLumaStack(dir));
     if (r) { removed.push(...r.removed); kept.push(...r.kept); }
+  }
+  // Deep Fried Chicken, when it is this game's chosen neural consumer and WE deployed it (dfc.js).
+  // One the user installed with its own .cmd has no marker: removeDfc leaves it and says so, which
+  // is right -- its own uninstaller is the thing that knows how to take it out.
+  if (dfc.dfcPresent(dir)) {
+    const r = await stage('Deep Fried Chicken', () => dfc.removeDfc(dir));
+    if (r) {
+      removed.push(...r.removed); kept.push(...r.kept);
+      for (const f of r.failed || []) failed.push(f);
+    }
   }
   try {
     const fg = await framegen.restoreFrameGenDll(dir);

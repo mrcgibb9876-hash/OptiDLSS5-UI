@@ -3667,6 +3667,9 @@ async function loadFeederSection(game) {
     return;
   }
   section.classList.remove('hidden');
+  // The neural-consumer choice lives with the Feeder, because it only exists on this route: the
+  // Feeder is what manufactures the contract a consumer eats.
+  loadConsumerSection(game);
   // Remove is there whenever the add-on is on disk -- and is the ONLY control for a Feeder
   // that landed on a game that ships its own DLSS (misdeployed: the two crash together).
   removeBtn.classList.toggle('hidden', !(readiness.misdeployed || readiness.addonInstalled));
@@ -3789,6 +3792,81 @@ async function loadFeederSection(game) {
 // provider) behind a real, per-action confirmation of its actual licence text -- never
 // silently, never just because it's selected in the dropdown. force=true is an update:
 // re-fetches and overwrites everything rather than skipping what's already present.
+// ── which neural consumer runs the pass ──────────────────────────────────────────────────────
+//
+// The Feeder manufactures a DLSS contract; exactly one add-on may consume it. Ours is this app's
+// own engine; Deep Fried Chicken is the other one people use. The choice is stored on the game and
+// acted on by feeder:deploy -- see src/dfc.js for why nothing here offers to download Chicken.
+const CONSUMER_LABELS = {
+  optiscaler: () => t('DLSS 5 (this app\x27s engine)'),
+  dfc: () => t('Deep Fried Chicken (your copy)'),
+};
+
+function chosenConsumer(game) {
+  const id = game && game.neuralConsumer;
+  return CONSUMER_LABELS[id] ? id : 'optiscaler';
+}
+
+async function loadConsumerSection(game) {
+  const select = $('#game-neural-consumer');
+  const supplyBtn = $('#btn-dfc-supply');
+  const status = $('#game-consumer-status');
+  if (!select) return;
+
+  const chosen = chosenConsumer(game);
+  select.innerHTML = '';
+  for (const id of Object.keys(CONSUMER_LABELS)) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = CONSUMER_LABELS[id]();
+    if (id === chosen) opt.selected = true;
+    select.appendChild(opt);
+  }
+
+  const info = await window.api.dfcStatus(game && game.exePath);
+  // The Add button only when it would do something: once a copy is supplied it is used for every
+  // game, so a button offering to add it again on each card is noise.
+  supplyBtn.classList.toggle('hidden', !!(info && info.supplied));
+
+  const lines = [];
+  if (!info || !info.ok) {
+    status.textContent = '';
+    return;
+  }
+  if (chosen === 'dfc') {
+    if (!info.supplied) lines.push(t('No Deep Fried Chicken copy yet -- add yours and Deploy again.'));
+    else if (info.present && !info.ours) lines.push(t('Chicken is already here and this app did not place it -- its own installer owns that copy.'));
+    else if (!info.present) lines.push(t('Chicken is not in this folder yet -- press Deploy.'));
+    // The clash this app can cause, and the one the user cannot see from inside the game.
+    if (info.optiScalerHere) lines.push(t('OptiScaler is still in this folder. Two neural passes means Chicken does nothing at all -- press Remove on the card, then Deploy.'));
+  } else if (info.ours) {
+    lines.push(t('A Chicken this app deployed is still here; Deploy again to take it out.'));
+  }
+  if (info.state && info.state.ran && info.state.state) {
+    lines.push(t('Chicken last reported: {state}.', { state: info.state.state }));
+  }
+  status.textContent = lines.join(' ');
+}
+
+$('#game-neural-consumer').addEventListener('change', async () => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  if (!game) return;
+  game.neuralConsumer = $('#game-neural-consumer').value;
+  window.api.saveGames(games);
+  await loadConsumerSection(game);
+  toast(t('Saved. Press Deploy to apply it to this game.'));
+});
+
+$('#btn-dfc-supply').addEventListener('click', async () => {
+  const res = await window.api.dfcSupply();
+  if (res.cancelled) return;
+  if (!res.ok) { toast(t('That is not a Deep Fried Chicken download: {error}', { error: res.error })); return; }
+  toast(t('Your Deep Fried Chicken copy is saved. Every game can use it now.'));
+  if (!editingGameId) return;
+  await loadConsumerSection(games.find((x) => x.id === editingGameId));
+});
+
 async function deployFeederStack(game, providerId, force) {
   const status = $('#game-feeder-status');
   const licenseConfirmed = await confirmMvProviderLicense(providerId);
@@ -3798,7 +3876,7 @@ async function deployFeederStack(game, providerId, force) {
   }
 
   status.textContent = force ? t('Updating…') : t('Deploying…');
-  const res = await window.api.feederDeploy(game.exePath, providerId, { force, licenseConfirmed });
+  const res = await window.api.feederDeploy(game.exePath, providerId, { force, licenseConfirmed, consumer: chosenConsumer(game) });
   if (res.ok) {
     toast(force
       ? t('Feeder stack updated.')
@@ -3813,6 +3891,7 @@ async function deployFeederStack(game, providerId, force) {
     }
   }
   loadFeederSection(game);
+  loadConsumerSection(game);
 }
 
 $('#btn-feeder-deploy').addEventListener('click', () => {

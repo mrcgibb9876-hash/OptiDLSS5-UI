@@ -1,6 +1,20 @@
 // Deutsch. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("de", {
+  "DLSS 5 (this app's engine)": "DLSS 5 (Engine dieser App)",
+  "Deep Fried Chicken (your copy)": "Deep Fried Chicken (deine Kopie)",
+  "No Deep Fried Chicken copy yet -- add yours and Deploy again.": "Noch keine Deep-Fried-Chicken-Kopie -- f\u00fcge deine hinzu und klicke erneut auf Bereitstellen.",
+  "Chicken is already here and this app did not place it -- its own installer owns that copy.": "Chicken ist bereits hier und wurde nicht von dieser App abgelegt -- diese Kopie geh\u00f6rt seinem eigenen Installer.",
+  "Chicken is not in this folder yet -- press Deploy.": "Chicken ist noch nicht in diesem Ordner -- klicke auf Bereitstellen.",
+  "OptiScaler is still in this folder. Two neural passes means Chicken does nothing at all -- press Remove on the card, then Deploy.": "OptiScaler ist noch in diesem Ordner. Bei zwei neuronalen Durchl\u00e4ufen tut Chicken \u00fcberhaupt nichts -- klicke auf der Karte auf Entfernen und dann auf Bereitstellen.",
+  "A Chicken this app deployed is still here; Deploy again to take it out.": "Ein von dieser App bereitgestelltes Chicken ist noch hier; klicke erneut auf Bereitstellen, um es zu entfernen.",
+  "Chicken last reported: {state}.": "Chicken meldete zuletzt: {state}.",
+  "Saved. Press Deploy to apply it to this game.": "Gespeichert. Klicke auf Bereitstellen, um es auf dieses Spiel anzuwenden.",
+  "That is not a Deep Fried Chicken download: {error}": "Das ist kein Deep-Fried-Chicken-Download: {error}",
+  "Your Deep Fried Chicken copy is saved. Every game can use it now.": "Deine Deep-Fried-Chicken-Kopie ist gespeichert. Jedes Spiel kann sie jetzt nutzen.",
+  "Neural pass: which one runs": "Neuronaler Durchlauf: welcher l\u00e4uft",
+  "The Feeder builds the DLSS request this game never makes; one add-on then runs the neural pass on it. Only one may be in the folder -- with two, Deep Fried Chicken sits out the whole session and nothing says why. This app's own engine is the default and needs nothing extra. Deep Fried Chicken is handed out on its author's Discord: there is no public download this app may fetch from, so supply your copy once in Settings and every game can use it.": "Der Feeder erzeugt die DLSS-Anfrage, die dieses Spiel nie stellt; ein Add-on f\u00fchrt darauf den neuronalen Durchlauf aus. Nur eines darf im Ordner sein -- bei zweien setzt Deep Fried Chicken die ganze Sitzung aus, ohne dass irgendwo steht, warum. Die eigene Engine dieser App ist die Vorgabe und braucht nichts weiter. Deep Fried Chicken wird \u00fcber den Discord seines Autors verteilt: es gibt keinen \u00f6ffentlichen Download, den diese App abrufen darf -- hinterlege deine Kopie einmal in den Einstellungen, dann kann jedes Spiel sie nutzen.",
+  "Add your Chicken copy\u2026": "Deine Chicken-Kopie hinzuf\u00fcgen\u2026",
   "Turn it on": "Einschalten",
   "Picture": "Bild",
   "Speed vs quality": "Tempo und Qualität",

@@ -1,6 +1,20 @@
 // 简体中文. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("zh-CN", {
+  "DLSS 5 (this app's engine)": "DLSS 5\uff08\u672c\u5e94\u7528\u7684\u5f15\u64ce\uff09",
+  "Deep Fried Chicken (your copy)": "Deep Fried Chicken\uff08\u4f60\u7684\u526f\u672c\uff09",
+  "No Deep Fried Chicken copy yet -- add yours and Deploy again.": "\u8fd8\u6ca1\u6709 Deep Fried Chicken \u526f\u672c \u2014\u2014 \u6dfb\u52a0\u4f60\u7684\u526f\u672c\u540e\u518d\u6b21\u70b9\u51fb\u201c\u90e8\u7f72\u201d\u3002",
+  "Chicken is already here and this app did not place it -- its own installer owns that copy.": "Chicken \u5df2\u7ecf\u5728\u8fd9\u91cc\uff0c\u4e14\u4e0d\u662f\u672c\u5e94\u7528\u653e\u7f6e\u7684 \u2014\u2014 \u90a3\u4efd\u526f\u672c\u5f52\u5b83\u81ea\u5df1\u7684\u5b89\u88c5\u7a0b\u5e8f\u7ba1\u7406\u3002",
+  "Chicken is not in this folder yet -- press Deploy.": "\u6b64\u6587\u4ef6\u5939\u4e2d\u8fd8\u6ca1\u6709 Chicken \u2014\u2014 \u8bf7\u70b9\u51fb\u201c\u90e8\u7f72\u201d\u3002",
+  "OptiScaler is still in this folder. Two neural passes means Chicken does nothing at all -- press Remove on the card, then Deploy.": "OptiScaler \u4ecd\u5728\u6b64\u6587\u4ef6\u5939\u4e2d\u3002\u540c\u65f6\u5b58\u5728\u4e24\u4e2a\u795e\u7ecf\u901a\u9053\u65f6\uff0cChicken \u5c06\u5b8c\u5168\u4e0d\u5de5\u4f5c \u2014\u2014 \u8bf7\u5728\u5361\u7247\u4e0a\u70b9\u51fb\u201c\u79fb\u9664\u201d\uff0c\u7136\u540e\u518d\u201c\u90e8\u7f72\u201d\u3002",
+  "A Chicken this app deployed is still here; Deploy again to take it out.": "\u672c\u5e94\u7528\u90e8\u7f72\u7684 Chicken \u4ecd\u5728\u8fd9\u91cc\uff1b\u518d\u6b21\u70b9\u51fb\u201c\u90e8\u7f72\u201d\u5373\u53ef\u5c06\u5176\u79fb\u9664\u3002",
+  "Chicken last reported: {state}.": "Chicken \u6700\u8fd1\u62a5\u544a\uff1a{state}\u3002",
+  "Saved. Press Deploy to apply it to this game.": "\u5df2\u4fdd\u5b58\u3002\u70b9\u51fb\u201c\u90e8\u7f72\u201d\u5c06\u5176\u5e94\u7528\u5230\u8fd9\u4e2a\u6e38\u620f\u3002",
+  "That is not a Deep Fried Chicken download: {error}": "\u8fd9\u4e0d\u662f Deep Fried Chicken \u7684\u4e0b\u8f7d\u6587\u4ef6\uff1a{error}",
+  "Your Deep Fried Chicken copy is saved. Every game can use it now.": "\u4f60\u7684 Deep Fried Chicken \u526f\u672c\u5df2\u4fdd\u5b58\u3002\u73b0\u5728\u6240\u6709\u6e38\u620f\u90fd\u53ef\u4ee5\u4f7f\u7528\u5b83\u3002",
+  "Neural pass: which one runs": "\u795e\u7ecf\u901a\u9053\uff1a\u8fd0\u884c\u54ea\u4e00\u4e2a",
+  "The Feeder builds the DLSS request this game never makes; one add-on then runs the neural pass on it. Only one may be in the folder -- with two, Deep Fried Chicken sits out the whole session and nothing says why. This app's own engine is the default and needs nothing extra. Deep Fried Chicken is handed out on its author's Discord: there is no public download this app may fetch from, so supply your copy once in Settings and every game can use it.": "Feeder \u4f1a\u6784\u9020\u8fd9\u4e2a\u6e38\u620f\u4ece\u4e0d\u53d1\u51fa\u7684 DLSS \u8bf7\u6c42\uff0c\u7136\u540e\u7531\u4e00\u4e2a\u9644\u52a0\u7ec4\u4ef6\u5728\u5176\u4e0a\u6267\u884c\u795e\u7ecf\u901a\u9053\u3002\u6587\u4ef6\u5939\u4e2d\u53ea\u80fd\u6709\u4e00\u4e2a \u2014\u2014 \u5982\u679c\u6709\u4e24\u4e2a\uff0cDeep Fried Chicken \u4f1a\u6574\u4e2a\u4f1a\u8bdd\u90fd\u4e0d\u5de5\u4f5c\uff0c\u800c\u4e14\u4efb\u4f55\u5730\u65b9\u90fd\u4e0d\u4f1a\u8bf4\u660e\u539f\u56e0\u3002\u672c\u5e94\u7528\u81ea\u5e26\u7684\u5f15\u64ce\u662f\u9ed8\u8ba4\u9009\u9879\uff0c\u4e0d\u9700\u8981\u989d\u5916\u51c6\u5907\u3002Deep Fried Chicken \u7531\u4f5c\u8005\u5728\u5176 Discord \u4e0a\u5206\u53d1\uff1a\u6ca1\u6709\u672c\u5e94\u7528\u53ef\u4ee5\u83b7\u53d6\u7684\u516c\u5f00\u4e0b\u8f7d\uff0c\u56e0\u6b64\u8bf7\u5728\u8bbe\u7f6e\u4e2d\u6dfb\u52a0\u4e00\u6b21\u4f60\u7684\u526f\u672c\uff0c\u4e4b\u540e\u6240\u6709\u6e38\u620f\u90fd\u80fd\u4f7f\u7528\u3002",
+  "Add your Chicken copy\u2026": "\u6dfb\u52a0\u4f60\u7684 Chicken \u526f\u672c\u2026",
   "Turn it on": "开启",
   "Picture": "画面",
   "Speed vs quality": "速度与画质",

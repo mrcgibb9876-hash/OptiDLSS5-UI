@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld('api', {
   feederCheckUpdate: (exePath) => ipcRenderer.invoke('feeder:checkUpdate', exePath),
   feederConfirmProviderLicense: (providerId) => ipcRenderer.invoke('feeder:confirmProviderLicense', providerId),
   feederDeploy: (exePath, mvProviderId, options) => ipcRenderer.invoke('feeder:deploy', { exePath, mvProviderId, ...options }),
+  dfcSupply: (sourcePath) => ipcRenderer.invoke('dfc:supply', sourcePath),
+  dfcStatus: (exePath) => ipcRenderer.invoke('dfc:status', exePath),
   feederRemove: (exePath) => ipcRenderer.invoke('feeder:remove', exePath),
   feederOpenReShadeSetup: () => ipcRenderer.invoke('feeder:openReShadeSetup'),
 

@@ -274,3 +274,79 @@ test('nothing in this module fetches Chicken from anywhere', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'dfc.js'), 'utf8');
   assert.ok(!/fetch\(|https?:\/\/(?!\S*discord)/.test(src.replace(/^\s*\/\/.*$/gm, '')), 'dfc.js must not download anything');
 });
+
+// ── wired into the app ───────────────────────────────────────────────────────────────────────
+
+const { loadMain, scratchDir, fakeExe } = require('./helpers');
+
+test('Settings takes the user\'s copy, and every game can use it after that', async () => {
+  const app = loadMain();
+  const base = scratchDir('dfc-supply');
+  const r = await app.invoke('dfc:supply', fakeDfcFolder(base));
+  assert.strictEqual(r.ok, true);
+  assert.ok(r.files.includes(dfc.ADDON));
+
+  const status = await app.invoke('dfc:status', null);
+  assert.strictEqual(status.supplied, true, 'the copy is remembered for the next game');
+});
+
+test('the status the card draws: whose Chicken is here, and what it last reported', async () => {
+  const app = loadMain();
+  const base = scratchDir('dfc-status');
+  await app.invoke('dfc:supply', fakeDfcFolder(base));
+
+  const game = path.join(base, 'game');
+  const exe = fakeExe(game, 'Game.exe');
+  let s = await app.invoke('dfc:status', exe);
+  assert.deepStrictEqual({ present: s.present, ours: s.ours }, { present: false, ours: false });
+
+  await dfc.deployDfc(game, path.join(app.userData, 'dfc'));
+  fs.writeFileSync(path.join(game, dfc.LOG), 'ARMED\n');
+  s = await app.invoke('dfc:status', exe);
+  assert.deepStrictEqual({ present: s.present, ours: s.ours, state: s.state.state }, { present: true, ours: true, state: 'ARMED' });
+  assert.strictEqual(s.cfg, 'enabled=1\npasses=1\n', 'their cfg is readable, for showing');
+});
+
+test('Remove takes out a Chicken we deployed, along with everything else', async () => {
+  const app = loadMain();
+  const base = scratchDir('dfc-uninstall');
+  await app.invoke('dfc:supply', fakeDfcFolder(base));
+  const game = path.join(base, 'game');
+  const exe = fakeExe(game, 'Game.exe');
+  await dfc.deployDfc(game, path.join(app.userData, 'dfc'));
+
+  const res = await app.invoke('game:run-uninstall', exe);
+  assert.strictEqual(res.ok, true);
+  assert.ok(res.removed.includes(dfc.ADDON), `expected ${dfc.ADDON} in ${JSON.stringify(res.removed)}`);
+  assert.strictEqual(fs.existsSync(path.join(game, dfc.ADDON)), false);
+  assert.strictEqual(fs.existsSync(path.join(game, dfc.MARKER)), false);
+});
+
+test('Remove leaves a Chicken the user installed themselves, and says whose it is', async () => {
+  const app = loadMain();
+  const base = scratchDir('dfc-uninstall-theirs');
+  const game = path.join(base, 'game');
+  const exe = fakeExe(game, 'Game.exe');
+  fs.writeFileSync(path.join(game, dfc.ADDON), 'THEIR addon');
+
+  const res = await app.invoke('game:run-uninstall', exe);
+  assert.strictEqual(res.ok, true);
+  assert.strictEqual(fs.existsSync(path.join(game, dfc.ADDON)), true, 'not ours to delete');
+  assert.match(res.kept.join(' '), /UNINSTALL-DEEP-FRIED-CHICKEN\.cmd/);
+});
+
+test('the deploy acts on the chosen consumer, and never leaves two of them in a folder', () => {
+  // The Feeder allows exactly one consumer. Choosing Chicken must deploy it AND notice OptiScaler
+  // is still there; choosing ours back must take our Chicken out again. Source-checked because the
+  // surrounding deploy fetches ReShade and the Feeder release, which a test cannot do offline.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8').replace(/\r\n/g, '\n');
+  const at = src.indexOf("ipcMain.handle('feeder:deploy'");
+  assert.notStrictEqual(at, -1);
+  const end = src.indexOf('\n});\n', at);
+  assert.notStrictEqual(end, -1);
+  const body = src.slice(at, end);
+  assert.match(body, /results\.consumer =/, 'the deploy records which consumer was chosen');
+  assert.match(body, /dfc\.deployDfc\(/, 'and deploys Chicken when it is the one');
+  assert.match(body, /optiScalerStillHere/, 'and reports OptiScaler still being in the folder');
+  assert.match(body, /dfc\.dfcOurs\(dir\)[\s\S]*dfc\.removeDfc\(/, 'and takes our Chicken out when switching back');
+});

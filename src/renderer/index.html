@@ -271,6 +271,16 @@
             <button id="btn-feeder-remove" class="btn btn-ghost hidden" data-i18n>Remove</button>
           </div>
           <span id="game-feeder-status" class="status-line"></span>
+
+          <!-- Which neural consumer eats the contract the Feeder manufactures. The Feeder allows
+               exactly one, so this is a choice rather than a pair of toggles. -->
+          <label class="field-label" data-i18n>Neural pass: which one runs</label>
+          <p class="field-hint" data-i18n>The Feeder builds the DLSS request this game never makes; one add-on then runs the neural pass on it. Only one may be in the folder -- with two, Deep Fried Chicken sits out the whole session and nothing says why. This app's own engine is the default and needs nothing extra. Deep Fried Chicken is handed out on its author's Discord: there is no public download this app may fetch from, so supply your copy once in Settings and every game can use it.</p>
+          <div class="field-row">
+            <select id="game-neural-consumer"></select>
+            <button id="btn-dfc-supply" class="btn btn-ghost hidden" data-i18n>Add your Chicken copy…</button>
+          </div>
+          <span id="game-consumer-status" class="status-line"></span>
         </div>
 
         <!-- The 32-bit route's motion-vector provider (legacy.js). Not advanced-only: the card's
