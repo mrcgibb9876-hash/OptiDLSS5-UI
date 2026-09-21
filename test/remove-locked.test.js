@@ -19,8 +19,14 @@ const path = require('node:path');
 
 const saferemove = require('../src/saferemove');
 
-const mainJs = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
-const rendererJs = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'renderer.js'), 'utf8');
+// Read with the line endings normalised. CI checks out on Windows with autocrlf, so every source
+// file there has CRLF, and a scan for '\n}\n' finds nothing -- which does not fail loudly, it just
+// makes "the function body" mean the whole rest of the file. That is how the first version of these
+// guards passed on Linux and reported nine unrelated fsp.rm calls on windows-latest.
+const readSrc = (...rel) => fs.readFileSync(path.join(__dirname, '..', 'src', ...rel), 'utf8').replace(/\r\n/g, '\n');
+const mainJs = readSrc('main.js');
+const rendererJs = readSrc('renderer', 'renderer.js');
+const translationJs = readSrc('translation.js');
 
 function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'dlss5ui-remove-'));
@@ -111,11 +117,18 @@ test('a genuinely read-only file on disk is removed', async () => {
 
 // ── the call sites ───────────────────────────────────────────────────────────────────────────
 
+// Both ends are asserted. A -1 from either indexOf would otherwise slice to the end of the file and
+// quietly turn every guard below into a scan of all of main.js.
+function bodyIn(src, opener, what) {
+  const start = src.indexOf(opener);
+  assert.notStrictEqual(start, -1, `${what}: could not find ${opener}`);
+  const end = src.indexOf('\n}\n', start);
+  assert.notStrictEqual(end, -1, `${what}: could not find the end of the function`);
+  return src.slice(start, end);
+}
+
 function bodyOf(name) {
-  const start = mainJs.indexOf(`async function ${name}(dir) {`);
-  assert.notStrictEqual(start, -1, `${name} not found in main.js`);
-  const end = mainJs.indexOf('\n}\n', start);
-  return mainJs.slice(start, end);
+  return bodyIn(mainJs, `async function ${name}(dir) {`, name);
 }
 
 test('the removal functions never delete with a bare fsp.rm -- every deletion can be survived', () => {
@@ -166,10 +179,7 @@ test('the translation manifest is deleted through saferemove, not a bare rm that
   // purgeTranslationLayer -- every other one in there already caught. It threw out of the purge and
   // out of uninstallEverything, which runs the purge as its second stage, so the layer's DLLs were
   // gone and every later stage never ran.
-  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'translation.js'), 'utf8');
-  const at = src.indexOf('async function purgeTranslationLayer');
-  assert.notStrictEqual(at, -1);
-  const body = src.slice(at, src.indexOf('\n}\n', at));
+  const body = bodyIn(translationJs, 'async function purgeTranslationLayer', 'purgeTranslationLayer');
   assert.doesNotMatch(body, /await fsp\.rm\(path\.join\(dir, MANIFEST\)/, 'the manifest delete can still throw the purge away');
   assert.match(body, /saferemove\.removePath\(/, 'deletions in the purge go through saferemove');
 });
@@ -177,10 +187,11 @@ test('the translation manifest is deleted through saferemove, not a bare rm that
 test('a wrapper DLL that will not delete is reported, not dropped from every list', () => {
   // The purge's rm() returned false on failure and the caller pushed the file to neither `removed`
   // nor `skipped` -- so a wrapper left behind was invisible to the user and to the app.
-  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'translation.js'), 'utf8');
-  const at = src.indexOf('  const rm = async (rel) => {');
+  const at = translationJs.indexOf('  const rm = async (rel) => {');
   assert.notStrictEqual(at, -1, 'the purge\x27s rm helper');
-  const body = src.slice(at, src.indexOf('  };', at));
+  const end = translationJs.indexOf('  };', at);
+  assert.notStrictEqual(end, -1, 'the end of the rm helper');
+  const body = translationJs.slice(at, end);
   assert.match(body, /failed\.push/, 'a failure is recorded');
   assert.match(body, /skipped\.push/, 'and shows up in the list the caller already reads');
 });
@@ -189,10 +200,9 @@ test('a manifest that was never on disk is not reported as removed', () => {
   // A legacy dgVoodoo2 deploy keeps its record in .dlss5ui-legacy.json and has no manifest of its
   // own, so rm() succeeds on a file that was never there. Claiming to have deleted it is how a
   // removal report stops being worth reading -- caught by dxvk-swap.test.js when this was written.
-  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'translation.js'), 'utf8');
-  const at = src.indexOf('const wasThere = fs.existsSync(path.join(dir, MANIFEST))');
+  const at = translationJs.indexOf('const wasThere = fs.existsSync(path.join(dir, MANIFEST))');
   assert.notStrictEqual(at, -1, 'the manifest removal checks the file was there first');
-  assert.match(src.slice(at, at + 200), /if \(gone && wasThere\) removed\.push\(MANIFEST\)/);
+  assert.match(translationJs.slice(at, at + 200), /if \(gone && wasThere\) removed\.push\(MANIFEST\)/);
 });
 
 test('an undeletable manifest reaches the user: the app would otherwise still think the layer is in', () => {
@@ -206,8 +216,7 @@ test('an undeletable manifest reaches the user: the app would otherwise still th
 });
 
 test('the user is told which files are still there, and that closing the game is what fixes it', () => {
-  const at = rendererJs.indexOf('function describeUninstall');
-  const body = rendererJs.slice(at, rendererJs.indexOf('\n}\n', at));
+  const body = bodyIn(rendererJs, 'function describeUninstall', 'describeUninstall');
   assert.match(body, /res\.failed/, 'describeUninstall reads the failures');
   assert.match(body, /DLSS 5 partly removed\./, 'and does not claim a clean removal');
   assert.match(body, /Close the game/, 'and names the one thing the user can do about it');
