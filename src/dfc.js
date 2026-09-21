@@ -38,20 +38,38 @@ const path = require('node:path');
 const { openZip, findEntry, extractEntry } = require('./zip');
 const saferemove = require('./saferemove');
 
-// The three files a working Chicken needs beside the game, and the two it produces itself.
-// Names come from its own footprint, recorded in detect.js from the #89 folder listing.
+// Read off a real release (CP376 Beta, 20 September 2026) rather than inferred from a folder
+// listing. The package ships TWO trees, and its README is explicit about which to use: "Use the
+// folder matching the GAME's bitness, not Windows' bitness."
+//
+//   64-bit/   deep-fried-chicken.addon64, deep-fried-chicken-nvngx.dll, deep-fried-chicken.cfg
+//             -> copied beside the game's ReShade
+//   32-bit/   deep-fried-chicken.addon32, dfc-universal-feed.cfg,
+//             host64\ (the same addon64 + nvngx + cfg, plus dfc-universal-host64.exe and its own
+//             dxgi.dll -- "the hidden x64 worker and its ReShade ... starts automatically"), and
+//             reshade-shaders\Shaders\DFC_Universal_Feed.fx
+//
+// Worth knowing for the route work: the 32-bit tree is Chicken's OWN transport. It does not use
+// jlrouzies' DLSS5-Feeder at all -- DFC_Universal_Feed.fx is enabled in the game's ReShade instead.
+// Only the 64-bit tree is the drop-in consumer for our Feeder route, which is all this module
+// deploys today.
 const ADDON = 'deep-fried-chicken.addon64';
+const ADDON32 = 'deep-fried-chicken.addon32';
 const NVNGX = 'deep-fried-chicken-nvngx.dll';
 const CFG = 'deep-fried-chicken.cfg';
 const LOG = 'deep-fried-chicken.log';
-const LICENSE = 'LICENSE-Deep-Fried-Chicken.md';
+// The licence, README and notices as the release actually names them. The older
+// LICENSE-Deep-Fried-Chicken.md is what #89's folder carried, so detect.js still knows that name
+// too; both are recognised and neither is ever modified -- its licence forbids altering
+// "copyright, authorship, version, licence, or integrity information".
+const DOCS = ['LICENSE.txt', 'README.txt', 'THIRD-PARTY-NOTICES.txt', 'LICENSE-Deep-Fried-Chicken.md'];
+const LICENSE = 'LICENSE.txt';
 
-// What a deploy places. The cfg goes in only when the folder has none: it carries the user's own
-// settings once they have touched it, and Chicken's README is explicit that the shipped one is
-// already the right starting point ("on, one pass, extras off"). Overwriting it on every deploy
-// would silently reset a tuned game.
+// What a deploy places. The cfg and the documents go in only when the folder has none of them:
+// Chicken's own README says "Keep your existing deep-fried-chicken.cfg when updating", so
+// overwriting it on a re-deploy would undo exactly what the author tells people to preserve.
 const PAYLOAD = [ADDON, NVNGX];
-const PAYLOAD_IF_ABSENT = [CFG, LICENSE];
+const PAYLOAD_IF_ABSENT = [CFG, ...DOCS];
 
 // The marker is the whole ownership story: which files this app placed, where they came from, and
 // when. Remove reads it rather than deleting by name, so a Chicken that was already in the folder
@@ -110,6 +128,25 @@ function readDfcFolder(dir) {
   return names;
 }
 
+// A release ships 64-bit/ and 32-bit/ side by side, so the folder the user picks is usually the
+// archive root rather than either tree. Finds the 64-bit payload wherever it is: this folder, a
+// child named for the bitness, or one level further down (the archive unpacks into a versioned
+// folder). Returns null when nothing here is Chicken.
+function findPayloadDir(root, depth = 0) {
+  if (readDfcFolder(root)) return root;
+  if (depth >= 2) return null;
+  let entries = [];
+  try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch { return null; }
+  // 64-bit/ first by name, so a package holding both trees never yields the 32-bit one by accident.
+  const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name)
+    .sort((a, b) => (/64/.test(a) ? -1 : 0) - (/64/.test(b) ? -1 : 0));
+  for (const name of dirs) {
+    const found = findPayloadDir(path.join(root, name), depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
 // Takes what the user picked -- Chicken's zip, or the folder they unpacked it into -- and keeps a
 // copy in this app's cache. Returns the cache path. Nothing is fetched and nothing is published:
 // this is their download, stored where the app can find it again for the next game.
@@ -120,14 +157,25 @@ async function importDfcSource(sourcePath, cacheDir) {
 
   const wanted = [...PAYLOAD, ...PAYLOAD_IF_ABSENT];
   if (stat.isDirectory()) {
-    if (!readDfcFolder(sourcePath)) {
-      throw new Error(`${path.basename(sourcePath)} does not look like Deep Fried Chicken (no ${ADDON} and ${NVNGX} in it)`);
+    // The 64-bit tree, wherever in the picked folder it lives -- the release unpacks to
+    // <name>/64-bit/, so the folder a user picks is normally a parent of the payload.
+    const payloadDir = findPayloadDir(sourcePath);
+    if (!payloadDir) {
+      throw new Error(`${path.basename(sourcePath)} does not look like Deep Fried Chicken (no ${ADDON} and ${NVNGX} in it, or in a 64-bit folder inside it)`);
     }
     await fsp.rm(dest, { recursive: true, force: true });
     await fsp.mkdir(dest, { recursive: true });
-    for (const name of fs.readdirSync(sourcePath)) {
-      if (!wanted.some((w) => w.toLowerCase() === name.toLowerCase())) continue;
-      await fsp.copyFile(path.join(sourcePath, name), path.join(dest, name));
+    // The payload from the 64-bit tree; the licence and notices from wherever they sit, which in a
+    // real release is the archive root beside the two trees rather than inside either.
+    for (const from of [payloadDir, sourcePath, path.dirname(payloadDir)]) {
+      let names = [];
+      try { names = fs.readdirSync(from); } catch { continue; }
+      for (const name of names) {
+        if (!wanted.some((w) => w.toLowerCase() === name.toLowerCase())) continue;
+        const to = path.join(dest, name);
+        if (fs.existsSync(to)) continue; // the payload tree wins over a copy further up
+        await fsp.copyFile(path.join(from, name), to);
+      }
     }
   } else {
     const zip = openZip(fs.readFileSync(sourcePath));

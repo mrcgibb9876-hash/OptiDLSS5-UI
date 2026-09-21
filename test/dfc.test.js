@@ -350,3 +350,52 @@ test('the deploy acts on the chosen consumer, and never leaves two of them in a 
   assert.match(body, /optiScalerStillHere/, 'and reports OptiScaler still being in the folder');
   assert.match(body, /dfc\.dfcOurs\(dir\)[\s\S]*dfc\.removeDfc\(/, 'and takes our Chicken out when switching back');
 });
+
+test('a real release layout imports from the archive root, the version folder, or 64-bit itself', async () => {
+  // CP376 Beta unpacks to <name>/{64-bit,32-bit}/ with LICENSE.txt and README.txt at the root, so
+  // the folder a user picks is normally a PARENT of the payload. Picking any of the three works,
+  // and the 64-bit tree is the one taken -- the 32-bit tree is Chicken's own transport, not a
+  // drop-in consumer for our Feeder route.
+  const base = tmp('layout');
+  try {
+    const root = path.join(base, 'Deep-Fried-Chicken-CP376-Beta');
+    fs.mkdirSync(path.join(root, '64-bit'), { recursive: true });
+    fs.mkdirSync(path.join(root, '32-bit', 'host64'), { recursive: true });
+    fs.writeFileSync(path.join(root, '64-bit', dfc.ADDON), '64-bit addon');
+    fs.writeFileSync(path.join(root, '64-bit', dfc.NVNGX), '64-bit nvngx');
+    fs.writeFileSync(path.join(root, '64-bit', dfc.CFG), 'config_schema=13\nenabled=1\n');
+    fs.writeFileSync(path.join(root, dfc.LICENSE), 'Alexander, all rights reserved');
+    fs.writeFileSync(path.join(root, 'README.txt'), 'Use the folder matching the GAME\x27s bitness');
+    // The 32-bit tree, which must never be the one picked up.
+    fs.writeFileSync(path.join(root, '32-bit', 'deep-fried-chicken.addon32'), 'x');
+    fs.writeFileSync(path.join(root, '32-bit', 'host64', dfc.ADDON), 'THE 32-BIT TREE\x27S COPY');
+    fs.writeFileSync(path.join(root, '32-bit', 'host64', dfc.NVNGX), 'x');
+
+    for (const pick of [base, root, path.join(root, '64-bit')]) {
+      const cache = path.join(base, 'cache-' + path.basename(pick));
+      const r = await dfc.importDfcSource(pick, cache);
+      assert.ok(r.files.includes(dfc.ADDON), `${pick}: payload`);
+      assert.ok(r.files.includes(dfc.LICENSE), `${pick}: the licence travels with it`);
+      assert.strictEqual(fs.readFileSync(path.join(r.path, dfc.ADDON), 'utf8'), '64-bit addon', `${pick}: the 64-bit tree, not the 32-bit one`);
+    }
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('the licence and notices are placed but never rewritten', async () => {
+  // Chicken's licence forbids removing or altering "copyright, authorship, version, licence, or
+  // integrity information", so a re-deploy must not overwrite them either.
+  const base = tmp('docs');
+  try {
+    const cache = path.join(base, 'cache');
+    await dfc.importDfcSource(fakeDfcFolder(base), cache);
+    const game = path.join(base, 'game');
+    fs.mkdirSync(game);
+    await dfc.deployDfc(game, cache);
+    assert.strictEqual(fs.readFileSync(path.join(game, dfc.LICENSE), 'utf8'), 'their licence, not ours');
+
+    fs.writeFileSync(path.join(game, dfc.LICENSE), 'edited by the user');
+    const again = await dfc.deployDfc(game, cache);
+    assert.strictEqual(fs.readFileSync(path.join(game, dfc.LICENSE), 'utf8'), 'edited by the user', 'left as found');
+    assert.ok(!again.files.includes(dfc.LICENSE));
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});

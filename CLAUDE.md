@@ -111,12 +111,25 @@ redistribution, so the manager only links to the release page and fetches the mo
   fetch appears. Same position as the AMD installer above. A permission request went to its author on
   2026-09-21 (asked for: may the app fetch it, and is there a documented `deep-fried-chicken.cfg`
   schema), with full credit offered -- **no reply yet**.
-- **Do not write `deep-fried-chicken.cfg`.** Its README says "Don't edit its settings file", its schema
-  is not published, and the binary cannot be obtained or run in a session to check what a key does.
-  `dfc.js` reads it for display and has no writer, guarded by a test. Inventing keys here is the engine
-  v1.0.21 D3D12 resource state all over again. The user's two uploaded Chicken archives
-  (`*-CP376-Beta.7z`, `*-v1.7.4-checkpoint-116-*.7z`) are **AES-encrypted with encrypted headers** --
-  py7zr answers `PasswordRequired` and cannot even list names -- so they are not a way in either.
+- **Writing `deep-fried-chicken.cfg` IS allowed; shipping Chicken is not.** Its `LICENSE.txt` grants
+  "create and share your own Deep Fried Chicken configuration and preset files, provided they do not
+  contain or redistribute any part of the Software", and separately forbids copying, mirroring,
+  bundling or modifying the Software without **prior written permission**. So `dfccfg.js` writes the
+  config and `dfc.js` still never fetches a byte. An earlier note here said the README forbade editing
+  the cfg -- that was the *Feeder's* README describing Chicken. Chicken's own says the opposite: "Keep
+  your existing deep-fried-chicken.cfg when updating."
+- **The cfg is 663 flat `key=value` lines with `config_schema=13` (CP376 Beta).** `dfccfg.js` rewrites
+  only the keys asked for and returns every other byte untouched, refuses a file whose schema is newer
+  than it knows, and keeps **per-line** endings -- `dfc-universal-feed.cfg` really is mixed (3 CRLF, 36
+  LF) and a file-wide flag rewrote all of it. Round-tripping the real files is what caught that; the
+  hand-written fixture was uniform and passed happily.
+- **A Chicken release ships two trees.** `64-bit/` is the drop-in consumer for our Feeder route.
+  `32-bit/` is Chicken's OWN transport (`deep-fried-chicken.addon32`, `dfc-universal-feed.cfg`,
+  `host64\dfc-universal-host64.exe` + its own `dxgi.dll`, `DFC_Universal_Feed.fx`) and does not use
+  jlrouzies' Feeder at all. Its README: "Use the folder matching the GAME's bitness, not Windows'."
+  Only the 64-bit tree is deployed today.
+- The user's Chicken archives are 7z **AES-encrypted with encrypted headers**; the password is
+  `chicken`, given 2026-09-21 and stated in the release's own README.txt.
 
 - **A clone goes stale fast.** This repo moved about 180 commits in the first half of September
   alone. Always `git fetch origin master` and rebase before writing a patch, and re-check that a
