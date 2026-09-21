@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Menu, clipboard } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
@@ -48,6 +48,7 @@ const verify = require('./verify');
 const translation = require('./translation');
 const catalog = require('./catalog');
 const routescore = require('./routescore');
+const editmenu = require('./editmenu');
 const fgsuggest = require('./fgsuggest');
 const launchwatch = require('./launchwatch');
 const defender = require('./defender');
@@ -108,6 +109,10 @@ function createWindow() {
       nodeIntegration: false
     }
   });
+  // Right-click Cut/Copy/Paste/Select all. A BrowserWindow has no context menu of its own, and this
+  // window hides its menu bar, so without this there was no discoverable way to paste a path into a
+  // field or copy an error message out of a panel -- only the keyboard shortcuts, if you knew them.
+  editmenu.attach(win.webContents, { Menu, clipboard });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   // The pop-out panel is hidden rather than closed, so it would keep the app alive after the main
   // window has gone -- and it is skipTaskbar, so there would be nothing left to click.

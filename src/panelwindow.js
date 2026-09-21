@@ -20,6 +20,7 @@
 // Electron is required on use rather than at load, so the tests -- which run under plain node, with
 // no electron module to resolve -- can exercise the parts that are only arithmetic and strings.
 const electron = () => require('electron');
+const editmenu = require('./editmenu');
 
 // Not Alt+Home: that is OptiScaler's own panel key, and a hotkey that fights the thing it stands in
 // for would be a poor default. Shift makes it distinct while staying in the same finger position.
@@ -84,6 +85,11 @@ function create({ preload, page, savedBounds, onBoundsChanged }) {
     backgroundColor: '#14161a',
     webPreferences: { preload, contextIsolation: true, nodeIntegration: false },
   });
+
+  // Right-click Cut/Copy/Paste/Select all here too (editmenu.js). This window is frameless, so it
+  // has no menu bar at all: a value read off this panel had no way out of it before.
+  const { Menu, clipboard } = electron();
+  editmenu.attach(win.webContents, { Menu, clipboard });
 
   win.loadFile(page);
 
