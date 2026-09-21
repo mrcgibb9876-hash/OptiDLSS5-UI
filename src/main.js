@@ -986,7 +986,7 @@ ipcMain.handle('legacy:dgvoodoo', async (_evt, { exePath, detected } = {}) => {
       if (pick.canceled || pick.filePaths.length === 0) return { ok: true, cancelled: true };
       source = await legacy.importDgVoodooZip(pick.filePaths[0], feederCacheDir());
     }
-    const res = await legacy.deployDgVoodoo(dir, plan, source);
+    const res = await legacy.deployDgVoodoo(dir, plan, source, { vendor: ((await getGpuInfo()) || {}).vendor });
     return { ok: true, ...res };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error), code: error && error.code ? error.code : null };
@@ -3455,7 +3455,7 @@ async function applyHelpFix(exePath, fixId) {
       const hadParked = !!((legacy.readMarker(dir) || {}).parked || []).length;
       // dgVoodoo2 goes back in, and what is installed wins over the catalog's proof: nothing to record.
       translation.writePreference(dir, null);
-      await legacy.deployDgVoodoo(dir, plan, source);
+      await legacy.deployDgVoodoo(dir, plan, source, { vendor: ((await getGpuInfo()) || {}).vendor });
       invalidateDetection(dir);
       const stillParked = !!((legacy.readMarker(dir) || {}).parked || []).length;
       const proxy = hadParked && !stillParked ? '; the game-folder ReShade is back' : stillParked ? '; the game-folder ReShade could not go back under its name (something else holds it)' : '';
@@ -5307,6 +5307,10 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
     // A 32-bit game on the helper route: its OptiScaler (winmm.dll) and NR model are in host64\ and
     // follow the engine and model in Settings the same way.
     const legacyMarker = legacy.readMarker(dir);
+    // For ensureDgVoodooWindowed below: which vendor dgVoodoo names itself as to the game (legacy.js
+    // DG_ADAPTER_ID_TYPES). getGpuInfo is memoised, so this is an already-resolved promise per game
+    // and not per-game work -- the rule that keeps sync off the 52-second path.
+    const gpuVendor = ((await getGpuInfo()) || {}).vendor || null;
     if (legacyMarker && legacyMarker.host32) {
       const hostDir = path.join(dir, legacy.HOST_DIR);
       let updated = false;
@@ -5327,7 +5331,7 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
       // Installs from before 32-bit DirectX 8/9 games were held in a borderless window (legacy.js
       // DG_WINDOWED): an exclusive-fullscreen game can freeze the moment the helper starts.
       let dgWindowed = false;
-      try { dgWindowed = legacy.ensureDgVoodooWindowed(dir); } catch {}
+      try { dgWindowed = legacy.ensureDgVoodooWindowed(dir, { vendor: gpuVendor }); } catch {}
       // Installs from before the deploy gave the in-game panel its Alt+Home key (legacy.js ensureCastKey).
       try { legacy.ensureCastKey(dir); } catch {}
       // Installs from before High performance was set for the helper (Feeder #100, 2026-09-19).
@@ -5335,7 +5339,7 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
       return { ok: true, updated: updated || nrUpdated, nrUpdated, dgWindowed, reason: 'legacy 32-bit route', autoConfigured: [] };
     }
     // A 64-bit DirectX 8/9 game behind dgVoodoo2 gets the same scaled-to-screen display (legacy.js DG_DISPLAY).
-    try { legacy.ensureDgVoodooWindowed(dir); } catch {}
+    try { legacy.ensureDgVoodooWindowed(dir, { vendor: gpuVendor }); } catch {}
     // Luma installs from before DLSS was preset for them (lumaue.js ensureLumaDlss).
     try { lumaue.ensureLumaDlss(dir); } catch {}
     // The Feeder follows its own releases, not this app's: a game installed weeks ago kept whatever
