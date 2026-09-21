@@ -373,7 +373,17 @@ test('the 32-bit layer is looked up where a 32-bit Vulkan loader looks', async (
 
 // ── Detection, route and Game Help after the swap ──────────────────────────────────────────────────
 
-test('our DXVK does not turn a 32-bit DirectX 9 game into "32-bit Vulkan"; someone else\'s still does', { skip: !onWindows }, async () => {
+// No 32-bit game is turned into a Vulkan game by a wrapper beside it -- ours or the player's own.
+//
+// The second half of this test used to assert the opposite: a DXVK the player placed still read as
+// Vulkan, and so as "32-bit Vulkan, unsupported". That was deliberate, and it was wrong. DXVK is the
+// standard community wrapper for Fallout: New Vegas, so an ordinary folder was told the game could
+// not be helped (#101) on the day that game shipped in the known-good catalog as working.
+//
+// Who put the wrapper there is not a fact about the game: underneath it is still DirectX 9, feeder32
+// is the route for it, and the layer in front is a choice the app already knows how to make either
+// way -- layerdefault.js accepts dxvk there, and translation.js can swap it to dgVoodoo2.
+test('no 32-bit DirectX 9 game becomes "32-bit Vulkan", whoever placed the DXVK', { skip: !onWindows }, async () => {
   const base = scratchDir('det-dxvk');
   const ours = path.join(base, 'ours');
   const exe = exeWith(ours, 'AssassinsCreedIIGame.exe', { bits: 32, marker: 'Direct3DCreate9' });
@@ -400,7 +410,15 @@ test('our DXVK does not turn a 32-bit DirectX 9 game into "32-bit Vulkan"; someo
   const exe2 = exeWith(theirsDir, 'Game.exe', { bits: 32, marker: 'Direct3DCreate9' });
   write(theirsDir, 'd3d9.dll', dll('DXVK vkGetInstanceProcAddr'));
   const stored = await detect.detectGameCached(theirsDir, exe2, { stored: { ...d, api: 'dx9', translatedBy: null, exeStamp: detect.exeStamp(exe2) } });
-  assert.equal(stored.api, 'vulkan', 'a DXVK the player placed is still read as what it is');
+  assert.equal(stored.api, 'dx9', 'a DXVK the player placed must not hide the game own API');
+  assert.notEqual(stored.recommend, 'unsupported');
+  // The wrapper is still recorded. It is simply not allowed to decide the API.
+  assert.ok(stored.vulkanWrapper, 'the wrapper should still be reported');
+  assert.equal(stored.translatedBy, null, 'and it is still not one of ours');
+  // Which is the point of the change: the game gets the 32-bit route instead of being refused.
+  const theirs = await detect.detectGame(theirsDir, exe2);
+  assert.equal(theirs.api, 'dx9');
+  assert.equal(route.recommendRoute(theirsDir, exe2, theirs, 'nvidia').route, 'feeder32');
 });
 
 test('the route shows a DXVK chosen before installing, and Install is the next step', () => {
