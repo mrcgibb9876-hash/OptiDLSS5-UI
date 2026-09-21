@@ -356,7 +356,10 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
       ...extra,
       route, label, reason, reasonVars, steps, gpuVendor,
       // Which neural pass this folder is set up for; the renderer compares it with the game's choice.
-      consumerHere: onDfc ? 'dfc' : 'optiscaler',
+      // From the marker alone: a GPU probe that came back 'unknown', or a route the catalog steered
+      // elsewhere, must not make a Chicken folder read as ours -- Install would then lay OptiScaler on
+      // top of it (review of 2026-09-22).
+      consumerHere: dfcHere ? 'dfc' : 'optiscaler',
       // Which of Chicken's routes the switch takes: its 32-bit companion, or the 64-bit one.
       dfcBits: detected.bitness === 32 ? 32 : 64,
       dfcSupport: dfcOffered ? dfc.supportedFor({ api, bitness: detected.bitness || 64 }) : null,

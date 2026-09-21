@@ -403,7 +403,9 @@ async function removeDfc(dir, { cacheDir = null, uninstall = false, unlistVulkan
   }
 
   // ReShade back from the proxy slot. Only the file we renamed, and only while it still is ReShade.
-  const proxy = marker.reshadeProxy ? path.join(dir, marker.reshadeProxy) : null;
+  // A ReShade taken over with a hand-made Chicken is the player's: it stays where it was (a later
+  // Install sets it aside properly, under its backup name, if OptiScaler needs the slot).
+  const proxy = marker.reshadeProxy && !marker.reshadeAdopted ? path.join(dir, marker.reshadeProxy) : null;
   if (proxy && fs.existsSync(proxy) && isReShade(proxy)) {
     const plain = path.join(dir, RESHADE_PLAIN);
     // Fetched for Chicken on a game with no Feeder: nothing on the way back loads a ReShade64.dll,
@@ -434,13 +436,32 @@ async function removeDfc(dir, { cacheDir = null, uninstall = false, unlistVulkan
     try { if (fs.readdirSync(path.join(dir, rel)).length === 0) fs.rmdirSync(path.join(dir, rel)); } catch {}
   }
 
-  if ((marker.reshadeFetched || marker.reshadeIni) && !failed.length) {
-    for (const name of ['ReShade.ini', 'ReShadePreset.ini', 'ReShade.log']) {
+  // ReShade's files beside the game. The ones this switch created go (and ReShade's log, when the
+  // ReShade was ours). A player's own ReShade.ini or preset that a switch edited was backed up to the
+  // cache first (writeReShadeFile) and is put back exactly -- never deleted. Markers from before that
+  // record existed keep the old rule.
+  if (!failed.length) {
+    const created = Array.isArray(marker.reshadeIniCreated) ? marker.reshadeIniCreated : null;
+    const backedUp = Array.isArray(marker.reshadeIniBackedUp) ? marker.reshadeIniBackedUp : [];
+    const oldMarker = !created && marker.reshadeIni;
+    const ours = new Set(created || []);
+    if (oldMarker || (marker.reshadeFetched && !created)) ['ReShade.ini', 'ReShadePreset.ini'].forEach((n) => ours.add(n));
+    if (marker.reshadeFetched || ours.has('ReShade.ini')) ours.add('ReShade.log');
+    for (const name of ours) {
+      if (backedUp.includes(name)) continue;
       const p = path.join(dir, name);
       if (!fs.existsSync(p)) continue;
       const r = await saferemove.removePath(p);
       if (r.ok) removed.push(name);
       else failed.push({ rel: name, code: r.code });
+    }
+    for (const name of backedUp) {
+      try {
+        if (cacheDir && await restoreStashedCfg(dir, cacheDir, name)) removed.push(`${name} (put back as it was before Chicken)`);
+        else kept.push(`${name} (the player's own, edited for Chicken)`);
+      } catch {
+        kept.push(`${name} (the player's own, edited for Chicken)`);
+      }
     }
   }
 
@@ -483,7 +504,9 @@ const HAND_PLACED = 'copied in by hand, not by this app -- switching this game t
 // every Chicken name beside the exe (and its worker folder, on 32-bit) becomes this app's to update
 // and, on the way back, to remove. Written only once the switch is about to change the folder, so a
 // switch that refuses leaves the player's copy exactly as unclaimed as it was.
-const CHICKEN_NAMES = [ADDON, NVNGX, CFG, ADDON32, BRIDGE_CFG, COMPAT_ADDON, ...DOCS];
+// Only names that are Chicken's alone: LICENSE.txt, README.txt and THIRD-PARTY-NOTICES.txt are as
+// likely to be the game's own, and a takeover must never claim (and later delete) those.
+const CHICKEN_NAMES = [ADDON, NVNGX, CFG, ADDON32, BRIDGE_CFG, COMPAT_ADDON, 'LICENSE-Deep-Fried-Chicken.md'];
 function handPlaced(dir) {
   return dfcPresent(dir) && !dfcOurs(dir);
 }
@@ -552,17 +575,20 @@ async function switchToDfc(dir, cacheDir, { nrDllPath = null, removeOptiScaler, 
   // (Luma's, the player's) is not touched.
   const feederReShade = fs.existsSync(plain) && fs.existsSync(path.join(dir, 'dlss5-feed.addon64'));
   // The hand-made Chicken setup: the player's ReShade already in the proxy slot, no Feeder. That
-  // ReShade is taken over with the rest rather than fetched again.
+  // ReShade is used where it is, and stays theirs: the way back leaves it in place.
   const adoptProxy = adopting && !already && !feederReShade && fs.existsSync(proxy) && isReShade(proxy);
   if (!already && fs.existsSync(plain) && !feederReShade) throw new Error(`${RESHADE_PLAIN} here is not this app's -- it is left alone`);
   if (!already && !feederReShade && !adoptProxy && !fetchReShade) throw new Error(`${RESHADE_PLAIN} is not here -- deploy the Feeder first`);
   const nrHere = fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'));
   if (!nrHere && !(nrDllPath && fs.existsSync(nrDllPath))) throw new Error('the NR model (nvngx_dlssnr.dll) is not set up in Settings, and Chicken needs it beside its add-on');
-  // The proxy slot has to end up free for ReShade. Checked now, not after OptiScaler is out: a
-  // dxgi.dll that is neither ReShade nor OptiScaler is somebody else's, and a game whose own
-  // dxgi.dll OptiScaler's install backed up gets that file back the moment OptiScaler leaves.
+  // The proxy slot has to end up free for ReShade, so whatever is in it now must be the OptiScaler
+  // that is coming out, or the ReShade being taken over. Anything else -- a game's own dxgi.dll, or a
+  // player's ReShade with no Chicken beside it -- is refused here, before anything is touched. (The
+  // latter used to pass this check and fail after OptiScaler was already out, leaving the game with
+  // neither; review of 2026-09-22.) A game whose own dxgi.dll OptiScaler's install set aside would
+  // get it back the moment OptiScaler leaves, so that is refused up front too.
   if (!already) {
-    if (fs.existsSync(proxy) && !isReShade(proxy) && !isOptiScaler(proxy)) {
+    if (fs.existsSync(proxy) && !adoptProxy && !isOptiScaler(proxy)) {
       throw new Error(`${RESHADE_PROXY} here is not this app's -- ReShade cannot take its place`);
     }
     const journal = readJson(path.join(dir, OPTISCALER_JOURNAL));
@@ -581,33 +607,53 @@ async function switchToDfc(dir, cacheDir, { nrDllPath = null, removeOptiScaler, 
     reshadeFetched = true;
     steps.push('fetched ReShade');
   }
-  if (adopting) adoptHandPlaced(dir);
+  const dropFetched = () => { if (reshadeFetched) { try { fs.rmSync(plain, { force: true }); } catch {} } };
   const out = await removeOptiScaler(dir);
   if (out && out.failed && out.failed.length) {
-    if (reshadeFetched) { try { fs.rmSync(plain, { force: true }); } catch {} }
+    dropFetched();
     throw new Error(`OptiScaler could not be taken out (${out.failed.map((f) => `${f.rel}: ${f.code}`).join(', ')}) -- close the game and try again`);
   }
   if (out && out.removed && out.removed.length) steps.push('took OptiScaler out');
+  // Only now, with OptiScaler out, is a hand-made Chicken this app's: a switch that stopped above
+  // leaves it exactly as unclaimed as it was.
+  if (adopting) adoptHandPlaced(dir);
 
   if (!already && adoptProxy) {
-    steps.push(`took over the ReShade already loading as ${RESHADE_PROXY}`);
+    steps.push(`kept the ReShade already loading as ${RESHADE_PROXY}`);
   } else if (!already) {
-    // dxgi.dll is free now unless it is something that is neither ours nor ReShade (a game's own,
-    // restored by the OptiScaler removal): that is never overwritten.
-    if (fs.existsSync(proxy)) throw new Error(`${RESHADE_PROXY} here is not this app's -- ReShade cannot take its place`);
-    await fsp.rename(plain, proxy);
+    // dxgi.dll is free now unless the OptiScaler removal put a game's own file back: never overwritten.
+    if (fs.existsSync(proxy)) {
+      dropFetched();
+      throw new Error(`${RESHADE_PROXY} here is not this app's -- ReShade cannot take its place`);
+    }
+    try {
+      await fsp.rename(plain, proxy);
+    } catch (e) {
+      dropFetched();
+      throw e;
+    }
     steps.push(`ReShade now loads itself as ${RESHADE_PROXY}`);
   }
+  // The proxy is recorded the moment it is in place: a failure below then leaves a switch that the
+  // next Install finishes (reshadeProxyOf reads it back as "already"), not a folder it refuses.
+  const soFar = readMarker(dir) || {};
+  writeMarker(dir, {
+    ...soFar,
+    files: Array.isArray(soFar.files) ? soFar.files : [],
+    reshadeProxy: RESHADE_PROXY,
+    ...(reshadeFetched ? { reshadeFetched: true } : {}),
+    ...(adoptProxy ? { reshadeAdopted: true } : {}),
+  });
 
   let nrPlaced = false;
   if (!fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'))) {
+    if (!nrDllPath || !fs.existsSync(nrDllPath)) throw new Error('the NR model (nvngx_dlssnr.dll) is not set up in Settings, and Chicken needs it beside its add-on -- set it, then press Install again to finish');
     await fsp.copyFile(nrDllPath, path.join(dir, 'nvngx_dlssnr.dll'));
     nrPlaced = true;
     steps.push('placed the NR model');
   }
 
-  // An adopted ReShade is this app's now: it goes with Chicken on the way back, like a fetched one.
-  const deployed = await deployDfc(dir, cacheDir, { extra: { reshadeProxy: RESHADE_PROXY, ...(nrPlaced ? { nrPlaced } : {}), ...((reshadeFetched || adoptProxy) ? { reshadeFetched: true } : {}) } });
+  const deployed = await deployDfc(dir, cacheDir, { extra: { ...(nrPlaced ? { nrPlaced } : {}) } });
   steps.push(deployed.restoredCfg ? 'deployed Chicken with this game\x27s saved settings' : 'deployed Chicken');
   return { ...deployed, steps };
 }
@@ -664,6 +710,9 @@ async function switchToDfcCompat(dir, cacheDir, deps = {}) {
   if (!nrHere && !(nrDllPath && fs.existsSync(nrDllPath))) throw new Error('the NR model (nvngx_dlssnr.dll) is not set up in Settings, and Chicken needs it beside its add-on');
   const before = readMarker(dir);
   const already = !!(before && before.compat === api && dfcOurs(dir));
+  // Which of ReShade's files were here before anything below (writeReShadeFile).
+  const iniAtStart = { 'ReShade.ini': fs.existsSync(path.join(dir, 'ReShade.ini')), 'ReShadePreset.ini': fs.existsSync(path.join(dir, 'ReShadePreset.ini')) };
+  const iniRecord = { created: [...((before && before.reshadeIniCreated) || [])], backedUp: [...((before && before.reshadeIniBackedUp) || [])] };
 
   // Everything that can refuse, before anything is touched.
   let setup = null;
@@ -697,29 +746,30 @@ async function switchToDfcCompat(dir, cacheDir, deps = {}) {
   }
 
   const steps = [];
-  if (adopting) adoptHandPlaced(dir);
   if (!already) {
     const o = await removeOptiScaler(dir);
     if (o && o.failed && o.failed.length) throw new Error(`OptiScaler could not be taken out (${o.failed.map((f) => `${f.rel}: ${f.code}`).join(', ')}) -- close the game and try again`);
-    await removeFeeder(dir);
+    // Both removals are safe to run again, so a locked file here is a retry, not a stuck folder.
+    try {
+      await removeFeeder(dir);
+    } catch (e) {
+      throw new Error(`the Feeder could not be taken out (${(e && e.code) || (e && e.message) || e}) -- close the game and press Install again`);
+    }
     steps.push('took OptiScaler and the Feeder out: Chicken\x27s producer is the one feeder now');
   }
+  // Only now, with this app's pass out, is a hand-made Chicken this app's.
+  if (adopting) adoptHandPlaced(dir);
 
   // Chicken's 64-bit files (with this game's saved cfg), then the producer set over them.
   const deployed = await deployDfc(dir, cacheDir);
   const files = new Set(readMarker(dir).files || []);
   const restored = [];
   if (!fs.existsSync(path.join(dir, BRIDGE_CFG)) && await restoreStashedCfg(dir, cacheDir, BRIDGE_CFG)) { restored.push(BRIDGE_CFG); files.add(BRIDGE_CFG); }
-  for (const rel of walkFiles(compat)) {
-    const to = path.join(dir, ...rel.split('/'));
-    if (/\.cfg$/i.test(rel) && fs.existsSync(to)) continue;
-    await fsp.mkdir(path.dirname(to), { recursive: true });
-    await fsp.copyFile(path.join(compat, ...rel.split('/')), to);
-    files.add(rel);
-  }
+  await layTree(compat, dir, files);
   // The model and DLSS itself beside the exe.
   let nrPlaced = !!(before && before.nrPlaced);
   if (!fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'))) {
+    if (!nrDllPath || !fs.existsSync(nrDllPath)) throw new Error('the NR model (nvngx_dlssnr.dll) is not set up in Settings -- set it, then press Install again to finish');
     await fsp.copyFile(nrDllPath, path.join(dir, 'nvngx_dlssnr.dll'));
     nrPlaced = true;
   }
@@ -741,7 +791,7 @@ async function switchToDfcCompat(dir, cacheDir, deps = {}) {
   }
   if (!getIniKey(ini, 'GENERAL', 'PresetPath')) ini = setIniKey(ini, 'GENERAL', 'PresetPath', '.\\ReShadePreset.ini');
   if (!getIniKey(ini, 'OVERLAY', 'TutorialProgress')) ini = setIniKey(ini, 'OVERLAY', 'TutorialProgress', '4');
-  await fsp.writeFile(iniPath, ini, 'utf8');
+  await writeReShadeFile(dir, cacheDir, 'ReShade.ini', iniAtStart['ReShade.ini'], ini, iniRecord);
   const presetPath = path.join(dir, 'ReShadePreset.ini');
   let preset = fs.existsSync(presetPath) ? fs.readFileSync(presetPath, 'utf8') : '';
   const techniques = (getIniKey(preset, '', 'Techniques') || '').split(',').map((t) => t.trim()).filter(Boolean)
@@ -749,15 +799,18 @@ async function switchToDfcCompat(dir, cacheDir, deps = {}) {
     .filter((t) => !/^DLSS5_Feed/i.test(t));
   if (!techniques.some((t) => /^DFC_Universal_Feed@/i.test(t))) techniques.push('DFC_Universal_Feed@DFC_Universal_Feed.fx');
   preset = setIniKey(preset, '', 'Techniques', techniques.join(','));
-  await fsp.writeFile(presetPath, preset, 'utf8');
+  await writeReShadeFile(dir, cacheDir, 'ReShadePreset.ini', iniAtStart['ReShadePreset.ini'], preset, iniRecord);
 
   writeMarker(dir, {
     ...readMarker(dir),
     compat: api,
     files: [...files],
     ...(nrPlaced ? { nrPlaced } : {}),
-    // Vulkan: no proxy of ours, but the ini and preset above are; OpenGL: the proxy too.
+    // Vulkan: no proxy of ours, but the ini and preset above are (created, or the player's backed
+    // up); OpenGL: the proxy too.
     reshadeIni: true,
+    reshadeIniCreated: iniRecord.created,
+    reshadeIniBackedUp: iniRecord.backedUp,
     ...(vulkanLayer ? { vulkanLayer } : {}),
     ...(api === 'opengl' ? { reshadeProxy: 'opengl32.dll', reshadeFetched: true } : {}),
   });
@@ -782,6 +835,40 @@ async function switchToDfcCompat(dir, cacheDir, deps = {}) {
 // DFC_Universal_Feed, the technique the README has the player enable by hand, is switched on in the
 // preset this app writes.
 const RESHADE32_FOR = { dx9: 'd3d9.dll', dx10: 'dxgi.dll', dx11: 'dxgi.dll', opengl: 'opengl32.dll', vulkan: null };
+
+// ReShade.ini / ReShadePreset.ini beside the game, written by a switch. One that is still there and
+// was there before the switch began is the player's own: backed up to the cache before it is edited,
+// and put back on the way back. Any other is this switch's, and goes with Chicken. `record` is
+// { created: [], backedUp: [] }, kept in the marker.
+async function writeReShadeFile(dir, cacheDir, rel, existedAtStart, text, record) {
+  const p = path.join(dir, rel);
+  if (!record.created.includes(rel) && !record.backedUp.includes(rel)) {
+    if (fs.existsSync(p) && existedAtStart) {
+      await stashCfg(dir, cacheDir, rel);
+      record.backedUp.push(rel);
+    } else {
+      record.created.push(rel);
+    }
+  }
+  await fsp.writeFile(p, text, 'utf8');
+}
+
+// A Chicken tree (the 32-bit one, or the Vulkan/OpenGL set) laid into the game folder. A tuned cfg
+// already there is kept. A file already there that is not ours -- a shared name such as
+// reshade-shaders\Shaders\ReShade.fxh, which the player's other effects use -- is left as it is
+// and never claimed, so the way back cannot delete it. `mayReplace(rel)` names the ones that are
+// ours to refresh (in the marker already, or in a worker folder being taken over).
+async function layTree(tree, dir, files, mayReplace = (rel) => files.has(rel)) {
+  for (const rel of walkFiles(tree)) {
+    const to = path.join(dir, ...rel.split('/'));
+    const exists = fs.existsSync(to);
+    if (exists && /\.cfg$/i.test(rel)) continue;
+    if (exists && !mayReplace(rel)) continue;
+    await fsp.mkdir(path.dirname(to), { recursive: true });
+    await fsp.copyFile(path.join(tree, ...rel.split('/')), to);
+    files.add(rel);
+  }
+}
 
 function walkFiles(root, rel = '') {
   const out = [];
@@ -816,6 +903,8 @@ async function switchToDfc32(dir, cacheDir, deps = {}) {
 
   const before = readMarker(dir);
   const already = !!(before && before.bits === 32 && dfcOurs(dir));
+  const iniAtStart = { 'ReShade.ini': fs.existsSync(path.join(dir, 'ReShade.ini')), 'ReShadePreset.ini': fs.existsSync(path.join(dir, 'ReShadePreset.ini')) };
+  const iniRecord = { created: [...((before && before.reshadeIniCreated) || [])], backedUp: [...((before && before.reshadeIniBackedUp) || [])] };
   // Everything that can refuse, before anything is touched.
   if (!already) {
     if (proxyName && occupiedAfterRemoval(proxyName) && !adoptProxy(proxyName)) throw new Error(`${proxyName} here is not this app's -- ReShade cannot take its place`);
@@ -848,7 +937,6 @@ async function switchToDfc32(dir, cacheDir, deps = {}) {
   }
 
   const steps = [];
-  if (adopting) adoptHandPlaced(dir);
   if (!already) {
     const out = await removeOurStack(dir);
     if (out && out.failed && out.failed.length) {
@@ -859,6 +947,8 @@ async function switchToDfc32(dir, cacheDir, deps = {}) {
       : (fs.existsSync(path.join(dir, HOST_DIR)) && !adoptHost) ? HOST_DIR : null;
     if (back) throw new Error(`${back} came back after the DLSS 5 route was taken out -- it is the game's own, so Chicken cannot use that name`);
   }
+  // Only now, with this app's route out, is a hand-made Chicken this app's.
+  if (adopting) adoptHandPlaced(dir);
 
   const adoptedMarker = adopting ? readMarker(dir) : null;
   const files = new Set(already && Array.isArray(before.files) ? before.files : (adoptedMarker ? adoptedMarker.files : []));
@@ -869,15 +959,9 @@ async function switchToDfc32(dir, cacheDir, deps = {}) {
     if (rel === CFG) continue; // the 64-bit route's name; not part of the 32-bit layout
     if (!fs.existsSync(path.join(dir, rel)) && await restoreStashedCfg(dir, cacheDir, rel)) { restored.push(rel); files.add(rel); }
   }
-  for (const rel of walkFiles(tree)) {
-    const to = path.join(dir, ...rel.split('/'));
-    const isCfg = /\.cfg$/i.test(rel);
-    // A cfg already here (tuned, or restored above) is kept; everything else is refreshed.
-    if (isCfg && fs.existsSync(to)) continue;
-    await fsp.mkdir(path.dirname(to), { recursive: true });
-    await fsp.copyFile(path.join(tree, ...rel.split('/')), to);
-    files.add(rel);
-  }
+  // A cfg already here (tuned, or restored above) is kept; Chicken's own files are refreshed; a shared
+  // name that is not ours is left alone. A worker folder being taken over is Chicken's through and through.
+  await layTree(tree, dir, files, (rel) => files.has(rel) || (adoptHost && rel.startsWith(`${HOST_DIR}/`)));
 
   // The game's 32-bit ReShade, under the name its renderer loads (none on Vulkan: the layer).
   if (proxyName) await fsp.writeFile(path.join(dir, proxyName), extract(setup, r32));
@@ -903,14 +987,14 @@ async function switchToDfc32(dir, cacheDir, deps = {}) {
   }
   if (!getIniKey(ini, 'GENERAL', 'PresetPath')) ini = setIniKey(ini, 'GENERAL', 'PresetPath', '.\\ReShadePreset.ini');
   if (!getIniKey(ini, 'OVERLAY', 'TutorialProgress')) ini = setIniKey(ini, 'OVERLAY', 'TutorialProgress', '4');
-  await fsp.writeFile(iniPath, ini, 'utf8');
+  await writeReShadeFile(dir, cacheDir, 'ReShade.ini', iniAtStart['ReShade.ini'], ini, iniRecord);
   const presetPath = path.join(dir, 'ReShadePreset.ini');
   let preset = fs.existsSync(presetPath) ? fs.readFileSync(presetPath, 'utf8') : '';
   const techniques = (getIniKey(preset, '', 'Techniques') || '').split(',').map((t) => t.trim()).filter(Boolean);
   if (!techniques.some((t) => /^DFC_Universal_Feed@/i.test(t))) {
     techniques.push('DFC_Universal_Feed@DFC_Universal_Feed.fx');
     preset = setIniKey(preset, '', 'Techniques', techniques.join(','));
-    await fsp.writeFile(presetPath, preset, 'utf8');
+    await writeReShadeFile(dir, cacheDir, 'ReShadePreset.ini', iniAtStart['ReShadePreset.ini'], preset, iniRecord);
   }
   // The worker's ReShade loads the add-on from its own folder and skips its first-run tutorial.
   const hostIniPath = path.join(hostDir, 'ReShade.ini');
@@ -929,6 +1013,8 @@ async function switchToDfc32(dir, cacheDir, deps = {}) {
     dirs: hostDirMade ? [HOST_DIR] : [],
     ...(proxyName ? { reshadeProxy: proxyName, reshadeFetched: true } : {}),
     reshadeIni: true,
+    reshadeIniCreated: iniRecord.created,
+    reshadeIniBackedUp: iniRecord.backedUp,
     ...(vulkanLayer ? { vulkanLayer } : {}),
     from: path.basename(path.dirname(tree)),
     deployedAt: new Date().toISOString(),

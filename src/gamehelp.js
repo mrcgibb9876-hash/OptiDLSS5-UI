@@ -85,11 +85,16 @@ function diagnose(ctx) {
   if (route.route === 'unsupported' && route.consumerHere !== 'dfc') return out('unavailable', 'unsupported', { reason: route.reason || '' });
 
   // Two stacks on one DLSS call crash before anything else can be judged.
-  // Chicken copied in by hand, and nothing else: the answer is the switch, which takes it over.
-  if (foreign.length && foreign.every((f) => f.tool === 'Deep Fried Chicken')) {
-    return out('step', 'dfc-hand-placed', { files: foreign.flatMap((f) => f.files).join(', ') });
+  // Chicken's footprint beside a Chicken this app runs is its own installer's leftovers, not a rival.
+  // Chicken copied in by hand, and nothing else, where the switch is offered and no OptiScaler of ours
+  // is beside it: the answer is the switch, which takes it over. Anywhere else (another GPU, or our
+  // OptiScaler in the same folder -- two neural passes) the remove-foreign fix stands.
+  const rivals = route.consumerHere === 'dfc' ? foreign.filter((f) => f.tool !== 'Deep Fried Chicken') : foreign;
+  if (rivals.length && rivals.every((f) => f.tool === 'Deep Fried Chicken')
+      && route.dfcSupport && route.dfcSupport.ok && !route.optiInstalled) {
+    return out('step', 'dfc-hand-placed', { files: rivals.flatMap((f) => f.files).join(', ') });
   }
-  if (foreign.length) return fix('foreign', 'remove-foreign', { tool: foreign.map((f) => f.tool).join(', ') });
+  if (rivals.length) return fix('foreign', 'remove-foreign', { tool: rivals.map((f) => f.tool).join(', ') });
   // The driver says DLSS 5 cannot run on it. No file in the game folder changes that, so it goes
   // before every per-folder finding -- otherwise the user fixes those first and still gets nothing.
   if (run.ran && run.verdict === 'driver-outdated') {

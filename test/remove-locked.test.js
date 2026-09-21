@@ -128,7 +128,8 @@ function bodyIn(src, opener, what) {
 }
 
 function bodyOf(name) {
-  return bodyIn(mainJs, `async function ${name}(dir) {`, name);
+  // The prefix, so a function that grows an options argument (uninstallOptiScaler's keepNr) is still found.
+  return bodyIn(mainJs, `async function ${name}(dir`, name);
 }
 
 test('the removal functions never delete with a bare fsp.rm -- every deletion can be survived', () => {

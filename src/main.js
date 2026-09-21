@@ -857,6 +857,7 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
         removeOptiScaler: removeOptiScalerForSwap,
         fetchReShade: fetchReShadeForDfc,
       });
+      invalidateDetection(dir);
     } else if (dfcRemoved) {
       results.dfcRemoved = dfcRemoved;
     }
@@ -2497,7 +2498,7 @@ function storeOf(exePath) {
   return storeCache.get(key);
 }
 
-ipcMain.handle('game:status', (_evt, exePath) => {
+ipcMain.handle('game:status', async (_evt, exePath) => {
   if (!exePath || !fs.existsSync(exePath)) return { exeMissing: true };
   const dir = gameDir(exePath);
   const hasIni = fs.existsSync(path.join(dir, 'OptiScaler.ini'));
@@ -2512,7 +2513,13 @@ ipcMain.handle('game:status', (_evt, exePath) => {
   const foreign = foreignToolchains(dir);
   // Deep Fried Chicken copied in by hand is the other neural pass this app can run, not a rival stack:
   // the card says how to switch to it (the switch takes it over, dfc.js) rather than warning of a crash.
-  const warnings = foreign.map((f) => (f.tool === 'Deep Fried Chicken'
+  // Only where that is the answer: on NVIDIA (the only place the switch is offered), and with no
+  // OptiScaler of ours beside it -- both in one folder is the two-neural-passes clash, and the crash
+  // warning is right there. A Chicken this app runs does not flag its own installer's leftovers.
+  const gpuVendor = ((await getGpuInfo()) || {}).vendor;
+  const chickenIsChoice = gpuVendor === 'nvidia' && !(backends.optiscaler && !backends.dfc);
+  const shown = backends.dfc ? foreign.filter((f) => f.tool !== 'Deep Fried Chicken') : foreign;
+  const warnings = shown.map((f) => (f.tool === 'Deep Fried Chicken' && chickenIsChoice
     ? {
       message: 'Deep Fried Chicken was copied into this folder by hand ({files}). Switch this game to Chicken from its ⋯ menu and the app takes it over, or delete those files to stay on DLSS 5.',
       vars: { files: f.files.join(', ') },
@@ -6116,7 +6123,8 @@ async function installProxy(dir, proxyName = DEFAULT_PROXY) {
 //
 // Never deletes a file at a proxy name without confirming it is actually OptiScaler: if someone
 // renamed things by hand in between, the honest outcome is to leave their file alone and say so.
-async function uninstallOptiScaler(dir) {
+// keepNr: leave nvngx_dlssnr.dll where it is (a switch to Deep Fried Chicken, which loads the same file).
+async function uninstallOptiScaler(dir, { keepNr = false } = {}) {
   const removed = [];
   const kept = [];
   const failed = [];
@@ -6163,7 +6171,7 @@ async function uninstallOptiScaler(dir) {
 
   let nrDllRemoved = false;
   try {
-    nrDllRemoved = await removeSharedNrDllIfUnneeded(dir);
+    nrDllRemoved = keepNr ? false : await removeSharedNrDllIfUnneeded(dir);
     if (nrDllRemoved) removed.push('nvngx_dlssnr.dll');
   } catch (err) {
     failed.push({ rel: 'nvngx_dlssnr.dll', code: (err && err.code) || 'failed' });
@@ -6181,7 +6189,7 @@ async function uninstallOptiScaler(dir) {
 const SWAP_KEEPS = new Set(['nvngx_dlss.dll', 'nvngx_dlssnr.dll', 'reshade64.dll', 'reshade.ini', 'reshadepreset.ini', 'reshade-shaders', 'dlss5-feed.addon64', 'dlss5-feed.cfg']);
 async function removeOptiScalerForSwap(dir) {
   const journal = readInstallMarker(dir) || {};
-  const core = await uninstallOptiScaler(dir);
+  const core = await uninstallOptiScaler(dir, { keepNr: true });
   if (core.failed.length) return core;
   const rm = async (rel) => {
     if (SWAP_KEEPS.has(String(rel).toLowerCase()) || !fs.existsSync(path.join(dir, rel))) return;

@@ -366,10 +366,12 @@ test('a hand-made Chicken setup (their ReShade as dxgi.dll, Chicken beside it) i
     assert.strictEqual(m.adopted, true);
     assert.strictEqual(m.reshadeProxy, 'dxgi.dll');
 
-    // And back: everything goes, their cfg stashed for next time.
+    // And back: Chicken goes, their cfg stashed for next time -- and their own ReShade stays where it
+    // was (review of 2026-09-22: deleting it on the way back took a player's setup with it).
     const back = await dfc.removeDfc(game, { cacheDir: cache });
     assert.deepStrictEqual(back.failed, []);
-    assert.deepStrictEqual(fs.readdirSync(game).sort(), ['Game.exe', 'nvngx_dlssnr.dll']);
+    assert.deepStrictEqual(fs.readdirSync(game).sort(), ['Game.exe', 'dxgi.dll', 'nvngx_dlssnr.dll']);
+    assert.strictEqual(fs.readFileSync(path.join(game, 'dxgi.dll'), 'utf8'), 'their ReShade build');
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
 
