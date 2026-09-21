@@ -100,6 +100,23 @@ redistribution, so the manager only links to the release page and fetches the mo
   DLSS" better than the wrapper does.
 - **Nexus Mods is blocked by the egress proxy**, so a mod page's comments -- often the richest source
   on a specific game -- cannot be read from a session. The OptiScaler wiki and its issues can.
+  **discord.com is blocked too** (confirmed 2026-09-21), which matters more than it sounds: several
+  tools in this space are handed out only through Discord, so a link to a message there is unreadable
+  from a session no matter how relevant. Ask the user to paste the contents.
+- **Deep Fried Chicken: no public download, no stated licence, and the app must not ship it.** It is
+  Alexander's neural consumer, the alternative to our OptiScaler in the Feeder's "exactly one neural
+  consumer" slot, and it is distributed through its author's Discord only -- no repository, no release
+  URL, so nothing for `integrity.js` to pin. `src/dfc.js` therefore takes a copy the USER supplies and
+  caches it, the way `importDgVoodooZip` does for dgVoodoo2; it never fetches, and a test fails if a
+  fetch appears. Same position as the AMD installer above. A permission request went to its author on
+  2026-09-21 (asked for: may the app fetch it, and is there a documented `deep-fried-chicken.cfg`
+  schema), with full credit offered -- **no reply yet**.
+- **Do not write `deep-fried-chicken.cfg`.** Its README says "Don't edit its settings file", its schema
+  is not published, and the binary cannot be obtained or run in a session to check what a key does.
+  `dfc.js` reads it for display and has no writer, guarded by a test. Inventing keys here is the engine
+  v1.0.21 D3D12 resource state all over again. The user's two uploaded Chicken archives
+  (`*-CP376-Beta.7z`, `*-v1.7.4-checkpoint-116-*.7z`) are **AES-encrypted with encrypted headers** --
+  py7zr answers `PasswordRequired` and cannot even list names -- so they are not a way in either.
 
 - **A clone goes stale fast.** This repo moved about 180 commits in the first half of September
   alone. Always `git fetch origin master` and rebase before writing a patch, and re-check that a
