@@ -2482,10 +2482,19 @@ function describeRun(run) {
 }
 
 function describeUninstall(res) {
+  const failedList = res.failed || [];
   const removed = (res.removed || []).length ? ' ' + t('Removed: {list}.', { list: res.removed.join(', ') }) : ' ' + t('Nothing left to remove.');
   const restored = (res.restored || []).length ? ' ' + t('Restored: {list}.', { list: res.restored.join(', ') }) : '';
   const kept = (res.kept || []).length ? ' ' + t('Left alone: {list}.', { list: res.kept.join('; ') }) : '';
-  return `${t('DLSS 5 removed.')}${removed}${restored}${kept}`;
+  // Windows refuses to delete a file that is still mapped into a running process, so the first thing
+  // to try is closing the game -- named before anything else, because it is the actionable part.
+  const failed = failedList.length
+    ? ' ' + t('Could not delete: {list}. Close the game and anything launched with it, then press Remove again -- or delete them by hand.', {
+      list: failedList.map((f) => (f.code ? `${f.rel} (${f.code})` : f.rel)).join(', '),
+    })
+    : '';
+  const head = failedList.length ? t('DLSS 5 partly removed.') : t('DLSS 5 removed.');
+  return `${head}${failed}${removed}${restored}${kept}`;
 }
 
 // The escape hatch. Installing no longer needs this -- the app does the rename itself -- but the

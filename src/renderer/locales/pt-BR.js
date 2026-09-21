@@ -193,6 +193,8 @@ window.I18N.register('pt-BR', {
   "Nothing left to remove.": "Nada mais para remover.",
   "Left alone: {list}.": "Mantidos: {list}.",
   "DLSS 5 removed.": "DLSS 5 removido.",
+  "DLSS 5 partly removed.": "DLSS 5 removido parcialmente.",
+  "Could not delete: {list}. Close the game and anything launched with it, then press Remove again -- or delete them by hand.": "Não foi possível excluir: {list}. Feche o jogo e tudo o que foi iniciado com ele e pressione Remover de novo -- ou exclua-os manualmente.",
   "Couldn't remove OptiScaler: {error}. Removed from the list anyway.": "Não foi possível remover o OptiScaler: {error}. Removido da lista mesmo assim.",
   "Edit Game": "Editar jogo",
   "Replace nvngx_dlssnr.dll with {version} (backs up the current one)": "Substituir nvngx_dlssnr.dll pela {version} (salva a atual)",
