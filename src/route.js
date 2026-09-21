@@ -330,9 +330,12 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
   // neural pass there instead of OptiScaler, so "Install DLSS 5" is not a step it is missing.
   const dfcHere = dfc.dfcOurs(dir);
   const finish = (route, label, reason, steps, reasonVars = null, extra = {}) => {
-    const onDfc = route === 'feeder' && dfcHere;
+    // Chicken is offered on NVIDIA, on a Feeder game or a plain-OptiScaler one (its 3.0 needs no
+    // Feeder on Direct3D); dfc.supportedFor then says whether this game qualifies.
+    const dfcOffered = gpuVendor === 'nvidia' && (route === 'feeder' || route === 'optiscaler');
+    const onDfc = dfcOffered && dfcHere;
     if (onDfc) {
-      label = 'Deep Fried Chicken + Feeder';
+      label = route === 'feeder' ? 'Deep Fried Chicken + Feeder' : 'Deep Fried Chicken';
       steps = steps.map((s) => (s.key === 'optiscaler' ? { key: 'dfc', label: 'Switch to Deep Fried Chicken', done: true } : s));
     }
     const next = steps.find((s) => !s.done) || null;
@@ -342,7 +345,7 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
       route, label, reason, reasonVars, steps, gpuVendor,
       // Which neural pass this folder is set up for; the renderer compares it with the game's choice.
       consumerHere: onDfc ? 'dfc' : 'optiscaler',
-      dfcSupport: route === 'feeder' ? dfc.supportedFor({ api, bitness: detected.bitness || 64 }) : null,
+      dfcSupport: dfcOffered ? dfc.supportedFor({ api, bitness: detected.bitness || 64 }) : null,
       optiInstalled, feederDeployed, lumaDeployed, feederMisdeployed, shipsDlss,
       verified: verified.verification(exePath),
       catalogDefault: steered,

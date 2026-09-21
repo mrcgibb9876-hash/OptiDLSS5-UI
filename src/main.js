@@ -816,6 +816,7 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
       results.dfc = await dfc.switchToDfc(dir, dfcCacheDir(), {
         nrDllPath: nrDllPath || null,
         removeOptiScaler: removeOptiScalerForSwap,
+        fetchReShade: fetchReShadeForDfc,
       });
     } else if (dfc.dfcOurs(dir) || dfc.reshadeProxyOf(dir)) {
       results.dfcRemoved = await dfc.removeDfc(dir, { cacheDir: dfcCacheDir() });
@@ -830,6 +831,53 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
       needsReShadeInstaller: !!(error && error.needsReShadeInstaller),
       code: (error && error.code) || null,
     };
+  }
+});
+
+// A plain ReShade64.dll (the add-on build this app pins, feeder.js), for a game switched to Chicken
+// that has no Feeder to have brought one.
+function fetchReShadeForDfc(dir) {
+  return feeder.deployReShade(dir, feederCacheDir(), GITHUB_HEADERS, { api: 'dx11' });
+}
+
+async function dfcRouteFor(dir, exePath) {
+  const { vendor } = await getGpuInfo();
+  const effective = effectiveDetection(dir, exePath, await detectFor(dir, exePath));
+  return recommendRoute(dir, exePath, effective, vendor, { lumaMod: lumaModFor(exePath, effective) });
+}
+
+// The swap on any game Chicken is offered on (route.dfcSupport), Feeder or not -- the card menu and
+// Install on a plain-OptiScaler game come here; a Feeder game's Install goes through feeder:deploy,
+// which does the same with the Feeder brought up to date first.
+//   to 'dfc'         OptiScaler out, ReShade in as the proxy (the Feeder's, or fetched), the NR
+//                    model, Chicken (dfc.switchToDfc)
+//   to 'optiscaler'  Chicken out, its cfg kept; the renderer's Install then puts OptiScaler back
+ipcMain.handle('dfc:switch', async (_evt, { exePath, to, nrDllPath }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    if (to === 'dfc') {
+      const route = await dfcRouteFor(dir, exePath);
+      const support = route.dfcSupport;
+      if (!support || !support.ok) {
+        const e = new Error((support && support.code) || 'dfc-route');
+        e.code = (support && support.code) || 'dfc-route';
+        throw e;
+      }
+      const r = await dfc.switchToDfc(dir, dfcCacheDir(), {
+        nrDllPath: nrDllPath || null,
+        removeOptiScaler: removeOptiScalerForSwap,
+        fetchReShade: fetchReShadeForDfc,
+      });
+      invalidateDetection(dir);
+      return { ok: true, dfc: r, consumerHere: 'dfc' };
+    }
+    const r = (dfc.dfcOurs(dir) || dfc.reshadeProxyOf(dir)) ? await dfc.removeDfc(dir, { cacheDir: dfcCacheDir() }) : null;
+    if (r && r.failed.length) throw new Error(`Chicken could not be taken out (${r.failed.map((f) => `${f.rel}: ${f.code}`).join(', ')}) -- close the game and try again`);
+    invalidateDetection(dir);
+    return { ok: true, dfcRemoved: r, consumerHere: 'optiscaler' };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error), code: (error && error.code) || null };
   }
 });
 
@@ -911,7 +959,9 @@ ipcMain.handle('dfc:status', async (_evt, exePath) => {
       out.optiScalerHere = !!(await findActiveOptiScalerFile(dir));
       // Whether the swap is built for this game at all (64-bit Direct3D 11/12), so the choice can
       // say why before Install would refuse.
-      out.support = dfc.supportedFor({ api: await resolveApi(dir, exePath), bitness: await peBitness(exePath) });
+      // From the route, not the API alone: the route says whether Chicken is offered here at all
+      // (NVIDIA, a Feeder or plain-OptiScaler game) and, if so, whether this game qualifies.
+      out.support = (await dfcRouteFor(dir, exePath)).dfcSupport || null;
     }
     return out;
   } catch (error) {

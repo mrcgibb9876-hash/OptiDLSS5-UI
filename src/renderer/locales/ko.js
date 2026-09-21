@@ -1440,7 +1440,7 @@ window.I18N.register("ko", {
   "Installed with Deep Fried Chicken. Press Home in the game for its menu.": "Deep Fried Chicken으로 설치되었습니다. 게임에서 Home을 눌러 메뉴를 여세요.",
   "Not for this game yet: on Vulkan and OpenGL Chicken brings its own feeder, which this app does not set up.": "아직 이 게임은 안 됩니다: Vulkan과 OpenGL에서는 Chicken이 자체 feeder를 쓰며, 이 앱은 그것을 설정하지 않습니다.",
   "Not for this game yet: 32-bit games use Chicken's own 32-bit route, which this app does not set up.": "아직 이 게임은 안 됩니다: 32비트 게임은 Chicken 자체 32비트 경로를 쓰며, 이 앱은 그것을 설정하지 않습니다.",
-  "Chicken is set up here for 64-bit DirectX 11 and 12 games only.": "여기서 Chicken은 64비트 DirectX 11/12 게임에만 설정됩니다.",
+  "Chicken is set up here for 64-bit DirectX 9 to 12 games only.": "여기서 Chicken은 64비트 DirectX 9~12 게임에만 설정됩니다.",
   "No Deep Fried Chicken copy yet -- add yours, then press Install.": "아직 Deep Fried Chicken 사본이 없습니다 -- 사본을 추가한 뒤 설치를 누르세요.",
   "Chicken is already here and this app did not place it. Delete its files to let this app manage it.": "Chicken이 이미 있지만 이 앱이 넣은 것이 아닙니다. 이 앱이 관리하게 하려면 해당 파일을 삭제하세요.",
   "Press Install on the card to switch this game to Chicken.": "카드에서 설치를 눌러 이 게임을 Chicken으로 전환하세요.",
@@ -1459,5 +1459,5 @@ window.I18N.register("ko", {
   "Not added yet.": "아직 추가되지 않았습니다.",
   "Added from {from} on {date}. Switch a game to it from its ⋯ menu.": "{date}에 {from}에서 추가됨. 게임의 ⋯ 메뉴에서 전환하세요.",
   "Added. Switch a game to it from its ⋯ menu.": "추가됨. 게임의 ⋯ 메뉴에서 전환하세요.",
-  "Add your own copy once, then switch any DirectX 11 or 12 Feeder game to it from the game's ⋯ menu. Unpack Chicken's .7z first and pick the folder it unpacked into.": "내 사본을 한 번 추가한 뒤, DirectX 11 또는 12 Feeder 게임을 게임의 ⋯ 메뉴에서 전환하세요. 먼저 Chicken의 .7z 압축을 풀고 그 폴더를 선택하세요.",
+  "Add your own copy once, then switch any 64-bit DirectX 9 to 12 game to it from the game's ⋯ menu. Unpack Chicken's .7z first and pick the folder it unpacked into.": "내 사본을 한 번 추가한 뒤, 64비트 DirectX 9~12 게임을 게임의 ⋯ 메뉴에서 전환하세요. 먼저 Chicken의 .7z 압축을 풀고 그 폴더를 선택하세요.",
 });

@@ -323,7 +323,9 @@ async function removeDfc(dir, { cacheDir = null, uninstall = false } = {}) {
   const proxy = marker.reshadeProxy ? path.join(dir, marker.reshadeProxy) : null;
   if (proxy && fs.existsSync(proxy) && isReShade(proxy)) {
     const plain = path.join(dir, RESHADE_PLAIN);
-    if (uninstall || fs.existsSync(plain)) {
+    // Fetched for Chicken on a game with no Feeder: nothing on the way back loads a ReShade64.dll,
+    // so it goes -- with the ini, preset and log ReShade wrote while it ran.
+    if (uninstall || marker.reshadeFetched || fs.existsSync(plain)) {
       const r = await saferemove.removePath(proxy);
       if (r.ok) removed.push(marker.reshadeProxy);
       else failed.push({ rel: marker.reshadeProxy, code: r.code });
@@ -334,6 +336,16 @@ async function removeDfc(dir, { cacheDir = null, uninstall = false } = {}) {
       } catch (e) {
         failed.push({ rel: marker.reshadeProxy, code: (e && e.code) || 'failed' });
       }
+    }
+  }
+
+  if (marker.reshadeFetched && !failed.length) {
+    for (const name of ['ReShade.ini', 'ReShadePreset.ini', 'ReShade.log']) {
+      const p = path.join(dir, name);
+      if (!fs.existsSync(p)) continue;
+      const r = await saferemove.removePath(p);
+      if (r.ok) removed.push(name);
+      else failed.push({ rel: name, code: r.code });
     }
   }
 
@@ -388,11 +400,17 @@ function reshadeProxyOf(dir) {
 //   vulkan/opengl  Chicken 3.0 brings its own feeder there (Compatibility\Vulkan-OpenGL) and says
 //                  "Do not install another neural feeder alongside" -- a different route.
 //   32-bit         Chicken's own 32-bit transport (host64 worker), also a different route.
+//
+// Chicken 3.0 needs no Feeder on Direct3D ("Feeder supported but no longer required"; its own
+// depth and motion fallback), so every 64-bit Direct3D game qualifies, Feeder or not. DX9 counts:
+// this app's 64-bit DX9 route is dgVoodoo2's D3D9.dll presenting through D3D11, and ReShade as
+// dxgi.dll sits on that D3D11 exactly as on any DX11 game.
+const D3D_APIS = ['dx9', 'dx10', 'dx11', 'dx12'];
 function supportedFor(detected) {
   const d = detected || {};
   if (d.bitness === 32) return { ok: false, code: 'dfc-32bit' };
   if (d.api === 'vulkan' || d.api === 'opengl') return { ok: false, code: 'dfc-vulkan-opengl' };
-  if (d.api !== 'dx11' && d.api !== 'dx12') return { ok: false, code: 'dfc-api' };
+  if (!D3D_APIS.includes(d.api)) return { ok: false, code: 'dfc-api' };
   return { ok: true, code: null };
 }
 
@@ -400,14 +418,20 @@ function supportedFor(detected) {
 // that can refuse checked before anything is touched, so a refusal leaves the folder as it was.
 //   removeOptiScaler  main.js uninstallOptiScaler (the install journal knows what is ours)
 //   nrDllPath         the NR model in Settings, for a folder that has none after OptiScaler left
-async function switchToDfc(dir, cacheDir, { nrDllPath = null, removeOptiScaler } = {}) {
+//   fetchReShade      places a plain ReShade64.dll (feeder.js deployReShade), for a game that has
+//                     none of its own -- one on the plain OptiScaler route, no Feeder
+async function switchToDfc(dir, cacheDir, { nrDllPath = null, removeOptiScaler, fetchReShade = null } = {}) {
   if (!cachedDfc(cacheDir)) throw new Error('no Deep Fried Chicken copy has been added yet -- add yours in Edit first');
   if (dfcPresent(dir) && !dfcOurs(dir)) throw new Error(`Deep Fried Chicken is already in this folder, ${HAND_PLACED}`);
 
   const plain = path.join(dir, RESHADE_PLAIN);
   const proxy = path.join(dir, RESHADE_PROXY);
   const already = reshadeProxyOf(dir);
-  if (!already && !fs.existsSync(plain)) throw new Error(`${RESHADE_PLAIN} is not here -- deploy the Feeder first`);
+  // A ReShade64.dll is ours to move only when the Feeder put it there; anything else by that name
+  // (Luma's, the player's) is not touched.
+  const feederReShade = fs.existsSync(plain) && fs.existsSync(path.join(dir, 'dlss5-feed.addon64'));
+  if (!already && fs.existsSync(plain) && !feederReShade) throw new Error(`${RESHADE_PLAIN} here is not this app's -- it is left alone`);
+  if (!already && !feederReShade && !fetchReShade) throw new Error(`${RESHADE_PLAIN} is not here -- deploy the Feeder first`);
   const nrHere = fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'));
   if (!nrHere && !(nrDllPath && fs.existsSync(nrDllPath))) throw new Error('the NR model (nvngx_dlssnr.dll) is not set up in Settings, and Chicken needs it beside its add-on');
   // The proxy slot has to end up free for ReShade. Checked now, not after OptiScaler is out: a
@@ -425,8 +449,17 @@ async function switchToDfc(dir, cacheDir, { nrDllPath = null, removeOptiScaler }
   }
 
   const steps = [];
+  // Fetched BEFORE OptiScaler comes out: offline, the swap stops here with the folder as it was.
+  let reshadeFetched = false;
+  if (!already && !feederReShade) {
+    await fetchReShade(dir);
+    if (!fs.existsSync(plain)) throw new Error('ReShade could not be fetched -- check the connection and try again');
+    reshadeFetched = true;
+    steps.push('fetched ReShade');
+  }
   const out = await removeOptiScaler(dir);
   if (out && out.failed && out.failed.length) {
+    if (reshadeFetched) { try { fs.rmSync(plain, { force: true }); } catch {} }
     throw new Error(`OptiScaler could not be taken out (${out.failed.map((f) => `${f.rel}: ${f.code}`).join(', ')}) -- close the game and try again`);
   }
   if (out && out.removed && out.removed.length) steps.push('took OptiScaler out');
@@ -446,7 +479,7 @@ async function switchToDfc(dir, cacheDir, { nrDllPath = null, removeOptiScaler }
     steps.push('placed the NR model');
   }
 
-  const deployed = await deployDfc(dir, cacheDir, { extra: { reshadeProxy: RESHADE_PROXY, ...(nrPlaced ? { nrPlaced } : {}) } });
+  const deployed = await deployDfc(dir, cacheDir, { extra: { reshadeProxy: RESHADE_PROXY, ...(nrPlaced ? { nrPlaced } : {}), ...(reshadeFetched ? { reshadeFetched } : {}) } });
   steps.push(deployed.restoredCfg ? 'deployed Chicken with this game\x27s saved settings' : 'deployed Chicken');
   return { ...deployed, steps };
 }

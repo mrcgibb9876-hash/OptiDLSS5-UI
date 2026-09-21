@@ -1440,7 +1440,7 @@ window.I18N.register("ru", {
   "Installed with Deep Fried Chicken. Press Home in the game for its menu.": "Установлено с Deep Fried Chicken. Нажмите Home в игре, чтобы открыть его меню.",
   "Not for this game yet: on Vulkan and OpenGL Chicken brings its own feeder, which this app does not set up.": "Пока не для этой игры: на Vulkan и OpenGL Chicken использует собственный feeder, который это приложение не настраивает.",
   "Not for this game yet: 32-bit games use Chicken's own 32-bit route, which this app does not set up.": "Пока не для этой игры: 32-битные игры используют собственный 32-битный путь Chicken, который это приложение не настраивает.",
-  "Chicken is set up here for 64-bit DirectX 11 and 12 games only.": "Здесь Chicken настраивается только для 64-битных игр на DirectX 11 и 12.",
+  "Chicken is set up here for 64-bit DirectX 9 to 12 games only.": "Здесь Chicken настраивается только для 64-битных игр на DirectX 9–12.",
   "No Deep Fried Chicken copy yet -- add yours, then press Install.": "Копии Deep Fried Chicken ещё нет -- добавьте свою, затем нажмите «Установить».",
   "Chicken is already here and this app did not place it. Delete its files to let this app manage it.": "Chicken уже здесь, но его положило не это приложение. Удалите его файлы, чтобы приложение могло им управлять.",
   "Press Install on the card to switch this game to Chicken.": "Нажмите «Установить» на карточке, чтобы переключить игру на Chicken.",
@@ -1459,5 +1459,5 @@ window.I18N.register("ru", {
   "Not added yet.": "Ещё не добавлен.",
   "Added from {from} on {date}. Switch a game to it from its ⋯ menu.": "Добавлен из {from} {date}. Переключите игру на него через её меню ⋯.",
   "Added. Switch a game to it from its ⋯ menu.": "Добавлен. Переключите игру на него через её меню ⋯.",
-  "Add your own copy once, then switch any DirectX 11 or 12 Feeder game to it from the game's ⋯ menu. Unpack Chicken's .7z first and pick the folder it unpacked into.": "Добавьте свою копию один раз, затем переключайте любую Feeder-игру на DirectX 11 или 12 через меню ⋯ игры. Сначала распакуйте .7z Chicken и выберите получившуюся папку.",
+  "Add your own copy once, then switch any 64-bit DirectX 9 to 12 game to it from the game's ⋯ menu. Unpack Chicken's .7z first and pick the folder it unpacked into.": "Добавьте свою копию один раз, затем переключайте любую 64-битную игру на DirectX 9–12 через меню ⋯ игры. Сначала распакуйте .7z Chicken и выберите получившуюся папку.",
 });

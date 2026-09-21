@@ -213,14 +213,81 @@ test('an OptiScaler in the proxy slot is never taken for ReShade', async () => {
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
 
-test('the swap is offered for 64-bit Direct3D 11/12 only, and says why elsewhere', () => {
-  assert.strictEqual(dfc.supportedFor({ api: 'dx11', bitness: 64 }).ok, true);
-  assert.strictEqual(dfc.supportedFor({ api: 'dx12', bitness: 64 }).ok, true);
+test('the swap is offered for 64-bit Direct3D 9 to 12, and says why elsewhere', () => {
+  // Chicken 3.0 needs no Feeder on Direct3D; 64-bit DX9 here is dgVoodoo2's D3D11.
+  for (const api of ['dx9', 'dx10', 'dx11', 'dx12']) assert.strictEqual(dfc.supportedFor({ api, bitness: 64 }).ok, true, api);
+  assert.strictEqual(dfc.supportedFor({ api: 'dx8', bitness: 64 }).code, 'dfc-api');
   // Chicken 3.0 brings its own feeder on Vulkan/OpenGL: "Do not install another neural feeder alongside".
   assert.strictEqual(dfc.supportedFor({ api: 'vulkan', bitness: 64 }).code, 'dfc-vulkan-opengl');
   assert.strictEqual(dfc.supportedFor({ api: 'opengl', bitness: 64 }).code, 'dfc-vulkan-opengl');
   assert.strictEqual(dfc.supportedFor({ api: 'dx11', bitness: 32 }).code, 'dfc-32bit');
-  assert.strictEqual(dfc.supportedFor({ api: 'dx9', bitness: 64 }).code, 'dfc-api');
+});
+
+// A game with its own DLSS, on the plain OptiScaler route: OptiScaler as the proxy, no Feeder, no ReShade.
+function plainRouteGame(base) {
+  const game = path.join(base, 'game');
+  fs.mkdirSync(game, { recursive: true });
+  fs.writeFileSync(path.join(game, 'Game.exe'), 'x');
+  fs.writeFileSync(path.join(game, 'dxgi.dll'), 'OptiScaler build');
+  fs.writeFileSync(path.join(game, 'OptiScaler.ini'), '[DLSS]\n');
+  fs.writeFileSync(path.join(game, 'nvngx_dlss.dll'), 'the game\'s own DLSS');
+  fs.writeFileSync(path.join(game, 'nvngx_dlssnr.dll'), 'NR model');
+  fs.writeFileSync(path.join(game, '.optiscaler-manager-install.json'), JSON.stringify({ added: ['OptiScaler.ini'], proxy: 'dxgi.dll' }));
+  return game;
+}
+const fakeFetchReShade = async (dir) => { fs.writeFileSync(path.join(dir, 'ReShade64.dll'), 'ReShade 6.8 add-on build (fetched)'); };
+
+test('a game with no Feeder switches too: ReShade is fetched in as the proxy, and taken out again on the way back', async () => {
+  const base = tmp('plain');
+  try {
+    const cache = await suppliedCache(base);
+    const game = plainRouteGame(base);
+    await dfc.switchToDfc(game, cache, { removeOptiScaler: fakeRemoveOptiScaler, nrDllPath: modelFile(base), fetchReShade: fakeFetchReShade });
+    assert.strictEqual(fs.readFileSync(path.join(game, 'dxgi.dll'), 'utf8'), 'ReShade 6.8 add-on build (fetched)');
+    assert.strictEqual(fs.existsSync(path.join(game, 'ReShade64.dll')), false);
+    assert.strictEqual(fs.existsSync(path.join(game, 'OptiScaler.ini')), false);
+    assert.strictEqual(fs.readFileSync(path.join(game, 'nvngx_dlss.dll'), 'utf8'), 'the game\'s own DLSS', 'the game\'s DLSS is untouched');
+    assert.strictEqual(dfc.readMarker(game).reshadeFetched, true);
+
+    // ReShade writes its own files while the game runs.
+    fs.writeFileSync(path.join(game, 'ReShade.ini'), '[GENERAL]\n');
+    fs.writeFileSync(path.join(game, 'ReShade.log'), 'log');
+    const back = await dfc.removeDfc(game, { cacheDir: cache });
+    assert.deepStrictEqual(back.failed, []);
+    for (const n of ['dxgi.dll', 'ReShade64.dll', 'ReShade.ini', 'ReShade.log', dfc.ADDON, dfc.MARKER]) {
+      assert.strictEqual(fs.existsSync(path.join(game, n)), false, `${n} is gone: nothing loads ReShade on the way back`);
+    }
+    assert.deepStrictEqual(foreignToolchains(game), []);
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('offline, a no-Feeder switch stops before OptiScaler comes out', async () => {
+  const base = tmp('offline');
+  try {
+    const cache = await suppliedCache(base);
+    const game = plainRouteGame(base);
+    let removed = 0;
+    await assert.rejects(() => dfc.switchToDfc(game, cache, {
+      removeOptiScaler: async (d) => { removed++; return fakeRemoveOptiScaler(d); },
+      nrDllPath: modelFile(base),
+      fetchReShade: async () => { throw new Error('getaddrinfo ENOTFOUND reshade.me'); },
+    }), /ENOTFOUND/);
+    assert.strictEqual(removed, 0);
+    assert.strictEqual(fs.readFileSync(path.join(game, 'dxgi.dll'), 'utf8'), 'OptiScaler build');
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('a ReShade64.dll the Feeder did not place is never moved into the proxy slot', async () => {
+  // Luma's, or the player's own: not ours to repurpose.
+  const base = tmp('their-reshade');
+  try {
+    const cache = await suppliedCache(base);
+    const game = plainRouteGame(base);
+    fs.writeFileSync(path.join(game, 'ReShade64.dll'), 'their ReShade');
+    await assert.rejects(() => dfc.switchToDfc(game, cache, { removeOptiScaler: fakeRemoveOptiScaler, nrDllPath: modelFile(base), fetchReShade: fakeFetchReShade }), /not this app's/);
+    assert.strictEqual(fs.readFileSync(path.join(game, 'ReShade64.dll'), 'utf8'), 'their ReShade');
+    assert.strictEqual(fs.existsSync(path.join(game, 'OptiScaler.ini')), true);
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
 
 test('Chicken\'s protected .7z is refused with what to do, not "not a zip"', async () => {

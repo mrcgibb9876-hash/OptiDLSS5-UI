@@ -1441,7 +1441,7 @@ window.I18N.register('pt-BR', {
   "Installed with Deep Fried Chicken. Press Home in the game for its menu.": "Instalado com Deep Fried Chicken. Aperte Home no jogo para abrir o menu dele.",
   "Not for this game yet: on Vulkan and OpenGL Chicken brings its own feeder, which this app does not set up.": "Ainda não para este jogo: no Vulkan e no OpenGL o Chicken traz o próprio feeder, que este app não configura.",
   "Not for this game yet: 32-bit games use Chicken's own 32-bit route, which this app does not set up.": "Ainda não para este jogo: jogos de 32 bits usam a rota de 32 bits do próprio Chicken, que este app não configura.",
-  "Chicken is set up here for 64-bit DirectX 11 and 12 games only.": "Aqui o Chicken só é configurado para jogos de 64 bits com DirectX 11 e 12.",
+  "Chicken is set up here for 64-bit DirectX 9 to 12 games only.": "Aqui o Chicken só é configurado para jogos de 64 bits com DirectX 9 a 12.",
   "No Deep Fried Chicken copy yet -- add yours, then press Install.": "Ainda não há cópia do Deep Fried Chicken -- adicione a sua e aperte Instalar.",
   "Chicken is already here and this app did not place it. Delete its files to let this app manage it.": "O Chicken já está aqui e não foi este app que o colocou. Apague os arquivos dele para este app gerenciá-lo.",
   "Press Install on the card to switch this game to Chicken.": "Aperte Instalar no card para mudar este jogo para o Chicken.",
@@ -1460,5 +1460,5 @@ window.I18N.register('pt-BR', {
   "Not added yet.": "Ainda não adicionado.",
   "Added from {from} on {date}. Switch a game to it from its ⋯ menu.": "Adicionado de {from} em {date}. Mude um jogo para ele pelo menu ⋯ do jogo.",
   "Added. Switch a game to it from its ⋯ menu.": "Adicionado. Mude um jogo para ele pelo menu ⋯ do jogo.",
-  "Add your own copy once, then switch any DirectX 11 or 12 Feeder game to it from the game's ⋯ menu. Unpack Chicken's .7z first and pick the folder it unpacked into.": "Adicione sua própria cópia uma vez e depois mude qualquer jogo Feeder DirectX 11 ou 12 para ela pelo menu ⋯ do jogo. Descompacte primeiro o .7z do Chicken e escolha a pasta resultante.",
+  "Add your own copy once, then switch any 64-bit DirectX 9 to 12 game to it from the game's ⋯ menu. Unpack Chicken's .7z first and pick the folder it unpacked into.": "Adicione sua própria cópia uma vez e depois mude qualquer jogo de 64 bits com DirectX 9 a 12 para ela pelo menu ⋯ do jogo. Descompacte primeiro o .7z do Chicken e escolha a pasta resultante.",
 });
