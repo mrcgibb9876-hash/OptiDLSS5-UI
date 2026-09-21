@@ -193,6 +193,8 @@ window.I18N.register("ko", {
   "Nothing left to remove.": "더 제거할 것이 없습니다.",
   "Left alone: {list}.": "그대로 둠: {list}.",
   "DLSS 5 removed.": "DLSS 5를 제거했습니다.",
+  "DLSS 5 partly removed.": "DLSS 5를 일부만 제거했습니다.",
+  "Could not delete: {list}. Close the game and anything launched with it, then press Remove again -- or delete them by hand.": "삭제하지 못했습니다: {list}. 게임과 함께 실행된 프로그램을 모두 종료한 뒤 제거를 다시 누르거나, 직접 삭제하세요.",
   "Couldn't remove OptiScaler: {error}. Removed from the list anyway.": "OptiScaler를 제거하지 못했습니다: {error}. 목록에서는 제거했습니다.",
   "Edit Game": "게임 편집",
   "Replace nvngx_dlssnr.dll with {version} (backs up the current one)": "nvngx_dlssnr.dll을 {version}(으)로 교체(현재 파일은 백업)",

@@ -193,6 +193,8 @@ window.I18N.register("zh-CN", {
   "Nothing left to remove.": "没有可移除的内容了。",
   "Left alone: {list}.": "未改动：{list}。",
   "DLSS 5 removed.": "已移除 DLSS 5。",
+  "DLSS 5 partly removed.": "已部分移除 DLSS 5。",
+  "Could not delete: {list}. Close the game and anything launched with it, then press Remove again -- or delete them by hand.": "无法删除：{list}。请关闭游戏以及随它启动的程序，然后再次按“移除”，或手动删除这些文件。",
   "Couldn't remove OptiScaler: {error}. Removed from the list anyway.": "无法移除 OptiScaler：{error}。已从列表中移除。",
   "Edit Game": "编辑游戏",
   "Replace nvngx_dlssnr.dll with {version} (backs up the current one)": "把 nvngx_dlssnr.dll 替换为 {version}（备份当前文件）",

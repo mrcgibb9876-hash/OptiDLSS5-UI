@@ -52,6 +52,7 @@ const fgsuggest = require('./fgsuggest');
 const launchwatch = require('./launchwatch');
 const defender = require('./defender');
 const elevate = require('./elevate');
+const saferemove = require('./saferemove');
 const panelwindow = require('./panelwindow');
 let electronAutoUpdater = null;
 try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
@@ -2401,7 +2402,8 @@ ipcMain.handle('game:run-setup', async (_evt, exePath) => {
 async function removeSharedNrDllIfUnneeded(dir) {
   const file = path.join(dir, 'nvngx_dlssnr.dll');
   if (!fs.existsSync(file)) return false;
-  await fsp.rm(file);
+  const r = await saferemove.removePath(file);
+  if (!r.ok) { const e = new Error(`nvngx_dlssnr.dll could not be deleted (${r.code})`); e.code = r.code; throw e; }
   return true;
 }
 
@@ -2433,21 +2435,32 @@ async function uninstallEverything(dir) {
   const removed = [];
   const restored = [];
   const kept = [];
+  const failed = [];
   const journal = readInstallMarker(dir) || {};
+  // Every deletion here goes through saferemove: a file Windows will not unlink -- read-only, still
+  // mapped into a running process, in a folder the user cannot delete from -- is recorded and the
+  // strip carries on. It used to throw out of this function on the first one, which left the folder
+  // half-stripped and told the user only the raw errno (GTA San Andreas, #96).
   const rmRel = async (rel) => {
     const p = path.join(dir, rel);
     if (!fs.existsSync(p)) return false;
-    await fsp.rm(p, { recursive: true, force: true });
+    const r = await saferemove.removePath(p);
+    if (!r.ok) { failed.push({ rel, code: r.code }); return false; }
     removed.push(rel);
     return true;
   };
   const rmdirIfEmpty = (rel) => {
     try { if (fs.readdirSync(path.join(dir, rel)).length === 0) { fs.rmdirSync(path.join(dir, rel)); removed.push(rel); } } catch {}
   };
+  // A stage that throws is one stage lost, not the whole removal. Each of them deletes a different
+  // stack, so the ones after it are still worth running.
+  const stage = async (what, fn) => {
+    try { return await fn(); } catch (err) { failed.push({ rel: what, code: (err && err.code) || 'failed' }); return null; }
+  };
 
   if (feeder.feederDeployed(dir)) {
-    const r = await feeder.removeFeederStack(dir, { keepReShade: false });
-    removed.push(...r.removed); kept.push(...r.kept);
+    const r = await stage('the Feeder stack', () => feeder.removeFeederStack(dir, { keepReShade: false }));
+    if (r) { removed.push(...r.removed); kept.push(...r.kept); }
   }
   // The translation layer this app put in front of the game (translation.js), before the legacy
   // marker goes: DXVK's d3d9.dll and .dlss5ui-translation.json used to survive Remove altogether,
@@ -2460,8 +2473,13 @@ async function uninstallEverything(dir) {
     const vkApp = legacy.vulkanLayerRecord(dir);
     const tl = translation.activeLayer(dir);
     if (tl.ours) {
-      const r = await translation.purgeTranslationLayer(dir, { layer: tl.layer });
-      removed.push(...r.removed); restored.push(...r.restored);
+      const r = await stage(`the ${tl.layer} translation layer`, () => translation.purgeTranslationLayer(dir, { layer: tl.layer }));
+      if (r) {
+        removed.push(...r.removed); restored.push(...r.restored);
+        // .dlss5ui-translation.json among them means the app still thinks this layer is deployed,
+        // so the user has to know: Install would otherwise put it back over whatever replaced it.
+        for (const f of r.failed || []) failed.push({ rel: f.file, code: f.code });
+      }
     }
     if (vkApp && vkApp.listedByUs) {
       const r = await legacy.unlistVulkanLayerApp(vkApp, {
@@ -2478,12 +2496,12 @@ async function uninstallEverything(dir) {
   } catch {}
   // The experimental legacy routes: dgVoodoo2, the 32-bit Feeder and its host64\ helper.
   if (legacy.readMarker(dir)) {
-    const r = await legacy.removeLegacy(dir);
-    removed.push(...r.removed); restored.push(...r.restored);
+    const r = await stage('dgVoodoo2 and the 32-bit helper', () => legacy.removeLegacy(dir));
+    if (r) { removed.push(...r.removed); restored.push(...r.restored); }
   }
   if (lumaue.lumaUeDeployed(dir)) {
-    const r = await lumaue.removeLumaStack(dir);
-    removed.push(...r.removed); kept.push(...r.kept);
+    const r = await stage('the Luma UE stack', () => lumaue.removeLumaStack(dir));
+    if (r) { removed.push(...r.removed); kept.push(...r.kept); }
   }
   try {
     const fg = await framegen.restoreFrameGenDll(dir);
@@ -2505,37 +2523,50 @@ async function uninstallEverything(dir) {
   }
   // RTXMFG, the same way: only the copy this app placed (rtxmfg.js).
   if (rtxmfg.readMarker(dir)) {
-    const r = rtxmfg.remove(dir);
-    removed.push(...r.removed); kept.push(...r.kept);
+    const r = await stage('the RTXMFG files', () => rtxmfg.remove(dir));
+    if (r) { removed.push(...r.removed); kept.push(...r.kept); }
   }
 
   const core = await uninstallOptiScaler(dir);
-  removed.push(...core.removed); kept.push(...core.kept);
+  removed.push(...core.removed); kept.push(...core.kept); failed.push(...core.failed);
   if (core.nrDllRemoved && !removed.includes('nvngx_dlssnr.dll')) removed.push('nvngx_dlssnr.dll');
   // Game Help's model-only route (nrmodelonly.js): its copy of the model, wherever it put it, and the
   // model it displaced put back. After uninstallOptiScaler, which deletes the one beside the exe.
   {
-    const r = await nrmodelonly.removeNrModelOnly(dir);
-    for (const rel of r.removed) if (!removed.includes(rel)) removed.push(rel);
-    restored.push(...r.restored);
+    const r = await stage('the model-only route\x27s files', () => nrmodelonly.removeNrModelOnly(dir));
+    if (r) {
+      for (const rel of r.removed) if (!removed.includes(rel)) removed.push(rel);
+      restored.push(...r.restored);
+    }
   }
 
   for (const rel of journal.added || []) await rmRel(rel);
+  // Putting an original back means deleting ours first. If that delete fails, the backup STAYS a
+  // backup -- renaming over a file that is still there would either fail or, worse, lose the
+  // original. The user is told which file to deal with, and the .orig is still sitting beside it.
+  const restoreFromBackup = async (rel, backupName) => {
+    const target = path.join(dir, rel);
+    if (fs.existsSync(target)) {
+      const r = await saferemove.removePath(target);
+      if (!r.ok) {
+        failed.push({ rel, code: r.code });
+        kept.push(`${backupName} (the original -- ${rel} could not be deleted, so it was left as the backup)`);
+        return false;
+      }
+    }
+    await fsp.rename(path.join(dir, backupName), target);
+    if (!restored.includes(rel)) restored.push(rel);
+    return true;
+  };
   for (const r of journal.replaced || []) {
-    const backup = path.join(dir, r.backup);
-    if (!fs.existsSync(backup)) continue;
-    await fsp.rm(path.join(dir, r.rel), { recursive: true, force: true });
-    await fsp.rename(backup, path.join(dir, r.rel));
-    restored.push(r.rel);
+    if (!fs.existsSync(path.join(dir, r.backup))) continue;
+    await restoreFromBackup(r.rel, r.backup);
   }
   // Any backup the journal lost track of (an older marker, a hand-edited one): the suffix alone
   // says what it is and where it goes back.
   for (const name of fs.readdirSync(dir)) {
     if (!name.endsWith(ORIG_BACKUP_SUFFIX)) continue;
-    const rel = name.slice(0, -ORIG_BACKUP_SUFFIX.length);
-    await fsp.rm(path.join(dir, rel), { recursive: true, force: true });
-    await fsp.rename(path.join(dir, name), path.join(dir, rel));
-    if (!restored.includes(rel)) restored.push(rel);
+    await restoreFromBackup(name.slice(0, -ORIG_BACKUP_SUFFIX.length), name);
   }
 
   // Payload names from before the journal existed. Licenses/ only loses the files the release
@@ -2578,7 +2609,10 @@ async function uninstallEverything(dir) {
   // Another tool's files are not this app's to delete -- named so the user knows they remain.
   for (const f of foreignToolchains(dir)) kept.push(`${f.tool} files, not placed by this app: ${f.files.join(', ')}`);
 
-  return { removed: [...new Set(removed)], restored, kept };
+  // A file that could not be deleted is never also reported as removed: the marker for this install
+  // may be one of them, so the folder is still partly ours and the next Remove has to find it again.
+  const failedRels = new Set(failed.map((f) => f.rel));
+  return { removed: [...new Set(removed)].filter((r) => !failedRels.has(r)), restored, kept, failed };
 }
 
 // What uninstallEverything() would do, read-only, for the confirmation text -- the same lists
@@ -3508,7 +3542,10 @@ async function applyHelpFix(exePath, fixId) {
       if (answer.response !== 0) return { done: false, text: 'cancelled by the user' };
       const r = await uninstallEverything(dir);
       invalidateDetection(dir);
-      return { done: true, text: `removed ${(r.removed || []).length} item(s)${(r.restored || []).length ? ', restored ' + r.restored.length : ''} -- the game is back to how it was` };
+      const tail = (r.failed || []).length
+        ? ` -- but ${r.failed.map((f) => f.rel).join(', ')} could not be deleted, so close the game and run Remove again`
+        : ' -- the game is back to how it was';
+      return { done: true, text: `removed ${(r.removed || []).length} item(s)${(r.restored || []).length ? ', restored ' + r.restored.length : ''}${tail}` };
     }
     case 'install':
       return { done: false, text: 'Install runs from the card: press Install DLSS 5 on this game' };
@@ -5668,6 +5705,7 @@ async function installProxy(dir, proxyName = DEFAULT_PROXY) {
 async function uninstallOptiScaler(dir) {
   const removed = [];
   const kept = [];
+  const failed = [];
   const marker = readInstallMarker(dir);
 
   const active = await findActiveOptiScalerFile(dir);
@@ -5677,8 +5715,10 @@ async function uninstallOptiScaler(dir) {
 
   if (proxyPath && fs.existsSync(proxyPath)) {
     if (active && active.renamed && path.resolve(active.file) === path.resolve(proxyPath)) {
-      await fsp.rm(proxyPath, { force: true });
-      removed.push(path.basename(proxyPath));
+      // The proxy is the file a still-running game has mapped, so it is the likeliest EPERM of all.
+      const r = await saferemove.removePath(proxyPath);
+      if (r.ok) removed.push(path.basename(proxyPath));
+      else failed.push({ rel: path.basename(proxyPath), code: r.code });
     } else {
       kept.push(
         `${path.basename(proxyPath)} (does not identify itself as OptiScaler -- left alone)`
@@ -5701,15 +5741,21 @@ async function uninstallOptiScaler(dir) {
                       'Remove_OptiScaler.bat', 'setup_windows.bat', 'setup_linux.sh', INSTALL_MARKER]) {
     const f = path.join(dir, name);
     if (fs.existsSync(f)) {
-      await fsp.rm(f, { force: true });
-      if (name !== INSTALL_MARKER) removed.push(name);
+      const r = await saferemove.removePath(f);
+      if (!r.ok) failed.push({ rel: name, code: r.code });
+      else if (name !== INSTALL_MARKER) removed.push(name);
     }
   }
 
-  const nrDllRemoved = await removeSharedNrDllIfUnneeded(dir);
-  if (nrDllRemoved) removed.push('nvngx_dlssnr.dll');
+  let nrDllRemoved = false;
+  try {
+    nrDllRemoved = await removeSharedNrDllIfUnneeded(dir);
+    if (nrDllRemoved) removed.push('nvngx_dlssnr.dll');
+  } catch (err) {
+    failed.push({ rel: 'nvngx_dlssnr.dll', code: (err && err.code) || 'failed' });
+  }
 
-  return { removed, kept, nrDllRemoved };
+  return { removed, kept, failed, nrDllRemoved };
 }
 
 function bannersDir() {
