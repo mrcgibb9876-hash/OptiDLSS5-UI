@@ -2171,8 +2171,12 @@ ipcMain.handle('game:route', async (_evt, { exePath, detected }) => {
   const { vendor } = await getGpuInfo();
   const dir = gameDir(exePath);
   const effective = effectiveDetection(dir, exePath, detected || {});
+  const route = recommendRoute(dir, exePath, effective, vendor, { lumaMod: lumaModFor(exePath, effective) });
+  // Kept for game:lastRun, which analyses the same game's run moments later on the same card render
+  // and has no route of its own (see lastRouteByExe).
+  lastRouteByExe.set(String(exePath).toLowerCase(), { route, api: effective.api || null });
   return {
-    ...recommendRoute(dir, exePath, effective, vendor, { lumaMod: lumaModFor(exePath, effective) }),
+    ...route,
     apiOverride: effective.apiOverride,
     effectiveApi: effective.api || null,
     detectedApi: (detected && detected.api) || null,
@@ -2829,12 +2833,42 @@ ipcMain.handle('game:confirm-remove', async (_evt, gameName) => {
   return ['remove-and-forget', 'forget-only', 'cancel'][res.response] || 'cancel';
 });
 
+// The route game:route last worked out for an exe, so game:lastRun can record a run without
+// computing one a second time per card. The card asks for both on the same render, route first, so
+// the entry is this game's and is seconds old; a game that has not been through game:route yet is
+// simply not recorded, which is where this was before.
+//
+// Nothing comes from the renderer here: an entry is only ever written by game:route from
+// recommendRoute's own result, because this feeds the catalog on disk.
+const lastRouteByExe = new Map();
+
 // What the last run's logs say -- see runlog.js for the verdicts and where each was met.
+//
+// This is also where a run becomes EVIDENCE. learnFromRun used to be called only from helpContext,
+// so a game was recorded as working only if the user happened to open Game Help on it after a run
+// -- which is why a library could be full of games that plainly worked and still wore the
+// Experimental chip (2026-09-21: 8 of 18 games here had zero recorded runs, while the ones that had
+// been debugged through Game Help carried 14, 18, 39, 44). The card already analyses the run here on
+// every render and already reads `nr-ran` off it to draw its "working" evidence, so the proof was in
+// hand and only the recording was missing. No extra work: the analysis and the route were both being
+// computed for this card anyway.
 ipcMain.handle('game:lastRun', async (_evt, exePath) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) return { ran: false, verdict: 'no-log' };
     const dir = gameDir(exePath);
-    return await runlog.analyzeRun(dir, { optiDir: optiScalerDirFor(dir) });
+    const run = await runlog.analyzeRun(dir, { optiDir: optiScalerDirFor(dir) });
+    const known = lastRouteByExe.get(String(exePath).toLowerCase());
+    // learnFromRun ignores anything that is not proof either way, and records each run once by its
+    // timestamp, so a card that renders twenty times counts one run once.
+    if (known && known.route && known.route.optiInstalled) {
+      try {
+        catalog.learnFromRun({
+          exePath, name: path.basename(exePath, path.extname(exePath)), run,
+          setup: { route: known.route.route, via: routescore.placedVia(known.route), api: run.runtimeApi || known.api || null },
+        });
+      } catch {}
+    }
+    return run;
   } catch (error) {
     return { ran: false, verdict: 'no-log', error: String(error && error.message ? error.message : error) };
   }
