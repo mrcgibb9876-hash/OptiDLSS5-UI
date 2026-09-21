@@ -2735,19 +2735,6 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
     if (proxy && proxy.adopted && proxy.ours === false && !foreignProxy && !proxyIsThisBuild) {
       foreignProxy = proxy.proxy;
     }
-    // A re-install over a proxy of ours: the release copy above dropped a fresh OptiScaler.dll beside
-    // it, and installProxy (which renames that file into the slot on a first install) adopted the
-    // existing slot instead -- so it stayed, a second, unused OptiScaler in the folder (seen on an
-    // OpenGL game re-installed over winmm.dll, 2026-09-22). Only the byte-identical release copy
-    // goes, and only when the slot is ours: a loose OptiScaler.dll of anyone else's is left alone.
-    if (proxy && proxy.adopted && (proxy.ours || proxyIsThisBuild) && proxy.proxy.toLowerCase() !== 'optiscaler.dll') {
-      const loose = path.join(dir, 'OptiScaler.dll');
-      try {
-        if (fs.existsSync(loose) && sha256File(loose) === sha256File(path.join(releaseFolder, 'OptiScaler.dll'))) {
-          await saferemove.removePath(loose);
-        }
-      } catch {}
-    }
 
     // Not fatal: OptiScaler still loads without it, and Game Help names the missing file after a run.
     let nvngxDlss = null;
