@@ -547,7 +547,9 @@ function applyProbe(detected, facts) {
   const keep = (why) => ({ ...d, probe: { ...probe, applied: false, why } });
   if (!facts.api) return keep('no-api-seen');
   if (d.vulkanWrapper && !d.translatedBy) return keep('player-wrapper');
-  if (d.emulator && !(d.emulator.apis || []).includes(facts.api)) return keep('emulator-profile');
+  // An emulator's route is set up for its best renderer whatever a launch saw (emulators.js, #106);
+  // what was seen stays on the detection as probe.api, for the "set it to ..." warning.
+  if (d.emulator) return keep('emulator-profile');
   const probeAt = Date.parse(facts.capturedAt || '') || 0;
   if (d.runtimeApi && d.runtimeLogMtime && d.runtimeLogMtime > probeAt) return keep('optiscaler-log-newer');
   const api = facts.api;

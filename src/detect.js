@@ -36,7 +36,13 @@ const rtxmfg = require('./rtxmfg');
 // experimental Feeder routes (legacy.js) instead of "unsupported".
 // 13: a DXVK this app deployed (translation.js manifest) no longer turns the game into a Vulkan
 // game -- the swap made Assassin's Creed II "32-bit Vulkan, unsupported" (2026-09-18).
-const DETECT_VERSION = 14;
+// 14: NO 32-bit game is turned into a Vulkan game by a wrapper beside it, whoever put it there.
+// 13 excepted only our own DXVK, so a player's own -- the standard thing to have in a Fallout:
+// New Vegas folder -- still read as "32-bit Vulkan, unsupported" (#101). A stored detection
+// carries the old api and detectFromStored would keep it, so this has to force a re-detect.
+// 16: an emulator is set up for its best renderer for this app, not the one its last run used, and
+// carries the renderer's name and menu path (emulators.js, #106).
+const DETECT_VERSION = 16;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
@@ -501,6 +507,30 @@ const HOOK_NEEDLES = ['DXVK', 'vkd3d', 'vkGetInstanceProcAddr', 'ReShade', 'Opti
 // 'dxvk' when this app's translation manifest says it put DXVK in front of the game, else null.
 // The manifest only -- a record, not a reading of the folder -- and read lazily so detection does
 // not load translation.js for the games that have no wrapper at all.
+// Whether a Vulkan wrapper sitting beside the exe should REPLACE the game's own detected API.
+//
+// A 64-bit game under DXVK really is served by the 64-bit Feeder's Vulkan path, which has to be told
+// Vulkan. A 32-bit one never is: "32-bit Vulkan" is not a route this app has, so the override turned
+// a game it fully supports into "Not supported".
+//
+// It used to make an exception only for a DXVK THIS APP deployed, which fixed the case it was
+// written for -- our own swap turning Assassin's Creed II into "32-bit Vulkan, unsupported"
+// (2026-09-18) -- and left the player's own DXVK reading as Vulkan, deliberately. That was wrong,
+// and issue #101 is what it costs: DXVK is the standard community wrapper for Fallout: New Vegas, so
+// a perfectly ordinary folder was told the game could not be helped, on the same day the game
+// shipped in the known-good catalog as working.
+//
+// Who put the wrapper there is not a fact about the game. The game underneath is still Direct3D 8 or
+// 9, feeder32 is the route for it, and the layer in front is a choice the app already knows how to
+// make either way: layerdefault.js accepts dxvk on that route, and translation.js can swap it to
+// dgVoodoo2. So on 32-bit the wrapper never decides the API -- it is recorded (vulkanWrapper,
+// translatedBy) and the route is planned from the game's own Direct3D, as it is for every other
+// legacy game.
+function vulkanOverrideApplies({ vulkanWrapper, bitness, api } = {}) {
+  if (!vulkanWrapper || !api || api === 'vulkan') return false;
+  return bitness !== 32;
+}
+
 function ourTranslationLayer(dir) {
   try {
     const m = require('./translation').readManifest(dir);
@@ -1292,6 +1322,7 @@ async function detectGame(dir, exePath) {
     const next = MODERN_APIS.find((a) => apis.includes(a)) || null;
     found = { ...found, api: next, apis, vetoed: found.api, reason: `${found.reason}; not ${API_LABEL[found.api]}: ${vetoes[found.api]}` };
   }
+
   // A DXVK this app put in front of the game (translation.js's manifest) is not evidence about the
   // game: it is the route the app chose for it, and the route has to be planned from the game's own
   // API, not from the wrapper's. Forcing 'vulkan' here turned Assassin's Creed II (32-bit DX9) into
@@ -1301,7 +1332,7 @@ async function detectGame(dir, exePath) {
   // Vulkan is not supported"), while a 64-bit game under DXVK really is served by the 64-bit
   // Feeder's Vulkan path, which needs to be told Vulkan.
   const ourWrapper = hooks.vulkanWrapper && bitness === 32 ? ourTranslationLayer(dir) : null;
-  if (hooks.vulkanWrapper && !ourWrapper && found.api && found.api !== 'vulkan') {
+  if (vulkanOverrideApplies({ vulkanWrapper: hooks.vulkanWrapper, bitness, api: found.api })) {
     found = {
       ...found, api: 'vulkan', apis: [...new Set(['vulkan', ...(found.apis || [])])], uncertain: false,
       reason: `Vulkan -- ${hooks.vulkanWrapper.file} beside the executable is ${hooks.vulkanWrapper.kind}, which presents the game's Direct3D through Vulkan`,
@@ -1430,17 +1461,19 @@ async function detectGame(dir, exePath) {
 }
 
 // EXPERIMENTAL. No exe scan: an emulator links every API it can render with, and which one runs
-// is a setting inside it. The profile's first API is assumed; once OptiScaler has run in it, its
-// log says what was really created, and an API chosen in Edit overrides both (route.js).
+// is a setting inside it. The route is always set up for the profile's best renderer for this app
+// (emulators.js), and the player is told to pick it in the emulator. What OptiScaler saw it create
+// last is kept as runtimeApi, so a run on another renderer is warned about rather than followed --
+// following it put Dolphin's last OpenGL run in charge of the route (#106). An API chosen in Edit
+// still overrides (route.js).
 async function detectEmulator(dir, exePath, emu) {
   const [bitness, hooks] = await Promise.all([peBitness(exePath), inspectHookDlls(dir)]);
-  let api = emu.apis[0];
-  let reason = `${emu.name} (${emu.system}) is an emulator, so its renderer is one of its own settings ` +
-    `(${emu.hint}); ${API_LABEL[api]} is assumed until you choose in Edit`;
+  const api = emu.apis[0];
+  let reason = `${emu.name} (${emu.system}) is an emulator, so its renderer is one of its own settings: ` +
+    `set up for ${emu.renderer || API_LABEL[api]}, the one that suits DLSS 5 best (${emu.hint})`;
   const runtime = await optiScalerRuntimeApi(dir);
-  if (runtime && emu.apis.includes(runtime.api)) {
-    api = runtime.api;
-    reason = `${emu.name} (${emu.system}) is an emulator; ${API_LABEL[api]} is what OptiScaler saw it create on its last run (${runtime.evidence})`;
+  if (runtime && runtime.api !== api) {
+    reason += ` -- but its last run used ${API_LABEL[runtime.api] || runtime.api} (${runtime.evidence})`;
   }
   const logStat = optiScalerLogStat(dir);
   const vulkan32 = bitness === 32 && api === 'vulkan';
@@ -1457,7 +1490,7 @@ async function detectEmulator(dir, exePath, emu) {
     uncertain: !runtime,
     bitness,
     experimental: true,
-    emulator: { key: emu.key, name: emu.name, system: emu.system, hint: emu.hint, apis: emu.apis },
+    emulator: { key: emu.key, name: emu.name, system: emu.system, hint: emu.hint, apis: emu.apis, renderer: emu.renderer, where: emu.where },
     vulkanWrapper: hooks.vulkanWrapper,
     reshadeProxy: hooks.reshadeProxy,
     // An OptiScaler loading under a proxy name that is not the build this app installed.
@@ -1534,7 +1567,7 @@ async function detectFromStored(dir, exePath, stored) {
   let out = { ...stored, ...evidence };
   if (!(stored.bitness === 32 && evidence.translatedBy)) evidence.translatedBy = null;
   out.translatedBy = evidence.translatedBy;
-  if (evidence.vulkanWrapper && !evidence.translatedBy && out.api && out.api !== 'vulkan') {
+  if (vulkanOverrideApplies({ vulkanWrapper: evidence.vulkanWrapper, bitness: out.bitness, api: out.api })) {
     out = {
       ...out, api: 'vulkan', apis: [...new Set(['vulkan', ...(out.apis || [])])], uncertain: false,
       reason: `Vulkan -- ${evidence.vulkanWrapper.file} beside the executable is ${evidence.vulkanWrapper.kind}, which presents the game's Direct3D through Vulkan`,
@@ -1677,4 +1710,4 @@ async function planForeignRemoval(dir, { ours = false } = {}) {
   return { found, del: [...del].sort(), restore, notes };
 }
 
-module.exports = { DETECT_VERSION, peBuildFacts, apiVetoes, exeStamp, openPeResources, RT_ICON, RT_GROUP_ICON, RT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, pickModern, foreignToolchains, planForeignRemoval };
+module.exports = { DETECT_VERSION, peBuildFacts, apiVetoes, exeStamp, openPeResources, RT_ICON, RT_GROUP_ICON, RT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, pickModern, vulkanOverrideApplies, foreignToolchains, planForeignRemoval };

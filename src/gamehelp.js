@@ -318,6 +318,12 @@ function diagnose(ctx) {
       if (route.dxvkDeployed && dxvkNative && !tried.has('swap-to-native')) {
         return fix('dxvk-no-dlss-native', 'swap-to-native', { api: route.legacy.api });
       }
+      // An emulator that ran and called nothing is, first of all, an emulator on another renderer than
+      // the one its route is set up for: Dolphin on OpenGL with OptiScaler waiting as dxgi.dll (#106).
+      if (route.emulatorRenderer) {
+        const r = route.emulatorRenderer;
+        return out('step', r.seen ? 'emulator-renderer-mismatch' : 'emulator-renderer', { name: r.name, renderer: r.renderer, hint: r.hint, seen: r.seen || '' });
+      }
       if (route.route === 'feeder' && route.feederDeployed) return out('unknown', 'no-hook');
       if (route.route === 'lumaue') return out('step', 'luma-missing');
       return out('unknown', 'no-hook');

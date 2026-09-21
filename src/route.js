@@ -55,6 +55,7 @@ const engines = require('./engines');
 const catalog = require('./catalog');
 const layerdefault = require('./layerdefault');
 const routescore = require('./routescore');
+const emulators = require('./emulators');
 
 // A user's per-game API choice laid over the detection result: the chosen API becomes the
 // primary, joins the list of APIs the game runs on (so keepGamesOwnDlss writes its upscaler key
@@ -139,8 +140,12 @@ const ROUTE_TEXT = {
 // what an emulator switched to Direct3D 11 on Game Help's advice has to follow.
 // A watched launch (probe.js) that saw the game create DX11 is the same kind of proof (probeApi, set
 // only when its facts won the precedence in probe.applyProbe).
+// Not for an emulator: its renderer order is deliberate (emulators.js), and D3D11 leads because the
+// model crashed on Dolphin's own D3D12 device. Turning that into DX12 is what set Dolphin up for DX12
+// in #106.
 function preferDx12(base) {
   const apis = base.apis || [];
+  if (base.emulator) return base;
   if (!apis.includes('dx12') || !apis.includes('dx11') || base.api === 'dx12' || base.runtimeApi === 'dx11' || base.probeApi === 'dx11') return base;
   if (base.api !== 'dx11') return base;
   return { ...base, api: 'dx12', apis: ['dx12', ...apis.filter((a) => a !== 'dx12')], detectedApi: base.api };
@@ -434,7 +439,7 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
         { key: 'optiscaler', label: 'Install DLSS 5', done: optiInstalled },
       ],
       { name: emu.name, system: emu.system, hint: emu.hint, api: API_NAMES[api] || String(api || '').toUpperCase() },
-      { experimental: true, emulator: emu });
+      { experimental: true, emulator: emu, emulatorRenderer: emulators.rendererAdvice(detected, api) });
   }
 
   // EXPERIMENTAL -- a 64-bit DirectX 9 game: dgVoodoo2's x64 D3D9.dll turns it into DirectX 11, and

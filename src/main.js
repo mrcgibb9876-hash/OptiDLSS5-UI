@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Menu, clipboard } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
@@ -48,6 +48,7 @@ const verify = require('./verify');
 const translation = require('./translation');
 const catalog = require('./catalog');
 const routescore = require('./routescore');
+const editmenu = require('./editmenu');
 const fgsuggest = require('./fgsuggest');
 const launchwatch = require('./launchwatch');
 const defender = require('./defender');
@@ -110,6 +111,10 @@ function createWindow() {
       nodeIntegration: false
     }
   });
+  // Right-click Cut/Copy/Paste/Select all. A BrowserWindow has no context menu of its own, and this
+  // window hides its menu bar, so without this there was no discoverable way to paste a path into a
+  // field or copy an error message out of a panel -- only the keyboard shortcuts, if you knew them.
+  editmenu.attach(win.webContents, { Menu, clipboard });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   // The pop-out panel is hidden rather than closed, so it would keep the app alive after the main
   // window has gone -- and it is skipTaskbar, so there would be nothing left to click.
@@ -1088,7 +1093,7 @@ ipcMain.handle('legacy:dgvoodoo', async (_evt, { exePath, detected } = {}) => {
       if (pick.canceled || pick.filePaths.length === 0) return { ok: true, cancelled: true };
       source = await legacy.importDgVoodooZip(pick.filePaths[0], feederCacheDir());
     }
-    const res = await legacy.deployDgVoodoo(dir, plan, source);
+    const res = await legacy.deployDgVoodoo(dir, plan, source, { vendor: ((await getGpuInfo()) || {}).vendor });
     return { ok: true, ...res };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error), code: error && error.code ? error.code : null };
@@ -2273,8 +2278,12 @@ ipcMain.handle('game:route', async (_evt, { exePath, detected }) => {
   const { vendor } = await getGpuInfo();
   const dir = gameDir(exePath);
   const effective = effectiveDetection(dir, exePath, detected || {});
+  const route = recommendRoute(dir, exePath, effective, vendor, { lumaMod: lumaModFor(exePath, effective) });
+  // Kept for game:lastRun, which analyses the same game's run moments later on the same card render
+  // and has no route of its own (see lastRouteByExe).
+  lastRouteByExe.set(String(exePath).toLowerCase(), { route, api: effective.api || null });
   return {
-    ...recommendRoute(dir, exePath, effective, vendor, { lumaMod: lumaModFor(exePath, effective) }),
+    ...route,
     apiOverride: effective.apiOverride,
     effectiveApi: effective.api || null,
     detectedApi: (detected && detected.api) || null,
@@ -2941,12 +2950,42 @@ ipcMain.handle('game:confirm-remove', async (_evt, gameName) => {
   return ['remove-and-forget', 'forget-only', 'cancel'][res.response] || 'cancel';
 });
 
+// The route game:route last worked out for an exe, so game:lastRun can record a run without
+// computing one a second time per card. The card asks for both on the same render, route first, so
+// the entry is this game's and is seconds old; a game that has not been through game:route yet is
+// simply not recorded, which is where this was before.
+//
+// Nothing comes from the renderer here: an entry is only ever written by game:route from
+// recommendRoute's own result, because this feeds the catalog on disk.
+const lastRouteByExe = new Map();
+
 // What the last run's logs say -- see runlog.js for the verdicts and where each was met.
+//
+// This is also where a run becomes EVIDENCE. learnFromRun used to be called only from helpContext,
+// so a game was recorded as working only if the user happened to open Game Help on it after a run
+// -- which is why a library could be full of games that plainly worked and still wore the
+// Experimental chip (2026-09-21: 8 of 18 games here had zero recorded runs, while the ones that had
+// been debugged through Game Help carried 14, 18, 39, 44). The card already analyses the run here on
+// every render and already reads `nr-ran` off it to draw its "working" evidence, so the proof was in
+// hand and only the recording was missing. No extra work: the analysis and the route were both being
+// computed for this card anyway.
 ipcMain.handle('game:lastRun', async (_evt, exePath) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) return { ran: false, verdict: 'no-log' };
     const dir = gameDir(exePath);
-    return await runlog.analyzeRun(dir, { optiDir: optiScalerDirFor(dir) });
+    const run = await runlog.analyzeRun(dir, { optiDir: optiScalerDirFor(dir) });
+    const known = lastRouteByExe.get(String(exePath).toLowerCase());
+    // learnFromRun ignores anything that is not proof either way, and records each run once by its
+    // timestamp, so a card that renders twenty times counts one run once.
+    if (known && known.route && known.route.optiInstalled) {
+      try {
+        catalog.learnFromRun({
+          exePath, name: path.basename(exePath, path.extname(exePath)), run,
+          setup: { route: known.route.route, via: routescore.placedVia(known.route), api: run.runtimeApi || known.api || null },
+        });
+      } catch {}
+    }
+    return run;
   } catch (error) {
     return { ran: false, verdict: 'no-log', error: String(error && error.message ? error.message : error) };
   }
@@ -3567,7 +3606,7 @@ async function applyHelpFix(exePath, fixId) {
       const hadParked = !!((legacy.readMarker(dir) || {}).parked || []).length;
       // dgVoodoo2 goes back in, and what is installed wins over the catalog's proof: nothing to record.
       translation.writePreference(dir, null);
-      await legacy.deployDgVoodoo(dir, plan, source);
+      await legacy.deployDgVoodoo(dir, plan, source, { vendor: ((await getGpuInfo()) || {}).vendor });
       invalidateDetection(dir);
       const stillParked = !!((legacy.readMarker(dir) || {}).parked || []).length;
       const proxy = hadParked && !stillParked ? '; the game-folder ReShade is back' : stillParked ? '; the game-folder ReShade could not go back under its name (something else holds it)' : '';
@@ -5419,6 +5458,10 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
     // A 32-bit game on the helper route: its OptiScaler (winmm.dll) and NR model are in host64\ and
     // follow the engine and model in Settings the same way.
     const legacyMarker = legacy.readMarker(dir);
+    // For ensureDgVoodooWindowed below: which vendor dgVoodoo names itself as to the game (legacy.js
+    // DG_ADAPTER_ID_TYPES). getGpuInfo is memoised, so this is an already-resolved promise per game
+    // and not per-game work -- the rule that keeps sync off the 52-second path.
+    const gpuVendor = ((await getGpuInfo()) || {}).vendor || null;
     if (legacyMarker && legacyMarker.host32) {
       const hostDir = path.join(dir, legacy.HOST_DIR);
       let updated = false;
@@ -5439,7 +5482,7 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
       // Installs from before 32-bit DirectX 8/9 games were held in a borderless window (legacy.js
       // DG_WINDOWED): an exclusive-fullscreen game can freeze the moment the helper starts.
       let dgWindowed = false;
-      try { dgWindowed = legacy.ensureDgVoodooWindowed(dir); } catch {}
+      try { dgWindowed = legacy.ensureDgVoodooWindowed(dir, { vendor: gpuVendor }); } catch {}
       // Installs from before the deploy gave the in-game panel its Alt+Home key (legacy.js ensureCastKey).
       try { legacy.ensureCastKey(dir); } catch {}
       // Installs from before High performance was set for the helper (Feeder #100, 2026-09-19).
@@ -5447,7 +5490,7 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
       return { ok: true, updated: updated || nrUpdated, nrUpdated, dgWindowed, reason: 'legacy 32-bit route', autoConfigured: [] };
     }
     // A 64-bit DirectX 8/9 game behind dgVoodoo2 gets the same scaled-to-screen display (legacy.js DG_DISPLAY).
-    try { legacy.ensureDgVoodooWindowed(dir); } catch {}
+    try { legacy.ensureDgVoodooWindowed(dir, { vendor: gpuVendor }); } catch {}
     // Luma installs from before DLSS was preset for them (lumaue.js ensureLumaDlss).
     try { lumaue.ensureLumaDlss(dir); } catch {}
     // The Feeder follows its own releases, not this app's: a game installed weeks ago kept whatever

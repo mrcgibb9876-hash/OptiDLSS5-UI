@@ -62,7 +62,7 @@ function fakeComponents(base) {
 
 test('emulator profiles: exe names map to the emulator, with this app\'s API names', () => {
   assert.equal(emulators.profileFor('C:\\Emu\\pcsx2-qt.exe').key, 'pcsx2');
-  assert.deepEqual(emulators.profileFor('pcsx2-qt.exe').apis, ['dx11', 'dx12', 'vulkan', 'opengl']);
+  assert.deepEqual(emulators.profileFor('pcsx2-qt.exe').apis, ['dx11', 'vulkan', 'dx12', 'opengl']);
   assert.equal(emulators.profileFor('RPCS3.EXE').apis[0], 'vulkan');
   assert.equal(emulators.profileFor('xenia_canary.exe').apis[0], 'dx12');
   assert.equal(emulators.profileFor('eden.exe').system, 'Nintendo Switch');
@@ -482,4 +482,55 @@ test('the 32-bit in-game panel gets Alt+Home, and a key the player chose is left
   write(other, legacy.MARKER, JSON.stringify({ version: 1, files: [], backups: [], dirs: [], dgVoodoo: { arch: 'x86', dll: 'D3D9.dll' } }));
   assert.equal(legacy.ensureCastKey(other), false);
   assert.equal(fs.existsSync(path.join(other, 'dlss5-feed.cfg')), false);
+});
+
+// #106: Dolphin was set up for DX12 (its DX11 lead turned into DX12 by preferDx12) while it ran on
+// OpenGL, and nothing told the player. Each emulator is set up for its best renderer for this app,
+// the route says which and where, and a run on another one is named.
+test('emulators: set up for the renderer that suits DLSS 5 best, never OpenGL where there is another', () => {
+  for (const p of emulators.PROFILES) {
+    assert.ok(p.renderer && p.hint, `${p.key} names its renderer and where to set it`);
+    if (p.apis.length > 1) assert.notEqual(p.apis[0], 'opengl', `${p.key} leads with OpenGL`);
+    if (p.apis.includes('dx11')) assert.equal(p.apis[0], 'dx11', `${p.key} offers D3D11 and should lead with it`);
+  }
+  assert.deepEqual(emulators.profileFor('Dolphin.exe').apis, ['dx11', 'vulkan', 'dx12', 'opengl']);
+  assert.ok(!emulators.profileFor('xenia_canary.exe').apis.includes('dx11'), 'Xenia has no Direct3D 11 backend');
+  assert.equal(emulators.profileFor('snes9x-x64.exe').apis[0], 'vulkan', 'Snes9x\'s "Direct3D" is D3D9');
+});
+
+test('emulators: DX11 stays DX11 (no DX12 preference), and the route carries the renderer advice', () => {
+  const dir = scratchDir('emu-106');
+  write(dir, 'Dolphin.exe', 'x');
+  const emu = { key: 'dolphin', name: 'Dolphin', system: 'GameCube / Wii', apis: ['dx11', 'vulkan', 'dx12', 'opengl'], renderer: 'Direct3D 11', where: 'Graphics > General > Backend', hint: 'Graphics > General > Backend: Direct3D 11' };
+  const det = { api: 'dx11', apis: emu.apis, bitness: 64, recommend: 'optiscaler', emulator: emu, runtimeApi: 'opengl', runtimeLogMtime: 1 };
+  assert.equal(route.withApiOverride(det, null).api, 'dx11');
+  const r = route.recommendRoute(dir, path.join(dir, 'Dolphin.exe'), route.withApiOverride(det, null), 'nvidia');
+  assert.deepEqual(r.emulatorRenderer, { name: 'Dolphin', api: 'dx11', renderer: 'Direct3D 11', hint: emu.hint, seen: 'OpenGL', openglOnly: false });
+
+  // Picked in Edit: the advice follows the choice, with the menu path but not the D3D11 name.
+  const vk = emulators.rendererAdvice({ ...det, runtimeApi: 'vulkan' }, 'vulkan');
+  assert.equal(vk.renderer, 'Vulkan');
+  assert.equal(vk.hint, 'Graphics > General > Backend');
+  assert.equal(vk.seen, null);
+
+  // A watched launch newer than OptiScaler's log is the fresher evidence.
+  const probed = { ...det, probe: { api: 'vulkan', capturedAt: new Date(10).toISOString() } };
+  assert.equal(emulators.seenApi(probed), 'vulkan');
+  assert.equal(emulators.rendererAdvice({ emulator: { key: 'melonds', name: 'melonDS' } }, 'opengl').openglOnly, true);
+
+  // Game Help: a run with no DLSS in it names the setting instead of "no known fix".
+  const ctx = (routeObj) => ({ detected: det, route: { ...routeObj, complete: true, nextStep: null, optiInstalled: true, feederDeployed: true }, run: { ran: true, verdict: 'no-dlss' }, foreign: [], fixesTried: [] });
+  const d = diagnose(ctx({ ...r, emulatorRenderer: { ...r.emulatorRenderer, seen: null } }));
+  assert.equal(d.code, 'emulator-renderer');
+  assert.equal(diagnose(ctx(r)).code, 'emulator-renderer-mismatch');
+  assert.equal(diagnose(ctx(r)).vars.seen, 'OpenGL');
+});
+
+test('emulators: a watched launch no longer moves the route, it is kept for the warning', () => {
+  const probe = require('../src/probe');
+  const d = { api: 'dx11', apis: ['dx11', 'vulkan', 'dx12', 'opengl'], emulator: { key: 'dolphin', apis: ['dx11', 'vulkan', 'dx12', 'opengl'] } };
+  const out = probe.applyProbe(d, { version: 1, api: 'opengl', apiEvidence: 'wglCreateContext', capturedAt: new Date().toISOString() });
+  assert.equal(out.api, 'dx11');
+  assert.equal(out.probe.api, 'opengl');
+  assert.equal(out.probe.applied, false);
 });

@@ -861,6 +861,14 @@ async function applyRecommendation(game, card, backends, generation = renderGene
     detectWarnings.push(t('ReShade is already installed here as {file}. Install replaces it with OptiScaler -- pick Launch mode: Injector in Edit to keep both.', { file: detected.reshadeProxy }));
     detectShort.push(t('ReShade already here ({file})', { file: detected.reshadeProxy }));
   }
+  // An emulator: which renderer to pick in it, always -- its renderer is a setting the route cannot
+  // see or change, and on any other one DLSS 5 has nothing to hook (emulators.js, #106).
+  const emuRenderer = route.emulatorRenderer || null;
+  // A last run on another renderer is a problem, not advice: it is claimed below as one.
+  if (emuRenderer && !emuRenderer.seen) {
+    detectWarnings.push(emulatorRendererWords(emuRenderer));
+    detectShort.push(emuRenderer.openglOnly ? t('OpenGL only: no in-game panel') : t('Set {name} to {renderer}', emuRenderer));
+  }
   if (detected.oldShaderCompiler) {
     detectWarnings.push(t('{file} v{version} beside the exe predates Shader Model 5.1, so OptiScaler\'s shaders can silently fail to compile -- rename it and Windows\' own copy loads instead.', { file: detected.oldShaderCompiler.file, version: detected.oldShaderCompiler.version }));
     detectShort.push(t('Old shader compiler ({file})', { file: detected.oldShaderCompiler.file }));
@@ -939,6 +947,11 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   if (route.optiInstalled && !route.complete && route.nextStep) {
     const step = t('Next: {step}', { step: t(route.nextStep) });
     claim({ bad: true, text: step, title: step, action: { label: t('Show me'), run: () => openHelp(game) } });
+  }
+
+  if (emuRenderer && emuRenderer.seen) {
+    const words = emulatorRendererWords(emuRenderer);
+    claim({ bad: true, text: t('{name} ran on {seen} -- set {renderer}', emuRenderer), title: words, action: { label: t('Show me'), run: () => openHelp(game) } });
   }
 
   if (detectShort.length) {
@@ -1140,9 +1153,19 @@ function routeName(route, via = null) {
   return via && vias[via] ? `${name} ${vias[via]}` : name;
 }
 
+// The one sentence about an emulator's renderer (route.emulatorRenderer, emulators.rendererAdvice),
+// for the card's hover text, the install toast and Game Help.
+function emulatorRendererWords(r) {
+  if (r.openglOnly) return t('{name} only renders with OpenGL, and DLSS 5 cannot draw its panel over OpenGL. Use the pop-out panel to change DLSS 5 settings.', r);
+  if (r.seen) return t('{name} last ran on {seen}, but DLSS 5 is set up for {renderer}. Set its renderer to {renderer} ({hint}) and start it again.', r);
+  return t('Set {name}\'s renderer to {renderer} ({hint}) before you play. DLSS 5 is set up for {renderer}; on any other renderer it will not load.', r);
+}
+
 function helpWords(diag) {
   const v = diag.vars || {};
   switch (diag.code) {
+    case 'emulator-renderer': return t('{name} ran and nothing called DLSS. DLSS 5 is set up for {renderer}, so {name} has to render with it -- on any other renderer there is nothing for it to hook.', v);
+    case 'emulator-renderer-mismatch': return emulatorRendererWords(v);
     case 'catalog-prefers': return t('What is known about this game points away from the route the app picked ({pick}): {why}. {route} has the better record here, and Fix it switches to it.', {
       pick: routeName(...String(v.pick || '').split(':')), route: routeName(v.route, v.via),
       why: v.why ? t(v.why, v.whyVars || {}) : t('it has failed here before'),
@@ -1179,7 +1202,7 @@ function helpWords(diag) {
     case 'feeder-technique': return t('DLSS initialised but the Feeder\'s shader technique was missing. Install again to redeploy the Feeder.');
     case 'luma-select-dlss': return t('Luma UE is deployed but no DLSS call happened. In-game, press Home for Luma\'s overlay and select DLSS as the upscaler, in gameplay. Then check again.');
     case 'init-no-feature': return t('DLSS initialised but no feature was ever created. This is not a known case. Save the bundle to share, or ask the AI.');
-    case 'vulkan-layer-missing': return t('On Vulkan, the DLSS5 Feeder runs inside ReShade, and ReShade only reaches a Vulkan game as a layer installed for the whole PC. None is installed, so the Feeder never loaded and nothing called DLSS. Run ReShade\'s own installer (the version with add-on support), pick this exe, choose Vulkan, then Install here again. Or switch the emulator to OpenGL, or to Direct3D if it has it, and pick the same API in Edit: those need no layer.');
+    case 'vulkan-layer-missing': return t('On Vulkan, the DLSS5 Feeder runs inside ReShade, and ReShade only reaches a Vulkan game as a layer installed for the whole PC. None is installed, so the Feeder never loaded and nothing called DLSS. Run ReShade\'s own installer (the version with add-on support), pick this exe, choose Vulkan, then Install here again. Or switch the emulator to Direct3D 11, if it has it, and pick DX11 in Edit: that needs no layer. Not OpenGL: DLSS 5 cannot draw its panel there.');
     case 'vulkan-layer-no-addon': return t('ReShade is installed as a Vulkan layer on this PC, but a build without add-on support, so the DLSS5 Feeder (an add-on) cannot load and nothing called DLSS. Reinstall ReShade with add-on support (its installer: "Enable loading of add-ons"), then Install here again.');
     case 'vulkan-layer-not-loaded': return t('ReShade\'s Vulkan layer with add-on support is installed, but it did not load in this program: the DLSS5 Feeder wrote no log at all. Run ReShade\'s installer once more for this exact exe and choose Vulkan (the layer only runs for programs it was set up for), check NVIDIA Smooth Motion is off for it, then launch again.');
     case 'vulkan-layer-app-not-listed': return t('ReShade\'s Vulkan layer with add-on support is installed, but {exe} is not on its app list (ReShadeApps.ini next to the layer), so the layer stays inert in this game: no overlay, no DLSS5 Feeder, no log. ReShade\'s own installer adds it -- run it, pick this exact exe, choose Vulkan and keep "Enable loading of add-ons" ticked -- then launch again.', v);
@@ -1264,6 +1287,7 @@ function helpSteps(diag) {
   const report = [t('Save the bundle (More…)'), t('Report it on GitHub (More…)')];
   switch (diag.code) {
     case 'driver-outdated': return [v.min ? t('Update the NVIDIA driver ({min} or newer)', v) : t('Update the NVIDIA driver'), t('Restart the PC'), launch];
+    case 'emulator-renderer': case 'emulator-renderer-mismatch': return [t('In {name}: {hint}', v), t('Start {name} again', v)];
     case 'nr-model-crash-emulator': return [
       t('In {name}: Graphics > Backend > Direct3D 11', v),
       ...(v.smoothMotion ? [t('Turn off NVIDIA Smooth Motion for {name}', v)] : []),
@@ -1305,7 +1329,7 @@ function helpSteps(diag) {
     case 'ok-panel-in-helper': return [t('Press Alt+Home in the game for the DLSS 5 panel'), t('Its controls take clicks there, as in any other game'),
       ...(popoutHotkeyUsable() ? [t('Or press {hotkey} for the pop-out panel', { hotkey: settings.panelHotkey || DEFAULT_PANEL_HOTKEY })] : []),
       ...(v.otherMv ? [t('Picture jumps or smears in motion? Card menu > Motion vectors > change: pick LumeniteFX')] : [])];
-    case 'vulkan-layer-missing': return [t('Install ReShade with add-on support for this exe, choosing Vulkan'), t('Or switch the emulator to OpenGL and pick OpenGL in Edit'), t('Press Install here again')];
+    case 'vulkan-layer-missing': return [t('Install ReShade with add-on support for this exe, choosing Vulkan'), t('Or switch the emulator to Direct3D 11, if it has it, and pick DX11 in Edit'), t('Press Install here again')];
     case 'vulkan-layer-no-addon': return [t('Reinstall ReShade with "Enable loading of add-ons"'), t('Press Install here again')];
     case 'vulkan-layer-not-loaded': return [t('Run ReShade\'s installer for this exe, choosing Vulkan'), t('Turn NVIDIA Smooth Motion off for it'), t('Launch again')];
     case 'vulkan-layer-app-not-listed': return [t('Run ReShade\'s installer for this exe, choosing Vulkan'), t('Keep "Enable loading of add-ons" ticked'), launch];
@@ -1374,6 +1398,8 @@ function helpShort(diag) {
     case 'catalog-prefers': return t('Known to run better on {route}', { route: routeName(v.route, v.via) });
     case 'luma-needs-dx11': return t('Switch the game to DirectX 11 for Luma');
     case 'nr-model-crash-emulator': return t('DLSS 5 crashed on D3D12 -- switch to Direct3D 11');
+    case 'emulator-renderer': return t('Set {name} to {renderer}', v);
+    case 'emulator-renderer-mismatch': return t('{name} ran on {seen} -- set {renderer}', v);
     case 'nr-model-crash': return t('The DLSS 5 model crashed');
     case 'feed-stopped': return t('The Feeder gave up');
     case 'smooth-motion-stacked': return t('Two frame generators: Smooth Motion and {generator}', v);
@@ -2326,9 +2352,13 @@ async function installGame(game) {
     }
     // Users read a wall of text here as something having gone wrong (2026-09-15). The toast says
     // "Installed" plus only what needs doing; everything informational goes to the console.
+    // An emulator's renderer is its own setting, and the install only works on the one it was set up
+    // for (emulators.js, #106) -- said at the moment the player is about to launch it.
+    const emuRenderer = route.emulatorRenderer || null;
+    const emulatorNote = emuRenderer ? ' ' + emulatorRendererWords(emuRenderer) : '';
     const actionNotes = [
       res.proxyError ? proxyCreatedNote : '', foreignProxyNote, proxyRefreshNote,
-      res.reframework && res.reframework.error ? reframeworkNote : '', lumaNote,
+      res.reframework && res.reframework.error ? reframeworkNote : '', lumaNote, emulatorNote,
     ].join('');
     console.info('[install]', game.name, `${feederNote} ${t('Copied nvngx_dlssnr.dll ({mb} MB) to {dir}', { mb, dir: res.dir })}${proxyNote}${proxyCreatedNote}${configNote}${streamlineNote}${reEngineNote}${profileNote}${hotfixNote}${reframeworkNote}${reframeworkConfigNote}`);
     toast(`${t('Installed.')}${actionNotes}`);

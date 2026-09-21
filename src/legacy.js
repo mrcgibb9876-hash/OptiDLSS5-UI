@@ -360,7 +360,38 @@ function repairColourSpace(text) {
 // all. One list, so the two halves cannot drift apart.
 const needsMinimalDgVoodoo = feeder.needsFullscreenHost;
 
-function configureDgVoodoo(text, { windowed = false, minimal = false } = {}) {
+// [DirectXExt] AdapterIDType: which vendor's PCI ids and driver-version format the DX API layer
+// reports to the game. dgVoodoo leaves it undefined and answers as its own virtual card, and an old
+// game that recognises nobody takes its worst path.
+//
+// Fallout New Vegas, 2026-09-21. The game crashed every time the world loaded, at
+// FalloutNV+0x757aa9, reading address 0:
+//
+//     call 0x755560          ; BSShaderManager::GetShader(29)
+//     mov  esi,eax           ; -> NULL
+//     mov  eax,[esi]         ; c0000005
+//
+// GetShader builds a shader only behind a global byte that was 0, so slot 29 of its cache stayed
+// null and the game dereferenced it without a check. That byte is off because the game had picked
+// its Shader Model 2.0 path, which its own RendererInfo.txt states:
+//
+//     NVIDIA GeForce RTX 5070 Ti Laptop (dgVoodoo DX API Layer)
+//     RenderPath   : BSSM_SV_2_0        3.0 Support    : yes
+//     3.0 Lighting : no                 Shader Package : 2
+//
+// "3.0 Support: yes" one line above "3.0 Lighting: no" is the whole diagnosis: the caps were never
+// the problem. The game can do Shader Model 3.0 and refuses to, because it does not recognise who
+// it is talking to. bAllow30Shaders=1 in both of its inis changed nothing; this key did.
+//
+// The real vendor, never a fixed string. Reporting NVIDIA on an AMD machine would buy the same
+// recognition and then send a game down a vendor-specific path the GPU underneath cannot answer.
+// An unknown vendor writes no key at all, which is where dgVoodoo already was.
+//
+// Only meaningful with VideoCard=internal3D (dgVoodoo: "Can be defined only for SVGA and Internal3D
+// card types") -- the line right above it below -- so it belongs there, past the minimal return.
+const DG_ADAPTER_ID_TYPES = new Set(['nvidia', 'amd', 'intel']);
+
+function configureDgVoodoo(text, { windowed = false, minimal = false, vendor = null } = {}) {
   let out = String(text || '');
 
   // First, always. Left in place a rejected value voids every key below it, including the VRAM line
@@ -384,6 +415,7 @@ function configureDgVoodoo(text, { windowed = false, minimal = false } = {}) {
 
   out = setIniKey(out, 'DirectX', 'DisableAndPassThru', 'false');
   out = setIniKey(out, 'DirectX', 'VideoCard', 'internal3D');
+  if (DG_ADAPTER_ID_TYPES.has(vendor)) out = setIniKey(out, 'DirectXExt', 'AdapterIDType', vendor);
   for (const [section, key, value] of DG_DISPLAY) out = setIniKey(out, section, key, value);
   if (windowed) for (const [section, key, value] of DG_WINDOWED) out = setIniKey(out, section, key, value);
   return out;
@@ -392,7 +424,7 @@ function configureDgVoodoo(text, { windowed = false, minimal = false } = {}) {
 // Brings an existing install's dgVoodoo.conf up to the current display settings: the scaled image on
 // every dgVoodoo2 route, and the borderless window on the 32-bit route (installs made before either
 // existed). Returns true when the file changed.
-function ensureDgVoodooWindowed(dir) {
+function ensureDgVoodooWindowed(dir, { vendor = null } = {}) {
   const marker = readMarker(dir);
   if (!marker || !marker.dgVoodoo) return false;
   const confPath = path.join(dir, 'dgVoodoo.conf');
@@ -411,6 +443,9 @@ function ensureDgVoodooWindowed(dir) {
 
   if (!needsMinimalDgVoodoo(dir))
   {
+    // Installs from before the vendor was reported at all (DG_ADAPTER_ID_TYPES): a game that picked
+    // its worst render path off dgVoodoo's virtual card keeps that path until this line lands.
+    if (DG_ADAPTER_ID_TYPES.has(vendor)) next = setIniKey(next, 'DirectXExt', 'AdapterIDType', vendor);
     for (const [section, key, value] of DG_DISPLAY) next = setIniKey(next, section, key, value);
     if (marker.host32) for (const [section, key, value] of DG_WINDOWED) next = setIniKey(next, section, key, value);
   }
@@ -504,7 +539,7 @@ function emptyMarker(existing) {
 }
 
 // source: a cache folder from ensureDgVoodoo/importDgVoodooZip.
-async function deployDgVoodoo(dir, plan, source) {
+async function deployDgVoodoo(dir, plan, source, { vendor = null } = {}) {
   if (!plan || !plan.dgVoodoo) throw new Error('this game does not need dgVoodoo2');
   if (!readDgFolder(source)) throw new Error('dgVoodoo2 is not in the cache (or one of its files has gone) -- press Install again');
   const read = (rel) => {
@@ -539,7 +574,7 @@ async function deployDgVoodoo(dir, plan, source) {
   const confPath = path.join(dir, 'dgVoodoo.conf');
   const base = fs.existsSync(confPath) ? fs.readFileSync(confPath, 'utf8') : conf.toString('utf8');
   await rec.write(confPath,
-                  Buffer.from(configureDgVoodoo(base, { windowed: !!plan.host32, minimal: needsMinimalDgVoodoo(dir) }), 'utf8'),
+                  Buffer.from(configureDgVoodoo(base, { windowed: !!plan.host32, minimal: needsMinimalDgVoodoo(dir), vendor }), 'utf8'),
                   { ours: () => true });
   marker.dgVoodoo = { arch: plan.dgVoodoo.arch, dll: plan.dgVoodoo.dll, source: path.basename(source) };
   marker.placedAt = new Date().toISOString();

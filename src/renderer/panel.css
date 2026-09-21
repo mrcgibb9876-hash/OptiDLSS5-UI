@@ -132,6 +132,13 @@ html, body { margin: 0; height: 100%; }
 }
 .p-caption:first-child { margin-top: 4px; }
 
+/* The body is user-select: none, because this window is dragged by its title bar and its rows are
+   sliders -- a drag that paints a selection across the panel feels broken. That also made the two
+   things anyone actually wants out of this panel impossible to take: the timing readout and the
+   notes. Right-click Copy (editmenu.js) is only ever as good as what can be selected, so selection
+   comes back for the text and stays off for the controls. */
+.p-note, .p-timing { user-select: text; }
+
 .p-note { margin: 5px 0; color: var(--dim); font-size: 12px; }
 .p-note.is-accent { color: var(--accent); }
 
