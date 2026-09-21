@@ -2229,6 +2229,32 @@ async function installGame(game) {
   }
   if (!(await preflightBeforeInstall(game))) return;
   const route = await window.api.gameRoute(game.exePath, game.detectedPath);
+  // Which add-on runs the neural pass here (Edit / the card menu). When the folder is set up for the
+  // other one, this Install is the swap.
+  const consumer = chosenConsumer(game);
+  const dfcOffered = !!(route.dfcSupport && route.dfcSupport.ok);
+  const swapNeeded = dfcOffered && (route.consumerHere || 'optiscaler') !== consumer;
+
+  // A 32-bit game on Chicken: its own companion route replaces this app's whole 32-bit stack, so the
+  // switch happens here, before dgVoodoo2 or the helper below would go in. On the way back, the
+  // switch takes Chicken out and the route below builds this app's stack again.
+  if (route.route === 'feeder32' && dfcOffered && (swapNeeded || consumer === 'dfc')) {
+    toast(!swapNeeded ? t('Deploying…') : consumer === 'dfc' ? t('Switching this game to Deep Fried Chicken…') : t('Switching this game back to DLSS 5…'));
+    const sw = await window.api.dfcSwitch(game.exePath, consumer, settings.nrDllPath);
+    if (!sw.ok) {
+      toast(sw.code && String(sw.code).startsWith('dfc-') ? dfcUnsupportedWords(sw.code) : t('Could not switch this game: {error}', { error: sw.error }));
+      renderGrid();
+      return;
+    }
+    if (consumer === 'dfc') {
+      toast(t('Installed with Deep Fried Chicken. Press Home in the game for its menu.'));
+      renderGrid();
+      return;
+    }
+    // Back to DLSS 5: this app's 32-bit route goes in below, from nothing, as on a first install.
+    route.dgVoodooDeployed = false;
+    route.dxvkDeployed = false;
+  }
 
   // Experimental DirectX 8/9 routes: dgVoodoo2 goes in first. The main process fetches it without
   // asking and only offers a zip of the user's own if that fails; a cancel there stops the install
@@ -2297,9 +2323,6 @@ async function installGame(game) {
   // Which add-on runs the neural pass here (Edit > Neural pass). When the folder is set up for the
   // other one, this Install is the swap: feeder:deploy does it whole (dfc.js), and Chicken ends the
   // install there -- OptiScaler going back in on top would put two neural passes in one folder.
-  const consumer = chosenConsumer(game);
-  const dfcOffered = !!(route.dfcSupport && route.dfcSupport.ok);
-  const swapNeeded = dfcOffered && (route.consumerHere || 'optiscaler') !== consumer;
   if (route.route === 'feeder' && (!route.feederDeployed || swapNeeded || consumer === 'dfc')) {
     toast(route.feederDeployed
       ? (!swapNeeded ? t('Deploying…') : consumer === 'dfc' ? t('Switching this game to Deep Fried Chicken…') : t('Switching this game back to DLSS 5…'))
@@ -3120,6 +3143,7 @@ function layerName(via) {
 
 function layerSwapFor(route) {
   if (!(route && route.legacy && route.legacy.supported)) return null;
+  if (route.consumerHere === 'dfc') return null;
   const plan = route.legacy;
   const native = !!(plan.host32 && !plan.dgVoodoo && (plan.api === 'dx10' || plan.api === 'dx11'));
   if (!route.legacy.dgVoodoo && !native) return null;
@@ -3957,7 +3981,7 @@ $('#btn-settings-dfc').addEventListener('click', async () => {
 
 function dfcUnsupportedWords(code) {
   if (code === 'dfc-vulkan-opengl') return t('Not for this game yet: on Vulkan and OpenGL Chicken brings its own feeder, which this app does not set up.');
-  if (code === 'dfc-32bit') return t('Not for this game yet: 32-bit games use Chicken\'s own 32-bit route, which this app does not set up.');
+  if (code === 'dfc-32bit') return t('Not for this game yet: on 32-bit games Chicken is set up here for DirectX 9 to 11 only.');
   return t('Chicken is set up here for 64-bit DirectX 9 to 12 games only.');
 }
 

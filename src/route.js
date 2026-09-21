@@ -332,11 +332,15 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
   const finish = (route, label, reason, steps, reasonVars = null, extra = {}) => {
     // Chicken is offered on NVIDIA, on a Feeder game or a plain-OptiScaler one (its 3.0 needs no
     // Feeder on Direct3D); dfc.supportedFor then says whether this game qualifies.
-    const dfcOffered = gpuVendor === 'nvidia' && (route === 'feeder' || route === 'optiscaler');
+    const dfcOffered = gpuVendor === 'nvidia' && (route === 'feeder' || route === 'optiscaler' || route === 'feeder32');
     const onDfc = dfcOffered && dfcHere;
     if (onDfc) {
-      label = route === 'feeder' ? 'Deep Fried Chicken + Feeder' : 'Deep Fried Chicken';
-      steps = steps.map((s) => (s.key === 'optiscaler' ? { key: 'dfc', label: 'Switch to Deep Fried Chicken', done: true } : s));
+      label = route === 'feeder' ? 'Deep Fried Chicken + Feeder' : route === 'feeder32' ? 'Deep Fried Chicken (32-bit)' : 'Deep Fried Chicken';
+      // On a 32-bit game Chicken's own companion route replaced this app's whole stack: none of the
+      // route's steps (dgVoodoo2, the Feeder helper) apply any more.
+      steps = route === 'feeder32'
+        ? [{ key: 'dfc', label: 'Switch to Deep Fried Chicken', done: true }]
+        : steps.map((s) => (s.key === 'optiscaler' ? { key: 'dfc', label: 'Switch to Deep Fried Chicken', done: true } : s));
     }
     const next = steps.find((s) => !s.done) || null;
     return {

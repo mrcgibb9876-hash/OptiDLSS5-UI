@@ -60,6 +60,14 @@ const ADDON32 = 'deep-fried-chicken.addon32';
 const NVNGX = 'deep-fried-chicken-nvngx.dll';
 const CFG = 'deep-fried-chicken.cfg';
 const LOG = 'deep-fried-chicken.log';
+// The 32-bit route (Chicken 3.0's README, "32-BIT GAMES"): its bridge settings beside the game, and a
+// host64\ folder holding the hidden x64 worker with its own copy of the add-on and the main cfg.
+const BRIDGE_CFG = 'deep-fried-chicken-bridge.cfg';
+const HOST_DIR = 'host64';
+const TREE32 = '32-bit';
+// Every cfg a player can tune, per route. Kept in the cache on the way back to DLSS 5 and restored on
+// the next switch to Chicken -- its README: "KEEP existing .cfg files".
+const TUNED_CFGS = [CFG, BRIDGE_CFG, `${HOST_DIR}/${CFG}`];
 // The licence, README and notices as the release actually names them. The older
 // LICENSE-Deep-Fried-Chicken.md is what #89's folder carried, so detect.js still knows that name
 // too; both are recognised and neither is ever modified -- its licence forbids altering
@@ -149,6 +157,33 @@ function findPayloadDir(root, depth = 0) {
   return null;
 }
 
+// Chicken's 32-bit tree: a folder with the 32-bit add-on and a host64\ holding the x64 worker's add-on.
+function is32Tree(dir) {
+  return fs.existsSync(path.join(dir, ADDON32)) && fs.existsSync(path.join(dir, HOST_DIR, ADDON));
+}
+
+function find32Dir(root, depth = 0) {
+  if (is32Tree(root)) return root;
+  if (depth >= 2) return null;
+  let entries = [];
+  try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch { return null; }
+  // 32-bit/ first by name, the same way findPayloadDir looks for 64-bit/ first.
+  const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name)
+    .sort((a, b) => (/32/.test(a) ? -1 : 0) - (/32/.test(b) ? -1 : 0));
+  for (const name of dirs) {
+    const found = find32Dir(path.join(root, name), depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+// The cached 32-bit tree, or null when the copy the user added had none (an older release, or only
+// its 64-bit folder picked).
+function cached32(cacheDir) {
+  const p = path.join(cacheDir, CACHE_NAME, TREE32);
+  return cachedDfc(cacheDir) && is32Tree(p) ? p : null;
+}
+
 // Takes what the user picked -- Chicken's zip, or the folder they unpacked it into -- and keeps a
 // copy in this app's cache. Returns the cache path. Nothing is fetched and nothing is published:
 // this is their download, stored where the app can find it again for the next game.
@@ -186,6 +221,10 @@ async function importDfcSource(sourcePath, cacheDir) {
         await fsp.copyFile(path.join(from, name), to);
       }
     }
+    // The 32-bit tree as it ships (addon32, the bridge cfg, host64\, reshade-shaders\), kept whole:
+    // its README is explicit that host64 and reshade-shaders keep their folder structure.
+    const tree32 = find32Dir(sourcePath);
+    if (tree32) await fsp.cp(tree32, path.join(dest, TREE32), { recursive: true, force: true });
   } else {
     const zip = openZip(fs.readFileSync(sourcePath));
     // Its zip may nest the files under a version folder, so each is found by name anywhere in it.
@@ -235,7 +274,9 @@ function readMarker(dir) {
 
 // Chicken's files are here, whoever put them there.
 function dfcPresent(dir) {
-  return PAYLOAD.some((n) => fs.existsSync(path.join(dir, n)));
+  return PAYLOAD.some((n) => fs.existsSync(path.join(dir, n)))
+    || fs.existsSync(path.join(dir, ADDON32))
+    || fs.existsSync(path.join(dir, HOST_DIR, ADDON));
 }
 
 // Here AND placed by this app. The distinction decides whether Remove may touch it and whether
@@ -307,8 +348,11 @@ async function removeDfc(dir, { cacheDir = null, uninstall = false } = {}) {
     return { removed, kept, failed };
   }
 
-  if (cacheDir && fs.existsSync(path.join(dir, CFG))) {
-    try { await stashCfg(dir, cacheDir); kept.push(`${CFG} (kept for this game's next switch to Chicken)`); } catch {}
+  if (cacheDir) {
+    for (const rel of TUNED_CFGS) {
+      if (!fs.existsSync(path.join(dir, rel))) continue;
+      try { await stashCfg(dir, cacheDir, rel); kept.push(`${rel} (kept for this game's next switch to Chicken)`); } catch {}
+    }
   }
 
   for (const name of marker.files || []) {
@@ -337,6 +381,18 @@ async function removeDfc(dir, { cacheDir = null, uninstall = false } = {}) {
         failed.push({ rel: marker.reshadeProxy, code: (e && e.code) || 'failed' });
       }
     }
+  }
+
+  // Chicken's 32-bit host64\ is entirely ours when we made it (switchToDfc32 refuses one that is
+  // not): the worker writes its own log and ReShade files there, so the folder goes whole.
+  if ((marker.dirs || []).includes(HOST_DIR) && fs.existsSync(path.join(dir, HOST_DIR)) && !failed.length) {
+    const r = await saferemove.removePath(path.join(dir, HOST_DIR));
+    if (r.ok) removed.push(`${HOST_DIR}/`);
+    else failed.push({ rel: HOST_DIR, code: r.code });
+  }
+  // The shader folders the 32-bit tree brought, once empty -- a player's own shaders stay.
+  for (const rel of ['reshade-shaders/Shaders', 'reshade-shaders']) {
+    try { if (fs.readdirSync(path.join(dir, rel)).length === 0) fs.rmdirSync(path.join(dir, rel)); } catch {}
   }
 
   if (marker.reshadeFetched && !failed.length) {
@@ -408,7 +464,8 @@ function reshadeProxyOf(dir) {
 const D3D_APIS = ['dx9', 'dx10', 'dx11', 'dx12'];
 function supportedFor(detected) {
   const d = detected || {};
-  if (d.bitness === 32) return { ok: false, code: 'dfc-32bit' };
+  // 32-bit: Chicken's own companion route (switchToDfc32), for the renderers it names there.
+  if (d.bitness === 32) return RESHADE32_FOR[d.api] ? { ok: true, code: null } : { ok: false, code: 'dfc-32bit' };
   if (d.api === 'vulkan' || d.api === 'opengl') return { ok: false, code: 'dfc-vulkan-opengl' };
   if (!D3D_APIS.includes(d.api)) return { ok: false, code: 'dfc-api' };
   return { ok: true, code: null };
@@ -485,22 +542,168 @@ async function switchToDfc(dir, cacheDir, { nrDllPath = null, removeOptiScaler, 
 }
 
 // The player's cfg, kept in the cache per game folder while the game is back on DLSS 5.
-function stashPathFor(dir, cacheDir) {
+// The main cfg keeps its first name (<key>.cfg), so a stash made before the 32-bit route still restores.
+function stashPathFor(dir, cacheDir, rel = CFG) {
   const key = require('node:crypto').createHash('sha1').update(path.resolve(dir).toLowerCase()).digest('hex').slice(0, 16);
-  return path.join(cacheDir, 'configs', `${key}.cfg`);
+  const name = rel === CFG ? `${key}.cfg` : `${key}.${rel.replace(/[\\/]/g, '_')}`;
+  return path.join(cacheDir, 'configs', name);
 }
 
-async function stashCfg(dir, cacheDir) {
-  const to = stashPathFor(dir, cacheDir);
+async function stashCfg(dir, cacheDir, rel = CFG) {
+  const to = stashPathFor(dir, cacheDir, rel);
   await fsp.mkdir(path.dirname(to), { recursive: true });
-  await fsp.copyFile(path.join(dir, CFG), to);
+  await fsp.copyFile(path.join(dir, rel), to);
 }
 
-async function restoreStashedCfg(dir, cacheDir) {
-  const from = stashPathFor(dir, cacheDir);
+async function restoreStashedCfg(dir, cacheDir, rel = CFG) {
+  const from = stashPathFor(dir, cacheDir, rel);
   if (!fs.existsSync(from)) return false;
-  await fsp.copyFile(from, path.join(dir, CFG));
+  await fsp.mkdir(path.dirname(path.join(dir, rel)), { recursive: true });
+  await fsp.copyFile(from, path.join(dir, rel));
   return true;
+}
+
+// ── 32-bit games (stage 3) ───────────────────────────────────────────────────────────────────
+//
+// Chicken 3.0 runs a 32-bit game through its own companion: a 32-bit ReShade with its add-on beside
+// the game, feeding frames to a hidden x64 worker in host64\ that runs DLSS and the model (its
+// README, "32-BIT GAMES"). This app's own 32-bit route uses a host64\ too -- the Feeder's helper,
+// a ReShade dxgi.dll and OptiScaler as winmm.dll -- so the two can never share the folder: the swap
+// takes this app's whole 32-bit stack out first (main.js removeOur32Stack: DXVK or dgVoodoo2, the
+// Feeder, host64\) and lays Chicken's tree in its place. The way back is removeDfc, then Install
+// builds this app's route again.
+//
+// The game's ReShade goes in under the name its renderer loads: d3d9.dll for Direct3D 9 (Chicken
+// hooks D3D9 itself, no dgVoodoo2), dxgi.dll for Direct3D 10/11. DFC_Universal_Feed, the technique
+// the README has the player enable by hand, is switched on in the preset this app writes.
+const RESHADE32_FOR = { dx9: 'd3d9.dll', dx10: 'dxgi.dll', dx11: 'dxgi.dll' };
+
+function walkFiles(root, rel = '') {
+  const out = [];
+  for (const e of fs.readdirSync(path.join(root, rel), { withFileTypes: true })) {
+    const r = rel ? `${rel}/${e.name}` : e.name;
+    if (e.isDirectory()) out.push(...walkFiles(root, r));
+    else out.push(r);
+  }
+  return out;
+}
+
+//   api                 dx9, dx10 or dx11
+//   removeOurStack(dir) this app's 32-bit route out, whole (main.js removeOur32Stack)
+//   occupiedAfterRemoval(rel)  true when a file or folder by that name would still be here once
+//                       removeOurStack has run -- a game's own file it would put back, or one that
+//                       was never ours
+//   reshadeSetup()      path to ReShade's add-on setup (a zip holding ReShade32.dll and ReShade64.dll)
+//   placeNvngxDlss(hostDir)  the x64 nvngx_dlss.dll into the worker's folder
+//   nrDllPath           the NR model, for the worker's folder
+async function switchToDfc32(dir, cacheDir, deps = {}) {
+  const { api, nrDllPath = null, removeOurStack, occupiedAfterRemoval, reshadeSetup, placeNvngxDlss } = deps;
+  const tree = cached32(cacheDir);
+  if (!cachedDfc(cacheDir)) throw new Error('no Deep Fried Chicken copy has been added yet -- add yours in Settings first');
+  if (!tree) throw new Error('the Chicken copy you added has no 32-bit part -- add the whole unpacked folder (the one with 32-bit and 64-bit inside) in Settings');
+  const proxyName = RESHADE32_FOR[api];
+  if (!proxyName) throw new Error(`Chicken is set up here for 32-bit DirectX 9 to 11 games, and this one is ${api || 'not detected'}`);
+  if (dfcPresent(dir) && !dfcOurs(dir)) throw new Error(`Deep Fried Chicken is already in this folder, ${HAND_PLACED}`);
+  if (!nrDllPath || !fs.existsSync(nrDllPath)) throw new Error('the NR model (nvngx_dlssnr.dll) is not set up in Settings, and Chicken\x27s worker needs it');
+
+  const before = readMarker(dir);
+  const already = !!(before && before.bits === 32 && dfcOurs(dir));
+  // Everything that can refuse, before anything is touched.
+  if (!already) {
+    if (occupiedAfterRemoval(proxyName)) throw new Error(`${proxyName} here is not this app's -- ReShade cannot take its place`);
+    if (occupiedAfterRemoval(HOST_DIR)) throw new Error(`a ${HOST_DIR} folder here is not this app's -- Chicken's worker needs that name`);
+  }
+  // ReShade fetched before this app's route comes out: offline, the swap stops with the folder as it was.
+  const { openZip: open, findEntry: find, extractEntry: extract } = require('./zip');
+  const setup = open(await reshadeSetup());
+  const r32 = find(setup, /^ReShade32\.dll$/i);
+  const r64 = find(setup, /^ReShade64\.dll$/i);
+  if (!r32 || !r64) throw new Error('ReShade32.dll and ReShade64.dll were not both found in the ReShade setup');
+
+  const steps = [];
+  if (!already) {
+    const out = await removeOurStack(dir);
+    if (out && out.failed && out.failed.length) {
+      throw new Error(`this app's 32-bit route could not be taken out (${out.failed.map((f) => `${f.rel}: ${f.code}`).join(', ')}) -- close the game and try again`);
+    }
+    steps.push('took the DLSS 5 32-bit route out');
+    if (fs.existsSync(path.join(dir, proxyName)) || fs.existsSync(path.join(dir, HOST_DIR))) {
+      throw new Error(`${fs.existsSync(path.join(dir, proxyName)) ? proxyName : HOST_DIR} came back after the DLSS 5 route was taken out -- it is the game's own, so Chicken cannot use that name`);
+    }
+  }
+
+  const files = new Set(already && Array.isArray(before.files) ? before.files : []);
+  const hostDirMade = already ? (before.dirs || []).includes(HOST_DIR) : true;
+  // The player's tuned cfgs first, so the tree's defaults below never overwrite them.
+  const restored = [];
+  for (const rel of TUNED_CFGS) {
+    if (rel === CFG) continue; // the 64-bit route's name; not part of the 32-bit layout
+    if (!fs.existsSync(path.join(dir, rel)) && await restoreStashedCfg(dir, cacheDir, rel)) { restored.push(rel); files.add(rel); }
+  }
+  for (const rel of walkFiles(tree)) {
+    const to = path.join(dir, ...rel.split('/'));
+    const isCfg = /\.cfg$/i.test(rel);
+    // A cfg already here (tuned, or restored above) is kept; everything else is refreshed.
+    if (isCfg && fs.existsSync(to)) continue;
+    await fsp.mkdir(path.dirname(to), { recursive: true });
+    await fsp.copyFile(path.join(tree, ...rel.split('/')), to);
+    files.add(rel);
+  }
+
+  // The game's 32-bit ReShade, under the name its renderer loads.
+  await fsp.writeFile(path.join(dir, proxyName), extract(setup, r32));
+  // The worker's x64 ReShade (the README's step 3), unless the tree shipped one of its own.
+  const hostDir = path.join(dir, HOST_DIR);
+  if (!fs.existsSync(path.join(hostDir, 'dxgi.dll')) || files.has(`${HOST_DIR}/dxgi.dll`)) {
+    await fsp.writeFile(path.join(hostDir, 'dxgi.dll'), extract(setup, r64));
+    files.add(`${HOST_DIR}/dxgi.dll`);
+  }
+  // DLSS and the model for the worker (step 4).
+  await fsp.copyFile(nrDllPath, path.join(hostDir, 'nvngx_dlssnr.dll'));
+  files.add(`${HOST_DIR}/nvngx_dlssnr.dll`);
+  await placeNvngxDlss(hostDir);
+  if (fs.existsSync(path.join(hostDir, 'nvngx_dlss.dll'))) files.add(`${HOST_DIR}/nvngx_dlss.dll`);
+
+  // ReShade beside the game: find the shaders, load the preset, and have DFC_Universal_Feed on (step 5).
+  const { setIniKey, getIniKey } = require('./ini-merge');
+  const iniPath = path.join(dir, 'ReShade.ini');
+  let ini = fs.existsSync(iniPath) ? fs.readFileSync(iniPath, 'utf8') : '';
+  const searchPaths = getIniKey(ini, 'GENERAL', 'EffectSearchPaths') || '';
+  if (!/reshade-shaders\\Shaders/i.test(searchPaths)) {
+    ini = setIniKey(ini, 'GENERAL', 'EffectSearchPaths', searchPaths ? `${searchPaths},.\\reshade-shaders\\Shaders\\**` : '.\\reshade-shaders\\Shaders\\**');
+  }
+  if (!getIniKey(ini, 'GENERAL', 'PresetPath')) ini = setIniKey(ini, 'GENERAL', 'PresetPath', '.\\ReShadePreset.ini');
+  if (!getIniKey(ini, 'OVERLAY', 'TutorialProgress')) ini = setIniKey(ini, 'OVERLAY', 'TutorialProgress', '4');
+  await fsp.writeFile(iniPath, ini, 'utf8');
+  const presetPath = path.join(dir, 'ReShadePreset.ini');
+  let preset = fs.existsSync(presetPath) ? fs.readFileSync(presetPath, 'utf8') : '';
+  const techniques = (getIniKey(preset, '', 'Techniques') || '').split(',').map((t) => t.trim()).filter(Boolean);
+  if (!techniques.some((t) => /^DFC_Universal_Feed@/i.test(t))) {
+    techniques.push('DFC_Universal_Feed@DFC_Universal_Feed.fx');
+    preset = setIniKey(preset, '', 'Techniques', techniques.join(','));
+    await fsp.writeFile(presetPath, preset, 'utf8');
+  }
+  // The worker's ReShade loads the add-on from its own folder and skips its first-run tutorial.
+  const hostIniPath = path.join(hostDir, 'ReShade.ini');
+  if (!fs.existsSync(hostIniPath)) {
+    let hostIni = setIniKey('', 'ADDON', 'AddonPath', '.\\');
+    hostIni = setIniKey(hostIni, 'OVERLAY', 'TutorialProgress', '4');
+    await fsp.writeFile(hostIniPath, hostIni, 'utf8');
+  }
+
+  writeMarker(dir, {
+    ...(already ? before : {}),
+    bits: 32,
+    files: [...files],
+    dirs: hostDirMade ? [HOST_DIR] : [],
+    reshadeProxy: proxyName,
+    reshadeFetched: true,
+    from: path.basename(path.dirname(tree)),
+    deployedAt: new Date().toISOString(),
+  });
+  steps.push(`ReShade (32-bit) as ${proxyName}, Chicken's worker in ${HOST_DIR}\\`);
+  if (restored.length) steps.push('this game\x27s saved Chicken settings restored');
+  return { deployed: true, bits: 32, files: [...files], restoredCfg: restored.length > 0, steps };
 }
 
 // ── what Chicken is doing ────────────────────────────────────────────────────────────────────
@@ -558,5 +761,6 @@ module.exports = {
   looksLikeDfc, importDfcSource, cachedDfc, suppliedInfo,
   readMarker, dfcPresent, dfcOurs, deployDfc, removeDfc,
   RESHADE_PROXY, reshadeProxyOf, supportedFor, switchToDfc,
+  ADDON32, BRIDGE_CFG, HOST_DIR, RESHADE32_FOR, cached32, switchToDfc32,
   readDfcState, readCfgText, cfgPath,
 };

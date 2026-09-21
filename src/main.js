@@ -840,6 +840,54 @@ function fetchReShadeForDfc(dir) {
   return feeder.deployReShade(dir, feederCacheDir(), GITHUB_HEADERS, { api: 'dx11' });
 }
 
+// This app's whole 32-bit route out of a game folder, for a switch to Chicken's own 32-bit route
+// (dfc.js switchToDfc32) -- the same stages uninstallEverything runs for it, in the same order: our
+// translation layer (DXVK or dgVoodoo2, with whatever it displaced put back), the exe's entry on
+// ReShade's Vulkan app list if our DXVK swap put it there, then the Feeder's 32-bit stack and its
+// host64\ helper (legacy.removeLegacy). Anything that fails is reported and the switch stops.
+async function removeOur32Stack(dir) {
+  const removed = [];
+  const failed = [];
+  const tl = translation.activeLayer(dir);
+  if (tl.ours) {
+    const r = await translation.purgeTranslationLayer(dir, { layer: tl.layer });
+    removed.push(...(r.removed || []));
+    for (const f of r.failed || []) failed.push({ rel: f.file, code: f.code });
+  }
+  const vkApp = legacy.vulkanLayerRecord(dir);
+  if (vkApp && vkApp.listedByUs) {
+    await legacy.unlistVulkanLayerApp(vkApp, {
+      runElevatedPowerShell: (command) => elevate.runElevatedPowerShell(command, { execFileAsync }),
+    }).catch(() => {});
+  }
+  if (legacy.readMarker(dir)) {
+    try {
+      const r = await legacy.removeLegacy(dir);
+      removed.push(...r.removed);
+    } catch (e) {
+      failed.push({ rel: 'the 32-bit route', code: (e && e.code) || 'failed' });
+    }
+  }
+  return { removed, failed };
+}
+
+// Would a file or folder by this name still be here once removeOur32Stack has run? A backup it would
+// put back under that name (the game's own d3d9.dll behind dgVoodoo2, say), or anything by that name
+// that none of this app's records own. Read-only: asked before anything is touched.
+function occupiedAfterOur32Removal(dir, rel) {
+  const lower = String(rel).toLowerCase();
+  const name = (x) => String(x && typeof x === 'object' ? (x.rel || x.file || '') : x).replace(/\\/g, '/').toLowerCase();
+  const lm = legacy.readMarker(dir) || {};
+  const tm = translation.readManifest(dir) || {};
+  const backups = [...(lm.backups || []), ...(tm.backups || [])];
+  if (backups.some((b) => name(b) === lower)) return true;
+  if (!fs.existsSync(path.join(dir, rel))) return false;
+  const ours = (lm.files || []).some((f) => name(f) === lower)
+    || (lm.dirs || []).some((d) => name(d) === lower)
+    || (tm.files || []).some((f) => name(f) === lower);
+  return !ours;
+}
+
 async function dfcRouteFor(dir, exePath) {
   const { vendor } = await getGpuInfo();
   const effective = effectiveDetection(dir, exePath, await detectFor(dir, exePath));
@@ -864,12 +912,24 @@ ipcMain.handle('dfc:switch', async (_evt, { exePath, to, nrDllPath }) => {
         e.code = (support && support.code) || 'dfc-route';
         throw e;
       }
-      const r = await dfc.switchToDfc(dir, dfcCacheDir(), {
-        nrDllPath: nrDllPath || null,
-        removeOptiScaler: removeOptiScalerForSwap,
-        fetchReShade: fetchReShadeForDfc,
-      });
+      // A 32-bit game: Chicken's own companion route, with this app's 32-bit route taken out whole.
+      const r = route.route === 'feeder32'
+        ? await dfc.switchToDfc32(dir, dfcCacheDir(), {
+          api: await resolveApi(dir, exePath),
+          nrDllPath: nrDllPath || null,
+          removeOurStack: removeOur32Stack,
+          occupiedAfterRemoval: (rel) => occupiedAfterOur32Removal(dir, rel),
+          reshadeSetup: () => feeder.downloadToCache(feeder.RESHADE_SETUP_URL, feederCacheDir(), path.basename(feeder.RESHADE_SETUP_URL), GITHUB_HEADERS),
+          placeNvngxDlss: (hostDir) => feeder.deployNvngxDlss(hostDir, getRhiManifest, compareStreamlineVersions, feederCacheDir(), GITHUB_HEADERS),
+        })
+        : await dfc.switchToDfc(dir, dfcCacheDir(), {
+          nrDllPath: nrDllPath || null,
+          removeOptiScaler: removeOptiScalerForSwap,
+          fetchReShade: fetchReShadeForDfc,
+        });
       invalidateDetection(dir);
+      // Chicken's x64 worker on a hybrid laptop, on the card the game renders on (gpupref.js).
+      if (route.route === 'feeder32') await preferDiscreteGpu(dir, exePath);
       return { ok: true, dfc: r, consumerHere: 'dfc' };
     }
     const r = (dfc.dfcOurs(dir) || dfc.reshadeProxyOf(dir)) ? await dfc.removeDfc(dir, { cacheDir: dfcCacheDir() }) : null;

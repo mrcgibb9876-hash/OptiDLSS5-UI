@@ -220,7 +220,9 @@ test('the swap is offered for 64-bit Direct3D 9 to 12, and says why elsewhere', 
   // Chicken 3.0 brings its own feeder on Vulkan/OpenGL: "Do not install another neural feeder alongside".
   assert.strictEqual(dfc.supportedFor({ api: 'vulkan', bitness: 64 }).code, 'dfc-vulkan-opengl');
   assert.strictEqual(dfc.supportedFor({ api: 'opengl', bitness: 64 }).code, 'dfc-vulkan-opengl');
-  assert.strictEqual(dfc.supportedFor({ api: 'dx11', bitness: 32 }).code, 'dfc-32bit');
+  // 32-bit: Chicken's own companion route, for DirectX 9 to 11 (test/dfc-32.test.js).
+  for (const api of ['dx9', 'dx10', 'dx11']) assert.strictEqual(dfc.supportedFor({ api, bitness: 32 }).ok, true, `32-bit ${api}`);
+  for (const api of ['dx8', 'vulkan', 'opengl']) assert.strictEqual(dfc.supportedFor({ api, bitness: 32 }).code, 'dfc-32bit', `32-bit ${api}`);
 });
 
 // A game with its own DLSS, on the plain OptiScaler route: OptiScaler as the proxy, no Feeder, no ReShade.

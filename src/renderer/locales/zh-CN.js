@@ -1439,7 +1439,7 @@ window.I18N.register("zh-CN", {
   "Could not switch this game: {error}": "无法切换此游戏：{error}",
   "Installed with Deep Fried Chicken. Press Home in the game for its menu.": "已使用 Deep Fried Chicken 安装。在游戏中按 Home 打开它的菜单。",
   "Not for this game yet: on Vulkan and OpenGL Chicken brings its own feeder, which this app does not set up.": "此游戏暂不支持：在 Vulkan 和 OpenGL 上 Chicken 自带 feeder，本应用不负责设置。",
-  "Not for this game yet: 32-bit games use Chicken's own 32-bit route, which this app does not set up.": "此游戏暂不支持：32 位游戏使用 Chicken 自己的 32 位路线，本应用不负责设置。",
+  "Not for this game yet: on 32-bit games Chicken is set up here for DirectX 9 to 11 only.": "此游戏暂不支持：对 32 位游戏，这里只为 DirectX 9 到 11 设置 Chicken。",
   "Chicken is set up here for 64-bit DirectX 9 to 12 games only.": "这里只为 64 位 DirectX 9 到 12 的游戏设置 Chicken。",
   "No Deep Fried Chicken copy yet -- add yours, then press Install.": "还没有 Deep Fried Chicken 副本 -- 先添加你的副本，再点击“安装”。",
   "Chicken is already here and this app did not place it. Delete its files to let this app manage it.": "Chicken 已在这里，但不是本应用放的。删除它的文件后本应用才能管理它。",
@@ -1459,5 +1459,5 @@ window.I18N.register("zh-CN", {
   "Not added yet.": "尚未添加。",
   "Added from {from} on {date}. Switch a game to it from its ⋯ menu.": "于 {date} 从 {from} 添加。在游戏的 ⋯ 菜单中切换到它。",
   "Added. Switch a game to it from its ⋯ menu.": "已添加。在游戏的 ⋯ 菜单中切换到它。",
-  "Add your own copy once, then switch any 64-bit DirectX 9 to 12 game to it from the game's ⋯ menu. Unpack Chicken's .7z first and pick the folder it unpacked into.": "先添加一次你自己的副本，然后在游戏的 ⋯ 菜单里把任意 64 位 DirectX 9 到 12 的游戏切换到它。请先解压 Chicken 的 .7z，再选择解压出的文件夹。",
+  "Add your own copy once, then switch a DirectX 9 to 12 game to it from the game's ⋯ menu (32-bit games too, DirectX 9 to 11). Unpack Chicken's .7z first and pick the whole folder it unpacked into.": "先添加一次你自己的副本，然后在游戏的 ⋯ 菜单里把 DirectX 9 到 12 的游戏切换到它（32 位游戏也可以，DirectX 9 到 11）。请先解压 Chicken 的 .7z，再选择解压出的整个文件夹。",
 });
