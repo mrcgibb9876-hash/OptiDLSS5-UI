@@ -1,7 +1,7 @@
 {
   "_readme": "The known-good catalog (src/catalog.js): per game exe, the setup PROVEN to run DLSS 5 and the setups known to be dead ends, each with its source. Only real evidence goes here -- a confirmed run on a real install, or a run log -- never a guess. After any edit run `node tools/catalog/build.js`: it checks every entry and rewrites sha256, and the app refuses the file while the hash does not match. `node tools/catalog/build.js --digest <issue body> --source \"issue #N\" --write` adds a report from an issue's Run digest.",
   "version": 1,
-  "sha256": "f2114f84c5b93314f8ebc96ae91fa7c2ce887ab70b215579b6848b54242774ea",
+  "sha256": "3aa9f8b5ce06286a7624058bd98507a401edb9ba8f5e10f0945e40f322487ed7",
   "entries": [
     {
       "exe": "ai.exe",
@@ -248,6 +248,28 @@
       "notes": "Engine Present route, no Feeder. 4800 frames, 0 model failures, 45 fps at 2560x1600. Launch from the app (skips EasyAntiCheat), offline only. Load a save: menus have no depth.",
       "sources": [
         "src/verified-games.json elden-ring (verified 2026-09-15)"
+      ]
+    },
+    {
+      "exe": "falloutnv.exe",
+      "name": "Fallout: New Vegas",
+      "status": "works",
+      "setup": {
+        "route": "feeder32",
+        "via": "dgvoodoo",
+        "api": "dx9"
+      },
+      "reports": {
+        "works": 3,
+        "fails": 0
+      },
+      "dead_ends": [],
+      "updated": "2026-09-21",
+      "notes": "32-bit DirectX 9 on dgVoodoo2. It crashed on every world load until the app started naming the real GPU vendor to the game (dgVoodoo.conf [DirectXExt] AdapterIDType, app v2.3.16): without it the game does not recognise the adapter, falls back to its Shader Model 2.0 path (RendererInfo.txt: RenderPath BSSM_SV_2_0, Shader Package 2) and then dereferences the NULL that BSShaderManager::GetShader(29) returns, at FalloutNV+0x757aa9. Its own caps were never the problem -- RendererInfo.txt reports \"3.0 Support: yes\" one line above \"3.0 Lighting: no\". An install made before v2.3.16 gets the key on sync. FalloutNV.exe is not large-address-aware, so it is still capped at 2 GB; the 4GB patch is worth having but was not needed for this.",
+      "sources": [
+        "live test 2026-09-21: crash reproduced twice at FalloutNV+0x757aa9 (dlss5-feed-crash.dmp, cdb), fixed by AdapterIDType and confirmed by the user",
+        "local runs 2026-09-21 (nr-ran x3): feeder32 via dgvoodoo, dx9",
+        "src/legacy.js DG_ADAPTER_ID_TYPES, test/dgvoodoo-adapter-id.test.js"
       ]
     },
     {
