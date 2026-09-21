@@ -103,10 +103,12 @@ redistribution, so the manager only links to the release page and fetches the mo
   **discord.com is blocked too** (confirmed 2026-09-21), which matters more than it sounds: several
   tools in this space are handed out only through Discord, so a link to a message there is unreadable
   from a session no matter how relevant. Ask the user to paste the contents.
-- **Deep Fried Chicken: no public download, no stated licence, and the app must not ship it.** It is
+- **Deep Fried Chicken: no public download, and its licence forbids the app shipping it.** It is
   Alexander's neural consumer, the alternative to our OptiScaler in the Feeder's "exactly one neural
   consumer" slot, and it is distributed through its author's Discord only -- no repository, no release
-  URL, so nothing for `integrity.js` to pin. `src/dfc.js` therefore takes a copy the USER supplies and
+  URL, so nothing for `integrity.js` to pin. Its `LICENSE.txt` (in the release, copyright 2026
+  Alexander) forbids copying, rehosting, mirroring, redistributing or bundling it without prior
+  written permission, so this is a licence term and not merely an unknown. `src/dfc.js` therefore takes a copy the USER supplies and
   caches it, the way `importDgVoodooZip` does for dgVoodoo2; it never fetches, and a test fails if a
   fetch appears. Same position as the AMD installer above. A permission request went to its author on
   2026-09-21 (asked for: may the app fetch it, and is there a documented `deep-fried-chicken.cfg`
