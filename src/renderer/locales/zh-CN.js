@@ -1460,4 +1460,5 @@ window.I18N.register("zh-CN", {
   "Added from {from} on {date}. Switch a game to it from its ⋯ menu.": "于 {date} 从 {from} 添加。在游戏的 ⋯ 菜单中切换到它。",
   "Added. Switch a game to it from its ⋯ menu.": "已添加。在游戏的 ⋯ 菜单中切换到它。",
   "Add your own copy once, then switch a DirectX 9 to 12 game to it from the game's ⋯ menu (32-bit games too, DirectX 9 to 11). Unpack Chicken's .7z first and pick the whole folder it unpacked into.": "先添加一次你自己的副本，然后在游戏的 ⋯ 菜单里把 DirectX 9 到 12 的游戏切换到它（32 位游戏也可以，DirectX 9 到 11）。请先解压 Chicken 的 .7z，再选择解压出的整个文件夹。",
+  "Chicken on Vulkan needs ReShade's Vulkan layer with add-on support, set up for this game.": "在 Vulkan 上，Chicken 需要为此游戏设置好、支持插件的 ReShade Vulkan 图层。",
 });

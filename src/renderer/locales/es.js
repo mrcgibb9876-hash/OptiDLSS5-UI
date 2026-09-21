@@ -1460,4 +1460,5 @@ window.I18N.register("es", {
   "Added from {from} on {date}. Switch a game to it from its ⋯ menu.": "Añadido desde {from} el {date}. Cambia un juego a él desde su menú ⋯.",
   "Added. Switch a game to it from its ⋯ menu.": "Añadido. Cambia un juego a él desde su menú ⋯.",
   "Add your own copy once, then switch a DirectX 9 to 12 game to it from the game's ⋯ menu (32-bit games too, DirectX 9 to 11). Unpack Chicken's .7z first and pick the whole folder it unpacked into.": "Añade tu propia copia una vez y luego cambia un juego con DirectX 9 a 12 a ella desde el menú ⋯ del juego (también juegos de 32 bits, DirectX 9 a 11). Descomprime primero el .7z de Chicken y elige toda la carpeta resultante.",
+  "Chicken on Vulkan needs ReShade's Vulkan layer with add-on support, set up for this game.": "En Vulkan, Chicken necesita la capa Vulkan de ReShade con soporte de add-ons, configurada para este juego.",
 });

@@ -1197,7 +1197,7 @@ const FOREIGN_TOOLCHAINS = [
   // uninstaller is one of the scripts, so finding them is never a reason to go hunting by hand.
   {
     tool: 'Deep Fried Chicken',
-    files: ['deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg', 'deep-fried-chicken.addon32', 'deep-fried-chicken-bridge.cfg',
+    files: ['deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg', 'deep-fried-chicken.addon32', 'deep-fried-chicken-bridge.cfg', 'dfc-universal-feed.addon64',
       '.dfc-installer', 'INSTALL-DEEP-FRIED-CHICKEN.cmd', 'UNINSTALL-DEEP-FRIED-CHICKEN.cmd', 'CHICKEN-ASSIST.cmd'],
     pattern: /^ReShade\.ini\.deep-fried-chicken-backup-.*\.bak$/i,
   },
@@ -1236,7 +1236,7 @@ const FOREIGN_REMOVALS = {
   // as well, and putting that back would undo our own configuration to undo theirs. Offered rather
   // than done: someone may be running it on purpose and want ours gone instead, which Remove does.
   'Deep Fried Chicken': {
-    files: ['deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg', 'deep-fried-chicken.addon32', 'deep-fried-chicken-bridge.cfg', 'deep-fried-chicken.log',
+    files: ['deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg', 'deep-fried-chicken.addon32', 'deep-fried-chicken-bridge.cfg', 'dfc-universal-feed.addon64', 'deep-fried-chicken.log',
       '.dfc-installer', 'INSTALL-DEEP-FRIED-CHICKEN.cmd', 'UNINSTALL-DEEP-FRIED-CHICKEN.cmd', 'CHICKEN-ASSIST.cmd',
       'LICENSE-Deep-Fried-Chicken.md'],
     patterns: [/^ReShade\.ini\.deep-fried-chicken-backup-.*\.bak$/i],

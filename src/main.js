@@ -778,12 +778,39 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
       throw new Error('this is a 32-bit game, and the 64-bit Feeder cannot load in it -- use Install, which sets up the experimental 32-bit route');
     }
     const api = await resolveApi(dir, exePath);
-    // Chicken is set up for 64-bit Direct3D 11/12 only (dfc.supportedFor) -- refused before anything
-    // is fetched or touched, so a Vulkan game is not left half-swapped.
+    // Refused before anything is fetched or touched when Chicken is not set up for this game
+    // (dfc.supportedFor), so nothing is left half-swapped.
     const wantConsumer = dfc.isConsumer(consumer) ? consumer : dfc.DEFAULT_CONSUMER;
     if (wantConsumer === 'dfc') {
       const support = dfc.supportedFor({ api, bitness: 64 });
       if (!support.ok) { const e = new Error(support.code); e.code = support.code; throw e; }
+    }
+    // Back to our engine: Chicken out FIRST, before the Feeder is deployed. On OpenGL its ReShade is
+    // the game's opengl32.dll, which the Feeder's deploy would take for its own ("already present")
+    // and removeDfc would then delete from under it; on Direct3D removeDfc puts ReShade64.dll back,
+    // which the deploy then finds where it expects it.
+    let dfcRemoved = null;
+    if (wantConsumer === 'optiscaler' && (dfc.dfcOurs(dir) || dfc.reshadeProxyOf(dir))) {
+      dfcRemoved = await dfc.removeDfc(dir, { cacheDir: dfcCacheDir() });
+      if (dfcRemoved.failed.length) throw new Error(`Chicken could not be taken out (${dfcRemoved.failed.map((f) => `${f.rel}: ${f.code}`).join(', ')}) -- close the game and try again`);
+    }
+    // Vulkan and OpenGL: Chicken's own producer replaces the Feeder rather than eating its contract
+    // ("Do not install another neural feeder alongside"), so the Feeder is not deployed at all.
+    if (wantConsumer === 'dfc' && (api === 'vulkan' || api === 'opengl')) {
+      const r = await dfc.switchToDfcCompat(dir, dfcCacheDir(), {
+        api,
+        nrDllPath: nrDllPath || null,
+        removeOptiScaler: removeOptiScalerForSwap,
+        removeFeeder: (d) => (feeder.feederDeployed(d) ? feeder.removeFeederStack(d, { keepReShade: false }) : null),
+        vulkanLayerReady: async () => {
+          const s = await feeder.vulkanLayerStatus({ execFileAsync, exePath });
+          return !!(s.registered && s.addon && s.appListed !== false);
+        },
+        reshadeSetup: () => feeder.downloadToCache(feeder.RESHADE_SETUP_URL, feederCacheDir(), path.basename(feeder.RESHADE_SETUP_URL), GITHUB_HEADERS),
+        placeNvngxDlss: (d) => feeder.deployNvngxDlss(d, getRhiManifest, compareStreamlineVersions, feederCacheDir(), GITHUB_HEADERS),
+      });
+      invalidateDetection(dir);
+      return { ok: true, consumer: 'dfc', dfc: r, consumerHere: 'dfc' };
     }
     const results = swapOnly && feeder.feederDeployed(dir) ? {} : await feeder.deployFeederStack(dir, api, mvProviderId || feeder.defaultMvProviderId(), {
       cacheDir: feederCacheDir(),
@@ -818,8 +845,8 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
         removeOptiScaler: removeOptiScalerForSwap,
         fetchReShade: fetchReShadeForDfc,
       });
-    } else if (dfc.dfcOurs(dir) || dfc.reshadeProxyOf(dir)) {
-      results.dfcRemoved = await dfc.removeDfc(dir, { cacheDir: dfcCacheDir() });
+    } else if (dfcRemoved) {
+      results.dfcRemoved = dfcRemoved;
     }
     results.consumerHere = dfc.dfcOurs(dir) ? 'dfc' : 'optiscaler';
     return { ok: true, ...results };

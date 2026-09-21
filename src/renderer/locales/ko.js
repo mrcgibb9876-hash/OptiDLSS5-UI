@@ -1460,4 +1460,5 @@ window.I18N.register("ko", {
   "Added from {from} on {date}. Switch a game to it from its ⋯ menu.": "{date}에 {from}에서 추가됨. 게임의 ⋯ 메뉴에서 전환하세요.",
   "Added. Switch a game to it from its ⋯ menu.": "추가됨. 게임의 ⋯ 메뉴에서 전환하세요.",
   "Add your own copy once, then switch a DirectX 9 to 12 game to it from the game's ⋯ menu (32-bit games too, DirectX 9 to 11). Unpack Chicken's .7z first and pick the whole folder it unpacked into.": "내 사본을 한 번 추가한 뒤, DirectX 9~12 게임을 게임의 ⋯ 메뉴에서 전환하세요(32비트 게임도 가능, DirectX 9~11). 먼저 Chicken의 .7z 압축을 풀고 압축을 푼 폴더 전체를 선택하세요.",
+  "Chicken on Vulkan needs ReShade's Vulkan layer with add-on support, set up for this game.": "Vulkan에서 Chicken을 쓰려면 이 게임에 맞게 설정된, 애드온을 지원하는 ReShade Vulkan 레이어가 필요합니다.",
 });

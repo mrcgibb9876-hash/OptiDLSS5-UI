@@ -217,9 +217,9 @@ test('the swap is offered for 64-bit Direct3D 9 to 12, and says why elsewhere', 
   // Chicken 3.0 needs no Feeder on Direct3D; 64-bit DX9 here is dgVoodoo2's D3D11.
   for (const api of ['dx9', 'dx10', 'dx11', 'dx12']) assert.strictEqual(dfc.supportedFor({ api, bitness: 64 }).ok, true, api);
   assert.strictEqual(dfc.supportedFor({ api: 'dx8', bitness: 64 }).code, 'dfc-api');
-  // Chicken 3.0 brings its own feeder on Vulkan/OpenGL: "Do not install another neural feeder alongside".
-  assert.strictEqual(dfc.supportedFor({ api: 'vulkan', bitness: 64 }).code, 'dfc-vulkan-opengl');
-  assert.strictEqual(dfc.supportedFor({ api: 'opengl', bitness: 64 }).code, 'dfc-vulkan-opengl');
+  // 64-bit Vulkan/OpenGL: Chicken's own producer in place of the Feeder (test/dfc-compat.test.js).
+  assert.strictEqual(dfc.supportedFor({ api: 'vulkan', bitness: 64 }).ok, true);
+  assert.strictEqual(dfc.supportedFor({ api: 'opengl', bitness: 64 }).ok, true);
   // 32-bit: Chicken's own companion route, for DirectX 9 to 11 (test/dfc-32.test.js).
   for (const api of ['dx9', 'dx10', 'dx11']) assert.strictEqual(dfc.supportedFor({ api, bitness: 32 }).ok, true, `32-bit ${api}`);
   for (const api of ['dx8', 'vulkan', 'opengl']) assert.strictEqual(dfc.supportedFor({ api, bitness: 32 }).code, 'dfc-32bit', `32-bit ${api}`);

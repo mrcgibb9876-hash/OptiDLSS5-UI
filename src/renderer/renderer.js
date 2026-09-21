@@ -2332,6 +2332,15 @@ async function installGame(game) {
     const deployed = provider
       ? await window.api.feederDeploy(game.exePath, provider.id, { force: false, licenseConfirmed: false, consumer, nrDllPath: settings.nrDllPath, swapOnly: route.feederDeployed })
       : { ok: false, error: t('no auto-fetchable motion-vector provider') };
+    if (!deployed.ok && deployed.code === 'dfc-vulkan-layer') {
+      // Chicken on Vulkan needs ReShade's machine-wide layer, as the Feeder does; only ReShade's own
+      // installer can register it, so it is opened here for the player.
+      toast(dfcUnsupportedWords(deployed.code));
+      const r = await window.api.feederOpenReShadeSetup();
+      if (r && r.ok) toast(t('ReShade\'s installer is open: pick this game\'s exe, choose Vulkan, tick "Enable loading of add-ons". Then press Install again.'));
+      renderGrid();
+      return;
+    }
     if (!deployed.ok && deployed.code && String(deployed.code).startsWith('dfc-')) {
       toast(dfcUnsupportedWords(deployed.code));
       renderGrid();
@@ -3980,7 +3989,7 @@ $('#btn-settings-dfc').addEventListener('click', async () => {
 });
 
 function dfcUnsupportedWords(code) {
-  if (code === 'dfc-vulkan-opengl') return t('Not for this game yet: on Vulkan and OpenGL Chicken brings its own feeder, which this app does not set up.');
+  if (code === 'dfc-vulkan-layer') return t('Chicken on Vulkan needs ReShade\'s Vulkan layer with add-on support, set up for this game.');
   if (code === 'dfc-32bit') return t('Not for this game yet: on 32-bit games Chicken is set up here for DirectX 9 to 11 only.');
   return t('Chicken is set up here for 64-bit DirectX 9 to 12 games only.');
 }

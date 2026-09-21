@@ -321,24 +321,29 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
   // DLSS 5 setup's sl.* files, and got an OptiScaler install its renderer never loads (2026-09-16).
   const legacyRenderer = nativeDlss.rendererCannotCallDlss(detected, dir);
   const shipsDlss = !legacyRenderer && nativeDlss.shipsNativeDlss(dir);
-  const shippedDlss = shipsDlss || (!legacyRenderer && !feeder.needsFeeder(dir) && !feederDeployed && !lumaDeployed);
+  // A game this app switched to Deep Fried Chicken (dfc.js): Chicken runs the neural pass there
+  // instead of OptiScaler, so "Install DLSS 5" is not a step it is missing. On Vulkan/OpenGL its own
+  // producer replaced the Feeder (dfc.switchToDfcCompat), taking the Feeder's marker with it -- the
+  // nvngx_dlss.dll the Feeder put beside the exe is still ours, not the game's own DLSS. Without this
+  // the route turned the game into "ships its own DLSS", and the way back installed OptiScaler with no
+  // Feeder for it (found switching an OpenGL game, 2026-09-22).
+  const dfcHere = dfc.dfcOurs(dir);
+  const dfcCompat = dfcHere && !!(dfc.readMarker(dir) || {}).compat;
+  const shippedDlss = shipsDlss || (!legacyRenderer && !feeder.needsFeeder(dir) && !feederDeployed && !lumaDeployed && !dfcCompat);
   // A Feeder on a game that ships DLSS: an older version of this app could not see DLSS kept
   // under an Unreal plugin folder and deployed it anyway. The two crash together.
   const feederMisdeployed = shipsDlss && feederDeployed;
 
-  // A Feeder game this app switched to Deep Fried Chicken (dfc.js switchToDfc): Chicken runs the
-  // neural pass there instead of OptiScaler, so "Install DLSS 5" is not a step it is missing.
-  const dfcHere = dfc.dfcOurs(dir);
   const finish = (route, label, reason, steps, reasonVars = null, extra = {}) => {
     // Chicken is offered on NVIDIA, on a Feeder game or a plain-OptiScaler one (its 3.0 needs no
     // Feeder on Direct3D); dfc.supportedFor then says whether this game qualifies.
     const dfcOffered = gpuVendor === 'nvidia' && (route === 'feeder' || route === 'optiscaler' || route === 'feeder32');
     const onDfc = dfcOffered && dfcHere;
     if (onDfc) {
-      label = route === 'feeder' ? 'Deep Fried Chicken + Feeder' : route === 'feeder32' ? 'Deep Fried Chicken (32-bit)' : 'Deep Fried Chicken';
+      label = route === 'feeder' && !dfcCompat ? 'Deep Fried Chicken + Feeder' : route === 'feeder32' ? 'Deep Fried Chicken (32-bit)' : 'Deep Fried Chicken';
       // On a 32-bit game Chicken's own companion route replaced this app's whole stack: none of the
       // route's steps (dgVoodoo2, the Feeder helper) apply any more.
-      steps = route === 'feeder32'
+      steps = route === 'feeder32' || dfcCompat
         ? [{ key: 'dfc', label: 'Switch to Deep Fried Chicken', done: true }]
         : steps.map((s) => (s.key === 'optiscaler' ? { key: 'dfc', label: 'Switch to Deep Fried Chicken', done: true } : s));
     }

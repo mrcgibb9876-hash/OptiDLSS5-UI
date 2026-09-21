@@ -65,6 +65,10 @@ const LOG = 'deep-fried-chicken.log';
 const BRIDGE_CFG = 'deep-fried-chicken-bridge.cfg';
 const HOST_DIR = 'host64';
 const TREE32 = '32-bit';
+// Vulkan and OpenGL (Chicken 3.0's README, "OpenGL or Vulkan without a usable native neural route"):
+// its own frame producer, which takes the place of any other feeder in the game.
+const COMPAT_ADDON = 'dfc-universal-feed.addon64';
+const COMPAT_TREE = 'compat';
 // Every cfg a player can tune, per route. Kept in the cache on the way back to DLSS 5 and restored on
 // the next switch to Chicken -- its README: "KEEP existing .cfg files".
 const TUNED_CFGS = [CFG, BRIDGE_CFG, `${HOST_DIR}/${CFG}`];
@@ -177,6 +181,25 @@ function find32Dir(root, depth = 0) {
   return null;
 }
 
+// Chicken's Vulkan/OpenGL producer set: the folder holding its add-on (Compatibility\Vulkan-OpenGL).
+function findCompatDir(root, depth = 0) {
+  if (fs.existsSync(path.join(root, COMPAT_ADDON))) return root;
+  if (depth >= 3) return null;
+  let entries = [];
+  try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch { return null; }
+  for (const name of entries.filter((e) => e.isDirectory()).map((e) => e.name)) {
+    if (/^(32-bit|host64|reshade-shaders)$/i.test(name)) continue;
+    const found = findCompatDir(path.join(root, name), depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+function cachedCompat(cacheDir) {
+  const p = path.join(cacheDir, CACHE_NAME, COMPAT_TREE);
+  return cachedDfc(cacheDir) && fs.existsSync(path.join(p, COMPAT_ADDON)) ? p : null;
+}
+
 // The cached 32-bit tree, or null when the copy the user added had none (an older release, or only
 // its 64-bit folder picked).
 function cached32(cacheDir) {
@@ -225,6 +248,9 @@ async function importDfcSource(sourcePath, cacheDir) {
     // its README is explicit that host64 and reshade-shaders keep their folder structure.
     const tree32 = find32Dir(sourcePath);
     if (tree32) await fsp.cp(tree32, path.join(dest, TREE32), { recursive: true, force: true });
+    // Compatibility\Vulkan-OpenGL as it ships (the producer, its bridge cfg, reshade-shaders\).
+    const compat = findCompatDir(sourcePath);
+    if (compat) await fsp.cp(compat, path.join(dest, COMPAT_TREE), { recursive: true, force: true });
   } else {
     const zip = openZip(fs.readFileSync(sourcePath));
     // Its zip may nest the files under a version folder, so each is found by name anywhere in it.
@@ -276,6 +302,7 @@ function readMarker(dir) {
 function dfcPresent(dir) {
   return PAYLOAD.some((n) => fs.existsSync(path.join(dir, n)))
     || fs.existsSync(path.join(dir, ADDON32))
+    || fs.existsSync(path.join(dir, COMPAT_ADDON))
     || fs.existsSync(path.join(dir, HOST_DIR, ADDON));
 }
 
@@ -395,7 +422,7 @@ async function removeDfc(dir, { cacheDir = null, uninstall = false } = {}) {
     try { if (fs.readdirSync(path.join(dir, rel)).length === 0) fs.rmdirSync(path.join(dir, rel)); } catch {}
   }
 
-  if (marker.reshadeFetched && !failed.length) {
+  if ((marker.reshadeFetched || marker.reshadeIni) && !failed.length) {
     for (const name of ['ReShade.ini', 'ReShadePreset.ini', 'ReShade.log']) {
       const p = path.join(dir, name);
       if (!fs.existsSync(p)) continue;
@@ -466,7 +493,8 @@ function supportedFor(detected) {
   const d = detected || {};
   // 32-bit: Chicken's own companion route (switchToDfc32), for the renderers it names there.
   if (d.bitness === 32) return RESHADE32_FOR[d.api] ? { ok: true, code: null } : { ok: false, code: 'dfc-32bit' };
-  if (d.api === 'vulkan' || d.api === 'opengl') return { ok: false, code: 'dfc-vulkan-opengl' };
+  // 64-bit Vulkan/OpenGL: Chicken's own producer (switchToDfcCompat), in place of this app's Feeder.
+  if (d.api === 'vulkan' || d.api === 'opengl') return { ok: true, code: null };
   if (!D3D_APIS.includes(d.api)) return { ok: false, code: 'dfc-api' };
   return { ok: true, code: null };
 }
@@ -561,6 +589,124 @@ async function restoreStashedCfg(dir, cacheDir, rel = CFG) {
   await fsp.mkdir(path.dirname(path.join(dir, rel)), { recursive: true });
   await fsp.copyFile(from, path.join(dir, rel));
   return true;
+}
+
+// ── 64-bit Vulkan and OpenGL (stage 2) ───────────────────────────────────────────────────────
+//
+// Chicken's README for these: the ordinary 64-bit files, plus the CONTENTS of
+// Compatibility\Vulkan-OpenGL beside the exe (reshade-shaders kept as a folder), the x64
+// nvngx_dlss.dll beside the exe, .\reshade-shaders\Shaders on ReShade's search path, and
+// DFC_Universal_Feed enabled -- "Do not install another neural feeder alongside this compatibility
+// producer." So this app's Feeder comes out with OptiScaler, and Chicken's producer takes its place.
+//
+// ReShade: on Vulkan it is the machine-wide layer, which has to be registered with add-on support and
+// switched on for this exe already (the Feeder route needs the same; the player runs ReShade's own
+// installer for it, this app cannot). On OpenGL it is the game's opengl32.dll, put back fresh after the
+// Feeder's comes out.
+//
+//   api                  vulkan or opengl
+//   removeOptiScaler(dir) / removeFeeder(dir)   this app's two halves out (main.js)
+//   vulkanLayerReady()   true when the add-on layer is registered and on for this exe
+//   reshadeSetup()       ReShade's add-on setup, for the OpenGL proxy
+//   placeNvngxDlss(dir)  the x64 nvngx_dlss.dll beside the exe, when none is there
+//   nrDllPath            the NR model
+async function switchToDfcCompat(dir, cacheDir, deps = {}) {
+  const { api, nrDllPath = null, removeOptiScaler, removeFeeder, vulkanLayerReady, reshadeSetup, placeNvngxDlss } = deps;
+  if (!cachedDfc(cacheDir)) throw new Error('no Deep Fried Chicken copy has been added yet -- add yours in Settings first');
+  const compat = cachedCompat(cacheDir);
+  if (!compat) throw new Error('the Chicken copy you added has no Vulkan/OpenGL part -- add the whole unpacked folder (the one with Compatibility inside) in Settings');
+  if (api !== 'vulkan' && api !== 'opengl') throw new Error(`not a Vulkan or OpenGL game (${api || 'not detected'})`);
+  if (dfcPresent(dir) && !dfcOurs(dir)) throw new Error(`Deep Fried Chicken is already in this folder, ${HAND_PLACED}`);
+  const nrHere = fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'));
+  if (!nrHere && !(nrDllPath && fs.existsSync(nrDllPath))) throw new Error('the NR model (nvngx_dlssnr.dll) is not set up in Settings, and Chicken needs it beside its add-on');
+  const before = readMarker(dir);
+  const already = !!(before && before.compat === api && dfcOurs(dir));
+
+  // Everything that can refuse, before anything is touched.
+  let setup = null;
+  const { openZip: open, findEntry: find, extractEntry: extract } = require('./zip');
+  if (api === 'vulkan') {
+    if (!(await vulkanLayerReady())) {
+      const e = new Error('ReShade\x27s Vulkan layer with add-on support is not set up for this game yet');
+      e.code = 'dfc-vulkan-layer';
+      throw e;
+    }
+  } else if (!already) {
+    const gl = path.join(dir, 'opengl32.dll');
+    // A game's own opengl32.dll that the Feeder set aside comes back when the Feeder leaves.
+    if (fs.existsSync(path.join(dir, 'opengl32.dll.dlss5ui-orig'))) {
+      throw new Error('this game\x27s own opengl32.dll was set aside by the Feeder and comes back when it is taken out, so ReShade cannot use that name here');
+    }
+    if (fs.existsSync(gl) && !isReShade(gl) && !isOptiScaler(gl)) throw new Error('opengl32.dll here is not this app\x27s -- ReShade cannot take its place');
+    setup = open(await reshadeSetup());
+    if (!find(setup, /^ReShade64\.dll$/i)) throw new Error('ReShade64.dll was not found in the ReShade setup');
+  }
+
+  const steps = [];
+  if (!already) {
+    const o = await removeOptiScaler(dir);
+    if (o && o.failed && o.failed.length) throw new Error(`OptiScaler could not be taken out (${o.failed.map((f) => `${f.rel}: ${f.code}`).join(', ')}) -- close the game and try again`);
+    await removeFeeder(dir);
+    steps.push('took OptiScaler and the Feeder out: Chicken\x27s producer is the one feeder now');
+  }
+
+  // Chicken's 64-bit files (with this game's saved cfg), then the producer set over them.
+  const deployed = await deployDfc(dir, cacheDir);
+  const files = new Set(readMarker(dir).files || []);
+  const restored = [];
+  if (!fs.existsSync(path.join(dir, BRIDGE_CFG)) && await restoreStashedCfg(dir, cacheDir, BRIDGE_CFG)) { restored.push(BRIDGE_CFG); files.add(BRIDGE_CFG); }
+  for (const rel of walkFiles(compat)) {
+    const to = path.join(dir, ...rel.split('/'));
+    if (/\.cfg$/i.test(rel) && fs.existsSync(to)) continue;
+    await fsp.mkdir(path.dirname(to), { recursive: true });
+    await fsp.copyFile(path.join(compat, ...rel.split('/')), to);
+    files.add(rel);
+  }
+  // The model and DLSS itself beside the exe.
+  let nrPlaced = !!(before && before.nrPlaced);
+  if (!fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'))) {
+    await fsp.copyFile(nrDllPath, path.join(dir, 'nvngx_dlssnr.dll'));
+    nrPlaced = true;
+  }
+  if (!fs.existsSync(path.join(dir, 'nvngx_dlss.dll'))) {
+    await placeNvngxDlss(dir);
+    if (fs.existsSync(path.join(dir, 'nvngx_dlss.dll'))) files.add('nvngx_dlss.dll');
+  }
+  // OpenGL: ReShade back in as the game's opengl32.dll.
+  if (setup) await fsp.writeFile(path.join(dir, 'opengl32.dll'), extract(setup, find(setup, /^ReShade64\.dll$/i)));
+
+  // ReShade beside the game: this folder's add-ons, the shaders, and DFC_Universal_Feed on.
+  const { setIniKey, getIniKey } = require('./ini-merge');
+  const iniPath = path.join(dir, 'ReShade.ini');
+  let ini = fs.existsSync(iniPath) ? fs.readFileSync(iniPath, 'utf8') : '';
+  ini = setIniKey(ini, 'ADDON', 'AddonPath', '.\\');
+  const searchPaths = getIniKey(ini, 'GENERAL', 'EffectSearchPaths') || '';
+  if (!/reshade-shaders\\Shaders/i.test(searchPaths)) {
+    ini = setIniKey(ini, 'GENERAL', 'EffectSearchPaths', searchPaths ? `${searchPaths},.\\reshade-shaders\\Shaders\\**` : '.\\reshade-shaders\\Shaders\\**');
+  }
+  if (!getIniKey(ini, 'GENERAL', 'PresetPath')) ini = setIniKey(ini, 'GENERAL', 'PresetPath', '.\\ReShadePreset.ini');
+  if (!getIniKey(ini, 'OVERLAY', 'TutorialProgress')) ini = setIniKey(ini, 'OVERLAY', 'TutorialProgress', '4');
+  await fsp.writeFile(iniPath, ini, 'utf8');
+  const presetPath = path.join(dir, 'ReShadePreset.ini');
+  let preset = fs.existsSync(presetPath) ? fs.readFileSync(presetPath, 'utf8') : '';
+  const techniques = (getIniKey(preset, '', 'Techniques') || '').split(',').map((t) => t.trim()).filter(Boolean)
+    // The Feeder's own technique went with the Feeder.
+    .filter((t) => !/^DLSS5_Feed/i.test(t));
+  if (!techniques.some((t) => /^DFC_Universal_Feed@/i.test(t))) techniques.push('DFC_Universal_Feed@DFC_Universal_Feed.fx');
+  preset = setIniKey(preset, '', 'Techniques', techniques.join(','));
+  await fsp.writeFile(presetPath, preset, 'utf8');
+
+  writeMarker(dir, {
+    ...readMarker(dir),
+    compat: api,
+    files: [...files],
+    ...(nrPlaced ? { nrPlaced } : {}),
+    // Vulkan: no proxy of ours, but the ini and preset above are; OpenGL: the proxy too.
+    reshadeIni: true,
+    ...(api === 'opengl' ? { reshadeProxy: 'opengl32.dll', reshadeFetched: true } : {}),
+  });
+  steps.push(api === 'opengl' ? 'ReShade as opengl32.dll, Chicken\x27s producer in' : 'Chicken\x27s producer in, on ReShade\x27s Vulkan layer');
+  return { ...deployed, compat: api, restoredCfg: deployed.restoredCfg || restored.length > 0, steps };
 }
 
 // ── 32-bit games (stage 3) ───────────────────────────────────────────────────────────────────
@@ -762,5 +908,6 @@ module.exports = {
   readMarker, dfcPresent, dfcOurs, deployDfc, removeDfc,
   RESHADE_PROXY, reshadeProxyOf, supportedFor, switchToDfc,
   ADDON32, BRIDGE_CFG, HOST_DIR, RESHADE32_FOR, cached32, switchToDfc32,
+  COMPAT_ADDON, cachedCompat, switchToDfcCompat,
   readDfcState, readCfgText, cfgPath,
 };
