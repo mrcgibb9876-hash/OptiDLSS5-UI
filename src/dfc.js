@@ -203,7 +203,17 @@ async function importDfcSource(sourcePath, cacheDir) {
   }
 
   // Their own licence file travels with it wherever it goes, and is never something we author.
-  return { path: dest, files: fs.readdirSync(dest).sort(), from: path.basename(sourcePath) };
+  // Beside the cache folder, not in it: the folder holds Chicken's files and nothing else.
+  const info = { from: path.basename(sourcePath), addedAt: new Date().toISOString() };
+  try { fs.writeFileSync(path.join(cacheDir, `${CACHE_NAME}.json`), JSON.stringify(info, null, 2), 'utf8'); } catch {}
+  return { path: dest, files: fs.readdirSync(dest).sort(), from: info.from };
+}
+
+// Which copy the app has: the name of what was picked, and when. Null for a copy imported before
+// this was recorded, or none at all.
+function suppliedInfo(cacheDir) {
+  if (!cachedDfc(cacheDir)) return null;
+  try { return JSON.parse(fs.readFileSync(path.join(cacheDir, `${CACHE_NAME}.json`), 'utf8')); } catch { return {}; }
 }
 
 // The cached copy, or null when the user has not supplied one yet. Every caller that offers the
@@ -512,7 +522,7 @@ module.exports = {
   ADDON, NVNGX, CFG, LOG, LICENSE, MARKER, CACHE_NAME,
   PAYLOAD, PAYLOAD_IF_ABSENT, STATES,
   CONSUMERS, DEFAULT_CONSUMER, isConsumer, consumerOf,
-  looksLikeDfc, importDfcSource, cachedDfc,
+  looksLikeDfc, importDfcSource, cachedDfc, suppliedInfo,
   readMarker, dfcPresent, dfcOurs, deployDfc, removeDfc,
   RESHADE_PROXY, reshadeProxyOf, supportedFor, switchToDfc,
   readDfcState, readCfgText, cfgPath,

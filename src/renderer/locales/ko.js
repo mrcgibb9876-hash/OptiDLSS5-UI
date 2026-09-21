@@ -1452,4 +1452,12 @@ window.I18N.register("ko", {
   "Press Home and open the Deep Fried Chicken tab": "Home을 눌러 Deep Fried Chicken 탭 열기",
   "Deep Fried Chicken: {state}": "Deep Fried Chicken: {state}",
   "Deep Fried Chicken runs the neural pass here": "여기서는 Deep Fried Chicken이 뉴럴 패스를 실행합니다",
+  "Neural pass: Deep Fried Chicken — switch back to DLSS 5": "뉴럴 패스: Deep Fried Chicken — DLSS 5로 되돌리기",
+  "Neural pass: DLSS 5 — switch to Deep Fried Chicken": "뉴럴 패스: DLSS 5 — Deep Fried Chicken으로 전환",
+  "Deep Fried Chicken is not added to this app yet. Pick the folder you unpacked it into now?": "Deep Fried Chicken이 아직 이 앱에 추가되지 않았습니다. 압축을 푼 폴더를 지금 선택할까요?",
+  "Replace your Chicken copy…": "Chicken 사본 교체…",
+  "Not added yet.": "아직 추가되지 않았습니다.",
+  "Added from {from} on {date}. Switch a game to it from its ⋯ menu.": "{date}에 {from}에서 추가됨. 게임의 ⋯ 메뉴에서 전환하세요.",
+  "Added. Switch a game to it from its ⋯ menu.": "추가됨. 게임의 ⋯ 메뉴에서 전환하세요.",
+  "Add your own copy once, then switch any DirectX 11 or 12 Feeder game to it from the game's ⋯ menu. Unpack Chicken's .7z first and pick the folder it unpacked into.": "내 사본을 한 번 추가한 뒤, DirectX 11 또는 12 Feeder 게임을 게임의 ⋯ 메뉴에서 전환하세요. 먼저 Chicken의 .7z 압축을 풀고 그 폴더를 선택하세요.",
 });

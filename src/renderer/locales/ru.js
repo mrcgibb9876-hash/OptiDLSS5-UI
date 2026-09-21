@@ -1452,4 +1452,12 @@ window.I18N.register("ru", {
   "Press Home and open the Deep Fried Chicken tab": "Нажмите Home и откройте вкладку Deep Fried Chicken",
   "Deep Fried Chicken: {state}": "Deep Fried Chicken: {state}",
   "Deep Fried Chicken runs the neural pass here": "Здесь нейронный проход выполняет Deep Fried Chicken",
+  "Neural pass: Deep Fried Chicken — switch back to DLSS 5": "Нейронный проход: Deep Fried Chicken — вернуть DLSS 5",
+  "Neural pass: DLSS 5 — switch to Deep Fried Chicken": "Нейронный проход: DLSS 5 — переключить на Deep Fried Chicken",
+  "Deep Fried Chicken is not added to this app yet. Pick the folder you unpacked it into now?": "Deep Fried Chicken ещё не добавлен в приложение. Выбрать сейчас папку, куда вы его распаковали?",
+  "Replace your Chicken copy…": "Заменить вашу копию Chicken…",
+  "Not added yet.": "Ещё не добавлен.",
+  "Added from {from} on {date}. Switch a game to it from its ⋯ menu.": "Добавлен из {from} {date}. Переключите игру на него через её меню ⋯.",
+  "Added. Switch a game to it from its ⋯ menu.": "Добавлен. Переключите игру на него через её меню ⋯.",
+  "Add your own copy once, then switch any DirectX 11 or 12 Feeder game to it from the game's ⋯ menu. Unpack Chicken's .7z first and pick the folder it unpacked into.": "Добавьте свою копию один раз, затем переключайте любую Feeder-игру на DirectX 11 или 12 через меню ⋯ игры. Сначала распакуйте .7z Chicken и выберите получившуюся папку.",
 });

@@ -1452,4 +1452,12 @@ window.I18N.register("zh-CN", {
   "Press Home and open the Deep Fried Chicken tab": "按 Home 并打开 Deep Fried Chicken 标签页",
   "Deep Fried Chicken: {state}": "Deep Fried Chicken：{state}",
   "Deep Fried Chicken runs the neural pass here": "这里由 Deep Fried Chicken 执行神经渲染",
+  "Neural pass: Deep Fried Chicken — switch back to DLSS 5": "神经渲染：Deep Fried Chicken — 切回 DLSS 5",
+  "Neural pass: DLSS 5 — switch to Deep Fried Chicken": "神经渲染：DLSS 5 — 切换到 Deep Fried Chicken",
+  "Deep Fried Chicken is not added to this app yet. Pick the folder you unpacked it into now?": "Deep Fried Chicken 还没有添加到本应用。现在选择你解压它的文件夹吗？",
+  "Replace your Chicken copy…": "替换你的 Chicken 副本…",
+  "Not added yet.": "尚未添加。",
+  "Added from {from} on {date}. Switch a game to it from its ⋯ menu.": "于 {date} 从 {from} 添加。在游戏的 ⋯ 菜单中切换到它。",
+  "Added. Switch a game to it from its ⋯ menu.": "已添加。在游戏的 ⋯ 菜单中切换到它。",
+  "Add your own copy once, then switch any DirectX 11 or 12 Feeder game to it from the game's ⋯ menu. Unpack Chicken's .7z first and pick the folder it unpacked into.": "先添加一次你自己的副本，然后在游戏的 ⋯ 菜单里把任意 DirectX 11 或 12 的 Feeder 游戏切换到它。请先解压 Chicken 的 .7z，再选择解压出的文件夹。",
 });

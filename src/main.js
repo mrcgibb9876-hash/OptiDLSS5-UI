@@ -847,10 +847,11 @@ ipcMain.handle('dfc:supply', async (_evt, sourcePath) => {
   try {
     const picked = sourcePath || (await (async () => {
       const r = await dialog.showOpenDialog({
-        title: 'Find your Deep Fried Chicken download',
-        message: 'Pick Chicken\'s zip, or the folder you unpacked it into',
-        properties: ['openFile', 'openDirectory'],
-        filters: [{ name: 'Deep Fried Chicken', extensions: ['zip'] }],
+        // A folder picker: on Windows a dialog cannot pick files and folders both, and Chicken 3.0
+        // comes as a password-protected .7z that has to be unpacked anyway.
+        title: 'Pick the folder you unpacked Deep Fried Chicken into',
+        message: 'The folder with 64-bit inside it (or the 64-bit folder itself)',
+        properties: ['openDirectory'],
       });
       return r.canceled || !r.filePaths.length ? null : r.filePaths[0];
     })());
@@ -900,7 +901,7 @@ ipcMain.handle('dfc:cfg-write', async (_evt, { exePath, edits }) => {
 ipcMain.handle('dfc:status', async (_evt, exePath) => {
   try {
     const supplied = dfc.cachedDfc(dfcCacheDir());
-    const out = { ok: true, supplied: !!supplied, suppliedFiles: supplied ? fs.readdirSync(supplied).sort() : [] };
+    const out = { ok: true, supplied: !!supplied, suppliedFiles: supplied ? fs.readdirSync(supplied).sort() : [], suppliedInfo: dfc.suppliedInfo(dfcCacheDir()) };
     if (exePath && fs.existsSync(exePath)) {
       const dir = gameDir(exePath);
       out.present = dfc.dfcPresent(dir);

@@ -1453,4 +1453,12 @@ window.I18N.register('pt-BR', {
   "Press Home and open the Deep Fried Chicken tab": "Aperte Home e abra a aba do Deep Fried Chicken",
   "Deep Fried Chicken: {state}": "Deep Fried Chicken: {state}",
   "Deep Fried Chicken runs the neural pass here": "Aqui o Deep Fried Chicken faz o passe neural",
+  "Neural pass: Deep Fried Chicken — switch back to DLSS 5": "Passe neural: Deep Fried Chicken — voltar para o DLSS 5",
+  "Neural pass: DLSS 5 — switch to Deep Fried Chicken": "Passe neural: DLSS 5 — mudar para o Deep Fried Chicken",
+  "Deep Fried Chicken is not added to this app yet. Pick the folder you unpacked it into now?": "O Deep Fried Chicken ainda não foi adicionado a este app. Escolher agora a pasta onde você o descompactou?",
+  "Replace your Chicken copy…": "Substituir sua cópia do Chicken…",
+  "Not added yet.": "Ainda não adicionado.",
+  "Added from {from} on {date}. Switch a game to it from its ⋯ menu.": "Adicionado de {from} em {date}. Mude um jogo para ele pelo menu ⋯ do jogo.",
+  "Added. Switch a game to it from its ⋯ menu.": "Adicionado. Mude um jogo para ele pelo menu ⋯ do jogo.",
+  "Add your own copy once, then switch any DirectX 11 or 12 Feeder game to it from the game's ⋯ menu. Unpack Chicken's .7z first and pick the folder it unpacked into.": "Adicione sua própria cópia uma vez e depois mude qualquer jogo Feeder DirectX 11 ou 12 para ela pelo menu ⋯ do jogo. Descompacte primeiro o .7z do Chicken e escolha a pasta resultante.",
 });
