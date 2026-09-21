@@ -74,14 +74,15 @@ function diagnose(ctx) {
 
   // Hard stops first: nothing the app deploys can run in these. A 32-bit game has an experimental
   // route now (legacy.js); only one that route cannot serve (32-bit Vulkan) is a stop.
-  if (d.bitness === 32 && route.route !== 'feeder32') return out('unavailable', 'bit32');
+  if (d.bitness === 32 && route.route !== 'feeder32' && route.consumerHere !== 'dfc') return out('unavailable', 'bit32');
   // Anti-cheat is a warning, not a verdict of unavailable. It used to be the latter, which put "Not
   // available" on the card while Install was in fact possible -- the app answering a question that
   // belongs to whoever owns the account. What it will actually do is unchanged and is said plainly:
   // the anti-cheat very likely stops the DLL loading, and going online with it in place risks a ban.
   // 'step' rather than 'fix': there is nothing to press, only something to know before deciding.
   if (d.antiCheat && !d.protectedLauncher) return out('step', 'anticheat', { antiCheat: d.antiCheat });
-  if (route.route === 'unsupported') return out('unavailable', 'unsupported', { reason: route.reason || '' });
+  // A 32-bit Vulkan game has no route of this app's own, but can be running Deep Fried Chicken's.
+  if (route.route === 'unsupported' && route.consumerHere !== 'dfc') return out('unavailable', 'unsupported', { reason: route.reason || '' });
 
   // Two stacks on one DLSS call crash before anything else can be judged.
   if (foreign.length) return fix('foreign', 'remove-foreign', { tool: foreign.map((f) => f.tool).join(', ') });

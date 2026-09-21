@@ -202,6 +202,62 @@ test('a 32-bit switch that would have to refuse refuses before this app\'s route
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
 
+test('a 32-bit OpenGL game gets ReShade as opengl32.dll', { skip: !onWindows }, async () => {
+  const base = tmp('gl32');
+  try {
+    const cache = await supplied(base);
+    const game = our32Route(base);
+    await dfc.switchToDfc32(game, cache, deps(base, { api: 'opengl' }));
+    assert.strictEqual(fs.readFileSync(path.join(game, 'opengl32.dll'), 'utf8'), 'ReShade 32-bit add-on build');
+    assert.strictEqual(dfc.readMarker(game).reshadeProxy, 'opengl32.dll');
+    await dfc.removeDfc(game, { cacheDir: path.join(base, 'cache') });
+    assert.deepStrictEqual(fs.readdirSync(game), ['Game.exe']);
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('a 32-bit Vulkan game: ReShade\'s 32-bit layer on for the exe, no proxy, and taken off its list again', { skip: !onWindows }, async () => {
+  const base = tmp('vk32');
+  try {
+    const cache = await supplied(base);
+    // A 32-bit Vulkan game has no route of this app's own: nothing of ours in the folder.
+    const game = path.join(base, 'game');
+    write(game, 'Game.exe', 'x');
+    let layerRuns = 0;
+    const setUpVulkanLayer = async () => {
+      layerRuns++;
+      return { ok: true, exe: path.join(game, 'Game.exe'), before: { appListed: false }, after: { appListed: true, appsPath: 'C:\\ProgramData\\ReShade\\ReShadeApps.ini' } };
+    };
+    await dfc.switchToDfc32(game, cache, deps(base, { api: 'vulkan', setUpVulkanLayer, removeOurStack: async () => ({ removed: [], failed: [] }) }));
+    assert.strictEqual(layerRuns, 1);
+    for (const proxy of ['d3d9.dll', 'dxgi.dll', 'opengl32.dll']) assert.strictEqual(fs.existsSync(path.join(game, proxy)), false, `no ${proxy}: Vulkan is the layer`);
+    assert.ok(fs.existsSync(path.join(game, 'deep-fried-chicken.addon32')));
+    assert.ok(fs.existsSync(path.join(game, 'host64', 'dxgi.dll')), 'the worker still has its x64 ReShade');
+    const m = dfc.readMarker(game);
+    assert.strictEqual(m.reshadeProxy, undefined);
+    assert.strictEqual(m.vulkanLayer.listedByUs, true);
+
+    let unlisted = null;
+    const r = await dfc.removeDfc(game, { cacheDir: path.join(base, 'cache'), unlistVulkanApp: async (rec) => { unlisted = rec; return { ok: true }; } });
+    assert.deepStrictEqual(r.failed, []);
+    assert.ok(unlisted && /Game\.exe$/.test(unlisted.exe), 'the exe comes off ReShade\'s app list');
+    assert.deepStrictEqual(fs.readdirSync(game), ['Game.exe']);
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('a 32-bit Vulkan switch whose layer set-up fails (the admin prompt declined) touches nothing', { skip: !onWindows }, async () => {
+  const base = tmp('vk32-no');
+  try {
+    const cache = await supplied(base);
+    const game = path.join(base, 'game');
+    write(game, 'Game.exe', 'x');
+    await assert.rejects(() => dfc.switchToDfc32(game, cache, deps(base, {
+      api: 'vulkan',
+      setUpVulkanLayer: async () => ({ ok: false, error: 'the administrator prompt was declined' }),
+    })), (e) => e.code === 'dfc-vulkan-layer' && /declined/.test(e.message));
+    assert.deepStrictEqual(fs.readdirSync(game), ['Game.exe']);
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
 test('a copy added without its 32-bit folder says what to add', async () => {
   const base = tmp('no32');
   try {

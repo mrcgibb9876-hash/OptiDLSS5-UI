@@ -1440,7 +1440,7 @@ window.I18N.register('pt-BR', {
   "Could not switch this game: {error}": "Não foi possível mudar este jogo: {error}",
   "Installed with Deep Fried Chicken. Press Home in the game for its menu.": "Instalado com Deep Fried Chicken. Aperte Home no jogo para abrir o menu dele.",
   "Not for this game yet: on Vulkan and OpenGL Chicken brings its own feeder, which this app does not set up.": "Ainda não para este jogo: no Vulkan e no OpenGL o Chicken traz o próprio feeder, que este app não configura.",
-  "Not for this game yet: on 32-bit games Chicken is set up here for DirectX 9 to 11 only.": "Ainda não para este jogo: em jogos de 32 bits o Chicken só é configurado aqui para DirectX 9 a 11.",
+  "Not for this game yet: on 32-bit games Chicken is set up here for DirectX 9 to 11, OpenGL and Vulkan.": "Ainda não para este jogo: em jogos de 32 bits o Chicken é configurado aqui para DirectX 9 a 11, OpenGL e Vulkan.",
   "Chicken is set up here for 64-bit DirectX 9 to 12 games only.": "Aqui o Chicken só é configurado para jogos de 64 bits com DirectX 9 a 12.",
   "No Deep Fried Chicken copy yet -- add yours, then press Install.": "Ainda não há cópia do Deep Fried Chicken -- adicione a sua e aperte Instalar.",
   "Chicken is already here and this app did not place it. Delete its files to let this app manage it.": "O Chicken já está aqui e não foi este app que o colocou. Apague os arquivos dele para este app gerenciá-lo.",
@@ -1460,6 +1460,7 @@ window.I18N.register('pt-BR', {
   "Not added yet.": "Ainda não adicionado.",
   "Added from {from} on {date}. Switch a game to it from its ⋯ menu.": "Adicionado de {from} em {date}. Mude um jogo para ele pelo menu ⋯ do jogo.",
   "Added. Switch a game to it from its ⋯ menu.": "Adicionado. Mude um jogo para ele pelo menu ⋯ do jogo.",
-  "Add your own copy once, then switch a DirectX 9 to 12 game to it from the game's ⋯ menu (32-bit games too, DirectX 9 to 11). Unpack Chicken's .7z first and pick the whole folder it unpacked into.": "Adicione sua própria cópia uma vez e depois mude um jogo com DirectX 9 a 12 para ela pelo menu ⋯ do jogo (jogos de 32 bits também, DirectX 9 a 11). Descompacte primeiro o .7z do Chicken e escolha a pasta inteira resultante.",
+  "Add your own copy once, then switch a game to it from the game's ⋯ menu: DirectX 9 to 12, Vulkan and OpenGL, 32-bit games too. Unpack Chicken's .7z first and pick the whole folder it unpacked into.": "Adicione sua própria cópia uma vez e depois mude um jogo para ela pelo menu ⋯ dele: DirectX 9 a 12, Vulkan e OpenGL, jogos de 32 bits também. Descompacte primeiro o .7z do Chicken e escolha a pasta inteira resultante.",
   "Chicken on Vulkan needs ReShade's Vulkan layer with add-on support, set up for this game.": "No Vulkan, o Chicken precisa da camada Vulkan do ReShade com suporte a add-ons, configurada para este jogo.",
+  "Deep Fried Chicken is out. DLSS 5 has no route of its own for this game.": "O Deep Fried Chicken foi removido. O DLSS 5 não tem uma rota própria para este jogo.",
 });

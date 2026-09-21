@@ -915,6 +915,17 @@ function occupiedAfterOur32Removal(dir, rel) {
   return !ours;
 }
 
+// What every removal of Chicken passes: the cache for the player's cfgs, and the way to take a
+// 32-bit Vulkan game back off ReShade's app list (the same call uninstallEverything makes for DXVK).
+function dfcRemoveOptions() {
+  return {
+    cacheDir: dfcCacheDir(),
+    unlistVulkanApp: (record) => legacy.unlistVulkanLayerApp(record, {
+      runElevatedPowerShell: (command) => elevate.runElevatedPowerShell(command, { execFileAsync }),
+    }),
+  };
+}
+
 async function dfcRouteFor(dir, exePath) {
   const { vendor } = await getGpuInfo();
   const effective = effectiveDetection(dir, exePath, await detectFor(dir, exePath));
@@ -940,7 +951,7 @@ ipcMain.handle('dfc:switch', async (_evt, { exePath, to, nrDllPath }) => {
         throw e;
       }
       // A 32-bit game: Chicken's own companion route, with this app's 32-bit route taken out whole.
-      const r = route.route === 'feeder32'
+      const r = route.dfcBits === 32
         ? await dfc.switchToDfc32(dir, dfcCacheDir(), {
           api: await resolveApi(dir, exePath),
           nrDllPath: nrDllPath || null,
@@ -948,6 +959,16 @@ ipcMain.handle('dfc:switch', async (_evt, { exePath, to, nrDllPath }) => {
           occupiedAfterRemoval: (rel) => occupiedAfterOur32Removal(dir, rel),
           reshadeSetup: () => feeder.downloadToCache(feeder.RESHADE_SETUP_URL, feederCacheDir(), path.basename(feeder.RESHADE_SETUP_URL), GITHUB_HEADERS),
           placeNvngxDlss: (hostDir) => feeder.deployNvngxDlss(hostDir, getRhiManifest, compareStreamlineVersions, feederCacheDir(), GITHUB_HEADERS),
+          // 32-bit Vulkan: ReShade's 32-bit layer, on for this exe (one administrator prompt).
+          setUpVulkanLayer: async () => {
+            const setupPath = await feeder.downloadToCache(feeder.RESHADE_SETUP_URL, feederCacheDir(), path.basename(feeder.RESHADE_SETUP_URL), GITHUB_HEADERS);
+            const r32 = await legacy.setUpVulkanLayer32(dir, exePath, {
+              setupPath,
+              runElevated: (file, args) => elevate.runElevated(file, args, { execFileAsync }),
+              layerStatus: () => feeder.vulkanLayerStatus({ execFileAsync, exePath, bitness: 32 }),
+            });
+            return { ...r32, exe: exePath };
+          },
         })
         : await dfc.switchToDfc(dir, dfcCacheDir(), {
           nrDllPath: nrDllPath || null,
@@ -956,10 +977,10 @@ ipcMain.handle('dfc:switch', async (_evt, { exePath, to, nrDllPath }) => {
         });
       invalidateDetection(dir);
       // Chicken's x64 worker on a hybrid laptop, on the card the game renders on (gpupref.js).
-      if (route.route === 'feeder32') await preferDiscreteGpu(dir, exePath);
+      if (route.dfcBits === 32) await preferDiscreteGpu(dir, exePath);
       return { ok: true, dfc: r, consumerHere: 'dfc' };
     }
-    const r = (dfc.dfcOurs(dir) || dfc.reshadeProxyOf(dir)) ? await dfc.removeDfc(dir, { cacheDir: dfcCacheDir() }) : null;
+    const r = (dfc.dfcOurs(dir) || dfc.reshadeProxyOf(dir)) ? await dfc.removeDfc(dir, dfcRemoveOptions()) : null;
     if (r && r.failed.length) throw new Error(`Chicken could not be taken out (${r.failed.map((f) => `${f.rel}: ${f.code}`).join(', ')}) -- close the game and try again`);
     invalidateDetection(dir);
     return { ok: true, dfcRemoved: r, consumerHere: 'optiscaler' };
@@ -2774,7 +2795,7 @@ async function uninstallEverything(dir) {
   // One the user installed with its own .cmd has no marker: removeDfc leaves it and says so, which
   // is right -- its own uninstaller is the thing that knows how to take it out.
   if (dfc.dfcPresent(dir) || dfc.readMarker(dir)) {
-    const r = await stage('Deep Fried Chicken', () => dfc.removeDfc(dir, { cacheDir: dfcCacheDir(), uninstall: true }));
+    const r = await stage('Deep Fried Chicken', () => dfc.removeDfc(dir, { ...dfcRemoveOptions(), uninstall: true }));
     if (r) {
       removed.push(...r.removed); kept.push(...r.kept);
       for (const f of r.failed || []) failed.push(f);

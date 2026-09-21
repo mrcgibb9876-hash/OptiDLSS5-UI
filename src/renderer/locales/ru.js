@@ -1439,7 +1439,7 @@ window.I18N.register("ru", {
   "Could not switch this game: {error}": "Не удалось переключить игру: {error}",
   "Installed with Deep Fried Chicken. Press Home in the game for its menu.": "Установлено с Deep Fried Chicken. Нажмите Home в игре, чтобы открыть его меню.",
   "Not for this game yet: on Vulkan and OpenGL Chicken brings its own feeder, which this app does not set up.": "Пока не для этой игры: на Vulkan и OpenGL Chicken использует собственный feeder, который это приложение не настраивает.",
-  "Not for this game yet: on 32-bit games Chicken is set up here for DirectX 9 to 11 only.": "Пока не для этой игры: для 32-битных игр Chicken здесь настраивается только для DirectX 9–11.",
+  "Not for this game yet: on 32-bit games Chicken is set up here for DirectX 9 to 11, OpenGL and Vulkan.": "Пока не для этой игры: для 32-битных игр Chicken здесь настраивается для DirectX 9–11, OpenGL и Vulkan.",
   "Chicken is set up here for 64-bit DirectX 9 to 12 games only.": "Здесь Chicken настраивается только для 64-битных игр на DirectX 9–12.",
   "No Deep Fried Chicken copy yet -- add yours, then press Install.": "Копии Deep Fried Chicken ещё нет -- добавьте свою, затем нажмите «Установить».",
   "Chicken is already here and this app did not place it. Delete its files to let this app manage it.": "Chicken уже здесь, но его положило не это приложение. Удалите его файлы, чтобы приложение могло им управлять.",
@@ -1459,6 +1459,7 @@ window.I18N.register("ru", {
   "Not added yet.": "Ещё не добавлен.",
   "Added from {from} on {date}. Switch a game to it from its ⋯ menu.": "Добавлен из {from} {date}. Переключите игру на него через её меню ⋯.",
   "Added. Switch a game to it from its ⋯ menu.": "Добавлен. Переключите игру на него через её меню ⋯.",
-  "Add your own copy once, then switch a DirectX 9 to 12 game to it from the game's ⋯ menu (32-bit games too, DirectX 9 to 11). Unpack Chicken's .7z first and pick the whole folder it unpacked into.": "Добавьте свою копию один раз, затем переключайте игру на DirectX 9–12 через её меню ⋯ (32-битные тоже, DirectX 9–11). Сначала распакуйте .7z Chicken и выберите всю получившуюся папку.",
+  "Add your own copy once, then switch a game to it from the game's ⋯ menu: DirectX 9 to 12, Vulkan and OpenGL, 32-bit games too. Unpack Chicken's .7z first and pick the whole folder it unpacked into.": "Добавьте свою копию один раз, затем переключайте игру на неё через её меню ⋯: DirectX 9–12, Vulkan и OpenGL, 32-битные тоже. Сначала распакуйте .7z Chicken и выберите всю получившуюся папку.",
   "Chicken on Vulkan needs ReShade's Vulkan layer with add-on support, set up for this game.": "На Vulkan Chicken нужен слой Vulkan от ReShade с поддержкой аддонов, настроенный для этой игры.",
+  "Deep Fried Chicken is out. DLSS 5 has no route of its own for this game.": "Deep Fried Chicken удалён. У DLSS 5 нет собственного пути для этой игры.",
 });

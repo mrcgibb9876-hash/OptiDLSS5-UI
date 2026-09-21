@@ -364,7 +364,9 @@ function writeMarker(dir, data) {
 //
 // uninstall: the whole folder is being put back (uninstallEverything). ReShade is deleted rather
 // than renamed, since the Feeder stack that owned it is going too.
-async function removeDfc(dir, { cacheDir = null, uninstall = false } = {}) {
+//   unlistVulkanApp(record)  takes the exe off ReShade's Vulkan app list (legacy.unlistVulkanLayerApp),
+//                            for a 32-bit Vulkan game this app put on it; the layer itself stays
+async function removeDfc(dir, { cacheDir = null, uninstall = false, unlistVulkanApp = null } = {}) {
   const marker = readMarker(dir);
   const removed = [];
   const kept = [];
@@ -432,6 +434,16 @@ async function removeDfc(dir, { cacheDir = null, uninstall = false } = {}) {
     }
   }
 
+  if (marker.vulkanLayer && marker.vulkanLayer.listedByUs && unlistVulkanApp && !failed.length) {
+    try {
+      const r = await unlistVulkanApp(marker.vulkanLayer);
+      if (r && r.ok === false) kept.push(`${path.basename(marker.vulkanLayer.exe || '')} on ReShade's Vulkan app list (${r.error})`);
+      else removed.push('this game on ReShade\x27s Vulkan app list');
+    } catch (e) {
+      kept.push(`this game on ReShade's Vulkan app list (${(e && e.message) || e})`);
+    }
+  }
+
   // The marker goes last, and only when everything it lists is gone: a failed delete (the game
   // still running) must leave the record that says what is ours, or the next try could not tell.
   if (!failed.length) {
@@ -492,7 +504,7 @@ const D3D_APIS = ['dx9', 'dx10', 'dx11', 'dx12'];
 function supportedFor(detected) {
   const d = detected || {};
   // 32-bit: Chicken's own companion route (switchToDfc32), for the renderers it names there.
-  if (d.bitness === 32) return RESHADE32_FOR[d.api] ? { ok: true, code: null } : { ok: false, code: 'dfc-32bit' };
+  if (d.bitness === 32) return Object.prototype.hasOwnProperty.call(RESHADE32_FOR, d.api) ? { ok: true, code: null } : { ok: false, code: 'dfc-32bit' };
   // 64-bit Vulkan/OpenGL: Chicken's own producer (switchToDfcCompat), in place of this app's Feeder.
   if (d.api === 'vulkan' || d.api === 'opengl') return { ok: true, code: null };
   if (!D3D_APIS.includes(d.api)) return { ok: false, code: 'dfc-api' };
@@ -720,9 +732,12 @@ async function switchToDfcCompat(dir, cacheDir, deps = {}) {
 // builds this app's route again.
 //
 // The game's ReShade goes in under the name its renderer loads: d3d9.dll for Direct3D 9 (Chicken
-// hooks D3D9 itself, no dgVoodoo2), dxgi.dll for Direct3D 10/11. DFC_Universal_Feed, the technique
-// the README has the player enable by hand, is switched on in the preset this app writes.
-const RESHADE32_FOR = { dx9: 'd3d9.dll', dx10: 'dxgi.dll', dx11: 'dxgi.dll' };
+// hooks D3D9 itself, no dgVoodoo2), dxgi.dll for Direct3D 10/11, opengl32.dll for OpenGL. Vulkan has
+// no proxy: ReShade's 32-bit layer, set up machine-wide for this exe by ReShade's own setup
+// (legacy.setUpVulkanLayer32, one administrator prompt -- the step this app's DXVK route already runs).
+// DFC_Universal_Feed, the technique the README has the player enable by hand, is switched on in the
+// preset this app writes.
+const RESHADE32_FOR = { dx9: 'd3d9.dll', dx10: 'dxgi.dll', dx11: 'dxgi.dll', opengl: 'opengl32.dll', vulkan: null };
 
 function walkFiles(root, rel = '') {
   const out = [];
@@ -743,12 +758,12 @@ function walkFiles(root, rel = '') {
 //   placeNvngxDlss(hostDir)  the x64 nvngx_dlss.dll into the worker's folder
 //   nrDllPath           the NR model, for the worker's folder
 async function switchToDfc32(dir, cacheDir, deps = {}) {
-  const { api, nrDllPath = null, removeOurStack, occupiedAfterRemoval, reshadeSetup, placeNvngxDlss } = deps;
+  const { api, nrDllPath = null, removeOurStack, occupiedAfterRemoval, reshadeSetup, placeNvngxDlss, setUpVulkanLayer = null } = deps;
   const tree = cached32(cacheDir);
   if (!cachedDfc(cacheDir)) throw new Error('no Deep Fried Chicken copy has been added yet -- add yours in Settings first');
   if (!tree) throw new Error('the Chicken copy you added has no 32-bit part -- add the whole unpacked folder (the one with 32-bit and 64-bit inside) in Settings');
+  if (!Object.prototype.hasOwnProperty.call(RESHADE32_FOR, api)) throw new Error(`Chicken is set up here for 32-bit DirectX 9 to 11, OpenGL and Vulkan games, and this one is ${api || 'not detected'}`);
   const proxyName = RESHADE32_FOR[api];
-  if (!proxyName) throw new Error(`Chicken is set up here for 32-bit DirectX 9 to 11 games, and this one is ${api || 'not detected'}`);
   if (dfcPresent(dir) && !dfcOurs(dir)) throw new Error(`Deep Fried Chicken is already in this folder, ${HAND_PLACED}`);
   if (!nrDllPath || !fs.existsSync(nrDllPath)) throw new Error('the NR model (nvngx_dlssnr.dll) is not set up in Settings, and Chicken\x27s worker needs it');
 
@@ -756,7 +771,7 @@ async function switchToDfc32(dir, cacheDir, deps = {}) {
   const already = !!(before && before.bits === 32 && dfcOurs(dir));
   // Everything that can refuse, before anything is touched.
   if (!already) {
-    if (occupiedAfterRemoval(proxyName)) throw new Error(`${proxyName} here is not this app's -- ReShade cannot take its place`);
+    if (proxyName && occupiedAfterRemoval(proxyName)) throw new Error(`${proxyName} here is not this app's -- ReShade cannot take its place`);
     if (occupiedAfterRemoval(HOST_DIR)) throw new Error(`a ${HOST_DIR} folder here is not this app's -- Chicken's worker needs that name`);
   }
   // ReShade fetched before this app's route comes out: offline, the swap stops with the folder as it was.
@@ -766,6 +781,25 @@ async function switchToDfc32(dir, cacheDir, deps = {}) {
   const r64 = find(setup, /^ReShade64\.dll$/i);
   if (!r32 || !r64) throw new Error('ReShade32.dll and ReShade64.dll were not both found in the ReShade setup');
 
+  // Vulkan: ReShade's 32-bit layer, on for this exe. Its setup changes nothing in the game folder
+  // for good (it holds any ReShade.ini aside and puts it back), so a refusal here still leaves the
+  // folder as it was.
+  let vulkanLayer = already ? (before.vulkanLayer || null) : null;
+  if (api === 'vulkan' && !already) {
+    const layer = await setUpVulkanLayer();
+    if (!layer || !layer.ok) {
+      const e = new Error(`ReShade's 32-bit Vulkan layer could not be set up for this game${layer && layer.error ? ` (${layer.error})` : ''}`);
+      e.code = 'dfc-vulkan-layer';
+      throw e;
+    }
+    vulkanLayer = {
+      exe: layer.exe || null,
+      appsPath: (layer.after && layer.after.appsPath) || null,
+      // Remove owes taking the exe off the layer's list only when this switch put it there.
+      listedByUs: !!(layer.before && layer.before.appListed !== true && layer.after && layer.after.appListed === true),
+    };
+  }
+
   const steps = [];
   if (!already) {
     const out = await removeOurStack(dir);
@@ -773,9 +807,8 @@ async function switchToDfc32(dir, cacheDir, deps = {}) {
       throw new Error(`this app's 32-bit route could not be taken out (${out.failed.map((f) => `${f.rel}: ${f.code}`).join(', ')}) -- close the game and try again`);
     }
     steps.push('took the DLSS 5 32-bit route out');
-    if (fs.existsSync(path.join(dir, proxyName)) || fs.existsSync(path.join(dir, HOST_DIR))) {
-      throw new Error(`${fs.existsSync(path.join(dir, proxyName)) ? proxyName : HOST_DIR} came back after the DLSS 5 route was taken out -- it is the game's own, so Chicken cannot use that name`);
-    }
+    const back = (proxyName && fs.existsSync(path.join(dir, proxyName))) ? proxyName : fs.existsSync(path.join(dir, HOST_DIR)) ? HOST_DIR : null;
+    if (back) throw new Error(`${back} came back after the DLSS 5 route was taken out -- it is the game's own, so Chicken cannot use that name`);
   }
 
   const files = new Set(already && Array.isArray(before.files) ? before.files : []);
@@ -796,8 +829,8 @@ async function switchToDfc32(dir, cacheDir, deps = {}) {
     files.add(rel);
   }
 
-  // The game's 32-bit ReShade, under the name its renderer loads.
-  await fsp.writeFile(path.join(dir, proxyName), extract(setup, r32));
+  // The game's 32-bit ReShade, under the name its renderer loads (none on Vulkan: the layer).
+  if (proxyName) await fsp.writeFile(path.join(dir, proxyName), extract(setup, r32));
   // The worker's x64 ReShade (the README's step 3), unless the tree shipped one of its own.
   const hostDir = path.join(dir, HOST_DIR);
   if (!fs.existsSync(path.join(hostDir, 'dxgi.dll')) || files.has(`${HOST_DIR}/dxgi.dll`)) {
@@ -842,12 +875,13 @@ async function switchToDfc32(dir, cacheDir, deps = {}) {
     bits: 32,
     files: [...files],
     dirs: hostDirMade ? [HOST_DIR] : [],
-    reshadeProxy: proxyName,
-    reshadeFetched: true,
+    ...(proxyName ? { reshadeProxy: proxyName, reshadeFetched: true } : {}),
+    reshadeIni: true,
+    ...(vulkanLayer ? { vulkanLayer } : {}),
     from: path.basename(path.dirname(tree)),
     deployedAt: new Date().toISOString(),
   });
-  steps.push(`ReShade (32-bit) as ${proxyName}, Chicken's worker in ${HOST_DIR}\\`);
+  steps.push(proxyName ? `ReShade (32-bit) as ${proxyName}, Chicken's worker in ${HOST_DIR}\\` : `ReShade's 32-bit Vulkan layer on for this game, Chicken's worker in ${HOST_DIR}\\`);
   if (restored.length) steps.push('this game\x27s saved Chicken settings restored');
   return { deployed: true, bits: 32, files: [...files], restoredCfg: restored.length > 0, steps };
 }

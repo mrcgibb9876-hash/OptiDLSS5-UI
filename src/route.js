@@ -337,13 +337,16 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
   const finish = (route, label, reason, steps, reasonVars = null, extra = {}) => {
     // Chicken is offered on NVIDIA, on a Feeder game or a plain-OptiScaler one (its 3.0 needs no
     // Feeder on Direct3D); dfc.supportedFor then says whether this game qualifies.
-    const dfcOffered = gpuVendor === 'nvidia' && (route === 'feeder' || route === 'optiscaler' || route === 'feeder32');
+    // A 32-bit Vulkan game has no route of this app's own ('unsupported'), but Chicken's 32-bit
+    // companion runs on it through ReShade's 32-bit layer.
+    const vulkan32 = route === 'unsupported' && detected.bitness === 32 && api === 'vulkan';
+    const dfcOffered = gpuVendor === 'nvidia' && (route === 'feeder' || route === 'optiscaler' || route === 'feeder32' || vulkan32);
     const onDfc = dfcOffered && dfcHere;
     if (onDfc) {
-      label = route === 'feeder' && !dfcCompat ? 'Deep Fried Chicken + Feeder' : route === 'feeder32' ? 'Deep Fried Chicken (32-bit)' : 'Deep Fried Chicken';
+      label = route === 'feeder' && !dfcCompat ? 'Deep Fried Chicken + Feeder' : (route === 'feeder32' || vulkan32) ? 'Deep Fried Chicken (32-bit)' : 'Deep Fried Chicken';
       // On a 32-bit game Chicken's own companion route replaced this app's whole stack: none of the
       // route's steps (dgVoodoo2, the Feeder helper) apply any more.
-      steps = route === 'feeder32' || dfcCompat
+      steps = route === 'feeder32' || vulkan32 || dfcCompat
         ? [{ key: 'dfc', label: 'Switch to Deep Fried Chicken', done: true }]
         : steps.map((s) => (s.key === 'optiscaler' ? { key: 'dfc', label: 'Switch to Deep Fried Chicken', done: true } : s));
     }
@@ -354,6 +357,8 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
       route, label, reason, reasonVars, steps, gpuVendor,
       // Which neural pass this folder is set up for; the renderer compares it with the game's choice.
       consumerHere: onDfc ? 'dfc' : 'optiscaler',
+      // Which of Chicken's routes the switch takes: its 32-bit companion, or the 64-bit one.
+      dfcBits: detected.bitness === 32 ? 32 : 64,
       dfcSupport: dfcOffered ? dfc.supportedFor({ api, bitness: detected.bitness || 64 }) : null,
       optiInstalled, feederDeployed, lumaDeployed, feederMisdeployed, shipsDlss,
       verified: verified.verification(exePath),

@@ -2384,6 +2384,12 @@ async function installGame(game) {
       renderGrid();
       return;
     }
+    // A 32-bit Vulkan game has no DLSS 5 route of this app's own: taking Chicken out is all there is.
+    if (route.route === 'unsupported') {
+      toast(t('Deep Fried Chicken is out. DLSS 5 has no route of its own for this game.'));
+      renderGrid();
+      return;
+    }
     // Back to DLSS 5: OptiScaler goes in below, as on any install.
   }
 
@@ -3990,7 +3996,7 @@ $('#btn-settings-dfc').addEventListener('click', async () => {
 
 function dfcUnsupportedWords(code) {
   if (code === 'dfc-vulkan-layer') return t('Chicken on Vulkan needs ReShade\'s Vulkan layer with add-on support, set up for this game.');
-  if (code === 'dfc-32bit') return t('Not for this game yet: on 32-bit games Chicken is set up here for DirectX 9 to 11 only.');
+  if (code === 'dfc-32bit') return t('Not for this game yet: on 32-bit games Chicken is set up here for DirectX 9 to 11, OpenGL and Vulkan.');
   return t('Chicken is set up here for 64-bit DirectX 9 to 12 games only.');
 }
 

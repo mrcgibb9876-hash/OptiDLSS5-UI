@@ -1439,7 +1439,7 @@ window.I18N.register("ko", {
   "Could not switch this game: {error}": "이 게임을 전환할 수 없습니다: {error}",
   "Installed with Deep Fried Chicken. Press Home in the game for its menu.": "Deep Fried Chicken으로 설치되었습니다. 게임에서 Home을 눌러 메뉴를 여세요.",
   "Not for this game yet: on Vulkan and OpenGL Chicken brings its own feeder, which this app does not set up.": "아직 이 게임은 안 됩니다: Vulkan과 OpenGL에서는 Chicken이 자체 feeder를 쓰며, 이 앱은 그것을 설정하지 않습니다.",
-  "Not for this game yet: on 32-bit games Chicken is set up here for DirectX 9 to 11 only.": "아직 이 게임은 안 됩니다: 32비트 게임에서는 Chicken이 여기서 DirectX 9~11에만 설정됩니다.",
+  "Not for this game yet: on 32-bit games Chicken is set up here for DirectX 9 to 11, OpenGL and Vulkan.": "아직 이 게임은 안 됩니다: 32비트 게임에서는 Chicken이 여기서 DirectX 9~11, OpenGL, Vulkan에 설정됩니다.",
   "Chicken is set up here for 64-bit DirectX 9 to 12 games only.": "여기서 Chicken은 64비트 DirectX 9~12 게임에만 설정됩니다.",
   "No Deep Fried Chicken copy yet -- add yours, then press Install.": "아직 Deep Fried Chicken 사본이 없습니다 -- 사본을 추가한 뒤 설치를 누르세요.",
   "Chicken is already here and this app did not place it. Delete its files to let this app manage it.": "Chicken이 이미 있지만 이 앱이 넣은 것이 아닙니다. 이 앱이 관리하게 하려면 해당 파일을 삭제하세요.",
@@ -1459,6 +1459,7 @@ window.I18N.register("ko", {
   "Not added yet.": "아직 추가되지 않았습니다.",
   "Added from {from} on {date}. Switch a game to it from its ⋯ menu.": "{date}에 {from}에서 추가됨. 게임의 ⋯ 메뉴에서 전환하세요.",
   "Added. Switch a game to it from its ⋯ menu.": "추가됨. 게임의 ⋯ 메뉴에서 전환하세요.",
-  "Add your own copy once, then switch a DirectX 9 to 12 game to it from the game's ⋯ menu (32-bit games too, DirectX 9 to 11). Unpack Chicken's .7z first and pick the whole folder it unpacked into.": "내 사본을 한 번 추가한 뒤, DirectX 9~12 게임을 게임의 ⋯ 메뉴에서 전환하세요(32비트 게임도 가능, DirectX 9~11). 먼저 Chicken의 .7z 압축을 풀고 압축을 푼 폴더 전체를 선택하세요.",
+  "Add your own copy once, then switch a game to it from the game's ⋯ menu: DirectX 9 to 12, Vulkan and OpenGL, 32-bit games too. Unpack Chicken's .7z first and pick the whole folder it unpacked into.": "내 사본을 한 번 추가한 뒤, 게임의 ⋯ 메뉴에서 전환하세요: DirectX 9~12, Vulkan, OpenGL, 32비트 게임도 가능. 먼저 Chicken의 .7z 압축을 풀고 압축을 푼 폴더 전체를 선택하세요.",
   "Chicken on Vulkan needs ReShade's Vulkan layer with add-on support, set up for this game.": "Vulkan에서 Chicken을 쓰려면 이 게임에 맞게 설정된, 애드온을 지원하는 ReShade Vulkan 레이어가 필요합니다.",
+  "Deep Fried Chicken is out. DLSS 5 has no route of its own for this game.": "Deep Fried Chicken을 제거했습니다. DLSS 5에는 이 게임을 위한 자체 경로가 없습니다.",
 });
