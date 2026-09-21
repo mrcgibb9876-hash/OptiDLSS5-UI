@@ -15,11 +15,13 @@
 //
 // WHY NOTHING HERE DOWNLOADS ANYTHING.
 //
-// Chicken is distributed through its author's Discord. There is no public repository, no release
-// URL and no stated licence, so this app cannot fetch it, cannot bundle it, and has no sha256 to
-// pin the way integrity.js pins every other download. The same rule the AMD installer is under
-// (CLAUDE.md, danielblnc/DLSS-NR-on-AMD#151): we do not redistribute someone else's work without
-// permission. What this module does instead is take a copy the USER already has, keep it in this
+// Chicken is distributed through its author's Discord: no public repository, no release URL, and so
+// nothing for integrity.js to pin a sha256 against. Its LICENSE.txt then settles it outright --
+// "you may not: copy, rehost, mirror, redistribute, sublicense, sell, rent, or bundle the
+// Software", unless Alexander gives prior written permission. So this is a licence term, not an
+// unknown, and the same position the AMD installer is under (CLAUDE.md,
+// danielblnc/DLSS-NR-on-AMD#151). A permission request is out with full credit offered; until it
+// is answered, nothing here fetches. What this module does instead is take a copy the USER already has, keep it in this
 // app's cache the way importDgVoodooZip keeps a user-supplied dgVoodoo2, and deploy that. The
 // bytes are theirs throughout.
 //
@@ -320,11 +322,14 @@ function readDfcState(dir) {
   };
 }
 
-// The config file, as text. Deliberately NOT parsed into keys and NOT written: Chicken's README
-// says "Don't edit its settings file", its schema is not published, and this app has never been
-// able to run the binary to check what a key does. Guessing one would be the same mistake as the
-// D3D12 resource state in engine v1.0.21 (CLAUDE.md) -- wrong defaults that only break on someone
-// else's machine. Shown as-is until a real cfg and its documentation are in hand.
+// The config file, as text. Parsing and writing live in dfccfg.js, which is where the field table
+// and the schema guard are; this is just the read that the panel and the status card start from.
+//
+// Writing it is allowed: Chicken's LICENSE.txt grants "create and share your own Deep Fried Chicken
+// configuration and preset files". The "don't edit its settings file" line this module once
+// deferred to came from the DLSS5-Feeder's README describing Chicken, not from Alexander -- his own
+// README says "Keep your existing deep-fried-chicken.cfg when updating", which is what deployDfc
+// does.
 function readCfgText(dir) {
   try { return fs.readFileSync(path.join(dir, CFG), 'utf8'); } catch { return null; }
 }

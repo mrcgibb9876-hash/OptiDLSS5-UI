@@ -6,8 +6,10 @@
 // Chicken's own config schema: taking the user's copy, deploying it, knowing whose copy is whose,
 // taking ours back out, and reading the state it reports.
 //
-// Nothing here downloads anything, and nothing here writes deep-fried-chicken.cfg. Chicken has no
-// public release and no stated licence, and its README says not to edit its settings file.
+// Nothing here downloads anything. Chicken has no public release, and its LICENSE.txt forbids
+// copying, mirroring or bundling it without prior written permission -- so the user supplies a copy
+// and this app deploys theirs. Writing deep-fried-chicken.cfg is a different question and a settled
+// one: the same licence expressly allows it, and test/dfccfg.test.js covers that half.
 
 const test = require('node:test');
 const assert = require('node:assert');
