@@ -1,6 +1,10 @@
 // 한국어. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("ko", {
+  "Deep Fried Chicken settings": "Deep Fried Chicken \uc124\uc815",
+  "This deep-fried-chicken.cfg was written by a newer Chicken ({schema}) than this app knows ({known}), so it is shown but not changed here. Use Chicken's own overlay.": "\uc774 deep-fried-chicken.cfg\ub294 \uc774 \uc571\uc774 \uc544\ub294 \ubc84\uc804({known})\ubcf4\ub2e4 \uc0c8\ub85c\uc6b4 Chicken({schema})\uc774 \uc791\uc131\ud588\uc2b5\ub2c8\ub2e4. \ub530\ub77c\uc11c \uc5ec\uae30\uc11c\ub294 \ubcf4\uc5ec\uc8fc\uae30\ub9cc \ud558\uace0 \ubcc0\uacbd\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4. Chicken\uc758 \uc790\uccb4 \uc624\ubc84\ub808\uc774\ub97c \uc0ac\uc6a9\ud558\uc138\uc694.",
+  "{offered} of this file's {total} settings are offered here -- the ones whose meaning is unambiguous. Everything else stays exactly as Chicken wrote it, and its own in-game overlay still has the full set.": "\uc774 \ud30c\uc77c\uc758 \uc124\uc815 {total}\uac1c \uc911 \uc758\ubbf8\uac00 \uba85\ud655\ud55c {offered}\uac1c\ub9cc \uc5ec\uae30\uc5d0 \uc81c\uacf5\ud569\ub2c8\ub2e4. \ub098\uba38\uc9c0\ub294 Chicken\uc774 \uae30\ub85d\ud55c \uadf8\ub300\ub85c \uc720\uc9c0\ub418\uba70, \uc804\uccb4 \uc124\uc815\uc740 \uac8c\uc784 \ub0b4 \uc624\ubc84\ub808\uc774\uc5d0 \uadf8\ub300\ub85c \uc788\uc2b5\ub2c8\ub2e4.",
+  "Could not save that setting: {error}": "\uc774 \uc124\uc815\uc744 \uc800\uc7a5\ud558\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4: {error}",
   "DLSS 5 (this app's engine)": "DLSS 5 (\uc774 \uc571\uc758 \uc5d4\uc9c4)",
   "Deep Fried Chicken (your copy)": "Deep Fried Chicken (\uc0ac\uc6a9\uc790 \uc0ac\ubcf8)",
   "No Deep Fried Chicken copy yet -- add yours and Deploy again.": "\uc544\uc9c1 Deep Fried Chicken \uc0ac\ubcf8\uc774 \uc5c6\uc2b5\ub2c8\ub2e4 -- \uc0ac\ubcf8\uc744 \ucd94\uac00\ud55c \ub4a4 \ubc30\ud3ec\ub97c \ub2e4\uc2dc \ub204\ub974\uc138\uc694.",

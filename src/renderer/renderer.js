@@ -3846,6 +3846,69 @@ async function loadConsumerSection(game) {
     lines.push(t('Chicken last reported: {state}.', { state: info.state.state }));
   }
   status.textContent = lines.join(' ');
+  await loadDfcSettings(game);
+}
+
+// Chicken's own settings, drawn from whatever dfccfg.js offers rather than from markup, so adding
+// a field there needs no change here. Each control writes straight to the cfg on change: Chicken
+// re-reads the file itself, and a Save button would let the panel and the file disagree.
+async function loadDfcSettings(game) {
+  const box = $('#dfc-settings');
+  const hint = $('#dfc-settings-hint');
+  const fields = $('#dfc-settings-fields');
+  if (!box) return;
+
+  const chosen = chosenConsumer(game);
+  if (chosen !== 'dfc' || !game || !game.exePath) { box.classList.add('hidden'); return; }
+  const r = await window.api.dfcCfgRead(game.exePath);
+  if (!r || !r.ok || !r.present) { box.classList.add('hidden'); return; }
+
+  box.classList.remove('hidden');
+  fields.innerHTML = '';
+  if (r.tooNew) {
+    // A cfg from a Chicken newer than the field table was read from. Shown, never written.
+    hint.textContent = t('This deep-fried-chicken.cfg was written by a newer Chicken ({schema}) than this app knows ({known}), so it is shown but not changed here. Use Chicken\x27s own overlay.', { schema: r.schema, known: r.knownSchema });
+    return;
+  }
+  // Said plainly, because it would otherwise read as all of Chicken's settings rather than a tenth.
+  hint.textContent = t('{offered} of this file\x27s {total} settings are offered here -- the ones whose meaning is unambiguous. Everything else stays exactly as Chicken wrote it, and its own in-game overlay still has the full set.', { offered: r.offeredKeys, total: r.totalKeys });
+
+  const byKey = Object.fromEntries(r.fields.map((f) => [f.key, f]));
+  for (const f of r.fields) {
+    if (!f.present) continue;
+    const row = document.createElement('div');
+    row.className = 'field-row';
+    const label = document.createElement('label');
+    label.textContent = t(f.label);
+    if (f.help) label.title = t(f.help);
+    const input = document.createElement('input');
+    input.id = `dfc-field-${f.key}`;
+    if (f.type === 'bool') {
+      input.type = 'checkbox';
+      input.checked = String(f.value).trim() !== '0';
+    } else {
+      input.type = 'number';
+      if (f.min !== undefined) input.min = String(f.min);
+      if (f.max !== undefined) input.max = String(f.max);
+      if (f.step !== undefined) input.step = String(f.step);
+      input.value = String(f.value);
+    }
+    // A field that only means anything while its switch is on says so by going dim, rather than
+    // disappearing -- someone looking for it should find it where they left it.
+    if (f.dependsOn && byKey[f.dependsOn] && String(byKey[f.dependsOn].value).trim() === '0') input.disabled = true;
+
+    input.addEventListener('change', async () => {
+      const value = f.type === 'bool' ? (input.checked ? 1 : 0) : Number(input.value);
+      const res = await window.api.dfcCfgWrite(game.exePath, { [f.key]: value });
+      if (!res.ok) { toast(t('Could not save that setting: {error}', { error: res.error })); return; }
+      loadDfcSettings(game);
+    });
+
+    row.appendChild(label);
+    row.appendChild(input);
+    if (f.unit) { const u = document.createElement('span'); u.textContent = f.unit; row.appendChild(u); }
+    fields.appendChild(row);
+  }
 }
 
 $('#game-neural-consumer').addEventListener('change', async () => {

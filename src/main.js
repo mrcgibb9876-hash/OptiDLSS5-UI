@@ -54,6 +54,7 @@ const defender = require('./defender');
 const elevate = require('./elevate');
 const saferemove = require('./saferemove');
 const dfc = require('./dfc');
+const dfccfg = require('./dfccfg');
 const panelwindow = require('./panelwindow');
 let electronAutoUpdater = null;
 try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
@@ -840,6 +841,39 @@ ipcMain.handle('dfc:supply', async (_evt, sourcePath) => {
     if (!picked) return { ok: true, cancelled: true };
     const r = await dfc.importDfcSource(picked, dfcCacheDir());
     return { ok: true, ...r };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// Chicken's own settings, in our panel. Writing this file is what its LICENSE.txt expressly allows
+// ("create and share your own Deep Fried Chicken configuration and preset files"), while shipping
+// its binaries is what it forbids -- so this reads and writes the config and nothing fetches.
+ipcMain.handle('dfc:cfg-read', async (_evt, exePath) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) return { ok: false, error: 'game .exe not found' };
+    const text = dfc.readCfgText(gameDir(exePath));
+    if (text === null) return { ok: true, present: false };
+    return { ok: true, present: true, ...dfccfg.readFields(text) };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// One field at a time, straight to disk: Chicken re-reads its config itself, and a panel that
+// batched changes would leave the file disagreeing with what the user is looking at.
+ipcMain.handle('dfc:cfg-write', async (_evt, { exePath, edits }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) return { ok: false, error: 'game .exe not found' };
+    const dir = gameDir(exePath);
+    const text = dfc.readCfgText(dir);
+    if (text === null) return { ok: false, error: 'there is no deep-fried-chicken.cfg in this folder yet' };
+    const r = dfccfg.applyEdits(text, edits || {});
+    if (r.refused) return { ok: false, error: r.refused };
+    // Written through the same helper the rest of the app uses, so a read-only or locked file is
+    // reported rather than throwing an errno at the renderer (#96).
+    await fsp.writeFile(dfc.cfgPath(dir), r.text, 'utf8');
+    return { ok: true, changed: r.changed };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }

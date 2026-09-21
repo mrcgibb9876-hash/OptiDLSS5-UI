@@ -281,6 +281,14 @@
             <button id="btn-dfc-supply" class="btn btn-ghost hidden" data-i18n>Add your Chicken copy…</button>
           </div>
           <span id="game-consumer-status" class="status-line"></span>
+
+          <!-- Chicken's own settings, in our panel. Built at runtime from the fields dfccfg.js
+               offers, so the markup carries no key names. -->
+          <div id="dfc-settings" class="hidden">
+            <label class="field-label" data-i18n>Deep Fried Chicken settings</label>
+            <p class="field-hint" id="dfc-settings-hint"></p>
+            <div id="dfc-settings-fields"></div>
+          </div>
         </div>
 
         <!-- The 32-bit route's motion-vector provider (legacy.js). Not advanced-only: the card's

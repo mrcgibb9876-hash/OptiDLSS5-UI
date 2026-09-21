@@ -1,6 +1,10 @@
 // Español. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("es", {
+  "Deep Fried Chicken settings": "Ajustes de Deep Fried Chicken",
+  "This deep-fried-chicken.cfg was written by a newer Chicken ({schema}) than this app knows ({known}), so it is shown but not changed here. Use Chicken's own overlay.": "Este deep-fried-chicken.cfg lo escribi\u00f3 un Chicken m\u00e1s nuevo ({schema}) del que conoce esta app ({known}), as\u00ed que se muestra pero no se modifica aqu\u00ed. Usa el overlay del propio Chicken.",
+  "{offered} of this file's {total} settings are offered here -- the ones whose meaning is unambiguous. Everything else stays exactly as Chicken wrote it, and its own in-game overlay still has the full set.": "Aqu\u00ed se ofrecen {offered} de los {total} ajustes de este archivo: aquellos cuyo significado es inequ\u00edvoco. Todo lo dem\u00e1s queda exactamente como lo escribi\u00f3 Chicken, y su propio overlay en el juego sigue teniendo el conjunto completo.",
+  "Could not save that setting: {error}": "No se pudo guardar ese ajuste: {error}",
   "DLSS 5 (this app's engine)": "DLSS 5 (el motor de esta app)",
   "Deep Fried Chicken (your copy)": "Deep Fried Chicken (tu copia)",
   "No Deep Fried Chicken copy yet -- add yours and Deploy again.": "A\u00fan no hay una copia de Deep Fried Chicken -- a\u00f1ade la tuya y pulsa Desplegar de nuevo.",

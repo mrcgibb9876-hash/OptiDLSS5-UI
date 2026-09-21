@@ -1,6 +1,10 @@
 // 简体中文. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("zh-CN", {
+  "Deep Fried Chicken settings": "Deep Fried Chicken \u8bbe\u7f6e",
+  "This deep-fried-chicken.cfg was written by a newer Chicken ({schema}) than this app knows ({known}), so it is shown but not changed here. Use Chicken's own overlay.": "\u8fd9\u4e2a deep-fried-chicken.cfg \u7531\u6bd4\u672c\u5e94\u7528\u6240\u77e5\u7248\u672c\uff08{known}\uff09\u66f4\u65b0\u7684 Chicken\uff08{schema}\uff09\u5199\u5165\uff0c\u56e0\u6b64\u8fd9\u91cc\u53ea\u663e\u793a\u800c\u4e0d\u4fee\u6539\u3002\u8bf7\u4f7f\u7528 Chicken \u81ea\u5e26\u7684\u53e0\u52a0\u5c42\u3002",
+  "{offered} of this file's {total} settings are offered here -- the ones whose meaning is unambiguous. Everything else stays exactly as Chicken wrote it, and its own in-game overlay still has the full set.": "\u6b64\u6587\u4ef6\u7684 {total} \u9879\u8bbe\u7f6e\u4e2d\uff0c\u8fd9\u91cc\u63d0\u4f9b\u4e86\u542b\u4e49\u660e\u786e\u7684 {offered} \u9879\u3002\u5176\u4f59\u90e8\u5206\u5b8c\u5168\u4fdd\u6301 Chicken \u5199\u5165\u7684\u72b6\u6001\uff0c\u5b83\u81ea\u5df1\u7684\u6e38\u620f\u5185\u53e0\u52a0\u5c42\u4ecd\u5305\u542b\u5168\u90e8\u8bbe\u7f6e\u3002",
+  "Could not save that setting: {error}": "\u65e0\u6cd5\u4fdd\u5b58\u8be5\u8bbe\u7f6e\uff1a{error}",
   "DLSS 5 (this app's engine)": "DLSS 5\uff08\u672c\u5e94\u7528\u7684\u5f15\u64ce\uff09",
   "Deep Fried Chicken (your copy)": "Deep Fried Chicken\uff08\u4f60\u7684\u526f\u672c\uff09",
   "No Deep Fried Chicken copy yet -- add yours and Deploy again.": "\u8fd8\u6ca1\u6709 Deep Fried Chicken \u526f\u672c \u2014\u2014 \u6dfb\u52a0\u4f60\u7684\u526f\u672c\u540e\u518d\u6b21\u70b9\u51fb\u201c\u90e8\u7f72\u201d\u3002",
