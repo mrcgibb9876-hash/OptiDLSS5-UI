@@ -791,12 +791,13 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
     // which the deploy then finds where it expects it.
     let dfcRemoved = null;
     if (wantConsumer === 'optiscaler' && (dfc.dfcOurs(dir) || dfc.reshadeProxyOf(dir))) {
-      dfcRemoved = await dfc.removeDfc(dir, { cacheDir: dfcCacheDir() });
+      dfcRemoved = await dfc.removeDfc(dir, dfcRemoveOptions());
       if (dfcRemoved.failed.length) throw new Error(`Chicken could not be taken out (${dfcRemoved.failed.map((f) => `${f.rel}: ${f.code}`).join(', ')}) -- close the game and try again`);
     }
     // Vulkan and OpenGL: Chicken's own producer replaces the Feeder rather than eating its contract
     // ("Do not install another neural feeder alongside"), so the Feeder is not deployed at all.
     if (wantConsumer === 'dfc' && (api === 'vulkan' || api === 'opengl')) {
+      await refreshDfcCopy('compat');
       const r = await dfc.switchToDfcCompat(dir, dfcCacheDir(), {
         api,
         nrDllPath: nrDllPath || null,
@@ -805,6 +806,17 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
         vulkanLayerReady: async () => {
           const s = await feeder.vulkanLayerStatus({ execFileAsync, exePath });
           return !!(s.registered && s.addon && s.appListed !== false);
+        },
+        // ReShade's own setup, headless and elevated: it installs both layers and lists this exe
+        // (the same call the 32-bit DXVK route makes; the function's name is from that route).
+        setUpVulkanLayer: async () => {
+          const setupPath = await feeder.downloadToCache(feeder.RESHADE_SETUP_URL, feederCacheDir(), path.basename(feeder.RESHADE_SETUP_URL), GITHUB_HEADERS);
+          const r = await legacy.setUpVulkanLayer32(dir, exePath, {
+            setupPath,
+            runElevated: (file, args) => elevate.runElevated(file, args, { execFileAsync }),
+            layerStatus: () => feeder.vulkanLayerStatus({ execFileAsync, exePath, bitness: 64 }),
+          });
+          return { ...r, exe: exePath };
         },
         reshadeSetup: () => feeder.downloadToCache(feeder.RESHADE_SETUP_URL, feederCacheDir(), path.basename(feeder.RESHADE_SETUP_URL), GITHUB_HEADERS),
         placeNvngxDlss: (d) => feeder.deployNvngxDlss(d, getRhiManifest, compareStreamlineVersions, feederCacheDir(), GITHUB_HEADERS),
@@ -950,6 +962,7 @@ ipcMain.handle('dfc:switch', async (_evt, { exePath, to, nrDllPath }) => {
         e.code = (support && support.code) || 'dfc-route';
         throw e;
       }
+      if (route.dfcBits === 32) await refreshDfcCopy(32);
       // A 32-bit game: Chicken's own companion route, with this app's 32-bit route taken out whole.
       const r = route.dfcBits === 32
         ? await dfc.switchToDfc32(dir, dfcCacheDir(), {
@@ -999,20 +1012,80 @@ function dfcCacheDir() {
 
 // Settings: the user points at Chicken's zip or the folder they unpacked it into, once, and every
 // game can use it after that. There is no download to offer -- see dfc.js for why.
+// 7-Zip, where its installer puts it. Chicken 3.0 is handed out as a .7z, which nothing built into
+// Windows can open when it is password-protected.
+function sevenZipExe() {
+  for (const base of [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.ProgramW6432]) {
+    if (!base) continue;
+    const p = path.join(base, '7-Zip', '7z.exe');
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
+// Chicken's .7z carries a password its author prints in the release post and in its own README
+// ("Archive password: chicken"), so that every player can open it -- used here only to unpack the
+// player's own download into a temporary folder that is removed again.
+const DFC_ARCHIVE_PASSWORD = 'chicken';
+
+// The player's copy into the cache, from whatever they picked: the .7z itself (unpacked with 7-Zip),
+// a .zip, a folder, or any file inside the folder they unpacked it into (the Windows picker cannot
+// offer files and folders at once). Remembered in full, for refreshDfcCopy.
+async function importChicken(picked) {
+  let source = picked;
+  let temp = null;
+  if (/\.7z$/i.test(picked)) {
+    const sz = sevenZipExe();
+    if (!sz) {
+      throw new Error(`${path.basename(picked)} is a password-protected .7z and 7-Zip is not installed -- unpack it (the password is in Chicken's post), then pick any file in the folder it unpacked into`);
+    }
+    temp = path.join(os.tmpdir(), `dlss5ui-dfc-${Date.now()}`);
+    try {
+      await execFileAsync(sz, ['x', '-y', `-p${DFC_ARCHIVE_PASSWORD}`, `-o${temp}`, picked], { windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
+    } catch (e) {
+      await fsp.rm(temp, { recursive: true, force: true }).catch(() => {});
+      throw new Error(`7-Zip could not unpack ${path.basename(picked)} -- unpack it yourself, then pick any file in the folder it unpacked into`);
+    }
+    source = temp;
+  } else if (fs.existsSync(picked) && fs.statSync(picked).isFile() && !/\.zip$/i.test(picked)) {
+    source = path.dirname(picked);
+  }
+  try {
+    const r = await dfc.importDfcSource(source, dfcCacheDir());
+    dfc.recordSource(dfcCacheDir(), picked);
+    return { ...r, from: path.basename(picked) };
+  } finally {
+    if (temp) await fsp.rm(temp, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+// A copy added before the app knew about Chicken's 32-bit or Vulkan/OpenGL parts, refreshed from
+// where it was picked when a switch needs one of them. Nothing happens when the part is there, or the
+// original is gone (the switch then says what to add).
+async function refreshDfcCopy(need) {
+  const cache = dfcCacheDir();
+  const missing = (need === 32 && !dfc.cached32(cache)) || (need === 'compat' && !dfc.cachedCompat(cache));
+  if (!missing) return;
+  const info = dfc.suppliedInfo(cache) || {};
+  if (!info.sourcePath || !fs.existsSync(info.sourcePath)) return;
+  try { await importChicken(info.sourcePath); } catch {}
+}
+
 ipcMain.handle('dfc:supply', async (_evt, sourcePath) => {
   try {
     const picked = sourcePath || (await (async () => {
       const r = await dialog.showOpenDialog({
-        // A folder picker: on Windows a dialog cannot pick files and folders both, and Chicken 3.0
-        // comes as a password-protected .7z that has to be unpacked anyway.
-        title: 'Pick the folder you unpacked Deep Fried Chicken into',
-        message: 'The folder with 64-bit inside it (or the 64-bit folder itself)',
-        properties: ['openDirectory'],
+        title: 'Pick Deep Fried Chicken\'s .7z, or any file in the folder you unpacked it into',
+        properties: ['openFile'],
+        filters: [
+          { name: 'Deep Fried Chicken (.7z, .zip)', extensions: ['7z', 'zip'] },
+          { name: 'Any file in the unpacked folder', extensions: ['*'] },
+        ],
       });
       return r.canceled || !r.filePaths.length ? null : r.filePaths[0];
     })());
     if (!picked) return { ok: true, cancelled: true };
-    const r = await dfc.importDfcSource(picked, dfcCacheDir());
+    const r = await importChicken(picked);
     return { ok: true, ...r };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
@@ -2437,10 +2510,17 @@ ipcMain.handle('game:status', (_evt, exePath) => {
   // Cheap marker checks on every card render: another DLSS 5 toolchain in the folder is the
   // one thing that makes an otherwise correct install crash, so it is said on the card itself.
   const foreign = foreignToolchains(dir);
-  const warnings = foreign.map((f) => ({
-    message: 'Another DLSS 5 toolchain is installed here ({tool}: {files}) -- two stacks hooking the same DLSS call crash the game. Remove it with its own uninstaller before using this one.',
-    vars: { tool: f.tool, files: f.files.join(', ') },
-  }));
+  // Deep Fried Chicken copied in by hand is the other neural pass this app can run, not a rival stack:
+  // the card says how to switch to it (the switch takes it over, dfc.js) rather than warning of a crash.
+  const warnings = foreign.map((f) => (f.tool === 'Deep Fried Chicken'
+    ? {
+      message: 'Deep Fried Chicken was copied into this folder by hand ({files}). Switch this game to Chicken from its ⋯ menu and the app takes it over, or delete those files to stay on DLSS 5.',
+      vars: { files: f.files.join(', ') },
+    }
+    : {
+      message: 'Another DLSS 5 toolchain is installed here ({tool}: {files}) -- two stacks hooking the same DLSS call crash the game. Remove it with its own uninstaller before using this one.',
+      vars: { tool: f.tool, files: f.files.join(', ') },
+    }));
   const marker = engines.readEngineMarker(dir);
   const engine = marker && marker.engine ? engines.normalizeEngine(marker.engine) : null;
   return { exeMissing: false, hasIni, hasNr, hasUninstaller, dir, backends, foreign, warnings, engine, store: storeOf(exePath) };
@@ -4267,7 +4347,7 @@ async function preflightFor(exePath, detected) {
   try { run = await runlog.analyzeRun(dir, { optiDir: optiScalerDirFor(dir) }); } catch {}
   const gathered = await preflight.gather({
     exePath, dir, exes, gpuInfo, detected: effective, route, run,
-    ourReShade: feeder.feederDeployed(dir) || lumaue.lumaUeDeployed(dir),
+    ourReShade: feeder.feederDeployed(dir) || lumaue.lumaUeDeployed(dir) || dfc.dfcPresent(dir),
     probe: probe.summary(facts),
   }, { execFileAsync, detect: { antiCheatPresent, antiCheatStub } });
   return { checks: preflight.evaluate(gathered), gpuPrefs: gathered.gpuPrefs };

@@ -85,6 +85,10 @@ function diagnose(ctx) {
   if (route.route === 'unsupported' && route.consumerHere !== 'dfc') return out('unavailable', 'unsupported', { reason: route.reason || '' });
 
   // Two stacks on one DLSS call crash before anything else can be judged.
+  // Chicken copied in by hand, and nothing else: the answer is the switch, which takes it over.
+  if (foreign.length && foreign.every((f) => f.tool === 'Deep Fried Chicken')) {
+    return out('step', 'dfc-hand-placed', { files: foreign.flatMap((f) => f.files).join(', ') });
+  }
   if (foreign.length) return fix('foreign', 'remove-foreign', { tool: foreign.map((f) => f.tool).join(', ') });
   // The driver says DLSS 5 cannot run on it. No file in the game folder changes that, so it goes
   // before every per-folder finding -- otherwise the user fixes those first and still gets nothing.

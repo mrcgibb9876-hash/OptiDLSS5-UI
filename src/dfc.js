@@ -274,6 +274,16 @@ async function importDfcSource(sourcePath, cacheDir) {
   return { path: dest, files: fs.readdirSync(dest).sort(), from: info.from };
 }
 
+// Where the copy came from, in full: what main.js re-imports from when a part is missing later.
+function recordSource(cacheDir, sourcePath) {
+  const file = path.join(cacheDir, `${CACHE_NAME}.json`);
+  let info = {};
+  try { info = JSON.parse(fs.readFileSync(file, 'utf8')); } catch {}
+  info.from = path.basename(sourcePath);
+  info.sourcePath = sourcePath;
+  try { fs.writeFileSync(file, JSON.stringify(info, null, 2), 'utf8'); } catch {}
+}
+
 // Which copy the app has: the name of what was picked, and when. Null for a copy imported before
 // this was recorded, or none at all.
 function suppliedInfo(cacheDir) {
@@ -467,7 +477,21 @@ async function removeDfc(dir, { cacheDir = null, uninstall = false, unlistVulkan
 const RESHADE_PLAIN = 'ReShade64.dll';
 // ReShade as the D3D11/D3D12 game's dxgi.dll -- the name ReShade's own installer uses for both.
 const RESHADE_PROXY = 'dxgi.dll';
-const HAND_PLACED = 'copied in by hand, not by this app -- delete its files to let this app manage Chicken here';
+const HAND_PLACED = 'copied in by hand, not by this app -- switching this game to Chicken from its ⋯ menu lets the app take it over';
+
+// A Chicken the player copied in by hand, taken over when they switch the game to Chicken here:
+// every Chicken name beside the exe (and its worker folder, on 32-bit) becomes this app's to update
+// and, on the way back, to remove. Written only once the switch is about to change the folder, so a
+// switch that refuses leaves the player's copy exactly as unclaimed as it was.
+const CHICKEN_NAMES = [ADDON, NVNGX, CFG, ADDON32, BRIDGE_CFG, COMPAT_ADDON, ...DOCS];
+function handPlaced(dir) {
+  return dfcPresent(dir) && !dfcOurs(dir);
+}
+function adoptHandPlaced(dir) {
+  const files = CHICKEN_NAMES.filter((n) => fs.existsSync(path.join(dir, n)));
+  const hostIsChicken = fs.existsSync(path.join(dir, HOST_DIR, ADDON));
+  writeMarker(dir, { files, dirs: hostIsChicken ? [HOST_DIR] : [], adopted: true, adoptedAt: new Date().toISOString() });
+}
 
 // OptiScaler's install journal (main.js INSTALL_MARKER): which proxy it took, and whose file it set aside.
 const OPTISCALER_JOURNAL = '.optiscaler-manager-install.json';
@@ -518,8 +542,8 @@ function supportedFor(detected) {
 //   fetchReShade      places a plain ReShade64.dll (feeder.js deployReShade), for a game that has
 //                     none of its own -- one on the plain OptiScaler route, no Feeder
 async function switchToDfc(dir, cacheDir, { nrDllPath = null, removeOptiScaler, fetchReShade = null } = {}) {
-  if (!cachedDfc(cacheDir)) throw new Error('no Deep Fried Chicken copy has been added yet -- add yours in Edit first');
-  if (dfcPresent(dir) && !dfcOurs(dir)) throw new Error(`Deep Fried Chicken is already in this folder, ${HAND_PLACED}`);
+  if (!cachedDfc(cacheDir)) throw new Error('no Deep Fried Chicken copy has been added yet -- add yours in Settings first');
+  const adopting = handPlaced(dir);
 
   const plain = path.join(dir, RESHADE_PLAIN);
   const proxy = path.join(dir, RESHADE_PROXY);
@@ -527,8 +551,11 @@ async function switchToDfc(dir, cacheDir, { nrDllPath = null, removeOptiScaler, 
   // A ReShade64.dll is ours to move only when the Feeder put it there; anything else by that name
   // (Luma's, the player's) is not touched.
   const feederReShade = fs.existsSync(plain) && fs.existsSync(path.join(dir, 'dlss5-feed.addon64'));
+  // The hand-made Chicken setup: the player's ReShade already in the proxy slot, no Feeder. That
+  // ReShade is taken over with the rest rather than fetched again.
+  const adoptProxy = adopting && !already && !feederReShade && fs.existsSync(proxy) && isReShade(proxy);
   if (!already && fs.existsSync(plain) && !feederReShade) throw new Error(`${RESHADE_PLAIN} here is not this app's -- it is left alone`);
-  if (!already && !feederReShade && !fetchReShade) throw new Error(`${RESHADE_PLAIN} is not here -- deploy the Feeder first`);
+  if (!already && !feederReShade && !adoptProxy && !fetchReShade) throw new Error(`${RESHADE_PLAIN} is not here -- deploy the Feeder first`);
   const nrHere = fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'));
   if (!nrHere && !(nrDllPath && fs.existsSync(nrDllPath))) throw new Error('the NR model (nvngx_dlssnr.dll) is not set up in Settings, and Chicken needs it beside its add-on');
   // The proxy slot has to end up free for ReShade. Checked now, not after OptiScaler is out: a
@@ -548,12 +575,13 @@ async function switchToDfc(dir, cacheDir, { nrDllPath = null, removeOptiScaler, 
   const steps = [];
   // Fetched BEFORE OptiScaler comes out: offline, the swap stops here with the folder as it was.
   let reshadeFetched = false;
-  if (!already && !feederReShade) {
+  if (!already && !feederReShade && !adoptProxy) {
     await fetchReShade(dir);
     if (!fs.existsSync(plain)) throw new Error('ReShade could not be fetched -- check the connection and try again');
     reshadeFetched = true;
     steps.push('fetched ReShade');
   }
+  if (adopting) adoptHandPlaced(dir);
   const out = await removeOptiScaler(dir);
   if (out && out.failed && out.failed.length) {
     if (reshadeFetched) { try { fs.rmSync(plain, { force: true }); } catch {} }
@@ -561,7 +589,9 @@ async function switchToDfc(dir, cacheDir, { nrDllPath = null, removeOptiScaler, 
   }
   if (out && out.removed && out.removed.length) steps.push('took OptiScaler out');
 
-  if (!already) {
+  if (!already && adoptProxy) {
+    steps.push(`took over the ReShade already loading as ${RESHADE_PROXY}`);
+  } else if (!already) {
     // dxgi.dll is free now unless it is something that is neither ours nor ReShade (a game's own,
     // restored by the OptiScaler removal): that is never overwritten.
     if (fs.existsSync(proxy)) throw new Error(`${RESHADE_PROXY} here is not this app's -- ReShade cannot take its place`);
@@ -576,7 +606,8 @@ async function switchToDfc(dir, cacheDir, { nrDllPath = null, removeOptiScaler, 
     steps.push('placed the NR model');
   }
 
-  const deployed = await deployDfc(dir, cacheDir, { extra: { reshadeProxy: RESHADE_PROXY, ...(nrPlaced ? { nrPlaced } : {}), ...(reshadeFetched ? { reshadeFetched } : {}) } });
+  // An adopted ReShade is this app's now: it goes with Chicken on the way back, like a fetched one.
+  const deployed = await deployDfc(dir, cacheDir, { extra: { reshadeProxy: RESHADE_PROXY, ...(nrPlaced ? { nrPlaced } : {}), ...((reshadeFetched || adoptProxy) ? { reshadeFetched: true } : {}) } });
   steps.push(deployed.restoredCfg ? 'deployed Chicken with this game\x27s saved settings' : 'deployed Chicken');
   return { ...deployed, steps };
 }
@@ -623,12 +654,12 @@ async function restoreStashedCfg(dir, cacheDir, rel = CFG) {
 //   placeNvngxDlss(dir)  the x64 nvngx_dlss.dll beside the exe, when none is there
 //   nrDllPath            the NR model
 async function switchToDfcCompat(dir, cacheDir, deps = {}) {
-  const { api, nrDllPath = null, removeOptiScaler, removeFeeder, vulkanLayerReady, reshadeSetup, placeNvngxDlss } = deps;
+  const { api, nrDllPath = null, removeOptiScaler, removeFeeder, vulkanLayerReady, reshadeSetup, placeNvngxDlss, setUpVulkanLayer = null } = deps;
   if (!cachedDfc(cacheDir)) throw new Error('no Deep Fried Chicken copy has been added yet -- add yours in Settings first');
   const compat = cachedCompat(cacheDir);
   if (!compat) throw new Error('the Chicken copy you added has no Vulkan/OpenGL part -- add the whole unpacked folder (the one with Compatibility inside) in Settings');
   if (api !== 'vulkan' && api !== 'opengl') throw new Error(`not a Vulkan or OpenGL game (${api || 'not detected'})`);
-  if (dfcPresent(dir) && !dfcOurs(dir)) throw new Error(`Deep Fried Chicken is already in this folder, ${HAND_PLACED}`);
+  const adopting = handPlaced(dir);
   const nrHere = fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'));
   if (!nrHere && !(nrDllPath && fs.existsSync(nrDllPath))) throw new Error('the NR model (nvngx_dlssnr.dll) is not set up in Settings, and Chicken needs it beside its add-on');
   const before = readMarker(dir);
@@ -637,13 +668,24 @@ async function switchToDfcCompat(dir, cacheDir, deps = {}) {
   // Everything that can refuse, before anything is touched.
   let setup = null;
   const { openZip: open, findEntry: find, extractEntry: extract } = require('./zip');
-  if (api === 'vulkan') {
-    if (!(await vulkanLayerReady())) {
-      const e = new Error('ReShade\x27s Vulkan layer with add-on support is not set up for this game yet');
+  // Vulkan: ReShade's layer, with add-ons and on for this exe. Set up here when it is not (ReShade's
+  // own setup, headless, one administrator prompt -- legacy.setUpVulkanLayer32 installs both layers),
+  // and the exe comes back off its app list with Chicken when this switch put it there.
+  let vulkanLayer = before && before.vulkanLayer ? before.vulkanLayer : null;
+  if (api === 'vulkan' && !(await vulkanLayerReady())) {
+    const layer = setUpVulkanLayer ? await setUpVulkanLayer() : null;
+    if (!layer || !layer.ok || !(await vulkanLayerReady())) {
+      const e = new Error(`ReShade's Vulkan layer with add-on support could not be set up for this game${layer && layer.error ? ` (${layer.error})` : ''}`);
       e.code = 'dfc-vulkan-layer';
       throw e;
     }
-  } else if (!already) {
+    vulkanLayer = {
+      exe: layer.exe || null,
+      appsPath: (layer.after && layer.after.appsPath) || null,
+      listedByUs: !!(layer.before && layer.before.appListed !== true && layer.after && layer.after.appListed === true),
+    };
+  }
+  if (api === 'opengl' && !already) {
     const gl = path.join(dir, 'opengl32.dll');
     // A game's own opengl32.dll that the Feeder set aside comes back when the Feeder leaves.
     if (fs.existsSync(path.join(dir, 'opengl32.dll.dlss5ui-orig'))) {
@@ -655,6 +697,7 @@ async function switchToDfcCompat(dir, cacheDir, deps = {}) {
   }
 
   const steps = [];
+  if (adopting) adoptHandPlaced(dir);
   if (!already) {
     const o = await removeOptiScaler(dir);
     if (o && o.failed && o.failed.length) throw new Error(`OptiScaler could not be taken out (${o.failed.map((f) => `${f.rel}: ${f.code}`).join(', ')}) -- close the game and try again`);
@@ -715,6 +758,7 @@ async function switchToDfcCompat(dir, cacheDir, deps = {}) {
     ...(nrPlaced ? { nrPlaced } : {}),
     // Vulkan: no proxy of ours, but the ini and preset above are; OpenGL: the proxy too.
     reshadeIni: true,
+    ...(vulkanLayer ? { vulkanLayer } : {}),
     ...(api === 'opengl' ? { reshadeProxy: 'opengl32.dll', reshadeFetched: true } : {}),
   });
   steps.push(api === 'opengl' ? 'ReShade as opengl32.dll, Chicken\x27s producer in' : 'Chicken\x27s producer in, on ReShade\x27s Vulkan layer');
@@ -764,15 +808,18 @@ async function switchToDfc32(dir, cacheDir, deps = {}) {
   if (!tree) throw new Error('the Chicken copy you added has no 32-bit part -- add the whole unpacked folder (the one with 32-bit and 64-bit inside) in Settings');
   if (!Object.prototype.hasOwnProperty.call(RESHADE32_FOR, api)) throw new Error(`Chicken is set up here for 32-bit DirectX 9 to 11, OpenGL and Vulkan games, and this one is ${api || 'not detected'}`);
   const proxyName = RESHADE32_FOR[api];
-  if (dfcPresent(dir) && !dfcOurs(dir)) throw new Error(`Deep Fried Chicken is already in this folder, ${HAND_PLACED}`);
+  const adopting = handPlaced(dir);
+  // The player's own Chicken worker folder, taken over with the rest.
+  const adoptHost = adopting && fs.existsSync(path.join(dir, HOST_DIR, ADDON));
+  const adoptProxy = (rel) => adopting && rel && fs.existsSync(path.join(dir, rel)) && isReShade(path.join(dir, rel));
   if (!nrDllPath || !fs.existsSync(nrDllPath)) throw new Error('the NR model (nvngx_dlssnr.dll) is not set up in Settings, and Chicken\x27s worker needs it');
 
   const before = readMarker(dir);
   const already = !!(before && before.bits === 32 && dfcOurs(dir));
   // Everything that can refuse, before anything is touched.
   if (!already) {
-    if (proxyName && occupiedAfterRemoval(proxyName)) throw new Error(`${proxyName} here is not this app's -- ReShade cannot take its place`);
-    if (occupiedAfterRemoval(HOST_DIR)) throw new Error(`a ${HOST_DIR} folder here is not this app's -- Chicken's worker needs that name`);
+    if (proxyName && occupiedAfterRemoval(proxyName) && !adoptProxy(proxyName)) throw new Error(`${proxyName} here is not this app's -- ReShade cannot take its place`);
+    if (occupiedAfterRemoval(HOST_DIR) && !adoptHost) throw new Error(`a ${HOST_DIR} folder here is not this app's -- Chicken's worker needs that name`);
   }
   // ReShade fetched before this app's route comes out: offline, the swap stops with the folder as it was.
   const { openZip: open, findEntry: find, extractEntry: extract } = require('./zip');
@@ -801,17 +848,20 @@ async function switchToDfc32(dir, cacheDir, deps = {}) {
   }
 
   const steps = [];
+  if (adopting) adoptHandPlaced(dir);
   if (!already) {
     const out = await removeOurStack(dir);
     if (out && out.failed && out.failed.length) {
       throw new Error(`this app's 32-bit route could not be taken out (${out.failed.map((f) => `${f.rel}: ${f.code}`).join(', ')}) -- close the game and try again`);
     }
     steps.push('took the DLSS 5 32-bit route out');
-    const back = (proxyName && fs.existsSync(path.join(dir, proxyName))) ? proxyName : fs.existsSync(path.join(dir, HOST_DIR)) ? HOST_DIR : null;
+    const back = (proxyName && fs.existsSync(path.join(dir, proxyName)) && !adoptProxy(proxyName)) ? proxyName
+      : (fs.existsSync(path.join(dir, HOST_DIR)) && !adoptHost) ? HOST_DIR : null;
     if (back) throw new Error(`${back} came back after the DLSS 5 route was taken out -- it is the game's own, so Chicken cannot use that name`);
   }
 
-  const files = new Set(already && Array.isArray(before.files) ? before.files : []);
+  const adoptedMarker = adopting ? readMarker(dir) : null;
+  const files = new Set(already && Array.isArray(before.files) ? before.files : (adoptedMarker ? adoptedMarker.files : []));
   const hostDirMade = already ? (before.dirs || []).includes(HOST_DIR) : true;
   // The player's tuned cfgs first, so the tree's defaults below never overwrite them.
   const restored = [];
@@ -872,6 +922,8 @@ async function switchToDfc32(dir, cacheDir, deps = {}) {
 
   writeMarker(dir, {
     ...(already ? before : {}),
+    // Taken over from a hand-made copy: said in the record, for support and for Remove.
+    ...(adopting || (before && before.adopted) ? { adopted: true } : {}),
     bits: 32,
     files: [...files],
     dirs: hostDirMade ? [HOST_DIR] : [],
@@ -938,7 +990,7 @@ module.exports = {
   ADDON, NVNGX, CFG, LOG, LICENSE, MARKER, CACHE_NAME,
   PAYLOAD, PAYLOAD_IF_ABSENT, STATES,
   CONSUMERS, DEFAULT_CONSUMER, isConsumer, consumerOf,
-  looksLikeDfc, importDfcSource, cachedDfc, suppliedInfo,
+  looksLikeDfc, importDfcSource, cachedDfc, suppliedInfo, recordSource,
   readMarker, dfcPresent, dfcOurs, deployDfc, removeDfc,
   RESHADE_PROXY, reshadeProxyOf, supportedFor, switchToDfc,
   ADDON32, BRIDGE_CFG, HOST_DIR, RESHADE32_FOR, cached32, switchToDfc32,

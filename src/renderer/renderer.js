@@ -1204,6 +1204,7 @@ function emulatorRendererWords(r) {
 function helpWords(diag) {
   const v = diag.vars || {};
   switch (diag.code) {
+    case 'dfc-hand-placed': return t('Deep Fried Chicken was copied into this folder by hand ({files}). Switch this game to Chicken from its ⋯ menu and the app takes it over, or delete those files to stay on DLSS 5.', v);
     case 'dfc-here': return v.state
       ? t('This game is switched to Deep Fried Chicken, so OptiScaler is not in the folder on purpose. Chicken last reported {state} (ARMED means it is running).', v)
       : t('This game is switched to Deep Fried Chicken, so OptiScaler is not in the folder on purpose. Chicken has not written a log yet: launch the game, press Home and open its tab.');
@@ -1331,6 +1332,7 @@ function helpSteps(diag) {
   switch (diag.code) {
     case 'driver-outdated': return [v.min ? t('Update the NVIDIA driver ({min} or newer)', v) : t('Update the NVIDIA driver'), t('Restart the PC'), launch];
     case 'dfc-here': return [t('Launch the game'), t('Press Home and open the Deep Fried Chicken tab')];
+    case 'dfc-hand-placed': return [t('Open the game\'s ⋯ menu and pick Neural pass: switch to Deep Fried Chicken')];
     case 'emulator-renderer': case 'emulator-renderer-mismatch': return [t('In {name}: {hint}', v), t('Start {name} again', v)];
     case 'nr-model-crash-emulator': return [
       t('In {name}: Graphics > Backend > Direct3D 11', v),
@@ -1443,6 +1445,7 @@ function helpShort(diag) {
     case 'luma-needs-dx11': return t('Switch the game to DirectX 11 for Luma');
     case 'nr-model-crash-emulator': return t('DLSS 5 crashed on D3D12 -- switch to Direct3D 11');
     case 'dfc-here': return v.state ? t('Deep Fried Chicken: {state}', v) : t('Deep Fried Chicken runs the neural pass here');
+    case 'dfc-hand-placed': return t('Chicken copied in by hand: switch to take it over');
     case 'emulator-renderer': return t('Set {name} to {renderer}', v);
     case 'emulator-renderer-mismatch': return t('{name} ran on {seen} -- set {renderer}', v);
     case 'nr-model-crash': return t('The DLSS 5 model crashed');
@@ -2333,9 +2336,9 @@ async function installGame(game) {
       ? await window.api.feederDeploy(game.exePath, provider.id, { force: false, licenseConfirmed: false, consumer, nrDllPath: settings.nrDllPath, swapOnly: route.feederDeployed })
       : { ok: false, error: t('no auto-fetchable motion-vector provider') };
     if (!deployed.ok && deployed.code === 'dfc-vulkan-layer') {
-      // Chicken on Vulkan needs ReShade's machine-wide layer, as the Feeder does; only ReShade's own
-      // installer can register it, so it is opened here for the player.
-      toast(dfcUnsupportedWords(deployed.code));
+      // The app's own set-up of ReShade's Vulkan layer did not finish (the administrator prompt
+      // declined, say): ReShade's installer is opened so the player can do it by hand.
+      toast(t('Could not switch this game: {error}', { error: deployed.error }));
       const r = await window.api.feederOpenReShadeSetup();
       if (r && r.ok) toast(t('ReShade\'s installer is open: pick this game\'s exe, choose Vulkan, tick "Enable loading of add-ons". Then press Install again.'));
       renderGrid();
@@ -3958,6 +3961,19 @@ const CONSUMER_LABELS = {
 // The card menu's swap: record the choice, and let Install do the swap whole. Chicken not added to
 // the app yet is asked for right here, rather than sending the player off to find where.
 async function switchNeuralPass(game, to) {
+  // Said before anything happens, and said as what it is: one comes out, the other goes in.
+  const route = await window.api.gameRoute(game.exePath, game.detectedPath);
+  const vulkan = route && route.effectiveApi === 'vulkan';
+  let ask;
+  if (to === 'dfc') {
+    ask = t('Switch {game} to Deep Fried Chicken? This removes DLSS 5 from the game folder and installs Deep Fried Chicken in its place. Switch back from this menu at any time.', { game: game.name });
+    if (vulkan) ask += '\n\n' + t('Windows asks once for administrator permission: ReShade\'s Vulkan layer is set up for this game.');
+  } else if (route && route.route === 'unsupported') {
+    ask = t('Take Deep Fried Chicken out of {game}? DLSS 5 has no route of its own for this game, so nothing goes in its place.', { game: game.name });
+  } else {
+    ask = t('Switch {game} back to DLSS 5? This removes Deep Fried Chicken from the game folder and installs DLSS 5 in its place. Your Chicken settings are kept for next time.', { game: game.name });
+  }
+  if (!window.confirm(ask)) return;
   if (to === 'dfc') {
     const st = await window.api.dfcStatus(null);
     if (!st || !st.supplied) {

@@ -143,10 +143,6 @@ test('a swap that would have to refuse refuses before anything is touched', asyn
     await assert.rejects(() => dfc.switchToDfc(g3, cache, { removeOptiScaler: remove }), /not this app's/);
     assert.strictEqual(fs.readFileSync(path.join(g3, 'dxgi.dll'), 'utf8'), 'a wrapper of theirs');
 
-    // A Chicken copied in by hand.
-    const g4 = feederRouteGame(path.join(base, 'd'));
-    fs.writeFileSync(path.join(g4, dfc.ADDON), 'THEIR addon');
-    await assert.rejects(() => dfc.switchToDfc(g4, cache, { removeOptiScaler: remove }), /copied in by hand/);
 
     // No copy supplied at all.
     const g5 = feederRouteGame(path.join(base, 'e'));
@@ -337,4 +333,57 @@ test('Game Help on a Chicken game reads Chicken\'s state, and never says "not in
   assert.deepStrictEqual([diagnose(ctx('ARMED')).status, diagnose(ctx('ARMED')).code], ['ok', 'dfc-here']);
   assert.deepStrictEqual([diagnose(ctx('CONFLICT')).status, diagnose(ctx('CONFLICT')).vars.state], ['step', 'CONFLICT']);
   assert.strictEqual(diagnose(ctx(null)).code, 'dfc-here');
+});
+
+test('a hand-made Chicken setup (their ReShade as dxgi.dll, Chicken beside it) is taken over by the switch', async () => {
+  // The standard hand install of Chicken on a 64-bit Direct3D game: ReShade as the game's proxy and
+  // Chicken's files beside it, no Feeder. Switching to Chicken here makes it this app's to manage;
+  // their ReShade is used as it is, their tuned cfg is kept.
+  const base = tmp('adopt');
+  try {
+    const cache = await suppliedCache(base);
+    const game = path.join(base, 'game');
+    fs.mkdirSync(game, { recursive: true });
+    fs.writeFileSync(path.join(game, 'Game.exe'), 'x');
+    fs.writeFileSync(path.join(game, 'dxgi.dll'), 'their ReShade build');
+    fs.writeFileSync(path.join(game, dfc.ADDON), 'THEIR addon');
+    fs.writeFileSync(path.join(game, dfc.NVNGX), 'THEIR nvngx');
+    fs.writeFileSync(path.join(game, dfc.CFG), 'passes=4\n');
+    fs.writeFileSync(path.join(game, 'nvngx_dlssnr.dll'), 'their model');
+    assert.ok(foreignToolchains(game).some((f) => f.tool === 'Deep Fried Chicken'));
+
+    let fetched = 0;
+    await dfc.switchToDfc(game, cache, {
+      removeOptiScaler: async () => ({ removed: [], kept: [], failed: [] }),
+      fetchReShade: async () => { fetched++; },
+    });
+    assert.strictEqual(fetched, 0, 'their ReShade is used, not fetched again');
+    assert.strictEqual(fs.readFileSync(path.join(game, 'dxgi.dll'), 'utf8'), 'their ReShade build');
+    assert.strictEqual(fs.readFileSync(path.join(game, dfc.ADDON), 'utf8'), 'fake chicken addon', 'the added copy replaces the hand-copied one');
+    assert.strictEqual(fs.readFileSync(path.join(game, dfc.CFG), 'utf8'), 'passes=4\n', 'their tuned cfg is kept');
+    assert.deepStrictEqual(foreignToolchains(game), [], 'taken over: no longer a foreign install');
+    const m = dfc.readMarker(game);
+    assert.strictEqual(m.adopted, true);
+    assert.strictEqual(m.reshadeProxy, 'dxgi.dll');
+
+    // And back: everything goes, their cfg stashed for next time.
+    const back = await dfc.removeDfc(game, { cacheDir: cache });
+    assert.deepStrictEqual(back.failed, []);
+    assert.deepStrictEqual(fs.readdirSync(game).sort(), ['Game.exe', 'nvngx_dlssnr.dll']);
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('a switch that refuses leaves a hand-copied Chicken unclaimed', async () => {
+  const base = tmp('adopt-refuse');
+  try {
+    const cache = await suppliedCache(base);
+    const game = path.join(base, 'game');
+    fs.mkdirSync(game, { recursive: true });
+    fs.writeFileSync(path.join(game, 'Game.exe'), 'x');
+    fs.writeFileSync(path.join(game, dfc.ADDON), 'THEIR addon');
+    // No NR model anywhere: the switch refuses.
+    await assert.rejects(() => dfc.switchToDfc(game, cache, { removeOptiScaler: async () => ({ removed: [], failed: [] }), fetchReShade: async () => {} }), /NR model/);
+    assert.strictEqual(dfc.readMarker(game), null, 'no marker: still theirs');
+    assert.strictEqual(fs.readFileSync(path.join(game, dfc.ADDON), 'utf8'), 'THEIR addon');
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });

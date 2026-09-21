@@ -270,15 +270,28 @@ test('a copy added without its 32-bit folder says what to add', async () => {
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
 
-test('a hand-copied 32-bit Chicken reads as a foreign install; ours does not', { skip: !onWindows }, async () => {
+test('a hand-copied 32-bit Chicken reads as foreign until a switch takes it over', { skip: !onWindows }, async () => {
   const base = tmp('foreign');
   try {
     const theirs = path.join(base, 'theirs');
-    write(theirs, 'deep-fried-chicken.addon32', 'x');
+    write(theirs, 'Game.exe', 'x');
+    write(theirs, 'deep-fried-chicken.addon32', 'their addon32');
+    write(theirs, 'deep-fried-chicken-bridge.cfg', 'mode=7\n');
+    // Their own hand-made setup: ReShade32 as d3d9.dll and Chicken's worker in host64\.
+    write(theirs, 'd3d9.dll', 'their ReShade 32');
+    write(theirs, 'host64/deep-fried-chicken.addon64', 'their worker addon');
     assert.ok(foreignToolchains(theirs).some((f) => f.tool === 'Deep Fried Chicken'));
-    await assert.rejects(async () => {
-      const cache = await supplied(path.join(base, 's'));
-      await dfc.switchToDfc32(theirs, cache, deps(path.join(base, 's')));
-    }, /copied in by hand/);
+
+    const s = path.join(base, 's');
+    const cache = await supplied(s);
+    // Nothing of this app's is in the folder: whatever d3d9.dll and host64\ are, they are theirs --
+    // except that an explicit switch takes a Chicken setup over.
+    await dfc.switchToDfc32(theirs, cache, deps(s, { occupiedAfterRemoval: (rel) => fs.existsSync(path.join(theirs, rel)), removeOurStack: async () => ({ removed: [], failed: [] }) }));
+    assert.strictEqual(dfc.dfcOurs(theirs), true);
+    assert.strictEqual(fs.readFileSync(path.join(theirs, 'deep-fried-chicken.addon32'), 'utf8'), 'addon32', 'our copy of Chicken, not the hand-copied one');
+    assert.strictEqual(fs.readFileSync(path.join(theirs, 'deep-fried-chicken-bridge.cfg'), 'utf8'), 'mode=7\n', 'their tuned bridge cfg is kept');
+    assert.strictEqual(fs.readFileSync(path.join(theirs, 'd3d9.dll'), 'utf8'), 'ReShade 32-bit add-on build');
+    assert.deepStrictEqual(foreignToolchains(theirs), [], 'taken over: no longer foreign');
+    assert.strictEqual(dfc.readMarker(theirs).adopted, true);
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });

@@ -350,7 +350,7 @@ test('the deploy acts on the chosen consumer, and never leaves two of them in a 
   assert.match(body, /results\.consumer =/, 'the deploy records which consumer was chosen');
   assert.match(body, /dfc\.switchToDfc\(/, 'and swaps Chicken in when it is the one');
   assert.match(body, /removeOptiScaler: removeOptiScalerForSwap/, 'taking OptiScaler out, so two passes never share a folder');
-  assert.match(body, /dfc\.dfcOurs\(dir\)[\s\S]*dfc\.removeDfc\(dir, \{ cacheDir/, 'and takes our Chicken out when switching back, keeping its cfg');
+  assert.match(body, /dfc\.dfcOurs\(dir\)[\s\S]*dfc\.removeDfc\(dir, dfcRemoveOptions\(\)\)/, 'and takes our Chicken out when switching back, keeping its cfg');
   assert.match(body, /dfc\.supportedFor\(/, 'and refuses a game the swap is not built for before touching it');
 });
 
