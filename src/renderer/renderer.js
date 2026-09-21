@@ -450,7 +450,7 @@ async function renderGrid() {
           <button class="btn btn-ghost btn-edit">${escapeHtml(t('Settings'))}</button>
           <button class="btn btn-ghost btn-help has-tip" data-tip="${escapeHtml(t('Checks this game\'s setup and its last run, applies the fix when the app has one, tells you plainly when DLSS 5 is not available here, and can save a bundle to share or ask an AI.'))}">${escapeHtml(t('Game Help'))}</button>
           <button class="btn btn-ghost btn-analyse has-tip" data-tip="${escapeHtml(t('Starts the game once, as it is, for about 25 seconds and writes down what it really loads -- the graphics API, which DLLs from where, and which process hands off to which. Nothing is changed; the game is closed at the end.'))}">${escapeHtml(t('Analyse game'))}</button>
-          <button class="btn btn-ghost btn-verify has-tip${backends.optiscaler ? '' : ' hidden'}" data-tip="${escapeHtml(t('Starts the game for about 30 seconds, reads its logs the way Game Help does, and closes it again: did DLSS 5 run?'))}">${escapeHtml(t('Verify install'))}</button>
+          <button class="btn btn-ghost btn-verify has-tip${backends.optiscaler && !backends.dfc ? '' : ' hidden'}" data-tip="${escapeHtml(t('Starts the game for about 30 seconds, reads its logs the way Game Help does, and closes it again: did DLSS 5 run?'))}">${escapeHtml(t('Verify install'))}</button>
           <button class="btn btn-ghost btn-swap-layer hidden"></button>
           <button class="btn btn-ghost btn-mv-provider hidden"></button>
           <button class="btn btn-ghost btn-open">${escapeHtml(t('Open folder'))}</button>
@@ -942,6 +942,14 @@ async function applyRecommendation(game, card, backends, generation = renderGene
     claim({ bad: true, text: describeRun(run), title: describeRun(run), action: { label: t('Help'), run: () => openHelp(game) } });
   }
 
+  // The neural pass chosen in Edit is not the one this folder is set up for: Install does the swap.
+  // Claimed before "Next:", because a route that is complete for the OTHER consumer says nothing.
+  if (route.route === 'feeder' && route.consumerHere && route.consumerHere !== chosenConsumer(game)) {
+    const to = chosenConsumer(game) === 'dfc' ? t('Deep Fried Chicken') : t('DLSS 5');
+    const words = t('Press Install to switch this game to {to}', { to });
+    claim({ bad: true, text: words, title: words, action: { label: t('Install'), run: () => installGame(game) } });
+  }
+
   // OptiScaler is in but the rest of its route is not (a Feeder game installed before the
   // one-click flow existed, or Luma UE still waiting on its licence confirmation).
   if (route.optiInstalled && !route.complete && route.nextStep) {
@@ -1164,6 +1172,9 @@ function emulatorRendererWords(r) {
 function helpWords(diag) {
   const v = diag.vars || {};
   switch (diag.code) {
+    case 'dfc-here': return v.state
+      ? t('This game is switched to Deep Fried Chicken, so OptiScaler is not in the folder on purpose. Chicken last reported {state} (ARMED means it is running).', v)
+      : t('This game is switched to Deep Fried Chicken, so OptiScaler is not in the folder on purpose. Chicken has not written a log yet: launch the game, press Home and open its tab.');
     case 'emulator-renderer': return t('{name} ran and nothing called DLSS. DLSS 5 is set up for {renderer}, so {name} has to render with it -- on any other renderer there is nothing for it to hook.', v);
     case 'emulator-renderer-mismatch': return emulatorRendererWords(v);
     case 'catalog-prefers': return t('What is known about this game points away from the route the app picked ({pick}): {why}. {route} has the better record here, and Fix it switches to it.', {
@@ -1287,6 +1298,7 @@ function helpSteps(diag) {
   const report = [t('Save the bundle (More…)'), t('Report it on GitHub (More…)')];
   switch (diag.code) {
     case 'driver-outdated': return [v.min ? t('Update the NVIDIA driver ({min} or newer)', v) : t('Update the NVIDIA driver'), t('Restart the PC'), launch];
+    case 'dfc-here': return [t('Launch the game'), t('Press Home and open the Deep Fried Chicken tab')];
     case 'emulator-renderer': case 'emulator-renderer-mismatch': return [t('In {name}: {hint}', v), t('Start {name} again', v)];
     case 'nr-model-crash-emulator': return [
       t('In {name}: Graphics > Backend > Direct3D 11', v),
@@ -1398,6 +1410,7 @@ function helpShort(diag) {
     case 'catalog-prefers': return t('Known to run better on {route}', { route: routeName(v.route, v.via) });
     case 'luma-needs-dx11': return t('Switch the game to DirectX 11 for Luma');
     case 'nr-model-crash-emulator': return t('DLSS 5 crashed on D3D12 -- switch to Direct3D 11');
+    case 'dfc-here': return v.state ? t('Deep Fried Chicken: {state}', v) : t('Deep Fried Chicken runs the neural pass here');
     case 'emulator-renderer': return t('Set {name} to {renderer}', v);
     case 'emulator-renderer-mismatch': return t('{name} ran on {seen} -- set {renderer}', v);
     case 'nr-model-crash': return t('The DLSS 5 model crashed');
@@ -2249,13 +2262,35 @@ async function installGame(game) {
     return;
   }
 
-  if (route.route === 'feeder' && !route.feederDeployed) {
-    toast(t('Deploying the DLSS5 Feeder first (ReShade, add-on, motion-vector shader, nvngx_dlss.dll)…'));
+  // Which add-on runs the neural pass here (Edit > Neural pass). When the folder is set up for the
+  // other one, this Install is the swap: feeder:deploy does it whole (dfc.js), and Chicken ends the
+  // install there -- OptiScaler going back in on top would put two neural passes in one folder.
+  const consumer = chosenConsumer(game);
+  const swapNeeded = route.route === 'feeder' && (route.consumerHere || 'optiscaler') !== consumer;
+  if (route.route === 'feeder' && (!route.feederDeployed || swapNeeded || consumer === 'dfc')) {
+    toast(route.feederDeployed
+      ? (!swapNeeded ? t('Deploying…') : consumer === 'dfc' ? t('Switching this game to Deep Fried Chicken…') : t('Switching this game back to DLSS 5…'))
+      : t('Deploying the DLSS5 Feeder first (ReShade, add-on, motion-vector shader, nvngx_dlss.dll)…'));
     const providers = await window.api.feederMvProviders();
     const provider = providers.find((p) => p.default && p.autoFetchable) || providers.find((p) => p.autoFetchable);
     const deployed = provider
-      ? await window.api.feederDeploy(game.exePath, provider.id, { force: false, licenseConfirmed: false })
+      ? await window.api.feederDeploy(game.exePath, provider.id, { force: false, licenseConfirmed: false, consumer, nrDllPath: settings.nrDllPath, swapOnly: route.feederDeployed })
       : { ok: false, error: t('no auto-fetchable motion-vector provider') };
+    if (!deployed.ok && deployed.code && String(deployed.code).startsWith('dfc-')) {
+      toast(dfcUnsupportedWords(deployed.code));
+      renderGrid();
+      return;
+    }
+    if (!deployed.ok && swapNeeded) {
+      toast(t('Could not switch this game: {error}', { error: deployed.error }));
+      renderGrid();
+      return;
+    }
+    if (deployed.ok && consumer === 'dfc') {
+      toast(t('Installed with Deep Fried Chicken. Press Home in the game for its menu.'));
+      renderGrid();
+      return;
+    }
     if (!deployed.ok) {
       if (deployed.needsReShadeInstaller) {
         // Vulkan: ReShade's own installer registers the machine-wide layer; this app opens it.
@@ -2268,7 +2303,7 @@ async function installGame(game) {
       renderGrid();
       return;
     }
-    feederNote = ' ' + t('Deployed the DLSS5 Feeder first ({provider}).', { provider: provider.displayName });
+    if (!route.feederDeployed) feederNote = ' ' + t('Deployed the DLSS5 Feeder first ({provider}).', { provider: provider.displayName });
   }
 
   toast(t('Installing…'));
@@ -3675,6 +3710,9 @@ $('#btn-legacy-mv-apply').addEventListener('click', () => {
 // implemented yet, see the Manager's own notes on this.
 async function loadFeederSection(game) {
   const section = $('#game-feeder-section');
+  // The neural-pass choice is its own section now (not advanced-only); it shows only when this
+  // function reaches loadConsumerSection, i.e. on a 64-bit Feeder game.
+  $('#game-consumer-section').classList.add('hidden');
   if (!game || !game.exePath) {
     section.classList.add('hidden');
     return;
@@ -3832,6 +3870,12 @@ const CONSUMER_LABELS = {
   dfc: () => t('Deep Fried Chicken (your copy)'),
 };
 
+function dfcUnsupportedWords(code) {
+  if (code === 'dfc-vulkan-opengl') return t('Not for this game yet: on Vulkan and OpenGL Chicken brings its own feeder, which this app does not set up.');
+  if (code === 'dfc-32bit') return t('Not for this game yet: 32-bit games use Chicken\'s own 32-bit route, which this app does not set up.');
+  return t('Chicken is set up here for 64-bit DirectX 11 and 12 games only.');
+}
+
 function chosenConsumer(game) {
   const id = game && game.neuralConsumer;
   return CONSUMER_LABELS[id] ? id : 'optiscaler';
@@ -3854,6 +3898,7 @@ async function loadConsumerSection(game) {
   }
 
   const info = await window.api.dfcStatus(game && game.exePath);
+  $('#game-consumer-section').classList.remove('hidden');
   // The Add button only when it would do something: once a copy is supplied it is used for every
   // game, so a button offering to add it again on each card is noise.
   supplyBtn.classList.toggle('hidden', !!(info && info.supplied));
@@ -3863,14 +3908,20 @@ async function loadConsumerSection(game) {
     status.textContent = '';
     return;
   }
-  if (chosen === 'dfc') {
-    if (!info.supplied) lines.push(t('No Deep Fried Chicken copy yet -- add yours and Deploy again.'));
-    else if (info.present && !info.ours) lines.push(t('Chicken is already here and this app did not place it -- its own installer owns that copy.'));
-    else if (!info.present) lines.push(t('Chicken is not in this folder yet -- press Deploy.'));
-    // The clash this app can cause, and the one the user cannot see from inside the game.
-    if (info.optiScalerHere) lines.push(t('OptiScaler is still in this folder. Two neural passes means Chicken does nothing at all -- press Remove on the card, then Deploy.'));
-  } else if (info.ours) {
-    lines.push(t('A Chicken this app deployed is still here; Deploy again to take it out.'));
+  // Chicken is set up for 64-bit Direct3D 11/12 games only (dfc.supportedFor): elsewhere the option
+  // says why instead of building a folder that cannot run.
+  const support = info.support || { ok: true };
+  const dfcOpt = select.querySelector('option[value="dfc"]');
+  if (dfcOpt && !support.ok && chosen !== 'dfc') dfcOpt.disabled = true;
+  if (!support.ok) lines.push(dfcUnsupportedWords(support.code));
+  // What the folder is set up for against what the player chose: the gap is exactly what Install does.
+  const here = info.ours ? 'dfc' : 'optiscaler';
+  if (chosen === 'dfc' && support.ok) {
+    if (!info.supplied) lines.push(t('No Deep Fried Chicken copy yet -- add yours, then press Install.'));
+    else if (info.present && !info.ours) lines.push(t('Chicken is already here and this app did not place it. Delete its files to let this app manage it.'));
+    else if (here !== 'dfc') lines.push(t('Press Install on the card to switch this game to Chicken.'));
+  } else if (chosen === 'optiscaler' && here === 'dfc') {
+    lines.push(t('Press Install on the card to switch this game back to DLSS 5.'));
   }
   if (info.state && info.state.ran && info.state.state) {
     lines.push(t('Chicken last reported: {state}.', { state: info.state.state }));
@@ -3948,7 +3999,8 @@ $('#game-neural-consumer').addEventListener('change', async () => {
   game.neuralConsumer = $('#game-neural-consumer').value;
   window.api.saveGames(games);
   await loadConsumerSection(game);
-  toast(t('Saved. Press Deploy to apply it to this game.'));
+  toast(t('Saved. Press Install on the card to switch this game.'));
+  renderGrid();
 });
 
 $('#btn-dfc-supply').addEventListener('click', async () => {
@@ -3969,7 +4021,7 @@ async function deployFeederStack(game, providerId, force) {
   }
 
   status.textContent = force ? t('Updating…') : t('Deploying…');
-  const res = await window.api.feederDeploy(game.exePath, providerId, { force, licenseConfirmed, consumer: chosenConsumer(game) });
+  const res = await window.api.feederDeploy(game.exePath, providerId, { force, licenseConfirmed, consumer: chosenConsumer(game), nrDllPath: settings.nrDllPath });
   if (res.ok) {
     toast(force
       ? t('Feeder stack updated.')

@@ -28,9 +28,9 @@
 // WHAT COUNTS AS OURS.
 //
 // Only a deploy this module made, recorded in .dlss5ui-dfc.json with the exact names it placed.
-// A Chicken the user installed with its own INSTALL-DEEP-FRIED-CHICKEN.cmd has no marker, and is
-// never deleted, never overwritten and never reported as ours -- it stays a foreign toolchain, as
-// it should, because its installer is the thing that knows how to take it out again.
+// A Chicken copied in by hand (3.0's README installs it that way; older builds had .cmd scripts)
+// has no marker, and is never deleted, never overwritten and never reported as ours -- it stays a
+// foreign toolchain, as it should, because this app cannot know what else was set up with it.
 
 'use strict';
 
@@ -157,6 +157,13 @@ async function importDfcSource(sourcePath, cacheDir) {
   const dest = path.join(cacheDir, CACHE_NAME);
   const stat = fs.statSync(sourcePath);
 
+  // Chicken 3.0 is handed out as a password-protected .7z (the password is in its README and its
+  // Discord post). This app reads zips only and does not unpack someone else's protected archive,
+  // so it says what to do instead of "not a zip".
+  if (!stat.isDirectory() && /\.(7z|rar)$/i.test(sourcePath)) {
+    throw new Error(`${path.basename(sourcePath)} is a protected archive -- unpack it first (the password is in Chicken's own post), then pick the folder it unpacked into`);
+  }
+
   const wanted = [...PAYLOAD, ...PAYLOAD_IF_ABSENT];
   if (stat.isDirectory()) {
     // The 64-bit tree, wherever in the picked folder it lives -- the release unpacks to
@@ -229,16 +236,23 @@ function dfcOurs(dir) {
 }
 
 // Copies the cached payload in and records it. Refuses rather than overwrites when Chicken is
-// already here and is not ours: that copy belongs to its own installer, which is also the only
-// thing that knows how to uninstall it.
-async function deployDfc(dir, cacheDir, { force = false } = {}) {
+// already here and is not ours: somebody copied that one in by hand (3.0 ships no installer), and
+// it is theirs to take out.
+//
+// The marker is MERGED with the one already here. A re-deploy skips the cfg and the documents
+// (they exist), so a marker written from this deploy alone forgot them -- and Remove then left
+// the cfg behind, which detect.js reported as a foreign Chicken install of our own making.
+async function deployDfc(dir, cacheDir, { force = false, extra = {} } = {}) {
   const source = cachedDfc(cacheDir);
-  if (!source) throw new Error('no Deep Fried Chicken copy has been supplied yet -- add one in Settings first');
+  if (!source) throw new Error('no Deep Fried Chicken copy has been added yet -- add yours in Edit first');
   if (dfcPresent(dir) && !dfcOurs(dir) && !force) {
-    return { deployed: false, reason: 'Deep Fried Chicken is already in this folder and this app did not put it there -- its own installer owns that copy', files: [] };
+    return { deployed: false, reason: HAND_PLACED, files: [] };
   }
 
-  const placed = [];
+  // A cfg the player tuned before switching this game back to DLSS 5 comes back with Chicken.
+  const restoredCfg = !fs.existsSync(path.join(dir, CFG)) && await restoreStashedCfg(dir, cacheDir);
+
+  const placed = restoredCfg ? [CFG] : [];
   for (const name of PAYLOAD) {
     const from = path.join(source, name);
     if (!fs.existsSync(from)) continue;
@@ -253,27 +267,38 @@ async function deployDfc(dir, cacheDir, { force = false } = {}) {
     placed.push(name);
   }
 
-  fs.writeFileSync(markerPath(dir), JSON.stringify({
-    files: placed,
-    from: path.basename(source),
-    deployedAt: new Date().toISOString(),
-  }, null, 2), 'utf8');
+  const before = readMarker(dir) || {};
+  const files = [...new Set([...(Array.isArray(before.files) ? before.files : []), ...placed])];
+  writeMarker(dir, { ...before, ...extra, files, from: path.basename(source), deployedAt: new Date().toISOString() });
 
-  return { deployed: true, files: placed };
+  return { deployed: true, files: placed, restoredCfg: !!restoredCfg };
 }
 
-// Takes out only what the marker says this app placed. A cfg the user has since edited is theirs;
-// it is deleted only because we placed it and it carries no state they could not rebuild -- but
-// the log never is, since it is the evidence for whatever sent them to support in the first place.
-async function removeDfc(dir) {
+function writeMarker(dir, data) {
+  fs.writeFileSync(markerPath(dir), JSON.stringify(data, null, 2), 'utf8');
+}
+
+// Takes out only what the marker says this app placed, and puts the folder back the way the Feeder
+// route has it: ReShade under its plain name again, for OptiScaler to load (switchToDfc made it the
+// proxy). The player's cfg is stashed in the cache first, so switching back to Chicken later brings
+// their settings with it -- Chicken's own README: "KEEP existing .cfg files". The log is never
+// removed: it is the evidence for whatever sent them to support.
+//
+// uninstall: the whole folder is being put back (uninstallEverything). ReShade is deleted rather
+// than renamed, since the Feeder stack that owned it is going too.
+async function removeDfc(dir, { cacheDir = null, uninstall = false } = {}) {
   const marker = readMarker(dir);
   const removed = [];
   const kept = [];
   const failed = [];
 
   if (!marker) {
-    if (dfcPresent(dir)) kept.push('Deep Fried Chicken (not placed by this app -- use its own UNINSTALL-DEEP-FRIED-CHICKEN.cmd)');
+    if (dfcPresent(dir)) kept.push(`Deep Fried Chicken (${HAND_PLACED})`);
     return { removed, kept, failed };
+  }
+
+  if (cacheDir && fs.existsSync(path.join(dir, CFG))) {
+    try { await stashCfg(dir, cacheDir); kept.push(`${CFG} (kept for this game's next switch to Chicken)`); } catch {}
   }
 
   for (const name of marker.files || []) {
@@ -283,11 +308,156 @@ async function removeDfc(dir) {
     if (r.ok) removed.push(name);
     else failed.push({ rel: name, code: r.code });
   }
-  const m = await saferemove.removePath(markerPath(dir));
-  if (!m.ok) failed.push({ rel: MARKER, code: m.code });
+
+  // ReShade back from the proxy slot. Only the file we renamed, and only while it still is ReShade.
+  const proxy = marker.reshadeProxy ? path.join(dir, marker.reshadeProxy) : null;
+  if (proxy && fs.existsSync(proxy) && isReShade(proxy)) {
+    const plain = path.join(dir, RESHADE_PLAIN);
+    if (uninstall || fs.existsSync(plain)) {
+      const r = await saferemove.removePath(proxy);
+      if (r.ok) removed.push(marker.reshadeProxy);
+      else failed.push({ rel: marker.reshadeProxy, code: r.code });
+    } else {
+      try {
+        await fsp.rename(proxy, plain);
+        removed.push(`${marker.reshadeProxy} (ReShade, back to ${RESHADE_PLAIN})`);
+      } catch (e) {
+        failed.push({ rel: marker.reshadeProxy, code: (e && e.code) || 'failed' });
+      }
+    }
+  }
+
+  // The marker goes last, and only when everything it lists is gone: a failed delete (the game
+  // still running) must leave the record that says what is ours, or the next try could not tell.
+  if (!failed.length) {
+    const m = await saferemove.removePath(markerPath(dir));
+    if (!m.ok) failed.push({ rel: MARKER, code: m.code });
+  }
 
   if (fs.existsSync(path.join(dir, LOG))) kept.push(`${LOG} (Chicken's own log, left for support)`);
   return { removed, kept, failed };
+}
+
+// ── the swap ─────────────────────────────────────────────────────────────────────────────────
+//
+// On this app's Feeder route, ReShade is a plain ReShade64.dll that OptiScaler loads
+// ([Plugins] LoadReshade=true, feeder.js). Take OptiScaler out and nothing loads ReShade at all --
+// so the first version of this PR, which deployed Chicken and left OptiScaler in place, built a
+// folder that could never run: with OptiScaler, two neural passes (Chicken goes CONFLICT); without
+// it, no ReShade. Chicken 3.0's own README installs ReShade the ordinary way, as the game's proxy,
+// with nvngx_dlssnr.dll beside the add-on. That is what switchToDfc builds, and removeDfc undoes.
+
+const RESHADE_PLAIN = 'ReShade64.dll';
+// ReShade as the D3D11/D3D12 game's dxgi.dll -- the name ReShade's own installer uses for both.
+const RESHADE_PROXY = 'dxgi.dll';
+const HAND_PLACED = 'copied in by hand, not by this app -- delete its files to let this app manage Chicken here';
+
+// OptiScaler's install journal (main.js INSTALL_MARKER): which proxy it took, and whose file it set aside.
+const OPTISCALER_JOURNAL = '.optiscaler-manager-install.json';
+
+function fileHas(file, text) {
+  try { return fs.readFileSync(file).includes(Buffer.from(text, 'latin1')); } catch { return false; }
+}
+// OptiScaler carries the string too (it loads ReShade itself), so ReShade means ReShade and not OptiScaler.
+function isReShade(file) { return fileHas(file, 'ReShade') && !fileHas(file, 'OptiScaler'); }
+function isOptiScaler(file) { return fileHas(file, 'OptiScaler'); }
+
+function readJson(file) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
+}
+
+// Where ReShade lives in a folder we switched to Chicken, or null.
+function reshadeProxyOf(dir) {
+  const m = readMarker(dir);
+  if (!m || !m.reshadeProxy) return null;
+  return isReShade(path.join(dir, m.reshadeProxy)) ? m.reshadeProxy : null;
+}
+
+// Which games this swap is built for. Everything else says why rather than building a folder that
+// cannot run. The reasons are codes; the renderer words them.
+//   vulkan/opengl  Chicken 3.0 brings its own feeder there (Compatibility\Vulkan-OpenGL) and says
+//                  "Do not install another neural feeder alongside" -- a different route.
+//   32-bit         Chicken's own 32-bit transport (host64 worker), also a different route.
+function supportedFor(detected) {
+  const d = detected || {};
+  if (d.bitness === 32) return { ok: false, code: 'dfc-32bit' };
+  if (d.api === 'vulkan' || d.api === 'opengl') return { ok: false, code: 'dfc-vulkan-opengl' };
+  if (d.api !== 'dx11' && d.api !== 'dx12') return { ok: false, code: 'dfc-api' };
+  return { ok: true, code: null };
+}
+
+// Our engine out, ReShade in as the proxy, the NR model beside it, Chicken in -- with everything
+// that can refuse checked before anything is touched, so a refusal leaves the folder as it was.
+//   removeOptiScaler  main.js uninstallOptiScaler (the install journal knows what is ours)
+//   nrDllPath         the NR model in Settings, for a folder that has none after OptiScaler left
+async function switchToDfc(dir, cacheDir, { nrDllPath = null, removeOptiScaler } = {}) {
+  if (!cachedDfc(cacheDir)) throw new Error('no Deep Fried Chicken copy has been added yet -- add yours in Edit first');
+  if (dfcPresent(dir) && !dfcOurs(dir)) throw new Error(`Deep Fried Chicken is already in this folder, ${HAND_PLACED}`);
+
+  const plain = path.join(dir, RESHADE_PLAIN);
+  const proxy = path.join(dir, RESHADE_PROXY);
+  const already = reshadeProxyOf(dir);
+  if (!already && !fs.existsSync(plain)) throw new Error(`${RESHADE_PLAIN} is not here -- deploy the Feeder first`);
+  const nrHere = fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'));
+  if (!nrHere && !(nrDllPath && fs.existsSync(nrDllPath))) throw new Error('the NR model (nvngx_dlssnr.dll) is not set up in Settings, and Chicken needs it beside its add-on');
+  // The proxy slot has to end up free for ReShade. Checked now, not after OptiScaler is out: a
+  // dxgi.dll that is neither ReShade nor OptiScaler is somebody else's, and a game whose own
+  // dxgi.dll OptiScaler's install backed up gets that file back the moment OptiScaler leaves.
+  if (!already) {
+    if (fs.existsSync(proxy) && !isReShade(proxy) && !isOptiScaler(proxy)) {
+      throw new Error(`${RESHADE_PROXY} here is not this app's -- ReShade cannot take its place`);
+    }
+    const journal = readJson(path.join(dir, OPTISCALER_JOURNAL));
+    const backedUpAs = journal && journal.backedUp ? String(journal.backedUpAs || journal.proxy || '').toLowerCase() : '';
+    if (backedUpAs === RESHADE_PROXY) {
+      throw new Error(`this game's own ${RESHADE_PROXY} was set aside when DLSS 5 was installed and comes back when it is taken out, so ReShade cannot use that name here`);
+    }
+  }
+
+  const steps = [];
+  const out = await removeOptiScaler(dir);
+  if (out && out.failed && out.failed.length) {
+    throw new Error(`OptiScaler could not be taken out (${out.failed.map((f) => `${f.rel}: ${f.code}`).join(', ')}) -- close the game and try again`);
+  }
+  if (out && out.removed && out.removed.length) steps.push('took OptiScaler out');
+
+  if (!already) {
+    // dxgi.dll is free now unless it is something that is neither ours nor ReShade (a game's own,
+    // restored by the OptiScaler removal): that is never overwritten.
+    if (fs.existsSync(proxy)) throw new Error(`${RESHADE_PROXY} here is not this app's -- ReShade cannot take its place`);
+    await fsp.rename(plain, proxy);
+    steps.push(`ReShade now loads itself as ${RESHADE_PROXY}`);
+  }
+
+  let nrPlaced = false;
+  if (!fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll'))) {
+    await fsp.copyFile(nrDllPath, path.join(dir, 'nvngx_dlssnr.dll'));
+    nrPlaced = true;
+    steps.push('placed the NR model');
+  }
+
+  const deployed = await deployDfc(dir, cacheDir, { extra: { reshadeProxy: RESHADE_PROXY, ...(nrPlaced ? { nrPlaced } : {}) } });
+  steps.push(deployed.restoredCfg ? 'deployed Chicken with this game\x27s saved settings' : 'deployed Chicken');
+  return { ...deployed, steps };
+}
+
+// The player's cfg, kept in the cache per game folder while the game is back on DLSS 5.
+function stashPathFor(dir, cacheDir) {
+  const key = require('node:crypto').createHash('sha1').update(path.resolve(dir).toLowerCase()).digest('hex').slice(0, 16);
+  return path.join(cacheDir, 'configs', `${key}.cfg`);
+}
+
+async function stashCfg(dir, cacheDir) {
+  const to = stashPathFor(dir, cacheDir);
+  await fsp.mkdir(path.dirname(to), { recursive: true });
+  await fsp.copyFile(path.join(dir, CFG), to);
+}
+
+async function restoreStashedCfg(dir, cacheDir) {
+  const from = stashPathFor(dir, cacheDir);
+  if (!fs.existsSync(from)) return false;
+  await fsp.copyFile(from, path.join(dir, CFG));
+  return true;
 }
 
 // ── what Chicken is doing ────────────────────────────────────────────────────────────────────
@@ -344,5 +514,6 @@ module.exports = {
   CONSUMERS, DEFAULT_CONSUMER, isConsumer, consumerOf,
   looksLikeDfc, importDfcSource, cachedDfc,
   readMarker, dfcPresent, dfcOurs, deployDfc, removeDfc,
+  RESHADE_PROXY, reshadeProxyOf, supportedFor, switchToDfc,
   readDfcState, readCfgText, cfgPath,
 };

@@ -108,6 +108,14 @@ function diagnose(ctx) {
   // did not work -- a pass that dispatched has plainly not been stopped by anything.
   if (run.dlssRuntimeStub && run.verdict !== 'nr-ran') return dlssRuntimeStubAnswer();
 
+  // A Feeder game switched to Deep Fried Chicken (dfc.js): OptiScaler is out of the folder on purpose,
+  // so none of the OptiScaler answers below apply, and "not installed" would send Install to put it
+  // back on top of Chicken. Chicken's own state word is the answer; ARMED is working.
+  if (route.consumerHere === 'dfc') {
+    const state = (ctx.dfcState && ctx.dfcState.state) || '';
+    return out(state === 'ARMED' ? 'ok' : 'step', 'dfc-here', { state });
+  }
+
   // Not installed, or the route's first step is missing: Install is the fix.
   if (!route.optiInstalled) return fix('not-installed', 'install');
   if (route.route === 'feeder' && !route.feederDeployed) return fix('feeder-missing', 'install');

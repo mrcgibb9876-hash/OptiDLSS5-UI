@@ -88,7 +88,7 @@ test('no copy supplied means no cached Chicken, and a deploy that says so rather
     assert.strictEqual(dfc.cachedDfc(cache), null);
     const game = path.join(base, 'game');
     fs.mkdirSync(game);
-    await assert.rejects(() => dfc.deployDfc(game, cache), /no Deep Fried Chicken copy has been supplied/);
+    await assert.rejects(() => dfc.deployDfc(game, cache), /no Deep Fried Chicken copy has been added/);
     assert.deepStrictEqual(fs.readdirSync(game), [], 'nothing was placed');
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
@@ -145,7 +145,7 @@ test('a Chicken the user installed themselves is refused, not overwritten', asyn
 
     const r = await dfc.deployDfc(game, cache);
     assert.strictEqual(r.deployed, false);
-    assert.match(r.reason, /this app did not put it there/);
+    assert.match(r.reason, /copied in by hand/);
     assert.strictEqual(fs.readFileSync(path.join(game, dfc.ADDON), 'utf8'), 'THEIR addon');
     assert.strictEqual(dfc.dfcOurs(game), false);
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
@@ -182,7 +182,7 @@ test('Remove never deletes a Chicken this app did not place', async () => {
 
     const r = await dfc.removeDfc(game);
     assert.deepStrictEqual(r.removed, []);
-    assert.match(r.kept.join(' '), /UNINSTALL-DEEP-FRIED-CHICKEN\.cmd/, 'and says what does own it');
+    assert.match(r.kept.join(' '), /copied in by hand/, 'and says it is theirs');
     assert.strictEqual(fs.existsSync(path.join(game, dfc.ADDON)), true);
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
@@ -334,7 +334,7 @@ test('Remove leaves a Chicken the user installed themselves, and says whose it i
   const res = await app.invoke('game:run-uninstall', exe);
   assert.strictEqual(res.ok, true);
   assert.strictEqual(fs.existsSync(path.join(game, dfc.ADDON)), true, 'not ours to delete');
-  assert.match(res.kept.join(' '), /UNINSTALL-DEEP-FRIED-CHICKEN\.cmd/);
+  assert.match(res.kept.join(' '), /copied in by hand/);
 });
 
 test('the deploy acts on the chosen consumer, and never leaves two of them in a folder', () => {
@@ -348,9 +348,10 @@ test('the deploy acts on the chosen consumer, and never leaves two of them in a 
   assert.notStrictEqual(end, -1);
   const body = src.slice(at, end);
   assert.match(body, /results\.consumer =/, 'the deploy records which consumer was chosen');
-  assert.match(body, /dfc\.deployDfc\(/, 'and deploys Chicken when it is the one');
-  assert.match(body, /optiScalerStillHere/, 'and reports OptiScaler still being in the folder');
-  assert.match(body, /dfc\.dfcOurs\(dir\)[\s\S]*dfc\.removeDfc\(/, 'and takes our Chicken out when switching back');
+  assert.match(body, /dfc\.switchToDfc\(/, 'and swaps Chicken in when it is the one');
+  assert.match(body, /removeOptiScaler: removeOptiScalerForSwap/, 'taking OptiScaler out, so two passes never share a folder');
+  assert.match(body, /dfc\.dfcOurs\(dir\)[\s\S]*dfc\.removeDfc\(dir, \{ cacheDir/, 'and takes our Chicken out when switching back, keeping its cfg');
+  assert.match(body, /dfc\.supportedFor\(/, 'and refuses a game the swap is not built for before touching it');
 });
 
 test('a real release layout imports from the archive root, the version folder, or 64-bit itself', async () => {

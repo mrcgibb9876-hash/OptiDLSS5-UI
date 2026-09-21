@@ -56,6 +56,7 @@ const catalog = require('./catalog');
 const layerdefault = require('./layerdefault');
 const routescore = require('./routescore');
 const emulators = require('./emulators');
+const dfc = require('./dfc');
 
 // A user's per-game API choice laid over the detection result: the chosen API becomes the
 // primary, joins the list of APIs the game runs on (so keepGamesOwnDlss writes its upscaler key
@@ -325,12 +326,23 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
   // under an Unreal plugin folder and deployed it anyway. The two crash together.
   const feederMisdeployed = shipsDlss && feederDeployed;
 
+  // A Feeder game this app switched to Deep Fried Chicken (dfc.js switchToDfc): Chicken runs the
+  // neural pass there instead of OptiScaler, so "Install DLSS 5" is not a step it is missing.
+  const dfcHere = dfc.dfcOurs(dir);
   const finish = (route, label, reason, steps, reasonVars = null, extra = {}) => {
+    const onDfc = route === 'feeder' && dfcHere;
+    if (onDfc) {
+      label = 'Deep Fried Chicken + Feeder';
+      steps = steps.map((s) => (s.key === 'optiscaler' ? { key: 'dfc', label: 'Switch to Deep Fried Chicken', done: true } : s));
+    }
     const next = steps.find((s) => !s.done) || null;
     return {
       experimental: false, emulator: null, legacy: null, dgVoodooDeployed: legacyStatus.dgVoodoo, dxvkDeployed, wrapperPreference, dxvkBlocked, layerChoice: null,
       ...extra,
       route, label, reason, reasonVars, steps, gpuVendor,
+      // Which neural pass this folder is set up for; the renderer compares it with the game's choice.
+      consumerHere: onDfc ? 'dfc' : 'optiscaler',
+      dfcSupport: route === 'feeder' ? dfc.supportedFor({ api, bitness: detected.bitness || 64 }) : null,
       optiInstalled, feederDeployed, lumaDeployed, feederMisdeployed, shipsDlss,
       verified: verified.verification(exePath),
       catalogDefault: steered,

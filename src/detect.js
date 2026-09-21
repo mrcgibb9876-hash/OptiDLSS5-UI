@@ -559,8 +559,15 @@ async function inspectHookDlls(dir) {
   // RTXMFG, placed by this app under a proxy name, carries the string "ReShade"; it is not a hook
   // anybody else put here (rtxmfg.js).
   const rtxmfgFile = (rtxmfg.ourFile(dir) || '').toLowerCase();
+  // ReShade as the proxy on a game this app switched to Deep Fried Chicken (dfc.js switchToDfc) is
+  // ours, not "ReShade is already installed here -- Install replaces it".
+  let dfcProxy = '';
+  try {
+    const m = JSON.parse(fs.readFileSync(path.join(dir, '.dlss5ui-dfc.json'), 'utf8'));
+    if (typeof m.reshadeProxy === 'string') dfcProxy = m.reshadeProxy.toLowerCase();
+  } catch {}
   for (const name of HOOK_DLLS) {
-    if (name.toLowerCase() === rtxmfgFile) continue;
+    if (name.toLowerCase() === rtxmfgFile || name.toLowerCase() === dfcProxy) continue;
     const file = path.join(dir, name);
     if (!fs.existsSync(file)) continue;
     const hits = await scanFile(file, HOOK_NEEDLES, { maxBytes: SIBLING_SCAN_MAX_BYTES });
