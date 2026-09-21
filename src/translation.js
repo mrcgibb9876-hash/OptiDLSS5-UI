@@ -34,6 +34,7 @@ const fsp = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { readTarGz, findTarEntry } = require('./tar');
+const saferemove = require('./saferemove');
 
 const MANIFEST = '.dlss5ui-translation.json';
 // The marker the dgVoodoo2 half of legacy.js has been writing since the 32-bit route shipped. Folders
@@ -301,6 +302,7 @@ async function purgeTranslationLayer(dir, { layer = null, dryRun = false } = {})
   const removed = [];
   const restored = [];
   const skipped = [];
+  const failed = [];
   const manifest = readManifest(dir);
   const manifestFiles = new Set(
     manifest && targets.includes(manifest.layer)
@@ -308,9 +310,16 @@ async function purgeTranslationLayer(dir, { layer = null, dryRun = false } = {})
       : [],
   );
 
+  // A file that will not delete is recorded, never silently dropped: it used to return false and
+  // land in neither `removed` nor `skipped`, so a wrapper DLL left behind was invisible to the
+  // caller and to the user. saferemove clears the read-only attribute and retries before giving up.
   const rm = async (rel) => {
     if (dryRun) return true;
-    try { await fsp.rm(path.join(dir, rel), { force: true }); return true; } catch { return false; }
+    const r = await saferemove.removePath(path.join(dir, rel)).catch((err) => ({ ok: false, code: (err && err.code) || 'failed' }));
+    if (r.ok) return true;
+    failed.push({ file: rel, code: r.code });
+    skipped.push({ file: rel, reason: `it could not be deleted (${r.code})` });
+    return false;
   };
 
   // 1. The files themselves, identified before they are touched.
@@ -371,7 +380,22 @@ async function purgeTranslationLayer(dir, { layer = null, dryRun = false } = {})
       }
     }
     if (!dryRun) {
-      await fsp.rm(path.join(dir, MANIFEST), { force: true });
+      // The one deletion in here that used to be unguarded, and the one that threw on GTA San
+      // Andreas (#96): EPERM on .dlss5ui-translation.json, from a game folder under
+      // C:\Program Files (x86)\. It threw out of this function and out of uninstallEverything,
+      // which had already run this as its second stage -- so the layer's DLLs were gone, the
+      // backups were back, and every later stage (dgVoodoo2's own marker and host64\, Luma,
+      // RTXMFG, OptiScaler itself, the journal) never ran.
+      //
+      // Worse than the abort: this manifest surviving makes the app go on believing the layer is
+      // deployed after its files have gone, which the note below is about. So it is reported
+      // loudly rather than thrown or swallowed.
+      // Only reported as removed when it was actually there: a legacy dgVoodoo2 deploy keeps its
+      // record in .dlss5ui-legacy.json and has no manifest of its own, and claiming to have deleted
+      // a file that never existed is how a removal report stops being worth reading.
+      const wasThere = fs.existsSync(path.join(dir, MANIFEST));
+      const gone = await rm(MANIFEST);
+      if (gone && wasThere) removed.push(MANIFEST);
     }
   }
   // dgVoodoo2's entries in legacy.js's marker go with it -- whether the manifest was read from that
@@ -380,7 +404,7 @@ async function purgeTranslationLayer(dir, { layer = null, dryRun = false } = {})
   // straight back over whatever replaced it.
   if (!dryRun && targets.includes('dgvoodoo') && manifest && manifest.layer === 'dgvoodoo') stripDgVoodooFromLegacyMarker(dir);
 
-  return { layer, removed, restored, skipped, wasActive: manifest ? manifest.layer : null };
+  return { layer, removed, restored, skipped, failed, wasActive: manifest ? manifest.layer : null };
 }
 
 // ---------------------------------------------------------------------------------------------

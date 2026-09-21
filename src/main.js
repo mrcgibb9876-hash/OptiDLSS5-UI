@@ -2474,7 +2474,12 @@ async function uninstallEverything(dir) {
     const tl = translation.activeLayer(dir);
     if (tl.ours) {
       const r = await stage(`the ${tl.layer} translation layer`, () => translation.purgeTranslationLayer(dir, { layer: tl.layer }));
-      if (r) { removed.push(...r.removed); restored.push(...r.restored); }
+      if (r) {
+        removed.push(...r.removed); restored.push(...r.restored);
+        // .dlss5ui-translation.json among them means the app still thinks this layer is deployed,
+        // so the user has to know: Install would otherwise put it back over whatever replaced it.
+        for (const f of r.failed || []) failed.push({ rel: f.file, code: f.code });
+      }
     }
     if (vkApp && vkApp.listedByUs) {
       const r = await legacy.unlistVulkanLayerApp(vkApp, {

@@ -159,6 +159,52 @@ test('a backup is never consumed when the file it would replace is still there',
   assert.match(fn.slice(del, rename), /if \(!r\.ok\)[\s\S]*return false/, 'a failed delete stops before the rename');
 });
 
+// ── the file that actually failed on #96 ─────────────────────────────────────────────────────
+
+test('the translation manifest is deleted through saferemove, not a bare rm that throws', () => {
+  // .dlss5ui-translation.json is the file #96 named, and its deletion was the ONE unguarded rm in
+  // purgeTranslationLayer -- every other one in there already caught. It threw out of the purge and
+  // out of uninstallEverything, which runs the purge as its second stage, so the layer's DLLs were
+  // gone and every later stage never ran.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'translation.js'), 'utf8');
+  const at = src.indexOf('async function purgeTranslationLayer');
+  assert.notStrictEqual(at, -1);
+  const body = src.slice(at, src.indexOf('\n}\n', at));
+  assert.doesNotMatch(body, /await fsp\.rm\(path\.join\(dir, MANIFEST\)/, 'the manifest delete can still throw the purge away');
+  assert.match(body, /saferemove\.removePath\(/, 'deletions in the purge go through saferemove');
+});
+
+test('a wrapper DLL that will not delete is reported, not dropped from every list', () => {
+  // The purge's rm() returned false on failure and the caller pushed the file to neither `removed`
+  // nor `skipped` -- so a wrapper left behind was invisible to the user and to the app.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'translation.js'), 'utf8');
+  const at = src.indexOf('  const rm = async (rel) => {');
+  assert.notStrictEqual(at, -1, 'the purge\x27s rm helper');
+  const body = src.slice(at, src.indexOf('  };', at));
+  assert.match(body, /failed\.push/, 'a failure is recorded');
+  assert.match(body, /skipped\.push/, 'and shows up in the list the caller already reads');
+});
+
+test('a manifest that was never on disk is not reported as removed', () => {
+  // A legacy dgVoodoo2 deploy keeps its record in .dlss5ui-legacy.json and has no manifest of its
+  // own, so rm() succeeds on a file that was never there. Claiming to have deleted it is how a
+  // removal report stops being worth reading -- caught by dxvk-swap.test.js when this was written.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'translation.js'), 'utf8');
+  const at = src.indexOf('const wasThere = fs.existsSync(path.join(dir, MANIFEST))');
+  assert.notStrictEqual(at, -1, 'the manifest removal checks the file was there first');
+  assert.match(src.slice(at, at + 200), /if \(gone && wasThere\) removed\.push\(MANIFEST\)/);
+});
+
+test('an undeletable manifest reaches the user: the app would otherwise still think the layer is in', () => {
+  // The manifest surviving is not cosmetic. translation.js's own note: left in, the marker "would go
+  // on saying dgVoodoo2 is deployed after its files were gone, and Install would put it straight
+  // back over whatever replaced it."
+  const body = bodyOf('uninstallEverything');
+  const at = body.indexOf('purgeTranslationLayer');
+  assert.notStrictEqual(at, -1);
+  assert.match(body.slice(at, at + 600), /for \(const f of r\.failed \|\| \[\]\) failed\.push/, 'the purge\x27s failures join the removal\x27s');
+});
+
 test('the user is told which files are still there, and that closing the game is what fixes it', () => {
   const at = rendererJs.indexOf('function describeUninstall');
   const body = rendererJs.slice(at, rendererJs.indexOf('\n}\n', at));
