@@ -403,3 +403,34 @@ test('the tuning rows write the DlssNr keys', () => {
   const back = fs.readFileSync(file, 'utf8');
   for (const key of TUNING) assert.equal(getIniKey(back, 'DlssNr', key), 'auto', key);
 });
+
+// The Present route had no motion vectors in some games and kept accumulating temporal history
+// anyway, against vectors that said nothing had moved -- which is the rippling across textures in
+// motion that no setting could touch, because nothing about it was a setting. Engine v2.2.5 resets
+// the history instead, and this row is how a game that would rather have the old behaviour gets it.
+test('forgetting history when motion is unknown is offered, on, beside the other model inputs', () => {
+  const field = dlssnr.FIELDS.find((f) => f.key === 'ResetWhenBlind');
+
+  assert.equal(field.type, 'bool');
+  assert.equal(field.default, true);
+  assert.equal(field.group, 'What the model is told');
+
+  // It has no dependency: the condition it covers is a route and a game's depth buffer, neither of
+  // which is a row in this dialog, so there is nothing here to hide it behind.
+  assert.equal(field.dependsOn, undefined);
+
+  // It is the fix for a visible artefact, so the help has to name the symptom in the words someone
+  // would use for it, or nobody finds the row that fixes what they are looking at.
+  assert.match(field.help, /pulse|ripple|swim/i);
+});
+
+test('the default folds back to auto so the engine decides, like every other row', () => {
+  const file = freshIni('nr-reset-when-blind');
+  assert.equal(valueOf(file, 'ResetWhenBlind'), null);
+
+  assert.deepEqual(dlssnr.writeSettings(file, { ResetWhenBlind: false }).written, ['ResetWhenBlind']);
+  assert.equal(getIniKey(fs.readFileSync(file, 'utf8'), 'DlssNr', 'ResetWhenBlind'), 'false');
+
+  dlssnr.writeSettings(file, { ResetWhenBlind: true });
+  assert.equal(getIniKey(fs.readFileSync(file, 'utf8'), 'DlssNr', 'ResetWhenBlind'), 'auto');
+});

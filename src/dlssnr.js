@@ -278,6 +278,12 @@ const FIELDS = [
     help: "Lets the model account for a UI layer laid over the frame. On is its own default and right whenever a UI resource reaches it; turn it off if the correction is itself what looks wrong.\n\nRead when the model is built." },
   { key: 'OpticalFlow', type: 'bool', default: true, group: 'What the model is told', label: 'Optical flow',
     help: "Gives the model motion between frames. Off is a diagnostic." },
+  // Engine v2.2.5. The fix for the pulsing that has been on the Present route in every game since it
+  // existed: with no motion vectors the model was still accumulating temporal history, against
+  // vectors that told it nothing had moved.
+  { key: 'ResetWhenBlind', type: 'bool', default: true, group: 'What the model is told',
+    label: 'Forget history when motion is unknown',
+    help: "Textures that ripple, pulse or swim while you move the view -- and nowhere else -- are this.\n\nWhere a game makes no upscale call of its own, the pass has to work out motion from the finished frames, and sometimes it cannot: Optical flow above is off, or it would not start, or the game's depth buffer is a shape that makes the picture's place in the frame unknowable. The log says which.\n\nWhat it had then was not 'no motion' but 'motion that says nothing moved', and the model believed it. It is a model with memory, and it lines its memory up using exactly those numbers -- so it kept reaching for the previous frame at the same spot on screen. Standing still that is correct. Moving, it blends what it is looking at now against what used to be somewhere else entirely, over and over.\n\nOn (default), it keeps no memory at all in that situation, so there is nothing misaligned left to blend and the rippling goes.\n\nThe memory is what steadies a picture, though, so a game can come out slightly crawlier on fine edges instead. If one does, turn this off for that game -- you get the steadiness back and the rippling with it. Costs no performance either way.\n\nDoes nothing in a game that hands over real motion vectors, which is most of them." },
 
   { key: 'AutoCapture', type: 'bool', default: true, group: 'Compare & inspect', label: 'Auto-capture once per session',
     help: "Writes one matched before/after set automatically, without anyone asking. The folder is cleared each run, so it holds a single session and never grows." },
