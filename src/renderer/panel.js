@@ -156,18 +156,67 @@ function helpMarker(text) {
   return el;
 }
 
+// Which collapsed groups are open. Survives a re-render; see renderFields.
+const openGroups = new Set();
+
 function renderFields() {
   const host = $('#p-fields');
   host.innerHTML = '';
   if (fields.length === 0) return;
 
   for (const group of [...new Set(fields.map((f) => f.group))]) {
+    const rows = fields.filter((f) => f.group === group);
+
     const cap = document.createElement('div');
     cap.className = 'p-caption';
     cap.textContent = t(group);
-    host.appendChild(cap);
 
-    for (const field of fields.filter((f) => f.group === group)) {
+    // A group the fields mark collapsed is drawn as a heading you press, and its rows go in a box
+    // under it instead of straight onto the panel. This window is read mid-game at a glance, and a
+    // set of controls nobody touches twice a session should not push the ones they do off the end.
+    //
+    // openGroups is module-level on purpose: renderFields clears the panel and rebuilds it on every
+    // single change, so an open state held locally would snap the section shut under the hand of
+    // whoever was moving a slider inside it.
+    let body = host;
+    if (rows.length > 0 && rows[0].collapsed) {
+      cap.classList.add('is-toggle');
+      cap.setAttribute('role', 'button');
+      cap.tabIndex = 0;
+
+      const chevron = document.createElement('span');
+      chevron.className = 'p-chev';
+      chevron.textContent = '\u25B8';
+      cap.prepend(chevron);
+
+      body = document.createElement('div');
+      body.className = 'p-collapse';
+
+      const paint = () => {
+        const open = openGroups.has(group);
+        body.hidden = !open;
+        cap.classList.toggle('is-open', open);
+        cap.setAttribute('aria-expanded', open ? 'true' : 'false');
+      };
+      const toggle = () => {
+        if (openGroups.has(group)) openGroups.delete(group);
+        else openGroups.add(group);
+        paint();
+      };
+
+      cap.addEventListener('click', toggle);
+      cap.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        toggle();
+      });
+      paint();
+    }
+
+    host.appendChild(cap);
+    if (body !== host) host.appendChild(body);
+
+    for (const field of rows) {
       const held = forced[field.key] || null;
       const met = dependencyMet(field) && !held;
       const shown = field.value === null ? field.default : field.value;
@@ -290,7 +339,7 @@ function renderFields() {
 
       el.classList.toggle('is-off', !met);
       el.appendChild(helpMarker(held ? t(held) : t(field.help)));
-      host.appendChild(el);
+      body.appendChild(el);
     }
 
     // The in-game panel's order: Frame Generation sits right after Models.

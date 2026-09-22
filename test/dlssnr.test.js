@@ -337,13 +337,15 @@ test('the upscale filter can be set back to auto', () => {
   assert.equal(valueOf(file, 'ScalingUpscaler'), null);
 });
 
-// Ring suppression and sigmoidal light only do anything to EWA Lanczos. The engine reads them for
-// that filter alone, so a row offering them beside Nearest would be a control that does nothing.
-test('ring suppression and sigmoidal light are shown only for EWA Lanczos', () => {
+// The four tuning rows only do anything to EWA Lanczos. The engine reads them for that filter
+// alone, so offering any of them beside Nearest would be a control that does nothing.
+const TUNING = ['ScalingSharpness', 'ScalingAntiRinging', 'ScalingSigmoid', 'ScalingDither'];
+
+test('the tuning rows are shown only for EWA Lanczos', () => {
   const ewaLanczos = dlssnr.FIELDS.find((f) => f.key === 'ScalingUpscaler')
     .options.find(([, name]) => name === 'EWA Lanczos')[0];
 
-  for (const key of ['ScalingAntiRinging', 'ScalingSigmoid']) {
+  for (const key of TUNING) {
     const field = dlssnr.FIELDS.find((f) => f.key === key);
     assert.deepEqual(field.dependsOn, {
       all: [{ key: 'WorkingScale', below: 1 }, { key: 'ScalingUpscaler', is: ewaLanczos }],
@@ -351,21 +353,46 @@ test('ring suppression and sigmoidal light are shown only for EWA Lanczos', () =
   }
 });
 
-// These are the NR pass's own keys, not Output Scaling's. Both passes have a pair and they used to
-// be the same pair, so setting one moved the other.
-test('ring suppression and sigmoidal light write the DlssNr keys', () => {
+// Four identical sliders read as one set to be balanced against each other. A checkbox among them
+// would read as an unrelated thing that happens to sit there -- and Sigmoid WAS a checkbox before
+// the engine made its strength the curve's slope.
+test('every tuning row is a percentage slider from zero', () => {
+  for (const key of TUNING) {
+    const field = dlssnr.FIELDS.find((f) => f.key === key);
+    assert.equal(field.type, 'float', key);
+    assert.equal(field.min, 0, key);
+    assert.equal(field.max, 1, key);
+    assert.equal(field.percent, true, key);
+  }
+});
+
+// The panel window only ever sees what readSettings hands it over IPC, so the flag that makes a
+// group open on a press has to travel on the fields themselves.
+test('the upscale filter group is marked collapsed and the everyday groups are not', () => {
+  const rows = dlssnr.readSettings(freshIni('nr-collapsed'));
+  const upscale = rows.filter((f) => f.group === 'Upscale filter');
+
+  assert.equal(upscale.length, 5);
+  assert.ok(upscale.every((f) => f.collapsed === true));
+  assert.ok(rows.filter((f) => f.group !== 'Upscale filter').every((f) => f.collapsed === false));
+
+  // And it has to be somewhere in the order, or it would fall in after the panel's own settings.
+  assert.ok(dlssnr.GROUPS.includes('Upscale filter'));
+});
+
+// These are the NR pass's own keys, not Output Scaling's. Both passes have a set and they used to
+// share one, so setting one moved the other.
+test('the tuning rows write the DlssNr keys', () => {
   const file = freshIni('nr-upscaler-tuning');
-  assert.equal(valueOf(file, 'ScalingAntiRinging'), null);
-  assert.equal(valueOf(file, 'ScalingSigmoid'), null);
+  for (const key of TUNING) assert.equal(valueOf(file, key), null);
 
-  dlssnr.writeSettings(file, { ScalingAntiRinging: 0.5, ScalingSigmoid: true });
+  dlssnr.writeSettings(file, { ScalingSharpness: 0.5, ScalingAntiRinging: 0.5, ScalingSigmoid: 0.5, ScalingDither: 0.5 });
   const text = fs.readFileSync(file, 'utf8');
-  assert.equal(getIniKey(text, 'DlssNr', 'ScalingAntiRinging'), '0.5');
-  assert.equal(getIniKey(text, 'DlssNr', 'ScalingSigmoid'), 'true');
+  for (const key of TUNING) assert.equal(getIniKey(text, 'DlssNr', key), '0.5', key);
 
-  // And the defaults still fold back to auto, the way every other row does.
-  dlssnr.writeSettings(file, { ScalingAntiRinging: 0.8, ScalingSigmoid: false });
+  // And the defaults still fold back to auto, the way every other row does. Ring suppression's is
+  // 0.8 and the other three are 0, so this also proves the fold is per-field and not a blanket zero.
+  dlssnr.writeSettings(file, { ScalingSharpness: 0, ScalingAntiRinging: 0.8, ScalingSigmoid: 0, ScalingDither: 0 });
   const back = fs.readFileSync(file, 'utf8');
-  assert.equal(getIniKey(back, 'DlssNr', 'ScalingAntiRinging'), 'auto');
-  assert.equal(getIniKey(back, 'DlssNr', 'ScalingSigmoid'), 'auto');
+  for (const key of TUNING) assert.equal(getIniKey(back, 'DlssNr', key), 'auto', key);
 });
