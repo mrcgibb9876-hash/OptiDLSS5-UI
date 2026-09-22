@@ -159,6 +159,13 @@ redistribution, so the manager only links to the release page and fetches the mo
   marginal network into a total install failure. A user can drop the right file into that folder by
   hand and the hash check will accept it.
 
+- **The release title is derived from the tag.** It used to be a *required* `workflow_dispatch`
+  input whose default was the literal `"OptiScaler Manager v1.1.0"`, and since nobody ever passed
+  one, every release inherited it -- v2.3.23 shipped under that title, on the GitHub release page
+  and on the Discord card. Leave the `title` input empty and the release is named after the tag; a
+  title naming a *different* version is refused outright. A version written by hand in a second
+  place is a version that goes stale.
+
 - **Nexus Mods is blocked by the egress proxy**, so a mod page's comments -- often the richest source
   on a specific game -- cannot be read from a session. The OptiScaler wiki and its issues can.
 
