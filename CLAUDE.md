@@ -137,6 +137,16 @@ redistribution, so the manager only links to the release page and fetches the mo
   ships, so an **older pin is no safer than the current one**. The list makes our fix a one-line
   release; it does not rescue a client already in the field. Only the cache and a user's own copy
   do that.
+  **The handoff when a download fails** (`ensureReShadeSetupOrAsk` in main.js): say which host failed
+  and why, point at `https://reshade.me/` with a Copy button, and then **find what they downloaded**
+  in Downloads or on the Desktop (`findDownloadedReShadeSetups` / `adoptDownloadedReShadeSetup`),
+  check it is the Add-on build and carry on. The user clicks a link and saves a file; no path to
+  type, nothing to place. A **browser** usually succeeds where this app's fetch does not, because
+  Node ignores the system proxy a VPN or DPI-bypass tool sets up. Same shape as `pdplugin.js`'s
+  handoff for PureDark's plugin -- copy that, do not invent a new one.
+  Test trap: a fixture setup .exe must be filled with **random** bytes. A zip of zeros deflates to
+  a couple of KB and falls under the 1MB floor that rejects a part-finished download, so the
+  fixture silently tests nothing.
 - **`fetch failed` is Node's, not ours, and it hides everything.** undici throws that bare string for
   DNS, a reset, a refused connection or a timeout, with the real reason in `error.cause`.
   `feeder.describeFetchFailure()` unwraps it and names the host. Also: the app has **no proxy

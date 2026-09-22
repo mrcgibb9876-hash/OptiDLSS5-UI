@@ -100,6 +100,18 @@ const RESHADE_SETUPS = [
 // and `cachedReShadeSetup` can prefer it. Same shape as dgVoodoo2's userCacheName (legacy.js).
 const RESHADE_USER_SETUP = 'ReShade_Setup_user.exe';
 
+// Where to send a user whose download we could not make ourselves. reshade.me's own terms ask that
+// people be pointed at the legitimate download page rather than handed a copy, which is exactly
+// what this does -- and a browser succeeds where this app's fetch fails more often than not, since
+// Node ignores the system proxy that a VPN or a DPI-bypass tool sets up.
+const RESHADE_DOWNLOAD_PAGE = 'https://reshade.me/';
+
+// A ReShade setup the user has already downloaded. The same handoff pdplugin.js makes for
+// PureDark's plugin: look where a browser puts things, newest first, and take it from there.
+// "ReShade_Setup_6.8.0_Addon.exe" is the shipped name; people also rename, so the name only picks
+// candidates -- what makes one acceptable is the export table of the ReShade64.dll inside.
+const RESHADE_SETUP_NAME_HINT = /reshade.*setup|setup.*reshade/i;
+
 
 // Plain filename, not a proxy name -- see the file header for why ReShade no longer proxies
 // anything itself in this integration. OptiScaler.ini's [Plugins] LoadReshade=true is what
@@ -719,6 +731,46 @@ async function deployReShade(dir, cacheDir, ghHeaders, { force = false, api = 'd
 // ReShade.fxh / ReShadeUI.fxh -- see the RESHADE_COMMON_HEADERS comment above for why these
 // are needed at all. Small text files, fetched directly rather than through the zip-cache
 // machinery the other deploy steps use.
+// Candidate ReShade setups sitting in the user's Downloads (and wherever else the caller names),
+// newest first. Name-matched only; validity is decided by importReShadeSetup, which looks inside.
+function findDownloadedReShadeSetups(dirs) {
+  const out = [];
+  const seen = new Set();
+  for (const dir of dirs || []) {
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+    for (const e of entries) {
+      if (!e.isFile() || !/\.exe$/i.test(e.name) || !RESHADE_SETUP_NAME_HINT.test(e.name)) continue;
+      const full = path.join(dir, e.name);
+      const key = full.toLowerCase();
+      if (seen.has(key)) continue;
+      try {
+        const st = fs.statSync(full);
+        if (st.size < 1024 * 1024) continue;
+        seen.add(key);
+        out.push({ path: full, name: e.name, size: st.size, mtimeMs: st.mtimeMs, addon: /addon/i.test(e.name) });
+      } catch {}
+    }
+  }
+  // Newest first, but an Add-on build ahead of a plain one of the same age: the plain build is the
+  // easier download to land on by accident and the one that silently never loads the Feeder.
+  return out.sort((a, b) => (b.addon - a.addon) || (b.mtimeMs - a.mtimeMs));
+}
+
+// Take the first downloaded setup that really is an add-on build. Each rejection is kept, so a user
+// who grabbed the plain build is told that rather than left wondering why nothing happened.
+async function adoptDownloadedReShadeSetup(dirs, cacheDir) {
+  const rejected = [];
+  for (const cand of findDownloadedReShadeSetups(dirs)) {
+    try {
+      return { path: await importReShadeSetup(cand.path, cacheDir), from: cand, rejected };
+    } catch (e) {
+      rejected.push({ name: cand.name, why: e_message(e) });
+    }
+  }
+  return { path: null, from: null, rejected };
+}
+
 // The ReShade setup to install from, in the order that keeps an install working when the host has
 // moved on:
 //
@@ -729,7 +781,7 @@ async function deployReShade(dir, cacheDir, ghHeaders, { force = false, api = 'd
 //
 // Only when all three come up empty is it an error, and then it says which step failed and what the
 // user can do about it, rather than handing on Node's bare "fetch failed".
-async function ensureReShadeSetup(cacheDir, ghHeaders, { fetchImpl = fetch } = {}) {
+async function ensureReShadeSetup(cacheDir, ghHeaders, { fetchImpl = fetch, downloadDirs = [] } = {}) {
   const cached = cachedReShadeSetup(cacheDir);
   if (cached) return cached;
 
@@ -745,14 +797,28 @@ async function ensureReShadeSetup(cacheDir, ghHeaders, { fetchImpl = fetch } = {
     }
   }
 
+  // Before giving up: the user may already have downloaded it themselves, either because the app
+  // asked them to last time or because they were installing ReShade anyway. Taking it from their
+  // Downloads folder is the whole point of the handoff -- they fetch it in a browser, the app
+  // carries on by itself.
+  const adopted = await adoptDownloadedReShadeSetup(downloadDirs, cacheDir);
+  if (adopted.path) return adopted.path;
+
   const err = new Error(
-    `Could not get ReShade's installer. ${tried.join('; ')}. ` +
-    'reshade.me publishes only its current version, so a version this app pins disappears when the next one ships. ' +
-    'Update this app, or pick a ReShade setup you already have -- it must be the Add-on build (ReShade_Setup_<version>_Addon.exe), ' +
-    'because the Feeder never loads on the plain one.'
+    `Could not download ReShade's installer. ${tried.join('; ')}. ` +
+    (adopted.rejected.length
+      ? `A setup was found in your Downloads but could not be used (${adopted.rejected.map((r) => `${r.name}: ${r.why}`).join('; ')}). `
+      : '') +
+    `Download it yourself from ${RESHADE_DOWNLOAD_PAGE} -- the Add-on build, ReShade_Setup_<version>_Addon.exe, ` +
+    'because the Feeder is a ReShade add-on and never loads on the plain one. Leave it in your Downloads folder ' +
+    'and this app will pick it up on its own.'
   );
   err.needsReShadeSetup = true;
   err.code = 'reshade-setup-unavailable';
+  // What the caller shows the user, and what a Copy button puts on the clipboard.
+  err.downloadPage = RESHADE_DOWNLOAD_PAGE;
+  err.downloadUrl = RESHADE_SETUPS[0].url;
+  err.rejected = adopted.rejected;
   throw err;
 }
 
@@ -1692,6 +1758,9 @@ module.exports = {
   RESHADE_SETUP_URL,
   RESHADE_SETUPS,
   RESHADE_USER_SETUP,
+  RESHADE_DOWNLOAD_PAGE,
+  findDownloadedReShadeSetups,
+  adoptDownloadedReShadeSetup,
   ensureReShadeSetup,
   cachedReShadeSetup,
   importReShadeSetup,

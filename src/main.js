@@ -965,30 +965,90 @@ async function dxvkHost32LayerStep(dir, exePath) {
 // machine at once. Rather than leave the user with nothing, offer to take a setup they already
 // have -- validated as the Add-on build, since the plain one deploys fine and then never loads
 // the Feeder.
+// Where a browser drops things. The same handoff pdplugin.js makes for PureDark's plugin.
+function reshadeDownloadDirs() {
+  const dirs = [];
+  for (const key of ['downloads', 'desktop']) {
+    try { dirs.push(app.getPath(key)); } catch {}
+  }
+  return dirs;
+}
+
+// ReShade's installer, with the handoff that keeps a failed download from ending the install.
+//
+// reshade.me publishes only its current version, so the version this app pins stops existing when
+// the next one ships -- and a filtered network, a VPN that is a proxy rather than a tunnel, or a
+// bad minute at the host all land in the same place. None of that may leave a user stuck, so when
+// the app cannot fetch it:
+//
+//   - it says WHICH download failed and why (the host and the cause, not "fetch failed"),
+//   - it points at reshade.me and puts the link on the clipboard, because a BROWSER usually
+//     succeeds where this app's fetch does not: Node ignores the system proxy a VPN or a
+//     DPI-bypass tool sets up, and a browser does not,
+//   - and then it finds what they downloaded by itself, in Downloads or on the Desktop, checks it
+//     is the Add-on build and carries straight on with the install.
+//
+// So the user's only job is to click a link and save a file. No path to type, nothing to place.
 async function ensureReShadeSetupOrAsk(win = null) {
+  const attempt = () => feeder.ensureReShadeSetup(feederCacheDir(), GITHUB_HEADERS, { downloadDirs: reshadeDownloadDirs() });
+  let error;
   try {
-    return await feeder.ensureReShadeSetup(feederCacheDir(), GITHUB_HEADERS);
-  } catch (error) {
-    const opts = {
+    return await attempt();
+  } catch (e) {
+    error = e;
+  }
+
+  const page = error.downloadPage || 'https://reshade.me/';
+  let note = '';
+  // Bounded: each round is a button press, and Cancel is always there. The cap only stops a stuck
+  // dialog looping forever if showMessageBox ever starts answering without a user.
+  for (let round = 0; round < 12; round++) {
+    const answer = await dialog.showMessageBox(...(win ? [win] : []), {
       type: 'warning',
-      buttons: ['Use a ReShade setup I have\u2026', 'Cancel'],
+      buttons: ['Open the download page', 'Copy the link', "I've downloaded it -- look again", 'Choose the file myself...', 'Cancel'],
       defaultId: 0,
-      cancelId: 1,
+      cancelId: 4,
       noLink: true,
       title: 'ReShade (the Feeder is one of its add-ons)',
-      message: 'ReShade\u2019s installer could not be fetched.',
-      detail: `${error && error.message ? error.message : error}\n\nIt must be the Add-on build -- ReShade_Setup_<version>_Addon.exe from https://reshade.me/ -- because the Feeder is a ReShade add-on and never loads on the plain build.`,
-    };
-    const answer = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
-    if (answer.response !== 0) throw error;
+      message: 'This app could not download ReShade\u2019s installer.',
+      detail: `${error.message}\n\n${page}\n\nDownload the Add-on build there and save it \u2014 Downloads is fine, you do not have to tell this app where it went. ` +
+        `Then press "I've downloaded it" and the install carries on.${note}`,
+    });
+
+    if (answer.response === 4) throw error;
+    if (answer.response === 0) {
+      await shell.openExternal(page).catch(() => {});
+      note = '\n\nThe page is open in your browser.';
+      continue;
+    }
+    if (answer.response === 1) {
+      clipboard.writeText(page);
+      note = `\n\nCopied: ${page}`;
+      continue;
+    }
+    if (answer.response === 2) {
+      try {
+        return await attempt();
+      } catch (e) {
+        // Keep the newest reasons -- "you downloaded the plain build" is the one that matters.
+        error = e;
+        note = '\n\nStill nothing usable found. Check the file finished downloading, and that it is the Add-on build.';
+        continue;
+      }
+    }
     const pick = await dialog.showOpenDialog({
       title: 'Select ReShade\u2019s Add-on setup',
       properties: ['openFile'],
       filters: [{ name: 'ReShade setup', extensions: ['exe'] }],
     });
-    if (pick.canceled || pick.filePaths.length === 0) throw error;
-    return await feeder.importReShadeSetup(pick.filePaths[0], feederCacheDir());
+    if (pick.canceled || pick.filePaths.length === 0) continue;
+    try {
+      return await feeder.importReShadeSetup(pick.filePaths[0], feederCacheDir());
+    } catch (e) {
+      note = `\n\n${e && e.message ? e.message : e}`;
+    }
   }
+  throw error;
 }
 
 // dgVoodoo2 in front of a DirectX 8/9 game. Fetched like every other component, with no prompt:
