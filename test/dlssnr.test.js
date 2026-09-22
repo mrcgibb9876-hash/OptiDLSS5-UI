@@ -300,11 +300,18 @@ test('Before Super Resolution and UI correction are never both on', () => {
 // was FSR1 if the downscale filter happened to be FSR1 and bicubic otherwise. The engine keeps that
 // rule for an unset key, so the row's default has to be null -- a number here would be a confident
 // label over a picture that depends on the row above.
-test('the upscale filter defaults to auto rather than naming a filter', () => {
+test('the upscale filter offers no FSR1 and defaults to the one that cannot go wrong', () => {
   const field = dlssnr.FIELDS.find((f) => f.key === 'ScalingUpscaler');
-  assert.equal(field.default, null);
+
+  // FSR1 stays a DOWNscaler. It is still the first entry of the downscale list beside this one, so
+  // this also guards against the two lists being wired to the same constant by mistake.
   assert.deepEqual(field.options.map(([, name]) => name),
-    ['FSR1', 'Bicubic', 'EWA Lanczos', 'xBR-lv2', 'Sharp bilinear', 'Integer scale', 'Nearest']);
+    ['Bicubic', 'EWA Lanczos', 'xBR-lv2', 'Sharp bilinear', 'Integer scale', 'Nearest']);
+  const downscaleRow = dlssnr.FIELDS.find((f) => f.key === 'ScalingDownscaler');
+  assert.equal(downscaleRow.options[0][1], 'FSR1');
+
+  assert.equal(field.default, 0);
+  assert.equal(field.options[field.default][1], 'Bicubic');
 
   // It is the enlarging direction, so it belongs to a model running SMALLER than the frame. The
   // downscale filter beside it is the opposite case, and showing both at once would offer a choice
@@ -318,20 +325,20 @@ test('an ini with no upscale filter reads as auto and writing one puts the numbe
   const file = freshIni('nr-upscaler');
   assert.equal(valueOf(file, 'ScalingUpscaler'), null);
 
-  const result = dlssnr.writeSettings(file, { ScalingUpscaler: 3 });
+  const result = dlssnr.writeSettings(file, { ScalingUpscaler: 2 });
   assert.equal(result.ok, true);
   assert.deepEqual(result.written, ['ScalingUpscaler']);
-  assert.equal(getIniKey(fs.readFileSync(file, 'utf8'), 'DlssNr', 'ScalingUpscaler'), '3');
-  assert.equal(valueOf(file, 'ScalingUpscaler'), 3);
+  assert.equal(getIniKey(fs.readFileSync(file, 'utf8'), 'DlssNr', 'ScalingUpscaler'), '2');
+  assert.equal(valueOf(file, 'ScalingUpscaler'), 2);
 });
 
-// There is no default to fold back into, so "auto" has to be reachable explicitly -- otherwise a
-// user who tried xBR on a 3D game could never get back to what the engine was doing before.
-test('the upscale filter can be set back to auto', () => {
+// Someone who tried xBR on a 3D game has to be able to get back, and picking the default in the
+// list is how they will do it -- so that has to land on disk as auto, the way every other row does.
+test('the upscale filter set back to its default is stored as auto', () => {
   const file = freshIni('nr-upscaler-back');
-  dlssnr.writeSettings(file, { ScalingUpscaler: 3 });
+  dlssnr.writeSettings(file, { ScalingUpscaler: 2 });
 
-  const result = dlssnr.writeSettings(file, { ScalingUpscaler: null });
+  const result = dlssnr.writeSettings(file, { ScalingUpscaler: 0 });
   assert.deepEqual(result.written, ['ScalingUpscaler']);
   assert.equal(getIniKey(fs.readFileSync(file, 'utf8'), 'DlssNr', 'ScalingUpscaler'), 'auto');
   assert.equal(valueOf(file, 'ScalingUpscaler'), null);

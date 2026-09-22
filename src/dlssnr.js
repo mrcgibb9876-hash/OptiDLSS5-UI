@@ -46,8 +46,10 @@ const DOWNSCALERS = [[0, 'FSR1'], [1, 'Bicubic'], [2, 'Catmull-Rom'], [3, 'Lancz
 // The other direction, and a different list, because a filter that answers "how do I average many
 // source pixels into one" is not the same question as "how do I invent the ones in between".
 // Engine [DlssNr] ScalingUpscaler; before it existed this direction had no control at all.
-const UPSCALERS = [[0, 'FSR1'], [1, 'Bicubic'], [2, 'EWA Lanczos'], [3, 'xBR-lv2'], [4, 'Sharp bilinear'], [5, 'Integer scale'], [6, 'Nearest']];
-const EWA_LANCZOS = 2;
+// No FSR1. It stays a downscaler, which is what DOWNSCALERS above is; as an enlarging filter it is
+// not worth having beside the rest of these.
+const UPSCALERS = [[0, 'Bicubic'], [1, 'EWA Lanczos'], [2, 'xBR-lv2'], [3, 'Sharp bilinear'], [4, 'Integer scale'], [5, 'Nearest']];
+const EWA_LANCZOS = 1;
 // Every tuning row below is read by that one filter and by nothing else, so they all hide together
 // rather than each repeating the condition.
 const EWA_ONLY = { all: [{ key: 'WorkingScale', below: 1 }, { key: 'ScalingUpscaler', is: EWA_LANCZOS }] };
@@ -153,9 +155,9 @@ const FIELDS = [
   // be FSR1 and bicubic otherwise, which is exactly what leaving this on default still does. The
   // default is null rather than a number for that reason: the answer depends on the row above, so
   // naming one here would put a confident wrong label on the picture for anyone who changed it.
-  { key: 'ScalingUpscaler', type: 'enum', default: null, options: UPSCALERS, group: 'Upscale filter',
+  { key: 'ScalingUpscaler', type: 'enum', default: 0, options: UPSCALERS, group: 'Upscale filter',
     label: "Filter", dependsOn: { key: 'WorkingScale', below: 1 },
-    help: "The filter that enlarges the model's answer back to display size when the model ran SMALLER than the frame.\n\nLeft on default it follows the downscale filter above: FSR1 if that is FSR1, Bicubic otherwise -- what this pass did before the control existed.\n\nEWA Lanczos is the sharp one. It weighs pixels by how far away they really are rather than by row and column, so a diagonal edge comes out as clean as a horizontal one instead of as a staircase. It is also much the most expensive here.\n\nxBR-lv2, Sharp bilinear, Integer scale and Nearest are for PIXEL ART and 2D. On a rendered 3D frame they will look wrong; on a sprite or a 2D game they are the only right answers in this list." },
+    help: "The filter that enlarges the model's answer back to display size when the model ran SMALLER than the frame.\n\nBicubic is the default because it is the cheapest and it cannot go wrong, not because it is good -- it is soft. For a rendered 3D game the one to try is EWA Lanczos.\n\nEWA Lanczos weighs pixels by how far away they really are rather than by row and column, so a diagonal edge comes out as clean as a horizontal one instead of as a staircase. Sharpness below is what makes it worth choosing, and it is much the most expensive here.\n\nxBR-lv2, Sharp bilinear, Integer scale and Nearest are for PIXEL ART and 2D. On a rendered 3D frame they will look wrong; on a sprite or a 2D game they are the only right answers in this list." },
   // EWA Lanczos's four controls. Every one of them is a percentage where 0 is the gentlest setting,
   // on purpose: four identical sliders read as one set to be balanced against each other, where a
   // checkbox beside a preset name reads as four unrelated things that happen to sit together.
