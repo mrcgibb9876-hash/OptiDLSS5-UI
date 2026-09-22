@@ -448,7 +448,10 @@ ipcMain.handle('feeder:readiness', async (_evt, exePath) => {
 // elevation itself). The setup exe is the same one the Feeder deploy downloads and caches.
 ipcMain.handle('feeder:openReShadeSetup', async () => {
   try {
-    const setupPath = await feeder.downloadToCache(feeder.RESHADE_SETUP_URL, feederCacheDir(), path.basename(feeder.RESHADE_SETUP_URL), GITHUB_HEADERS);
+    // ...OrAsk, because this button IS the Vulkan route's only way forward: the layer is
+    // machine-wide and only ReShade's own installer registers it. A download that fails here used
+    // to be a dead end with nothing to run, so the user's own setup is offered instead.
+    const setupPath = await ensureReShadeSetupOrAsk();
     const opened = await shell.openPath(setupPath);
     if (opened) throw new Error(opened);
     return { ok: true, setupPath };
@@ -773,6 +776,11 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
       throw new Error('this is a 32-bit game, and the 64-bit Feeder cannot load in it -- use Install, which sets up the experimental 32-bit route');
     }
     const api = await resolveApi(dir, exePath);
+    // Settle ReShade's installer before the deploy starts, so the "use one I have" door is offered
+    // with the user standing right there rather than thrown from inside a half-finished stack. It
+    // lands in the cache, which is the first place deployReShade looks, so the deploy below just
+    // finds it. On the Vulkan layer no local setup is needed and this is a no-op.
+    if (feeder.reshadeModeForApi(api) !== 'vulkan-layer') await ensureReShadeSetupOrAsk();
     const results = await feeder.deployFeederStack(dir, api, mvProviderId || feeder.defaultMvProviderId(), {
       cacheDir: feederCacheDir(),
       getRhiManifest,
@@ -938,7 +946,7 @@ async function dxvkHost32LayerStep(dir, exePath) {
   const parkedNote = parked.parked ? `; the game-folder ReShade (${parked.parked}) is set aside as ${parked.as}` : '';
   let setupPath;
   try {
-    setupPath = await feeder.downloadToCache(feeder.RESHADE_SETUP_URL, feederCacheDir(), path.basename(feeder.RESHADE_SETUP_URL), GITHUB_HEADERS);
+    setupPath = await ensureReShadeSetupOrAsk();
   } catch (error) {
     return { ok: false, parkedNote, error: `ReShade's setup could not be fetched (${error && error.message ? error.message : error})` };
   }
@@ -949,6 +957,38 @@ async function dxvkHost32LayerStep(dir, exePath) {
   });
   invalidateDetection(dir);
   return { ok: layer.ok, ran: layer.ran, error: layer.error || null, parkedNote };
+}
+
+// ReShade's installer, with the door out that dgVoodoo2 has had all along (askForDgVoodooZip's
+// shape, below). reshade.me publishes only its current version: when the next one ships, the
+// version this app pins 404s and every fresh Feeder install fails at the same step on every
+// machine at once. Rather than leave the user with nothing, offer to take a setup they already
+// have -- validated as the Add-on build, since the plain one deploys fine and then never loads
+// the Feeder.
+async function ensureReShadeSetupOrAsk(win = null) {
+  try {
+    return await feeder.ensureReShadeSetup(feederCacheDir(), GITHUB_HEADERS);
+  } catch (error) {
+    const opts = {
+      type: 'warning',
+      buttons: ['Use a ReShade setup I have\u2026', 'Cancel'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+      title: 'ReShade (the Feeder is one of its add-ons)',
+      message: 'ReShade\u2019s installer could not be fetched.',
+      detail: `${error && error.message ? error.message : error}\n\nIt must be the Add-on build -- ReShade_Setup_<version>_Addon.exe from https://reshade.me/ -- because the Feeder is a ReShade add-on and never loads on the plain build.`,
+    };
+    const answer = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
+    if (answer.response !== 0) throw error;
+    const pick = await dialog.showOpenDialog({
+      title: 'Select ReShade\u2019s Add-on setup',
+      properties: ['openFile'],
+      filters: [{ name: 'ReShade setup', extensions: ['exe'] }],
+    });
+    if (pick.canceled || pick.filePaths.length === 0) throw error;
+    return await feeder.importReShadeSetup(pick.filePaths[0], feederCacheDir());
+  }
 }
 
 // dgVoodoo2 in front of a DirectX 8/9 game. Fetched like every other component, with no prompt:
@@ -1030,7 +1070,7 @@ ipcMain.handle('legacy:installHost32', async (_evt, { exePath, detected, release
     }
     const asset = await feeder.resolveFeederAsset(GITHUB_HEADERS);
     const feederZip = await feeder.downloadToCache(asset.url, feederCacheDir(), asset.name, GITHUB_HEADERS, { sha256: asset.digest });
-    const reshadeSetup = await feeder.downloadToCache(feeder.RESHADE_SETUP_URL, feederCacheDir(), path.basename(feeder.RESHADE_SETUP_URL), GITHUB_HEADERS);
+    const reshadeSetup = await ensureReShadeSetupOrAsk();
     const res = await legacy.deployHost32(dir, plan, {
       feederZip,
       reshadeSetup,
