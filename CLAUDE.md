@@ -149,11 +149,10 @@ redistribution, so the manager only links to the release page and fetches the mo
   fixture silently tests nothing.
 - **`fetch failed` is Node's, not ours, and it hides everything.** undici throws that bare string for
   DNS, a reset, a refused connection or a timeout, with the real reason in `error.cause`.
-  `feeder.describeFetchFailure()` unwraps it and names the host. Also: the app has **no proxy
-  support at all** -- no `ProxyAgent`, nothing reading `HTTPS_PROXY` -- and Node's fetch ignores
-  Windows' system proxy, so a VPN only applies when it is a TUN/virtual adapter, never when it is a
-  local SOCKS/HTTP proxy or a browser extension. A Fallout: New Vegas user (2026-09-22) burned a
-  day on that. Still to do.
+  `feeder.describeFetchFailure()` unwraps it and names the host. A Fallout: New Vegas user
+  (2026-09-22) burned a day on those two words. The proxy half of that is fixed too -- see the
+  `src/net.js` note above -- so a VPN or bypass tool now applies whether it is a TUN adapter or a
+  local proxy; before that it only ever worked as a TUN adapter.
 - **Revo Uninstaller's "additional folders" sweep can empty `%APPDATA%\OptiDLSS5-UI\feeder-cache`.**
   `downloadToCache` returns a cached file with **no network at all**, so a wiped cache turns a
   marginal network into a total install failure. A user can drop the right file into that folder by
@@ -171,10 +170,12 @@ redistribution, so the manager only links to the release page and fetches the mo
   resolution cache -- after which `test/helpers.js`'s electron stub stops being reachable and every
   `loadMain` throws on `ipcMain`. Seven tests went red on that, and making the require lazy was not
   enough: the first download in a file still triggered it.
-- **The release title is derived from the tag.** It used to be a *required* workflow input whose
-  default was the literal `"OptiScaler Manager v1.1.0"`, and since nobody ever passed one, every
-  release since carried that title -- v2.3.23 shipped under it, on the GitHub release page and the
-  Discord card. A title naming a different version than the tag is now refused outright.
+- **The release title is derived from the tag.** It used to be a *required* `workflow_dispatch`
+  input whose default was the literal `"OptiScaler Manager v1.1.0"`, and since nobody ever passed
+  one, every release inherited it -- v2.3.23 shipped under that title, on the GitHub release page
+  and on the Discord card. Leave the `title` input empty and the release is named after the tag; a
+  title naming a *different* version is refused outright. A version written by hand in a second
+  place is a version that goes stale.
 
 - **Nexus Mods is blocked by the egress proxy**, so a mod page's comments -- often the richest source
   on a specific game -- cannot be read from a session. The OptiScaler wiki and its issues can.
