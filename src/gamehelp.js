@@ -136,6 +136,26 @@ function diagnose(ctx) {
     const why = mv.broken ? 'broken' : !mv.shaderPresent ? 'missing' : 'mismatched';
     return fix('feeder-mv-broken', 'redeploy-feeder', { provider: mv.displayName || mv.id, why });
   }
+  // A Feeder that is deployed but not all there. main.js has gathered feederReady for this since the
+  // field was added -- "a no-dlss verdict on this route is almost always one of them missing, above
+  // all ReShade, which the add-on needs to load at all" -- and no rule ever read it. Dolphin (#106,
+  // 2026-09-21) is what that costs: `feeder: INCOMPLETE -- missing ReShade, DLSS5_Feed.fx, the
+  // ReShade headers` in the report's own digest, and a card that said "no known fix".
+  //
+  // Only the three pieces that stop the add-on loading at all. The two nvngx DLLs are left to the
+  // dlss-runtime rules above, which read OptiScaler's own log and say it better, and ReShade is
+  // skipped on the Vulkan layer, where it is machine-wide rather than a file here and the
+  // vulkan-layer-* rules under no-dlss are the ones that know why it did not attach.
+  const fr = ctx.feederReady;
+  if (route.feederDeployed && fr && fr.supported !== false) {
+    const gone = [
+      fr.reshadeMode !== 'vulkan-layer' && !fr.reshadeInstalled && 'ReShade',
+      !fr.addonInstalled && 'the Feeder add-on',
+      !fr.fxInstalled && 'DLSS5_Feed.fx',
+      !fr.headersInstalled && 'the ReShade headers',
+    ].filter(Boolean);
+    if (gone.length) return fix('feeder-incomplete', 'install', { missing: gone.join(', '), count: gone.length });
+  }
   // The experimental legacy routes: dgVoodoo2 or the 32-bit helper still to place. Install does both.
   if (route.route === 'feeder32' && !route.complete) return fix('not-installed', 'install');
   // DXVK in dgVoodoo2's place counts as the wrapper being there: offering Install here would put
@@ -338,6 +358,27 @@ function diagnose(ctx) {
       if (route.emulatorRenderer) {
         const r = route.emulatorRenderer;
         return out('step', r.seen ? 'emulator-renderer-mismatch' : 'emulator-renderer', { name: r.name, renderer: r.renderer, hint: r.hint, seen: r.seen || '' });
+      }
+      // The optiscaler route rests on one of two very different things. route.js:
+      //
+      //   shippedDlss = shipsDlss || (!legacyRenderer && !needsFeeder(dir) && ...)
+      //   hasNativeDlss(dir) = shipsNativeDlss(dir) || exists(dir/nvngx_dlss.dll)
+      //
+      // shipsDlss is the game's OWN DLSS, found in its tree -- evidence. The other branch is one
+      // loose nvngx_dlss.dll beside the exe, which anyone's tool could have dropped there. On that
+      // branch the card still says "This game ships its own DLSS, so OptiScaler only adds Neural
+      // Rendering on top of it -- just Install", which is an inference stated as a fact.
+      //
+      // A run with no DLSS in it falsifies that inference: OptiScaler loaded, saw the swapchain,
+      // and the game never made a DLSS call, because it has nothing to make one with. Kingdom Come:
+      // Deliverance (#107, 2026-09-21) is the case -- a 2018 CryEngine game with no upscaler at all,
+      // routed as "ships its own DLSS" and then left at "no known fix".
+      //
+      // A step, not a fix: the file may be the player's own and this app does not delete what it did
+      // not place (the same line foreign-optiscaler takes). Naming it, and what removing it changes,
+      // is the part that was missing.
+      if (route.route === 'optiscaler' && route.shipsDlss === false && !route.lumaDeployed) {
+        return out('step', 'optiscaler-no-native-dlss', { file: 'nvngx_dlss.dll' });
       }
       if (route.route === 'feeder' && route.feederDeployed) return noHook();
       if (route.route === 'lumaue') return out('step', 'luma-missing');
