@@ -5605,8 +5605,15 @@ $('#btn-check-updates').addEventListener('click', async () => {
         window.api.managerUpdateCheck();
         lines.push(t('Downloading Manager {version} in the background -- you will be asked to restart when it is ready.', { version: managerRes.latestVersion }));
       } else {
+        // Say WHY it did not just download it. The reason was sitting in the state and being thrown
+        // away at the one moment someone is stood in front of the app wondering what changed -- so
+        // the same behaviour on the portable build and on the installer looked like a regression,
+        // and got reported as one. The reason comes from the main process, so it is passed through
+        // t() as a value rather than a literal, the way the game status line at the top of this
+        // file already does.
         await window.api.openManagerReleasePage();
         lines.push(t('Opened the release page for {version} -- install it and relaunch.', { version: managerRes.latestVersion }));
+        if (st.reason) lines.push(t('It could not update itself: {reason}.', { reason: t(st.reason) }));
       }
     }
   } finally {
