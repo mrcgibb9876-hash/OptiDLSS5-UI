@@ -164,6 +164,13 @@ function renderFields() {
   host.innerHTML = '';
   if (fields.length === 0) return;
 
+  // Frame Generation goes after the model rows, the way the in-game panel orders it. Anchored to
+  // the model picker's FIELD rather than to a group name: it used to read `group === 'Models'`, the
+  // 2026-09-20 regroup renamed that group, and the whole section silently stopped rendering -- a
+  // string compare against a group name is only ever one rename away from dead, and nothing failed
+  // loudly enough for anyone to notice.
+  const frameGenAfter = (fields.find((f) => f.key === 'Preset') || {}).group || null;
+
   for (const group of [...new Set(fields.map((f) => f.group))]) {
     const rows = fields.filter((f) => f.group === group);
 
@@ -342,8 +349,7 @@ function renderFields() {
       body.appendChild(el);
     }
 
-    // The in-game panel's order: Frame Generation sits right after Models.
-    if (group === 'Models') renderFrameGen(host);
+    if (frameGenAfter && group === frameGenAfter) renderFrameGen(host);
   }
 }
 

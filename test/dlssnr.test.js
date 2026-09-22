@@ -434,3 +434,24 @@ test('the default folds back to auto so the engine decides, like every other row
   dlssnr.writeSettings(file, { ResetWhenBlind: true });
   assert.equal(getIniKey(fs.readFileSync(file, 'utf8'), 'DlssNr', 'ResetWhenBlind'), 'auto');
 });
+
+// The panel draws Frame Generation after the model rows. It used to find them by comparing against
+// a group literally named 'Models'; the 2026-09-20 regroup renamed that group and the whole section
+// stopped rendering, with nothing failing loudly enough for anyone to notice. The anchor is the
+// model picker's FIELD now, so this test is what keeps the next rename from doing it again.
+test('the group holding the model picker still exists for the panel to hang Frame Generation on', () => {
+  const rows = dlssnr.readSettings(freshIni('nr-framegen-anchor'));
+  const preset = rows.find((f) => f.key === 'Preset');
+
+  assert.ok(preset, 'the model picker is offered');
+  assert.ok(dlssnr.GROUPS.includes(preset.group), `${preset.group} is a real group`);
+
+  // And panel.js must still be anchoring to the field rather than to a group name, which is the
+  // thing that rotted last time. Comments are stripped first: the explanation of the old anchor
+  // names it, and a test that matches its own commentary proves nothing (the same way the "no
+  // picker inside the folder" guard once matched the comment saying there wasn't one).
+  const panel = fs.readFileSync(path.join(REPO, 'src', 'renderer', 'panel.js'), 'utf8')
+    .split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+  assert.match(panel, /frameGenAfter\s*=\s*\(fields\.find\(\(f\) => f\.key === 'Preset'\)/);
+  assert.doesNotMatch(panel, /group === 'Models'/);
+});
