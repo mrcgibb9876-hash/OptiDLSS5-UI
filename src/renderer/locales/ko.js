@@ -1281,6 +1281,8 @@ window.I18N.register("ko", {
   "Needs the pd-upscaler REFramework": "pd-upscaler REFramework가 필요합니다",
   "Enable DLSS in REFramework (Insert)": "REFramework에서 DLSS를 켜세요(Insert)",
   "Another OptiScaler loads first": "다른 OptiScaler가 먼저 불러와집니다",
+  "Your Deep Fried Chicken copy is saved, and {count} game(s) already using it were updated to it.": "Deep Fried Chicken 사본이 저장되었고, 이미 사용 중이던 게임 {count}개가 이 사본으로 업데이트되었습니다.",
+  "{count} game(s) could not be updated to the new copy -- close the game and add it again.": "게임 {count}개를 새 사본으로 업데이트하지 못했습니다. 게임을 닫고 다시 추가하세요.",
   "This game was routed as one that ships its own DLSS, and the last run says it does not: OptiScaler loaded, saw the game draw, and no DLSS call ever came. That routing rests on a single {file} sitting beside the game exe, which any DLSS tool could have left there -- not on finding the game's own DLSS in its files. If this game really has DLSS or DLAA in its graphics settings, turn it on and run again. If it has no upscaler at all, {file} is not the game's: delete it (it is not ours to remove for you) and press Install again, and the app will set up the Feeder route instead, which gives OptiScaler a DLSS call to hook.": "이 게임은 자체 DLSS를 제공하는 게임으로 분류되었지만, 마지막 실행은 그렇지 않다고 말합니다. OptiScaler가 로드되어 게임이 그리는 것을 보았는데도 DLSS 호출은 전혀 오지 않았습니다. 그 분류는 게임 실행 파일 옆에 있는 {file} 하나에만 근거한 것으로, 어떤 DLSS 도구든 남겨 둘 수 있는 파일이며 게임 자체의 DLSS를 파일에서 찾아낸 것이 아닙니다. 이 게임에 정말 그래픽 설정에 DLSS나 DLAA가 있다면 켜고 다시 실행하세요. 업스케일러가 전혀 없다면 {file}은 게임의 것이 아닙니다. 삭제한 뒤(대신 지워 드리지는 않습니다) 다시 설치를 누르면, 앱이 대신 Feeder 경로를 설정해 OptiScaler가 가로챌 DLSS 호출을 만들어 줍니다.",
   "Turn DLSS or DLAA on in the game, if it has one": "게임에 DLSS나 DLAA가 있다면 켜세요",
   "If it has none, delete {file} from the game folder": "없다면 게임 폴더에서 {file}을(를) 삭제하세요",

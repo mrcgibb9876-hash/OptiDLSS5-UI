@@ -330,6 +330,30 @@ function dfcOurs(dir) {
 // The marker is MERGED with the one already here. A re-deploy skips the cfg and the documents
 // (they exist), so a marker written from this deploy alone forgot them -- and Remove then left
 // the cfg behind, which detect.js reported as a foreign Chicken install of our own making.
+// Every game this app put Chicken into, brought up to the copy now in the cache.
+//
+// Replacing the copy in Settings used to change the cache and nothing else: a player who updated
+// Chicken had the new build sitting in the app's folder while every game they had switched kept
+// running the old binaries, with nothing on screen saying so. Since deployDfc overwrites the
+// payload, bringing them along is just re-running it.
+//
+// Only games whose marker says the deploy is OURS. A Chicken somebody copied in by hand is theirs
+// and is never touched, which is the same line drawn everywhere else in this module.
+async function redeployOurs(dirs, cacheDir) {
+  const updated = [];
+  const failed = [];
+  for (const dir of dirs || []) {
+    if (!dir || !dfcOurs(dir)) continue;
+    try {
+      const r = await deployDfc(dir, cacheDir);
+      if (r.deployed !== false) updated.push(dir);
+    } catch (e) {
+      failed.push({ dir, error: e && e.message ? e.message : String(e) });
+    }
+  }
+  return { updated, failed };
+}
+
 async function deployDfc(dir, cacheDir, { force = false, extra = {} } = {}) {
   const source = cachedDfc(cacheDir);
   if (!source) throw new Error('no Deep Fried Chicken copy has been added yet -- add yours in Edit first');
@@ -1076,6 +1100,7 @@ module.exports = {
   ADDON, NVNGX, CFG, LOG, LICENSE, MARKER, CACHE_NAME,
   PAYLOAD, PAYLOAD_IF_ABSENT, STATES,
   CONSUMERS, DEFAULT_CONSUMER, isConsumer, consumerOf,
+  redeployOurs,
   looksLikeDfc, importDfcSource, cachedDfc, suppliedInfo, recordSource,
   readMarker, dfcPresent, dfcOurs, deployDfc, removeDfc,
   RESHADE_PROXY, reshadeProxyOf, supportedFor, switchToDfc,
