@@ -14,6 +14,7 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const os = require('node:os');
 const integrity = require('./integrity');
+const { netFetch } = require('./net');
 
 const FG_DLL_NAMES = ['nvngx_dlssg.dll'];
 const FG_BACKUP_SUFFIX = '.dlss5ui-fgbackup';
@@ -157,7 +158,7 @@ async function ensureFrameGenDllCache(release, { cacheRoot, execFileAsync, ghHea
   const dllPath = path.join(cacheDir, 'nvngx_dlssg.dll');
   if (fs.existsSync(dllPath)) return dllPath;
 
-  const res = await fetch(release.url, { headers: ghHeaders });
+  const res = await netFetch(release.url, { headers: ghHeaders });
   if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
   integrity.checkFinalUrl(release.url, res);
   const buf = Buffer.from(await res.arrayBuffer());

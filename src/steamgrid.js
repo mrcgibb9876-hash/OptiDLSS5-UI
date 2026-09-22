@@ -23,6 +23,7 @@
 // no layout change. Its "heroes" (a much wider banner) are the fallback, and a vertical capsule is
 // never taken: it would be cropped to a strip of somebody's cover art.
 'use strict';
+const { netFetch } = require('./net');
 const library = require('./library');
 
 const API = 'https://www.steamgriddb.com/api/v2';
@@ -50,7 +51,7 @@ async function apiGet(pathAndQuery, key, fetchImpl) {
 }
 
 // What SteamGridDB knows by that name. Returns the shape pickBannerMatch reads: objects with a .name.
-async function search(term, key, fetchImpl = fetch) {
+async function search(term, key, fetchImpl = netFetch) {
   const data = await apiGet(`/search/autocomplete/${encodeURIComponent(term)}`, key, fetchImpl);
   if (!Array.isArray(data)) return [];
   return data.slice(0, 8).map((item) => ({ gridId: item.id, name: item.name }));
@@ -58,7 +59,7 @@ async function search(term, key, fetchImpl = fetch) {
 
 // The best still image for a game id, header-shaped if there is one. `url` is the full-size file and
 // `thumb` a smaller copy of the same picture; the full size is what the banner cache stores.
-async function artFor(gridId, key, fetchImpl = fetch) {
+async function artFor(gridId, key, fetchImpl = netFetch) {
   const ladder = [
     `/grids/game/${gridId}?dimensions=${HEADER_DIMENSIONS}&types=${STILL_TYPES}&nsfw=false`,
     `/heroes/game/${gridId}?types=${STILL_TYPES}&nsfw=false`,
@@ -79,7 +80,7 @@ async function artFor(gridId, key, fetchImpl = fetch) {
 // with a result that survives pickBannerMatch wins; a term whose results are all refused carries on
 // down the ladder rather than ending it, because being refused means that spelling found the wrong
 // game, not that the right one is absent.
-async function resolve(name, key, { fetchImpl = fetch } = {}) {
+async function resolve(name, key, { fetchImpl = netFetch } = {}) {
   if (!keyIsSet(key) || !name) return null;
   for (const term of library.bannerSearchTerms(name)) {
     let items = [];

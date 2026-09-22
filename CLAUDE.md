@@ -149,16 +149,27 @@ redistribution, so the manager only links to the release page and fetches the mo
   fixture silently tests nothing.
 - **`fetch failed` is Node's, not ours, and it hides everything.** undici throws that bare string for
   DNS, a reset, a refused connection or a timeout, with the real reason in `error.cause`.
-  `feeder.describeFetchFailure()` unwraps it and names the host. Also: the app has **no proxy
-  support at all** -- no `ProxyAgent`, nothing reading `HTTPS_PROXY` -- and Node's fetch ignores
-  Windows' system proxy, so a VPN only applies when it is a TUN/virtual adapter, never when it is a
-  local SOCKS/HTTP proxy or a browser extension. A Fallout: New Vegas user (2026-09-22) burned a
-  day on that. Still to do.
+  `feeder.describeFetchFailure()` unwraps it and names the host. A Fallout: New Vegas user
+  (2026-09-22) burned a day on those two words. The proxy half of that is fixed too -- see the
+  `src/net.js` note above -- so a VPN or bypass tool now applies whether it is a TUN adapter or a
+  local proxy; before that it only ever worked as a TUN adapter.
 - **Revo Uninstaller's "additional folders" sweep can empty `%APPDATA%\OptiDLSS5-UI\feeder-cache`.**
   `downloadToCache` returns a cached file with **no network at all**, so a wiped cache turns a
   marginal network into a total install failure. A user can drop the right file into that folder by
   hand and the hash check will accept it.
 
+- **Every download goes through `src/net.js` (`netFetch`), not Node's `fetch`.** Node's fetch ignores
+  the Windows system proxy entirely -- no `ProxyAgent`, nothing reads `HTTPS_PROXY` -- so a VPN or
+  DPI-bypass tool that works as a **proxy** rather than a virtual adapter does nothing for this app
+  while the user's browser sails through. Electron's `net.fetch` runs on Chromium's stack, which
+  reads the system proxy (PAC and WPAD included) and the OS certificate store. `test/net-proxy.test.js`
+  fails if any downloader goes back to `fetchImpl = fetch` or a bare `await fetch(`.
+  **The trap that cost an hour:** `require('electron')` must sit behind a `process.versions.electron`
+  guard and never at module scope. Outside Electron the package is still on disk as a devDependency,
+  and requiring it both returns a useless path *string* and poisons Node's per-(parent, request)
+  resolution cache -- after which `test/helpers.js`'s electron stub stops being reachable and every
+  `loadMain` throws on `ipcMain`. Seven tests went red on that, and making the require lazy was not
+  enough: the first download in a file still triggered it.
 - **The release title is derived from the tag.** It used to be a *required* `workflow_dispatch`
   input whose default was the literal `"OptiScaler Manager v1.1.0"`, and since nobody ever passed
   one, every release inherited it -- v2.3.23 shipped under that title, on the GitHub release page

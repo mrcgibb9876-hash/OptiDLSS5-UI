@@ -46,6 +46,7 @@ const { openZip, findEntry, extractEntryTo } = require('./zip');
 const { setIniKey, getIniKey } = require('./ini-merge');
 const nativeDlss = require('./native-dlss');
 const integrity = require('./integrity');
+const { netFetch } = require('./net');
 const dfc = require('./dfc');
 
 const FEEDER_RELEASES_API = 'https://api.github.com/repos/jlrouzies-fr/DLSS5-Feeder/releases/latest';
@@ -476,7 +477,7 @@ async function feederReadiness(dir, api, { execFileAsync = null, exePath = null 
 // now and then: a 5xx, a 429 or a dropped connection is retried a few times with a growing
 // pause before it becomes the error the user sees. A 4xx is final at once.
 const RETRY_PAUSES_MS = [1000, 3000, 6000];
-async function fetchWithRetry(url, init = {}, { fetchImpl = fetch, pauses = RETRY_PAUSES_MS } = {}) {
+async function fetchWithRetry(url, init = {}, { fetchImpl = netFetch, pauses = RETRY_PAUSES_MS } = {}) {
   let lastError = null;
   for (let attempt = 0; attempt <= pauses.length; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, pauses[attempt - 1]));
@@ -494,7 +495,7 @@ async function fetchWithRetry(url, init = {}, { fetchImpl = fetch, pauses = RETR
 // sha256: the digest the caller already has (a GitHub release asset's). Pinned URLs need none, and
 // a GitHub release URL without one is looked up (integrity.js). A cached copy is re-checked when
 // its hash is known without the network, so a file damaged in the cache is fetched again.
-async function downloadToCache(url, cacheDir, fileName, ghHeaders, { sha256: given = null, fetchImpl = fetch } = {}) {
+async function downloadToCache(url, cacheDir, fileName, ghHeaders, { sha256: given = null, fetchImpl = netFetch } = {}) {
   const dest = path.join(cacheDir, fileName);
   if (fs.existsSync(dest)) {
     const known = integrity.pinFor(url) || given;
@@ -529,7 +530,7 @@ function feederAssetFromRelease(release) {
 // The newest Feeder build this app should install. Stable by default; with allowPrerelease the
 // release list is walked newest-first instead, skipping drafts and any release published without
 // the zip, so one malformed release cannot break the deploy for everyone.
-async function resolveFeederAsset(ghHeaders, { allowPrerelease = false, fetchImpl = fetch } = {}) {
+async function resolveFeederAsset(ghHeaders, { allowPrerelease = false, fetchImpl = netFetch } = {}) {
   if (!allowPrerelease) {
     const res = await fetchWithRetry(FEEDER_RELEASES_API, { headers: ghHeaders }, { fetchImpl });
     if (!res.ok) throw new Error(`Could not check the DLSS5-Feeder release: HTTP ${res.status}`);
@@ -679,7 +680,7 @@ const VULKAN_APP_NOT_LISTED = (exePath, appsPath) => `ReShade's Vulkan layer is 
 // is machine-wide and needs the user at ReShade's installer, so on a sync it is reported as a warning
 // and the rest of the update goes ahead -- throwing there aborted the whole add-on update for a reason
 // the sync can do nothing about, and the sync's catch swallowed the message too (review, 2026-09-18).
-async function deployReShade(dir, cacheDir, ghHeaders, { force = false, api = 'dx11', execFileAsync = null, exePath = null, layerWarnOnly = false, vulkanStatus = null, fetchImpl = fetch } = {}) {
+async function deployReShade(dir, cacheDir, ghHeaders, { force = false, api = 'dx11', execFileAsync = null, exePath = null, layerWarnOnly = false, vulkanStatus = null, fetchImpl = netFetch } = {}) {
   const mode = reshadeModeForApi(api);
 
   if (mode === 'vulkan-layer') {
@@ -785,7 +786,7 @@ async function adoptDownloadedReShadeSetup(dirs, cacheDir) {
 //
 // Only when all three come up empty is it an error, and then it says which step failed and what the
 // user can do about it, rather than handing on Node's bare "fetch failed".
-async function ensureReShadeSetup(cacheDir, ghHeaders, { fetchImpl = fetch, downloadDirs = [] } = {}) {
+async function ensureReShadeSetup(cacheDir, ghHeaders, { fetchImpl = netFetch, downloadDirs = [] } = {}) {
   const cached = cachedReShadeSetup(cacheDir);
   if (cached) return cached;
 
@@ -892,7 +893,7 @@ async function importReShadeSetup(sourcePath, cacheDir) {
 // so every later deploy on this machine needs no network for them at all.
 const RESHADE_SHADERS_MIRROR_RAW = integrity.URLS.reshadeShadersMirror;
 
-async function fetchReShadeHeader(name, ghHeaders, { fetchImpl = fetch, pauses } = {}) {
+async function fetchReShadeHeader(name, ghHeaders, { fetchImpl = netFetch, pauses } = {}) {
   const init = { headers: { 'User-Agent': ghHeaders['User-Agent'] } };
   let lastError = null;
   for (const base of [RESHADE_SHADERS_REPO_RAW, RESHADE_SHADERS_MIRROR_RAW]) {
@@ -914,7 +915,7 @@ async function fetchReShadeHeader(name, ghHeaders, { fetchImpl = fetch, pauses }
   throw new Error(`Could not fetch ${name} from GitHub or its mirror (${lastError && lastError.message ? lastError.message : lastError}). Try again in a minute -- this is the host, not the game.`);
 }
 
-async function deployReShadeCommonHeaders(dir, ghHeaders, { force = false, cacheDir = null, fetchImpl = fetch, pauses } = {}) {
+async function deployReShadeCommonHeaders(dir, ghHeaders, { force = false, cacheDir = null, fetchImpl = netFetch, pauses } = {}) {
   const shaderDir = path.join(dir, 'reshade-shaders', 'Shaders');
   await fsp.mkdir(shaderDir, { recursive: true });
   const deployed = [];
@@ -1051,7 +1052,7 @@ async function deployMvProvider(dir, providerId, cacheDir, ghHeaders) {
 // just tidiness, it's the actual condition the licence sets for redistribution.
 // fetchImpl is for tests, which must never reach the network; the app passes nothing, so every
 // real call is a live fetch from the official repo, as the licence requires.
-async function deployLumeniteFx(dir, ghHeaders, { licenseConfirmed = false, fetchImpl = fetch } = {}) {
+async function deployLumeniteFx(dir, ghHeaders, { licenseConfirmed = false, fetchImpl = netFetch } = {}) {
   if (!licenseConfirmed) {
     throw new Error('LumeniteFX requires explicit licence confirmation before it can be fetched -- ' +
       'see MV_PROVIDERS["lumenite-kernel"].licenseSummary. Refusing.');

@@ -24,7 +24,7 @@
 // the game folder's listing, the app's own view of the game); the Windows user name is replaced wherever
 // it appears in a path, and the player confirms before anything is sent.
 'use strict';
-
+const { netFetch } = require('./net');
 // ┌──────────────────────────────────────────────────────────────────────────────────────────────┐
 // │ TODO(maintainer): paste the GitHub App's Client ID here, e.g. 'Iv23liAbCdEf0123456789'.       │
 // │ Empty = this build falls back to "save the zip + open a prefilled issue" (renderer.js).       │
@@ -77,7 +77,7 @@ const gistName = (name) => String(name).replace(/[\\/]/g, '_').replace(/^\.+/, '
 
 // ---- device flow -------------------------------------------------------------------------------
 
-async function startDeviceFlow({ fetchImpl = fetch } = {}) {
+async function startDeviceFlow({ fetchImpl = netFetch } = {}) {
   if (!configured()) throw new Error('Game failure reports are not set up in this build yet');
   const res = await fetchImpl('https://github.com/login/device/code', {
     method: 'POST',
@@ -90,7 +90,7 @@ async function startDeviceFlow({ fetchImpl = fetch } = {}) {
 }
 
 // Polls until the player approves (returns the token), declines, or the code expires.
-async function pollForToken(deviceCode, { interval = 5, expiresIn = 900, fetchImpl = fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), now = Date.now } = {}) {
+async function pollForToken(deviceCode, { interval = 5, expiresIn = 900, fetchImpl = netFetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)), now = Date.now } = {}) {
   const deadline = now() + expiresIn * 1000;
   let wait = Math.max(1, interval);
   while (now() < deadline) {
@@ -156,7 +156,7 @@ function prepareReport({ title, body, files = [], redactOpts = {} }) {
 
 // Posts a prepareReport() result as it stands: a secret gist with its files, then the issue linking it.
 // Returns { issueUrl, issueNumber, gistUrl, sent: [names], cut: [names] }.
-async function postReport({ token, prepared, fetchImpl = fetch }) {
+async function postReport({ token, prepared, fetchImpl = netFetch }) {
   const gistFiles = {};
   for (const f of prepared.files) gistFiles[f.name] = { content: f.text };
   const gist = prepared.files.length
@@ -171,7 +171,7 @@ async function postReport({ token, prepared, fetchImpl = fetch }) {
 }
 
 // prepare + post in one go, without a preview.
-async function sendReport({ token, title, body, files, fetchImpl = fetch, redactOpts = {} }) {
+async function sendReport({ token, title, body, files, fetchImpl = netFetch, redactOpts = {} }) {
   return postReport({ token, prepared: prepareReport({ title, body, files, redactOpts }), fetchImpl });
 }
 

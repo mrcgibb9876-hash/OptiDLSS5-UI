@@ -28,7 +28,7 @@
 //      cannot positively identify as the layer being purged is left alone and reported.
 
 'use strict';
-
+const { netFetch } = require('./net');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
@@ -510,7 +510,7 @@ function cachedDxvk(cacheDir) {
 // The pinned release, verified, unpacked into the cache as x32/ and x64/. Errors are told apart the
 // way legacy.js tells them apart, because the remedies differ: a bad download is worth retrying and
 // a file that vanished after being written is antivirus, which is not.
-async function ensureDxvk(cacheDir, { fetchImpl = fetch, headers = {} } = {}) {
+async function ensureDxvk(cacheDir, { fetchImpl = netFetch, headers = {} } = {}) {
   const cached = cachedDxvk(cacheDir);
   if (cached) return cached;
   await fsp.mkdir(cacheDir, { recursive: true });

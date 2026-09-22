@@ -19,6 +19,7 @@
 //     read as a rival's -- has bitten this app twice before; see native-dlss.js's host64 note.)
 //   - Remove takes the DLL only while it is still the copy this app placed.
 'use strict';
+const { netFetch } = require('./net');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -77,7 +78,7 @@ const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 
 // The latest release's RTXMFG.dll in cacheRoot/<tag>/, verified. Returns { ok, tag, dllPath, sha256 }
 // or { ok: false, error }. A cached copy whose hash still matches the release is used as is.
-async function ensureCache({ cacheRoot, fetchImpl = fetch, headers = {} }) {
+async function ensureCache({ cacheRoot, fetchImpl = netFetch, headers = {} }) {
   try {
     const res = await fetchImpl(RELEASES_API, { headers });
     if (!res.ok) throw new Error(`GitHub answered ${res.status} for ${REPO}'s latest release`);

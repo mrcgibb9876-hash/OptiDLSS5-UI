@@ -57,6 +57,7 @@ const saferemove = require('./saferemove');
 const dfc = require('./dfc');
 const dfccfg = require('./dfccfg');
 const panelwindow = require('./panelwindow');
+const { netFetch } = require('./net');
 let electronAutoUpdater = null;
 try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
 const ENGINE_KNOWN_GAMES = new Set(require('./engine-known-games.json').exeNames);
@@ -1792,7 +1793,7 @@ const BANNER_SEARCH_VERSION = 5;
 
 async function steamStoreSearch(term) {
   const url = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(term)}&l=english&cc=US`;
-  const res = await fetch(url, { headers: { 'User-Agent': 'OptiDLSS5-UI' } });
+  const res = await netFetch(url, { headers: { 'User-Agent': 'OptiDLSS5-UI' } });
   if (!res.ok) return [];
   const data = await res.json();
   return (data.items || []).slice(0, 8).map((item) => ({
@@ -4976,7 +4977,7 @@ async function getRhiManifest() {
   }
 
   try {
-    const res = await fetch(RHI_MANIFEST_URL, { headers: { 'User-Agent': GITHUB_HEADERS['User-Agent'] } });
+    const res = await netFetch(RHI_MANIFEST_URL, { headers: { 'User-Agent': GITHUB_HEADERS['User-Agent'] } });
     if (res.ok) {
       const data = await res.json();
       if (data && typeof data === 'object') {
@@ -5080,7 +5081,7 @@ async function ensureStreamlineSdkCache(release) {
 
   let tmpZip;
   try {
-    const dlRes = await fetch(release.url, { headers: GITHUB_HEADERS });
+    const dlRes = await netFetch(release.url, { headers: GITHUB_HEADERS });
     if (!dlRes.ok) throw new Error(`Download failed: HTTP ${dlRes.status}`);
     integrity.checkFinalUrl(release.url, dlRes);
     const buf = Buffer.from(await dlRes.arrayBuffer());
@@ -5232,7 +5233,7 @@ function reframeworkCacheDir() {
 
 async function getLatestREFrameworkVersion() {
   try {
-    const res = await fetch(REFRAMEWORK_RELEASES_API, { headers: GITHUB_HEADERS });
+    const res = await netFetch(REFRAMEWORK_RELEASES_API, { headers: GITHUB_HEADERS });
     if (!res.ok) return null;
     const data = await res.json();
     const first = Array.isArray(data) ? data[0] : null;
@@ -5250,7 +5251,7 @@ async function getLatestREFrameworkVersion() {
 
 async function reframeworkZipDigest() {
   try {
-    const res = await fetch(REFRAMEWORK_RELEASES_API, { headers: GITHUB_HEADERS });
+    const res = await netFetch(REFRAMEWORK_RELEASES_API, { headers: GITHUB_HEADERS });
     if (!res.ok) return null;
     const first = (await res.json())[0];
     return integrity.digestFromAsset(((first && first.assets) || []).find((a) => a.name === 'REFramework.zip'));
@@ -5276,7 +5277,7 @@ async function ensureREFrameworkCache() {
 
   let tmpZip;
   try {
-    const dlRes = await fetch(REFRAMEWORK_ZIP_URL, { headers: GITHUB_HEADERS });
+    const dlRes = await netFetch(REFRAMEWORK_ZIP_URL, { headers: GITHUB_HEADERS });
     if (!dlRes.ok) throw new Error(`Download failed: HTTP ${dlRes.status}`);
     integrity.checkFinalUrl(REFRAMEWORK_ZIP_URL, dlRes);
     const buf = Buffer.from(await dlRes.arrayBuffer());
@@ -6369,7 +6370,7 @@ ipcMain.handle('banner:cache-steam', async (_evt, { appid, fallbackImageUrl }) =
 
   let imageUrl = null;
   try {
-    const res = await fetch(`https://store.steampowered.com/api/appdetails?appids=${appid}`);
+    const res = await netFetch(`https://store.steampowered.com/api/appdetails?appids=${appid}`);
     if (res.ok) {
       const data = await res.json();
       const entry = data[String(appid)];
@@ -6383,7 +6384,7 @@ ipcMain.handle('banner:cache-steam', async (_evt, { appid, fallbackImageUrl }) =
   if (!imageUrl) return null;
 
   try {
-    const res = await fetch(imageUrl);
+    const res = await netFetch(imageUrl);
     if (!res.ok) return null;
     const buf = Buffer.from(await res.arrayBuffer());
     await fsp.writeFile(dest, buf);
@@ -6403,7 +6404,7 @@ ipcMain.handle('banner:cache-url', async (_evt, { id, imageUrl }) => {
   const dest = path.join(bannersDir(), `sgdb-${String(id).replace(/[^a-z0-9]/gi, '')}${ext}`);
   if (fs.existsSync(dest)) return dest;
   try {
-    const res = await fetch(imageUrl, { headers: { 'User-Agent': 'OptiDLSS5-UI' } });
+    const res = await netFetch(imageUrl, { headers: { 'User-Agent': 'OptiDLSS5-UI' } });
     if (!res.ok) return null;
     await fsp.writeFile(dest, Buffer.from(await res.arrayBuffer()));
     return dest;
@@ -6433,7 +6434,7 @@ ipcMain.handle('update:check', async (_evt, { engine } = {}) => {
     // build this app does not bundle is offered its own latest instead.
     const pin = engines.engine(id).bundled ? engines.pinnedEngineTag() : null;
     const getJson = async (url) => {
-      const r = await fetch(url, { headers: GITHUB_HEADERS });
+      const r = await netFetch(url, { headers: GITHUB_HEADERS });
       if (!r.ok) throw new Error(`GitHub API returned ${r.status}`);
       return r.json();
     };
@@ -6484,7 +6485,7 @@ ipcMain.handle('update:checkManager', async () => {
     // builds made before the bundle existed.
     let bundledEngineTag = (bundledEngine() || {}).tag || null;
     if (!bundledEngineTag) {
-      const ownRes = await fetch(`https://api.github.com/repos/${MANAGER_REPO}/releases/tags/${encodeURIComponent(currentTag)}`, { headers: GITHUB_HEADERS });
+      const ownRes = await netFetch(`https://api.github.com/repos/${MANAGER_REPO}/releases/tags/${encodeURIComponent(currentTag)}`, { headers: GITHUB_HEADERS });
       if (ownRes.ok) {
         const ownRelease = await ownRes.json();
         const zipAsset = (ownRelease.assets || []).find((a) => /^OptiScaler_DLSSNR-.*\.zip$/i.test(a.name));
@@ -6493,7 +6494,7 @@ ipcMain.handle('update:checkManager', async () => {
       }
     }
 
-    const latestRes = await fetch(`https://api.github.com/repos/${MANAGER_REPO}/releases/latest`, { headers: GITHUB_HEADERS });
+    const latestRes = await netFetch(`https://api.github.com/repos/${MANAGER_REPO}/releases/latest`, { headers: GITHUB_HEADERS });
     if (!latestRes.ok) throw new Error(`GitHub API returned ${latestRes.status}`);
     const latest = await latestRes.json();
     const latestVersion = String(latest.tag_name || '').replace(/^v/i, '');
@@ -6578,7 +6579,7 @@ ipcMain.handle('update:install', async (_evt, { downloadUrl, localZip, tag, engi
   try {
     let zipPath = localZip;
     if (!zipPath) {
-      const res = await fetch(downloadUrl, { headers: GITHUB_HEADERS });
+      const res = await netFetch(downloadUrl, { headers: GITHUB_HEADERS });
       if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
       integrity.checkFinalUrl(downloadUrl, res);
       const buf = Buffer.from(await res.arrayBuffer());
@@ -6586,7 +6587,7 @@ ipcMain.handle('update:install', async (_evt, { downloadUrl, localZip, tag, engi
       if (digest && /^[0-9a-f]{64}$/i.test(digest)) integrity.verifyBuffer(buf, digest.toLowerCase(), 'The engine zip');
 
       if (sha256Url) {
-        const shaRes = await fetch(sha256Url, { headers: GITHUB_HEADERS });
+        const shaRes = await netFetch(sha256Url, { headers: GITHUB_HEADERS });
         const expected = shaRes.ok ? engines.parseSha256Text(await shaRes.text()) : null;
         if (expected) {
           const actual = crypto.createHash('sha256').update(buf).digest('hex');

@@ -48,6 +48,7 @@ const feeder = require('./feeder');
 const integrity = require('./integrity');
 const verified = require('./verified');
 const { readFileVersion } = require('./detect');
+const { netFetch } = require('./net');
 
 // The app's backup suffix for a game file it replaced (main.js ORIG_BACKUP_SUFFIX, which the full uninstall
 // restores by name).
@@ -285,7 +286,7 @@ function lumaUeReadiness(dir, exePath, detected = null, lumaMod = null) {
 const downloadToCache = (url, cacheDir, fileName, ghHeaders, opts) => feeder.downloadToCache(url, cacheDir, fileName, ghHeaders, opts);
 
 async function resolveLumaAsset(ghHeaders, profile = LUMA_PROFILES.ue) {
-  const res = await fetch(LUMA_RELEASES_API, { headers: ghHeaders });
+  const res = await netFetch(LUMA_RELEASES_API, { headers: ghHeaders });
   if (!res.ok) throw new Error(`Could not check the Luma-Framework release: HTTP ${res.status}`);
   const release = await res.json();
   const asset = (release.assets || []).find((a) => profile.asset.test(a.name));

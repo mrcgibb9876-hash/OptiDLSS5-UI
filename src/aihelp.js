@@ -7,6 +7,7 @@
 // account of its own). The key is kept in settings.json with the rest of the settings and is
 // sent to api.anthropic.com only. Nothing is sent unless the user presses Ask AI.
 
+const { netFetch } = require('./net');
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const DEFAULT_MODEL = 'claude-sonnet-5';
 const MODELS = ['claude-sonnet-5', 'claude-haiku-4-5-20251001', 'claude-opus-5'];
@@ -43,7 +44,7 @@ const TOOLS = [
   },
 ];
 
-async function callClaude({ apiKey, model, messages, fetchImpl = fetch }) {
+async function callClaude({ apiKey, model, messages, fetchImpl = netFetch }) {
   const res = await fetchImpl(API_URL, {
     method: 'POST',
     headers: {
@@ -63,7 +64,7 @@ async function callClaude({ apiKey, model, messages, fetchImpl = fetch }) {
 
 // Runs the loop. `applyFix(fix, why)` is the app's: it asks the user, runs the fix, and returns
 // a text result (or a refusal). `onText(text)` receives Claude's prose as it comes.
-async function helpSession({ apiKey, model = DEFAULT_MODEL, evidence, applyFix, onText = () => {}, fetchImpl = fetch, maxTurns = 6 }) {
+async function helpSession({ apiKey, model = DEFAULT_MODEL, evidence, applyFix, onText = () => {}, fetchImpl = netFetch, maxTurns = 6 }) {
   const transcript = [];
   const messages = [{ role: 'user', content: `Here is the app's evidence for this game:\n\n${evidence}` }];
   for (let turn = 0; turn < maxTurns; turn++) {

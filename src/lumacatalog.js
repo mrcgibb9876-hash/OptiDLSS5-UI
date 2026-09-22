@@ -21,6 +21,7 @@
 // Results are cached in userData by asset name and re-probed after a week or when the asset changes size;
 // src/luma-catalog.json is the snapshot this app ships with, for a first run with no network.
 'use strict';
+const { netFetch } = require('./net');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -85,7 +86,7 @@ function nameMatches(gameName, modKey) {
 // ---- remote zip listing ------------------------------------------------------------------------
 
 // The root entry names of a remote zip, from its central directory alone.
-async function listRemoteZip(url, { fetchImpl = fetch, headers = {}, size = null } = {}) {
+async function listRemoteZip(url, { fetchImpl = netFetch, headers = {}, size = null } = {}) {
   let total = size;
   if (!total) {
     const head = await fetchImpl(url, { method: 'HEAD', headers, redirect: 'follow' });
@@ -157,7 +158,7 @@ function get() {
 }
 
 // Reads the release and the wiki, probes every per-game zip it has not probed recently, writes the cache.
-async function refresh({ cachePath, fetchImpl = fetch, headers = {}, concurrency = 6, now = Date.now() } = {}) {
+async function refresh({ cachePath, fetchImpl = netFetch, headers = {}, concurrency = 6, now = Date.now() } = {}) {
   const prev = (cachePath && readJson(cachePath)) || readJson(BUNDLED) || { mods: [] };
   const byAsset = new Map((prev.mods || []).map((m) => [m.asset, m]));
   const relRes = await fetchImpl(RELEASES_API, { headers });
