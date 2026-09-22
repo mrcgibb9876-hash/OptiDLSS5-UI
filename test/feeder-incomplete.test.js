@@ -84,3 +84,45 @@ test('the motion-vector rule still wins -- it is the more specific of the two', 
   });
   assert.equal(d.code, 'feeder-mv-broken');
 });
+
+// #107, Kingdom Come: Deliverance -- a 2018 CryEngine game with no upscaler of any kind, routed as
+// "ships its own DLSS" and then left at "no known fix".
+//
+// route.js: shippedDlss = shipsDlss || (!legacyRenderer && !needsFeeder(dir) && ...)
+// feeder.js: needsFeeder(dir) = !hasNativeDlss(dir)
+// native-dlss.js: hasNativeDlss(dir) = shipsNativeDlss(dir) || exists(dir/nvngx_dlss.dll)
+//
+// So the optiscaler route has two very different grounds: the game's OWN DLSS found in its tree
+// (shipsDlss -- evidence), or one loose nvngx_dlss.dll beside the exe that any tool could have
+// dropped (an inference). The card states the second as the first: "This game ships its own DLSS".
+// A run with no DLSS in it falsifies that, and the app knew which ground it stood on all along.
+test('an optiscaler route with no DLSS of the game’s own says so when the run proves it', () => {
+  const kcd = (over = {}) => diagnose({
+    detected: { api: 'dx11', bitness: 64, antiCheat: null },
+    route: { route: 'optiscaler', optiInstalled: true, shipsDlss: false, ...over },
+    run: { ran: true, verdict: 'no-dlss' },
+    foreign: [],
+  });
+  const d = kcd();
+  assert.equal(d.status, 'step');
+  assert.equal(d.code, 'optiscaler-no-native-dlss');
+  assert.equal(d.vars.file, 'nvngx_dlss.dll');
+
+  // The game's own DLSS really was found: the route rests on evidence, so this rule keeps out of it
+  // and the old answer stands (they probably just have DLSS switched off in the game).
+  assert.equal(kcd({ shipsDlss: true }).code, 'no-hook');
+  // An older card that never carried the field is not guessed at either.
+  assert.equal(kcd({ shipsDlss: undefined }).code, 'no-hook');
+  // Luma owns its own no-dlss answer.
+  assert.equal(kcd({ lumaDeployed: true }).code, 'luma-select-dlss');
+});
+
+test('OptiScaler naming a missing nvngx_dlss.dll still wins -- it read its own log', () => {
+  const d = diagnose({
+    detected: { api: 'dx11', bitness: 64 },
+    route: { route: 'optiscaler', optiInstalled: true, shipsDlss: false },
+    run: { ran: true, verdict: 'no-dlss', dlssRuntimeMissing: true },
+    foreign: [],
+  });
+  assert.equal(d.code, 'dlss-runtime-missing');
+});

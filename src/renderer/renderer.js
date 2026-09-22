@@ -1200,6 +1200,7 @@ function helpWords(diag) {
     case 'asi-optiscaler': return t('OptiScaler is here as {file}, an ASI loader\'s plugin. This app never installs it that way -- it always uses a proxy DLL name -- so that copy is not ours, and it is the one the game loads and the one that answers the DLSS calls. Whatever this app has put beside it makes no difference while it is there. Remove {file} (it is not ours to remove for you), then press Install here.', v);
     case 'dlss-runtime-missing': return t('OptiScaler switched DLSS off a second into the run, because nvngx_dlss.dll is not beside the game exe -- its log says so in as many words. Nothing this app builds can make a DLSS call without it: not the Feeder\x27s synthesised one, not REFramework\x27s upscaler on a Resident Evil, not a DLSS 5 only profile. On this route the deploy fetches and places it, so running that again puts it back.');
     case 'dlss-runtime-stub': return t('There is an nvngx_dlss.dll beside the game exe, but it is only {bytes} bytes -- far too small to be a DLL. It is a placeholder, a failed download, or a marker left by another DLSS tool. This is worse than the file being missing: OptiScaler checks the name, finds it, writes "Enabling DLSS" in its log and carries on, so everything downstream looks switched on while nothing can load it. Fix it deletes the placeholder and puts a real copy there.', v);
+    case 'optiscaler-no-native-dlss': return t('This game was routed as one that ships its own DLSS, and the last run says it does not: OptiScaler loaded, saw the game draw, and no DLSS call ever came. That routing rests on a single {file} sitting beside the game exe, which any DLSS tool could have left there -- not on finding the game\'s own DLSS in its files. If this game really has DLSS or DLAA in its graphics settings, turn it on and run again. If it has no upscaler at all, {file} is not the game\'s: delete it (it is not ours to remove for you) and press Install again, and the app will set up the Feeder route instead, which gives OptiScaler a DLSS call to hook.', v);
     case 'feeder-incomplete': return t('The Feeder is deployed here, but not all of it arrived: {missing} still missing. The add-on cannot load without those, so nothing feeds DLSS and the game runs as if none of this were installed. Install again puts them back. If it keeps failing at the same piece, the download is being blocked rather than the game refusing it.', v);
     case 'feeder-technique': return t('DLSS initialised but the Feeder\'s shader technique was missing. Install again to redeploy the Feeder.');
     case 'luma-select-dlss': return t('Luma UE is deployed but no DLSS call happened. In-game, press Home for Luma\'s overlay and select DLSS as the upscaler, in gameplay. Then check again.');
@@ -1307,6 +1308,7 @@ function helpSteps(diag) {
     case 'asi-loader-blind': return [t('Check the .asi plugins in the game folder: {files}', v), t('Save the bundle or ask the AI')];
     case 'feeder-misdeployed': case 'ue-crash-feeder': return fixIt(t('Press Fix it (removes the Feeder)'));
     case 'luma-known-bad': case 'ue-crash-luma': return fixIt(t('Press Fix it (removes Luma UE)'));
+    case 'optiscaler-no-native-dlss': return [t('Turn DLSS or DLAA on in the game, if it has one', v), t('If it has none, delete {file} from the game folder', v), t('Press Install')];
     case 'feeder-incomplete': return [t('Press Install to fetch and place {missing}', v), launch];
     case 'not-installed': case 'feeder-missing': case 'dgvoodoo-missing': case 'feeder-technique': return [t('Press Install'), launch];
     case 'luma-missing': return [t('Press Fix it (sets up Luma)'), t('In the game: pick DirectX 11'), launch];
@@ -1396,6 +1398,7 @@ function helpShort(diag) {
     case 'asi-loader-blind': return t('An ASI loader is in charge here');
     case 'dlss-runtime-missing': return t('nvngx_dlss.dll is missing');
     case 'dlss-runtime-stub': return t('nvngx_dlss.dll is not a real DLL');
+    case 'optiscaler-no-native-dlss': return t('This game has no DLSS to hook');
     case 'feeder-incomplete': return t('The Feeder is only half installed');
     case 'feeder-technique': return t('Feeder shader missing');
     case 'luma-select-dlss': return t('Select DLSS in Luma\'s overlay (Home)');
