@@ -448,7 +448,10 @@ ipcMain.handle('feeder:readiness', async (_evt, exePath) => {
 // elevation itself). The setup exe is the same one the Feeder deploy downloads and caches.
 ipcMain.handle('feeder:openReShadeSetup', async () => {
   try {
-    const setupPath = await feeder.ensureReShadeSetup(feederCacheDir(), GITHUB_HEADERS);
+    // ...OrAsk, because this button IS the Vulkan route's only way forward: the layer is
+    // machine-wide and only ReShade's own installer registers it. A download that fails here used
+    // to be a dead end with nothing to run, so the user's own setup is offered instead.
+    const setupPath = await ensureReShadeSetupOrAsk();
     const opened = await shell.openPath(setupPath);
     if (opened) throw new Error(opened);
     return { ok: true, setupPath };
@@ -943,7 +946,7 @@ async function dxvkHost32LayerStep(dir, exePath) {
   const parkedNote = parked.parked ? `; the game-folder ReShade (${parked.parked}) is set aside as ${parked.as}` : '';
   let setupPath;
   try {
-    setupPath = await feeder.ensureReShadeSetup(feederCacheDir(), GITHUB_HEADERS);
+    setupPath = await ensureReShadeSetupOrAsk();
   } catch (error) {
     return { ok: false, parkedNote, error: `ReShade's setup could not be fetched (${error && error.message ? error.message : error})` };
   }

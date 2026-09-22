@@ -144,3 +144,28 @@ test("a user's file is taken only when it is the Add-on build", async () => {
   await assert.rejects(() => feeder.importReShadeSetup(junk, cache), /not a ReShade setup/);
   await assert.rejects(() => feeder.importReShadeSetup(path.join(src, 'nope.exe'), cache), /does not exist/);
 });
+
+// On Vulkan, ReShade is a machine-wide layer that only its own installer can register, so
+// deployReShade's job there is to TELL the user which of the three layer faults they have. That
+// diagnosis is something the app is certain of; a failed download is not a reason to replace it
+// with a network error on the one route where the user has to act.
+test('a Vulkan layer fault is still reported when the installer cannot be fetched', async () => {
+  const dir = scratchDir('rs-vk-dir');
+  const cache = scratchDir('rs-vk-cache');
+  await assert.rejects(
+    () => feeder.deployReShade(dir, cache, { 'User-Agent': 'test' }, {
+      api: 'vulkan',
+      exePath: path.join(dir, 'game.exe'),
+      vulkanStatus: { registered: false, addon: false, appListed: false },
+      fetchImpl: async () => { throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } }); },
+    }),
+    (err) => {
+      assert.ok(err.needsReShadeInstaller, 'still the Vulkan-installer case');
+      assert.match(err.message, /not installed as a Vulkan layer/, 'the diagnosis survives');
+      assert.match(err.message, /could not fetch it for you/, 'and the download failure is added, not substituted');
+      assert.equal(err.setupPath, null, 'so the caller can offer the user their own copy');
+      assert.match(err.setupError, /reshade\.me/, 'naming the host');
+      return true;
+    },
+  );
+});

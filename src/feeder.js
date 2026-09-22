@@ -665,7 +665,7 @@ const VULKAN_APP_NOT_LISTED = (exePath, appsPath) => `ReShade's Vulkan layer is 
 // is machine-wide and needs the user at ReShade's installer, so on a sync it is reported as a warning
 // and the rest of the update goes ahead -- throwing there aborted the whole add-on update for a reason
 // the sync can do nothing about, and the sync's catch swallowed the message too (review, 2026-09-18).
-async function deployReShade(dir, cacheDir, ghHeaders, { force = false, api = 'dx11', execFileAsync = null, exePath = null, layerWarnOnly = false, vulkanStatus = null } = {}) {
+async function deployReShade(dir, cacheDir, ghHeaders, { force = false, api = 'dx11', execFileAsync = null, exePath = null, layerWarnOnly = false, vulkanStatus = null, fetchImpl = fetch } = {}) {
   const mode = reshadeModeForApi(api);
 
   if (mode === 'vulkan-layer') {
@@ -680,10 +680,22 @@ async function deployReShade(dir, cacheDir, ghHeaders, { force = false, api = 'd
         ? `The ReShade Vulkan layer on this PC (${status.dllPath || status.manifestPath}) is a build without add-on support, so the Feeder would never load. ${VULKAN_LAYER_INSTRUCTION}`
         : `ReShade is not installed as a Vulkan layer on this PC. ${VULKAN_LAYER_INSTRUCTION}`;
     if (layerWarnOnly) return { deployed: false, reason: 'Vulkan layer needs the user', warning: message, mode, manifestPath: status.manifestPath };
-    const setupPath = await ensureReShadeSetup(cacheDir, ghHeaders);
-    const err = new Error(message);
+    // The Vulkan message above is the information that matters -- the layer on this PC is missing,
+    // add-on-less, or does not list this exe -- and it must reach the user whether or not the
+    // installer can be fetched. Letting a failed download throw INSTEAD would replace a diagnosis
+    // the app is certain of with a network error, on the one route where the user has to act.
+    let setupPath = null;
+    let setupError = null;
+    try {
+      setupPath = await ensureReShadeSetup(cacheDir, ghHeaders, { fetchImpl });
+    } catch (e) {
+      setupError = e;
+    }
+    const err = new Error(setupPath ? message : `${message} (and this app could not fetch it for you: ${e_message(setupError)})`);
     err.needsReShadeInstaller = true;
     err.setupPath = setupPath;
+    // Null when the fetch failed, so the caller can offer the user's own copy instead of a dead end.
+    err.setupError = setupError ? e_message(setupError) : null;
     throw err;
   }
 
@@ -696,7 +708,7 @@ async function deployReShade(dir, cacheDir, ghHeaders, { force = false, api = 'd
     await fsp.copyFile(dest, path.join(dir, OPENGL_BACKUP_NAME));
   }
 
-  const setupPath = await ensureReShadeSetup(cacheDir, ghHeaders);
+  const setupPath = await ensureReShadeSetup(cacheDir, ghHeaders, { fetchImpl });
   const zip = openZip(setupPath);
   const entry = findEntry(zip, /^ReShade64\.dll$/i);
   if (!entry) throw new Error('ReShade64.dll not found in the downloaded ReShade setup');
@@ -755,6 +767,8 @@ function describeFetchFailure(err, url) {
   const code = (cause && (cause.code || cause.message)) || (err && err.message) || String(err);
   return /fetch failed/i.test(String(err && err.message)) ? `could not reach ${host} (${code})` : `${host}: ${err && err.message ? err.message : err}`;
 }
+
+const e_message = (e) => (e && e.message ? e.message : String(e));
 
 function cachedReShadeSetup(cacheDir) {
   const names = [RESHADE_USER_SETUP, ...RESHADE_SETUPS.map((s) => path.basename(s.url))];
