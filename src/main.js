@@ -509,6 +509,18 @@ function latestFeederTag() {
   return latestFeederTagPromise;
 }
 
+// The newest Feeder's zip in the cache, resolved once per app run like the tag above, for the
+// 32-bit route's sync (legacy.refreshFeeder32). null when offline.
+let latestFeederZipPromise = null;
+function latestFeederZip() {
+  if (latestFeederZipPromise === null) {
+    latestFeederZipPromise = feeder.resolveFeederAsset(GITHUB_HEADERS, { allowPrerelease: feederPrereleaseEnabled() })
+      .then((asset) => feeder.downloadToCache(asset.url, feederCacheDir(), asset.name, GITHUB_HEADERS, { sha256: asset.digest }))
+      .catch(() => null);
+  }
+  return latestFeederZipPromise;
+}
+
 // Brings a game's deployed Feeder up to the newest release, the same way Game Help's
 // "redeploy-feeder" does. Games were left on whatever the Feeder was when they were installed, so a
 // library built up over weeks ran a different Feeder per game -- and the fixes that matter most on
@@ -5918,9 +5930,17 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
       try { dgWindowed = legacy.ensureDgVoodooWindowed(dir, { vendor: gpuVendor }); } catch {}
       // Installs from before the deploy gave the in-game panel its Alt+Home key (legacy.js ensureCastKey).
       try { legacy.ensureCastKey(dir); } catch {}
+      // The Feeder follows its releases here too. A locked file (the game running) is thrown, so the
+      // sync fails and the renderer retries once the game closes.
+      let feederUpdated = null;
+      const feederZip = await latestFeederZip();
+      if (feederZip) {
+        const refreshed = await legacy.refreshFeeder32(dir, feederZip);
+        if (refreshed.updated) feederUpdated = { files: refreshed.files };
+      }
       // Installs from before High performance was set for the helper (Feeder #100, 2026-09-19).
       await preferDiscreteGpu(dir, exePath, { onlyNew: true });
-      return { ok: true, updated: updated || nrUpdated, nrUpdated, dgWindowed, reason: 'legacy 32-bit route', autoConfigured: [] };
+      return { ok: true, updated: updated || nrUpdated || !!feederUpdated, nrUpdated, feederUpdated, dgWindowed, reason: 'legacy 32-bit route', autoConfigured: [] };
     }
     // A 64-bit DirectX 8/9 game behind dgVoodoo2 gets the same scaled-to-screen display (legacy.js DG_DISPLAY).
     try { legacy.ensureDgVoodooWindowed(dir, { vendor: gpuVendor }); } catch {}

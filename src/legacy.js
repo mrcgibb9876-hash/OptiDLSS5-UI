@@ -490,6 +490,45 @@ function ensureCastKey(dir) {
   return changed;
 }
 
+// The Feeder's three files on an installed 32-bit game, brought up to the given release zip. Sync
+// used to return before the Feeder for this route, so a game kept whatever Feeder it was installed
+// with: Castlevania LoS2 sat on 1.16.0-beta.5 after beta.6 fixed the in-game panel's cursor, and the
+// mouse froze with the panel open (2026-09-22).
+//
+// All or nothing. The add-on and the helper refuse each other across an IPC version change, so a
+// half-done refresh -- the helper exe locked by a running game, say -- would break a working install.
+// Every file is read first; if any write fails, the ones already written are put back.
+async function refreshFeeder32(dir, feederZip) {
+  const marker = readMarker(dir);
+  if (!marker || !marker.host32 || !feederZip || !fs.existsSync(feederZip)) return { updated: false };
+  const zip = openZip(feederZip);
+  const files = [
+    [path.join(dir, 'dlss5-feed.addon32'), ENTRY.addon32],
+    [path.join(dir, HOST_DIR, 'dlss5-feed-host64.exe'), ENTRY.host64],
+    [path.join(dir, 'reshade-shaders', 'Shaders', 'DLSS5_Feed.fx'), ENTRY.feedFx],
+  ];
+  const plan = [];
+  for (const [dest, re] of files) {
+    const entry = findEntry(zip, re);
+    if (!entry || !fs.existsSync(dest)) return { updated: false, reason: `${path.basename(dest)} missing` };
+    const next = extractEntry(zip, entry);
+    const prev = fs.readFileSync(dest);
+    if (!prev.equals(next)) plan.push({ dest, prev, next });
+  }
+  if (plan.length === 0) return { updated: false };
+  const done = [];
+  try {
+    for (const step of plan) {
+      await fsp.writeFile(step.dest, step.next);
+      done.push(step);
+    }
+  } catch (error) {
+    for (const step of done) await fsp.writeFile(step.dest, step.prev).catch(() => {});
+    throw error;
+  }
+  return { updated: true, files: plan.map((s) => path.relative(dir, s.dest)) };
+}
+
 // LEGACY_QUARANTINE_WAIT_MS lets tests skip the pause a real security scanner needs.
 async function stillThere(file) {
   const wait = Number(process.env.LEGACY_QUARANTINE_WAIT_MS ?? 1500);
@@ -1186,7 +1225,7 @@ async function removeLegacy(dir) {
 
 module.exports = {
   MARKER, HOST_DIR, DGVOODOO, PARK_SUFFIX, planFor, dxvkReplacesNative, status, readMarker, ensureDgVoodoo, importDgVoodooZip, cachedDgVoodoo,
-  isDgVoodooZip, configureDgVoodoo, DG_COLORSPACE_VALID, ensureDgVoodooWindowed, ensureCastKey, deployDgVoodoo, deployHost32, removalPlan, removeLegacy,
+  isDgVoodooZip, configureDgVoodoo, DG_COLORSPACE_VALID, ensureDgVoodooWindowed, ensureCastKey, refreshFeeder32, deployDgVoodoo, deployHost32, removalPlan, removeLegacy,
   parkReShadeProxy, unparkReShadeProxy, swapNativeToDxvk, swapDxvkToNative, setUpVulkanLayer32, vulkanLayerRecord, unlistVulkanLayerApp,
   currentMvProvider, deployLegacyShaders, setMvProvider,
 };

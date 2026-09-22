@@ -534,3 +534,39 @@ test('emulators: a watched launch no longer moves the route, it is kept for the 
   assert.equal(out.probe.api, 'opengl');
   assert.equal(out.probe.applied, false);
 });
+
+// Castlevania LoS2 (2026-09-22): sync returned before the Feeder on the 32-bit route, so the game kept
+// 1.16.0-beta.5 after beta.6 fixed the in-game panel's cursor.
+test('a 32-bit install\'s Feeder follows the release on sync, all three files or none', { skip: !onWindows }, async () => {
+  const base = scratchDir('feeder32-refresh');
+  const src = path.join(base, 'feeder-src');
+  write(src, 'dlss5-feed.addon32', 'addon32 beta.7');
+  write(src, 'host64/dlss5-feed-host64.exe', 'host exe beta.7');
+  write(src, 'reshade-shaders/Shaders/DLSS5_Feed.fx', '// feed fx beta.7');
+  const zip = zipDir(src, path.join(base, 'DLSS5-Feeder-new.zip'));
+
+  const game = path.join(base, 'game');
+  const addon = write(game, 'dlss5-feed.addon32', 'addon32 beta.5');
+  const host = write(game, 'host64/dlss5-feed-host64.exe', 'host exe beta.5');
+  const fx = write(game, 'reshade-shaders/Shaders/DLSS5_Feed.fx', '// feed fx beta.5');
+  write(game, '.dlss5ui-legacy.json', JSON.stringify({ version: 1, files: [], dirs: ['host64'], host32: { api: 'dx9', reshadeName: 'dxgi.dll' } }));
+
+  // The helper exe locked: nothing may be left half-updated, the add-on included.
+  fs.chmodSync(host, 0o444);
+  await assert.rejects(legacy.refreshFeeder32(game, zip));
+  assert.equal(fs.readFileSync(addon, 'utf8'), 'addon32 beta.5', 'the add-on was put back');
+  assert.equal(fs.readFileSync(host, 'utf8'), 'host exe beta.5');
+  fs.chmodSync(host, 0o666);
+
+  const res = await legacy.refreshFeeder32(game, zip);
+  assert.equal(res.updated, true);
+  assert.equal(fs.readFileSync(addon, 'utf8'), 'addon32 beta.7');
+  assert.equal(fs.readFileSync(host, 'utf8'), 'host exe beta.7');
+  assert.equal(fs.readFileSync(fx, 'utf8'), '// feed fx beta.7');
+  assert.equal((await legacy.refreshFeeder32(game, zip)).updated, false, 'nothing to do the second time');
+
+  // Not a 32-bit install: never touched.
+  const other = path.join(base, 'other');
+  write(other, 'dlss5-feed.addon32', 'someone else\'s');
+  assert.equal((await legacy.refreshFeeder32(other, zip)).updated, false);
+});
