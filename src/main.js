@@ -4259,7 +4259,7 @@ ipcMain.handle('game:detect-path-if-stale', async (_evt, { exePath, stored }) =>
     // renderer the fresh answer whenever that evidence differs from what it saved.
     try {
       const fresh = await detectFor(dir, exePath);
-      const keys = ['vulkanWrapper', 'reshadeProxy', 'optiScalerProxy', 'antiCheat', 'protectedLauncher', 'oldShaderCompiler'];
+      const keys = ['vulkanWrapper', 'reshadeProxy', 'optiScalerProxy', 'asiPlugins', 'antiCheat', 'protectedLauncher', 'oldShaderCompiler'];
       const changed = fresh && keys.some((k) => JSON.stringify(fresh[k] ?? null) !== JSON.stringify(stored[k] ?? null));
       return changed ? fresh : null;
     } catch {

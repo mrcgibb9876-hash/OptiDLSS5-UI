@@ -522,6 +522,16 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = 
         ? `${detected.optiScalerProxy.file} -- NOT the build this app installed, and it is the one that answers the game's NGX calls`
         : `${detected.optiScalerProxy.file} (this app's own install)`);
     }
+    // An ASI loader's plugins. This app installs OptiScaler as a proxy DLL and reads a folder by
+    // those names, so it cannot see what an .asi loads -- and its verdicts are then about the wrong
+    // file. Saying so is the point: a GAMMA report (#108) spent a whole diagnosis on a leftover
+    // dxgi.dll before the reporter mentioned that he loads OptiScaler and ReShade as .asi.
+    if (detected.asiPlugins && (detected.asiPlugins.files || []).length) {
+      const asi = detected.asiPlugins;
+      const named = [asi.optiScaler && `OptiScaler in ${asi.optiScaler}`, asi.reShade && `ReShade in ${asi.reShade}`].filter(Boolean);
+      add('asi plugins', `${asi.files.length} beside the exe (${asi.files.slice(0, 6).join(', ')}${asi.files.length > 6 ? ', ...' : ''})` +
+        (named.length ? ` -- ${named.join(' and ')}, loaded by an ASI loader and NOT by this app` : ' -- this app cannot see what they load'));
+    }
     if (detected.antiCheat) add('anti-cheat', detected.antiCheat);
   }
   // dgVoodoo2 turns DirectX 8/9 into D3D11 inside the game, which is itself a reason a DX9 game can
