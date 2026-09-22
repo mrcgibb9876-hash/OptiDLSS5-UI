@@ -151,27 +151,27 @@ function formatValue(v) {
 // make unambiguous. Everything else stays readable and untouched, and a player who wants it uses
 // Chicken's own overlay -- which is still there.
 //
-// `min`/`max` are stated only where a source gives them: the pass and layer counts come from the
-// documented 1-30 range, percentages from their own units, and a 0/1 key from its default. Where a
-// bound is genuinely unknown the field is a plain number with no slider, rather than a guessed
-// range that would quietly clamp someone's tuning.
+// Checked against Chicken 3.0's own menu on 2026-09-22 (its add-on's draw code: labels, widget types
+// and slider ranges). Labels are his, so a player sees the same words here and in his overlay, and
+// every range is the one his slider clamps to. Nothing is offered that his menu does not offer:
+// `arm`, `layers`, `texture_boost*`, `preserve_native_tone_color*` and `frame_generation_coexistence`
+// were here from the CP376 cfg and are gone -- his menu never shows them (the last is automatic now),
+// and a setting that exists only in this app is one nobody can check against Chicken itself.
+//
+// Chicken keeps its settings in memory and saves the whole file after each change in its own menu,
+// so an edit here reaches a game that is NOT running; a running game writes over it.
 const FIELDS = [
-  { key: 'enabled', type: 'bool', label: 'Neural rendering on', help: 'Chicken\x27s master switch for the neural pass.' },
-  { key: 'arm', type: 'bool', label: 'Arm on load', help: 'Whether Chicken arms itself when it loads, rather than waiting to be turned on in its overlay.' },
-  { key: 'passes', type: 'number', min: 1, max: 30, step: 1, label: 'Neural passes', help: 'How many sequential neural passes run. 1 is the shipped default; more costs frame time.' },
-  { key: 'layers', type: 'number', min: 1, max: 30, step: 1, label: 'Layers', help: 'How many of the 30 layer blocks are active. Each has its own settings in Chicken\x27s overlay.' },
-  { key: 'neural_work_percent', type: 'number', min: 1, max: 100, step: 1, unit: '%', label: 'Neural work', help: 'Share of the full neural workload to run. Lower trades quality for frame time.' },
-  { key: 'texture_boost', type: 'bool', label: 'Texture boost' },
-  { key: 'texture_boost_strength', type: 'number', min: 0, max: 2, step: 0.05, label: 'Texture boost strength', dependsOn: 'texture_boost' },
-  { key: 'clean_fry_enabled', type: 'bool', label: 'Clean Fry' },
-  { key: 'clean_fry_cleanup_strength', type: 'number', min: 0, max: 1, step: 0.05, label: 'Clean Fry cleanup', dependsOn: 'clean_fry_enabled' },
-  { key: 'clean_fry_detail_retention', type: 'number', min: 0, max: 1, step: 0.05, label: 'Clean Fry detail kept', dependsOn: 'clean_fry_enabled' },
-  { key: 'motion_stability_enabled', type: 'bool', label: 'Motion stability' },
-  { key: 'motion_stability_strength', type: 'number', min: 0, max: 1, step: 0.05, label: 'Motion stability strength', dependsOn: 'motion_stability_enabled' },
-  { key: 'motion_stability_detail_retention', type: 'number', min: 0, max: 1, step: 0.05, label: 'Motion stability detail kept', dependsOn: 'motion_stability_enabled' },
-  { key: 'frame_generation_coexistence', type: 'bool', label: 'Coexist with Frame Generation', help: 'Turn on when the game\x27s own Frame Generation is running.' },
-  { key: 'preserve_native_tone_color', type: 'bool', label: 'Preserve the game\x27s tone and colour' },
-  { key: 'preserve_native_tone_color_strength', type: 'number', min: 0, max: 1, step: 0.05, label: 'How much to preserve', dependsOn: 'preserve_native_tone_color' },
+  { key: 'enabled', type: 'bool', label: 'Enabled', help: 'Chicken\x27s own on/off switch. The game\x27s DLSS and frame-generation settings are not touched either way.' },
+  // A decimal, not a count: Chicken blends the last pass in by the fraction.
+  { key: 'passes', type: 'number', min: 1, max: 30, step: 0.1, label: 'Pass amount', help: 'How many neural passes run each frame, in tenths. 1.0 is the default; above about 10 the GPU and VRAM cost is heavy.' },
+  { key: 'neural_work_percent', type: 'number', min: 10, max: 150, step: 1, unit: '%', label: 'Resolution scale', help: 'The resolution the neural pass works at, as a share of the game\x27s. In the game, Chicken\x27s own menu only applies a change after "Apply resolution".' },
+  { key: 'clean_fry_enabled', type: 'bool', label: 'Clean Fry enabled' },
+  { key: 'clean_fry_cleanup_strength', type: 'number', min: 0, max: 1, step: 0.05, label: 'Cleanup Strength', dependsOn: 'clean_fry_enabled', help: 'Higher is stricter. Clean Fry only works when two or more neural passes run.' },
+  // Only Chicken's 32-bit menu shows this one; the key is live on both.
+  { key: 'clean_fry_detail_retention', type: 'number', min: 0, max: 1, step: 0.05, label: 'Fine-detail retention', dependsOn: 'clean_fry_enabled', help: 'How much fine detail Clean Fry keeps. Chicken shows this in its 32-bit menu only.' },
+  { key: 'motion_stability_enabled', type: 'bool', label: 'Motion Stability enabled' },
+  { key: 'motion_stability_strength', type: 'number', min: 0, max: 1, step: 0.05, label: 'Settle Strength', dependsOn: 'motion_stability_enabled', help: 'Settles broad changes between passes within the current frame. It only works when two or more neural passes run.' },
+  { key: 'motion_stability_detail_retention', type: 'number', min: 0, max: 1, step: 0.05, label: 'Detail retention', dependsOn: 'motion_stability_enabled' },
 ];
 
 const FIELD_KEYS = new Set(FIELDS.map((f) => f.key));
