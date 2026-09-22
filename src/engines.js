@@ -125,7 +125,7 @@ function clampPasses(value) {
 }
 
 // The [DlssNr] values a marker asks for, or [] when it asks for nothing. Only explicit choices
-// count. A marker with no explicit values asks for nothing -- the Alt+Home panel owns both keys,
+// count. A marker with no explicit values asks for nothing -- the Insert panel owns both keys,
 // and an earlier version of this reset them to auto on every sync.
 function iniEditsFor(marker) {
   if (!marker) return [];

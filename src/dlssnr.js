@@ -199,9 +199,13 @@ const FIELDS = [
   // other program on that machine holds the chord, which is exactly what this is for. Offered as a
   // list rather than a key capture: the point is to escape a key something else has taken, and a
   // short list of alternatives does that without another input-capture widget to get wrong.
-  { key: 'PanelKey', type: 'enum', default: VK.HOME | MOD.ALT, group: 'Window', keybind: true,
+  // Insert since engine v2.2.7: one key opens this project's panel on every route, so nobody has to
+  // remember which renderer or which neural consumer a game ended up on. RE Engine games are the
+  // exception and keep Alt+Home -- REFramework owns Insert there (main.js RE_ENGINE_HOTFIX).
+  { key: 'PanelKey', type: 'enum', default: VK.INSERT, group: 'Window', keybind: true,
     label: 'DLSS 5 panel hotkey',
     options: [
+      [VK.INSERT, 'Insert'],
       [VK.HOME | MOD.ALT, 'Alt+Home'],
       [VK.HOME, 'Home'],
       [VK.HOME | MOD.ALT | MOD.SHIFT, 'Shift+Alt+Home'],
@@ -212,7 +216,7 @@ const FIELDS = [
       [VK.F10, 'F10'],
       [VK.F10 | MOD.ALT, 'Alt+F10'],
     ],
-    help: "Opens OptiScaler's own DLSS 5 panel inside the game. Alt+Home by default.\n\nChange it when something else on the machine already holds that chord -- an overlay, a capture tool, a keyboard macro -- and the panel never appears. Nothing here can tell you which program took it; the symptom is simply that the key does nothing.\n\nThis is the panel drawn INSIDE the game. It is not this app's own pop-out panel, whose hotkey lives in Settings and is Alt+Shift+Home by default. On the 32-bit route the panel is drawn by the 64-bit helper and shown over the game, and this key still reaches it." },
+    help: "Opens the DLSS 5 panel inside the game. Insert by default, the same key on every route -- OptiScaler's own menu moved to Alt+O to free it.\n\nChange it when something else on the machine already holds the key -- an overlay, a capture tool, a keyboard macro -- and the panel never appears. Nothing here can tell you which program took it; the symptom is simply that the key does nothing.\n\nRE Engine games keep Alt+Home instead: REFramework's own menu owns Insert there, and it takes the keyboard from OptiScaler a few seconds into the game.\n\nThis is the panel drawn INSIDE the game. It is not this app's own pop-out panel, whose hotkey lives in Settings. On the 32-bit route the panel is drawn by the 64-bit helper and shown over the game, and this key still reaches it." },
 
   { key: 'LocalStructure', type: 'float', default: 1.0, min: 0, max: 1, step: 0.01, group: 'Picture',
     label: "Texture detail", help: "The model's structure-synthesis strength across the whole frame." },
