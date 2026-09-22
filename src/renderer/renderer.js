@@ -4017,7 +4017,14 @@ $('#btn-settings-dfc').addEventListener('click', async () => {
   const res = await window.api.dfcSupply();
   if (!res || res.cancelled) return;
   if (!res.ok) { toast(t('That is not a Deep Fried Chicken download: {error}', { error: res.error })); return; }
-  toast(t('Your Deep Fried Chicken copy is saved. Every game can use it now.'));
+  // Say how many games followed the new copy, so replacing it is visibly a change to the games and
+  // not just to a folder the player never sees.
+  toast(res.updatedGames
+    ? t('Your Deep Fried Chicken copy is saved, and {count} game(s) already using it were updated to it.', { count: res.updatedGames })
+    : t('Your Deep Fried Chicken copy is saved. Every game can use it now.'));
+  if (res.failedGames && res.failedGames.length) {
+    toast(t('{count} game(s) could not be updated to the new copy -- close the game and add it again.', { count: res.failedGames.length }));
+  }
   loadSettingsDfc();
   renderGrid();
 });

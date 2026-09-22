@@ -1281,6 +1281,8 @@ window.I18N.register("zh-CN", {
   "Needs the pd-upscaler REFramework": "需要 pd-upscaler 版 REFramework",
   "Enable DLSS in REFramework (Insert)": "在 REFramework 中启用 DLSS（Insert）",
   "Another OptiScaler loads first": "另一个 OptiScaler 先加载了",
+  "Your Deep Fried Chicken copy is saved, and {count} game(s) already using it were updated to it.": "你的 Deep Fried Chicken 副本已保存，已在使用它的 {count} 个游戏也已更新到该副本。",
+  "{count} game(s) could not be updated to the new copy -- close the game and add it again.": "有 {count} 个游戏无法更新到新副本——请关闭游戏后重新添加。",
   "This game was routed as one that ships its own DLSS, and the last run says it does not: OptiScaler loaded, saw the game draw, and no DLSS call ever came. That routing rests on a single {file} sitting beside the game exe, which any DLSS tool could have left there -- not on finding the game's own DLSS in its files. If this game really has DLSS or DLAA in its graphics settings, turn it on and run again. If it has no upscaler at all, {file} is not the game's: delete it (it is not ours to remove for you) and press Install again, and the app will set up the Feeder route instead, which gives OptiScaler a DLSS call to hook.": "本游戏被判定为自带 DLSS，而上次运行说明并非如此：OptiScaler 已加载并看到游戏绘制，却始终没有出现 DLSS 调用。这个判定只依据游戏 exe 旁边的一个 {file}——任何 DLSS 工具都可能把它留在那里，而不是在游戏文件中找到了游戏自己的 DLSS。如果这款游戏的图形设置里确实有 DLSS 或 DLAA，请开启后重新运行。如果它根本没有任何超分辨率功能，那么 {file} 不属于这款游戏：请删除它（我们不会替你删除），然后再次点击安装，应用会改为配置 Feeder 路线，为 OptiScaler 提供一个可挂钩的 DLSS 调用。",
   "Turn DLSS or DLAA on in the game, if it has one": "如果游戏有 DLSS 或 DLAA，请在游戏中开启",
   "If it has none, delete {file} from the game folder": "如果没有，请从游戏文件夹删除 {file}",

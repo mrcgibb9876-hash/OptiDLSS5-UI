@@ -446,3 +446,69 @@ test('a folder is what import wants anyway, at any of the depths a release unpac
     }
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
+
+// Replacing the copy used to change the cache and nothing else: a player who updated Chicken had
+// the new build in the app's folder while every game they had switched kept the old binaries, with
+// nothing on screen saying so. That is not "change it at will".
+test('replacing the copy carries the new version into the games already using it', async () => {
+  const base = tmp('redeploy');
+  try {
+    const cache = path.join(base, 'cache');
+    fs.mkdirSync(cache, { recursive: true });
+    const game = path.join(base, 'game');
+    fs.mkdirSync(game, { recursive: true });
+
+    // v1 supplied and deployed.
+    await dfc.importDfcSource(fakeDfcFolder(path.join(base, 'v1')), cache);
+    await dfc.deployDfc(game, cache);
+    assert.strictEqual(fs.readFileSync(path.join(game, dfc.ADDON), 'utf8'), 'fake chicken addon');
+
+    // v2 supplied: the game follows.
+    const v2 = fakeDfcFolder(path.join(base, 'v2'));
+    fs.writeFileSync(path.join(v2, dfc.ADDON), 'NEWER chicken addon');
+    await dfc.importDfcSource(v2, cache);
+    const r = await dfc.redeployOurs([game], cache);
+    assert.deepStrictEqual(r.failed, []);
+    assert.deepStrictEqual(r.updated, [game]);
+    assert.strictEqual(fs.readFileSync(path.join(game, dfc.ADDON), 'utf8'), 'NEWER chicken addon',
+      'the game runs the copy the player just supplied');
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('a Chicken somebody placed by hand is never updated out from under them', async () => {
+  const base = tmp('redeploy-hand');
+  try {
+    const cache = path.join(base, 'cache');
+    fs.mkdirSync(cache, { recursive: true });
+    await dfc.importDfcSource(fakeDfcFolder(path.join(base, 'supplied')), cache);
+
+    // Their own copy: the files are there, but no marker of ours.
+    const game = path.join(base, 'game');
+    fs.mkdirSync(game, { recursive: true });
+    fs.writeFileSync(path.join(game, dfc.ADDON), 'THEIR addon');
+    fs.writeFileSync(path.join(game, dfc.NVNGX), 'THEIR nvngx');
+
+    const r = await dfc.redeployOurs([game], cache);
+    assert.deepStrictEqual(r.updated, [], 'not ours, so not touched');
+    assert.strictEqual(fs.readFileSync(path.join(game, dfc.ADDON), 'utf8'), 'THEIR addon');
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('a game that is not on Chicken at all is skipped, and a bad folder does not stop the rest', async () => {
+  const base = tmp('redeploy-mixed');
+  try {
+    const cache = path.join(base, 'cache');
+    fs.mkdirSync(cache, { recursive: true });
+    await dfc.importDfcSource(fakeDfcFolder(path.join(base, 'supplied')), cache);
+
+    const onChicken = path.join(base, 'a');
+    fs.mkdirSync(onChicken, { recursive: true });
+    await dfc.deployDfc(onChicken, cache);
+    const plain = path.join(base, 'b');
+    fs.mkdirSync(plain, { recursive: true });
+
+    const r = await dfc.redeployOurs([plain, path.join(base, 'gone'), onChicken, null], cache);
+    assert.deepStrictEqual(r.updated, [onChicken]);
+    assert.deepStrictEqual(r.failed, [], 'a game folder that no longer exists is simply not ours');
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});

@@ -1127,7 +1127,14 @@ ipcMain.handle('dfc:supply', async (_evt, sourcePath) => {
     const picked = sourcePath || (await askForChicken());
     if (!picked) return { ok: true, cancelled: true };
     const r = await importChicken(picked);
-    return { ok: true, ...r };
+    // Carry the new copy into every game this app already put Chicken into. Without this, replacing
+    // the copy changed the cache and nothing else: the player's games kept the old binaries and
+    // nothing on screen said so, which is not "changing it at will". Games with a hand-placed
+    // Chicken are never ours and are left exactly as they are.
+    const dirs = readJson(gamesFile(), []).map((g) => (g && g.exePath ? gameDir(g.exePath) : null)).filter(Boolean);
+    const refreshed = await dfc.redeployOurs(dirs, dfcCacheDir());
+    for (const dir of refreshed.updated) invalidateDetection(dir);
+    return { ok: true, ...r, updatedGames: refreshed.updated.length, failedGames: refreshed.failed };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
