@@ -83,10 +83,16 @@ const FIELDS = [
     dependsOn: { key: 'RunBeforeSR', is: true },
     help: "For games with Ray Reconstruction: the pass costs what it would before Ray Reconstruction, without the damage. It runs after Ray Reconstruction, on its clean frame, with the model at the game's render resolution instead of the output's. Ray Reconstruction's own input is never touched, so nothing is smeared, and the model never sees ray-tracing noise. Model resolution and Adaptive resolution then count from the render resolution. Needs Before Super Resolution on." },
   // Enlargement: under the render-cost toggle, which is what makes the model run small (moved from Cost).
-  { key: 'Transfer', type: 'enum', default: 3, options: [[0, 'Classic'], [1, 'Matched residual'], [2, 'Edge-aware'], [3, 'Full-size look']], group: 'Speed vs quality',
-    label: "Scaling method", dependsOn: { any: [{ key: 'WorkingScale', below: 1 }, { key: 'AutoScale', is: true },
+  // Two modes, as the engine has: Classic and Matched residual. It briefly had four on the v2.2.0
+  // release line -- Edge-aware and a Full-size look default -- and that line is not the one v2.2.3
+  // onwards came from, so the two never shipped. Offering them here was worse than useless: picking
+  // Edge-aware wrote Transfer = 2, which the shipping shader reads as "the model ran small" rather
+  // than as a mode, and Full-size look wrote a 3 the engine simply treats as Matched residual while
+  // this panel claimed it was doing something else.
+  { key: 'Transfer', type: 'enum', default: 1, options: [[0, 'Classic'], [1, 'Matched residual']], group: 'Speed vs quality',
+    label: "Enlargement", dependsOn: { any: [{ key: 'WorkingScale', below: 1 }, { key: 'AutoScale', is: true },
       { all: [{ key: 'RunBeforeSR', is: true }, { key: 'RunBeforeRR', is: true }] }] },
-    help: "How the model's work is brought back up when it ran below the frame's size.\n\nClassic composes the model's small picture directly against the full-size frame. Those two disagree by the shrink's blur as well as by the model's edit, and the composition cannot tell them apart.\n\nMatched residual enlarges only the model's edit, laid on the full-size frame.\n\nEdge-aware does the same, but never blends the edit across an outline -- which is what drew a thin halo round characters' heads.\n\nFull-size look (default) learns how the model re-grades each patch -- its contrast, colour and saturation -- and applies that to every full-size pixel, so a smaller model looks like the full-size one, without halos. D3D12; Vulkan uses Edge-aware.\n\nGreyed out at 100%, where there is nothing to enlarge." },
+    help: "How the model's work is brought back up when it ran below the frame's size.\n\nClassic composes the model's small picture directly against the full-size frame. Those two disagree by the shrink's blur as well as by the model's edit, and the composition cannot tell them apart.\n\nGreyed out at 100%, where there is nothing to enlarge." },
   // Adaptive resolution (engine v2.1: DlssNr_Menu.cpp DrawAutoScale, DlssNrBudget.h). Labels, ranges and
   // help are the in-game panel's own; its help is hard-wrapped there and reflowed here, like every other
   // help text in this file. AutoScalePrebuild is not a panel row in the engine either, so it is not here.

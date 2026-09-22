@@ -1501,4 +1501,5 @@ window.I18N.register("ru", {
   "Reset all to defaults": "Сбросить всё к значениям по умолчанию",
   "Puts this window back where it opens, at its own size.": "Возвращает это окно туда, где оно открывается, и к его собственному размеру.",
   "Every DLSS 5 setting for this game back to what it ships with. Kept: the keys that open the panel, and whether it is light or dark.": "Все настройки DLSS 5 для этой игры возвращаются к исходным. Сохраняются: клавиши, открывающие панель, и светлая или тёмная тема.",
+  "How the model's work is brought back up when it ran below the frame's size.\n\nClassic composes the model's small picture directly against the full-size frame. Those two disagree by the shrink's blur as well as by the model's edit, and the composition cannot tell them apart.\n\nGreyed out at 100%, where there is nothing to enlarge.": "Как работа модели возвращается вверх, если она выполнялась ниже размера кадра.\n\nКлассическое компонует маленькую картинку модели прямо с полноразмерным кадром. Они расходятся и на размытие от уменьшения, и на правку модели, а композиция не может их различить.\n\nНеактивно на 100%, где увеличивать нечего.",
 });

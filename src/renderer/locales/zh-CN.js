@@ -1501,4 +1501,5 @@ window.I18N.register("zh-CN", {
   "Reset all to defaults": "全部恢复默认",
   "Puts this window back where it opens, at its own size.": "把这个窗口放回它打开时的位置和大小。",
   "Every DLSS 5 setting for this game back to what it ships with. Kept: the keys that open the panel, and whether it is light or dark.": "把这个游戏的所有 DLSS 5 设置恢复为出厂值。保留：打开面板的按键，以及面板是浅色还是深色。",
+  "How the model's work is brought back up when it ran below the frame's size.\n\nClassic composes the model's small picture directly against the full-size frame. Those two disagree by the shrink's blur as well as by the model's edit, and the composition cannot tell them apart.\n\nGreyed out at 100%, where there is nothing to enlarge.": "模型在低于画面尺寸运行时，如何把它的成果放大回来。\n\n经典方式把模型的小图直接与全尺寸画面合成。两者的差异既有缩小的模糊，也有模型的修改，而合成无法区分它们。\n\n在 100% 时灰显，因为没有需要放大的内容。",
 });

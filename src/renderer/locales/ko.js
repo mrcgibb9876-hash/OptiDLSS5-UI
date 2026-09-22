@@ -1501,4 +1501,5 @@ window.I18N.register("ko", {
   "Reset all to defaults": "모두 기본값으로 초기화",
   "Puts this window back where it opens, at its own size.": "이 창을 처음 열리는 위치와 크기로 되돌립니다.",
   "Every DLSS 5 setting for this game back to what it ships with. Kept: the keys that open the panel, and whether it is light or dark.": "이 게임의 모든 DLSS 5 설정을 출고 상태로 되돌립니다. 유지되는 것: 패널을 여는 단축키, 밝은 테마인지 어두운 테마인지.",
+  "How the model's work is brought back up when it ran below the frame's size.\n\nClassic composes the model's small picture directly against the full-size frame. Those two disagree by the shrink's blur as well as by the model's edit, and the composition cannot tell them apart.\n\nGreyed out at 100%, where there is nothing to enlarge.": "모델이 프레임 크기보다 작게 실행되었을 때 작업을 다시 키우는 방법.\n\n클래식은 모델의 작은 그림을 전체 크기 프레임에 직접 합성합니다. 둘은 축소 블러와 모델 편집 양쪽으로 다르고, 합성은 그 둘을 구분하지 못합니다.\n\n100%에서는 확대할 것이 없어 비활성화됩니다.",
 });
