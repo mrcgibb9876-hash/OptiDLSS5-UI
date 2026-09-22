@@ -173,6 +173,27 @@
           </label>
           <span id="game-lumaue-status" class="status-line"></span>
         </div>
+
+        <!-- Which add-on runs the neural pass on a Feeder game (dfc.js). The Feeder allows exactly
+             one, so this is a choice, and Install does the swap whole. Not advanced-only: it is
+             the one thing on a Feeder game the player has to decide. Shown on Feeder games only. -->
+        <div id="game-consumer-section" class="hidden">
+          <label class="field-label" data-i18n>Neural pass: which one runs</label>
+          <p class="field-hint" data-i18n>Only one runs in a game at a time. Switching removes one from the game folder and installs the other in its place; your Chicken settings are kept for next time.</p>
+          <div class="field-row">
+            <select id="game-neural-consumer"></select>
+            <button id="btn-dfc-supply" class="btn btn-ghost hidden" data-i18n>Add your Chicken copy…</button>
+          </div>
+          <span id="game-consumer-status" class="status-line"></span>
+
+          <!-- Chicken's own settings, in our panel. Built at runtime from the fields dfccfg.js
+               offers, so the markup carries no key names. -->
+          <div id="dfc-settings" class="hidden">
+            <label class="field-label" data-i18n>Deep Fried Chicken settings</label>
+            <p class="field-hint" id="dfc-settings-hint"></p>
+            <div id="dfc-settings-fields"></div>
+          </div>
+        </div>
       </details>
 
       <details id="edit-group-fg" class="edit-group">
@@ -271,6 +292,7 @@
             <button id="btn-feeder-remove" class="btn btn-ghost hidden" data-i18n>Remove</button>
           </div>
           <span id="game-feeder-status" class="status-line"></span>
+
         </div>
 
         <!-- The 32-bit route's motion-vector provider (legacy.js). Not advanced-only: the card's
@@ -498,6 +520,15 @@
         <button id="btn-panel-open" class="btn btn-ghost" data-i18n>Open it now</button>
       </div>
       <div id="panel-hotkey-status" class="status-line"></div>
+
+      <!-- Deep Fried Chicken (dfc.js): the user's own copy, added once for every game. Not advanced:
+           it is where people look for "where do I put the Chicken files". -->
+      <label class="field-label" style="margin-top: 14px;" data-i18n>Deep Fried Chicken</label>
+      <p class="field-hint" data-i18n>Add your own copy once, then switch a game to it from the game's ⋯ menu: DirectX 9 to 12, Vulkan and OpenGL, 32-bit games too. Pick the .7z you downloaded (7-Zip unpacks it), or any file in the folder you unpacked it into.</p>
+      <div class="field-row">
+        <button id="btn-settings-dfc" class="btn btn-ghost" data-i18n>Add your Chicken copy…</button>
+      </div>
+      <div id="settings-dfc-status" class="status-line"></div>
 
       <label class="scan-checkbox-row" style="margin-top: 14px;">
         <input id="settings-show-advanced" type="checkbox" />

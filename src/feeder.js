@@ -46,6 +46,7 @@ const { openZip, findEntry, extractEntryTo } = require('./zip');
 const { setIniKey, getIniKey } = require('./ini-merge');
 const nativeDlss = require('./native-dlss');
 const integrity = require('./integrity');
+const dfc = require('./dfc');
 
 const FEEDER_RELEASES_API = 'https://api.github.com/repos/jlrouzies-fr/DLSS5-Feeder/releases/latest';
 // GitHub's /releases/latest deliberately excludes pre-releases, so a beta the Feeder's author
@@ -402,7 +403,8 @@ async function feederReadiness(dir, api, { execFileAsync = null, exePath = null 
   } else if (mode === 'opengl32') {
     reshadeInstalled = isReShadeDll(path.join(dir, OPENGL_PROXY_NAME));
   } else {
-    reshadeInstalled = fs.existsSync(path.join(dir, RESHADE_DLL_NAME));
+    // A game switched to Deep Fried Chicken has ReShade as its proxy instead (dfc.js switchToDfc).
+    reshadeInstalled = fs.existsSync(path.join(dir, RESHADE_DLL_NAME)) || !!dfc.reshadeProxyOf(dir);
   }
   const addonInstalled = fs.existsSync(path.join(dir, 'dlss5-feed.addon64'));
   const fxInstalled = fs.existsSync(path.join(dir, 'reshade-shaders', 'Shaders', 'DLSS5_Feed.fx'));
@@ -711,7 +713,9 @@ async function deployReShade(dir, cacheDir, ghHeaders, { force = false, api = 'd
     throw err;
   }
 
-  const fileName = mode === 'opengl32' ? OPENGL_PROXY_NAME : RESHADE_DLL_NAME;
+  // On a game switched to Deep Fried Chicken, ReShade is the proxy (dfc.js switchToDfc): an update
+  // replaces it there, and a deploy finds it there, rather than putting a second ReShade64.dll beside it.
+  const fileName = mode === 'opengl32' ? OPENGL_PROXY_NAME : (dfc.reshadeProxyOf(dir) || RESHADE_DLL_NAME);
   const dest = path.join(dir, fileName);
   if (fs.existsSync(dest) && !force) {
     if (mode !== 'opengl32' || isReShadeDll(dest)) return { deployed: false, reason: 'already present', file: fileName, mode };

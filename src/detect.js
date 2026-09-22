@@ -603,8 +603,15 @@ async function inspectHookDlls(dir) {
   // RTXMFG, placed by this app under a proxy name, carries the string "ReShade"; it is not a hook
   // anybody else put here (rtxmfg.js).
   const rtxmfgFile = (rtxmfg.ourFile(dir) || '').toLowerCase();
+  // ReShade as the proxy on a game this app switched to Deep Fried Chicken (dfc.js switchToDfc) is
+  // ours, not "ReShade is already installed here -- Install replaces it".
+  let dfcProxy = '';
+  try {
+    const m = JSON.parse(fs.readFileSync(path.join(dir, '.dlss5ui-dfc.json'), 'utf8'));
+    if (typeof m.reshadeProxy === 'string') dfcProxy = m.reshadeProxy.toLowerCase();
+  } catch {}
   for (const name of HOOK_DLLS) {
-    if (name.toLowerCase() === rtxmfgFile) continue;
+    if (name.toLowerCase() === rtxmfgFile || name.toLowerCase() === dfcProxy) continue;
     const file = path.join(dir, name);
     if (!fs.existsSync(file)) continue;
     const hits = await scanFile(file, HOOK_NEEDLES, { maxBytes: SIBLING_SCAN_MAX_BYTES });
@@ -1234,7 +1241,7 @@ const FOREIGN_TOOLCHAINS = [
   // uninstaller is one of the scripts, so finding them is never a reason to go hunting by hand.
   {
     tool: 'Deep Fried Chicken',
-    files: ['deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg',
+    files: ['deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg', 'deep-fried-chicken.addon32', 'deep-fried-chicken-bridge.cfg', 'dfc-universal-feed.addon64',
       '.dfc-installer', 'INSTALL-DEEP-FRIED-CHICKEN.cmd', 'UNINSTALL-DEEP-FRIED-CHICKEN.cmd', 'CHICKEN-ASSIST.cmd'],
     pattern: /^ReShade\.ini\.deep-fried-chicken-backup-.*\.bak$/i,
   },
@@ -1273,7 +1280,7 @@ const FOREIGN_REMOVALS = {
   // as well, and putting that back would undo our own configuration to undo theirs. Offered rather
   // than done: someone may be running it on purpose and want ours gone instead, which Remove does.
   'Deep Fried Chicken': {
-    files: ['deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg', 'deep-fried-chicken.log',
+    files: ['deep-fried-chicken.addon64', 'deep-fried-chicken-nvngx.dll', 'deep-fried-chicken.cfg', 'deep-fried-chicken.addon32', 'deep-fried-chicken-bridge.cfg', 'dfc-universal-feed.addon64', 'deep-fried-chicken.log',
       '.dfc-installer', 'INSTALL-DEEP-FRIED-CHICKEN.cmd', 'UNINSTALL-DEEP-FRIED-CHICKEN.cmd', 'CHICKEN-ASSIST.cmd',
       'LICENSE-Deep-Fried-Chicken.md'],
     patterns: [/^ReShade\.ini\.deep-fried-chicken-backup-.*\.bak$/i],
@@ -1293,13 +1300,22 @@ const OUR_PAYLOAD = ['nvngx_dlssnr.dll', 'nvngx.dll_dlssnr.dll', 'OptiScaler.ini
 // extracted and journaled. The signature list is the first defence and this is the second, because
 // the next collision will be with a filename nobody has thought about yet.
 function filesWePlaced(dir) {
+  const ours = new Set();
+  const add = (list) => { for (const n of Array.isArray(list) ? list : []) ours.add(String(n).toLowerCase()); };
   try {
     const journal = JSON.parse(fs.readFileSync(path.join(dir, '.optiscaler-manager-install.json'), 'utf8'));
-    const added = Array.isArray(journal.added) ? journal.added : [];
-    return new Set(added.map((n) => String(n).toLowerCase()));
-  } catch {
-    return new Set();
-  }
+    add(journal.added);
+  } catch { /* no install of ours here */ }
+  // Deep Fried Chicken deployed as this game's chosen neural consumer (dfc.js) is ours, not a rival
+  // stack that wandered in. Its marker lists the exact names we placed, so only those stop counting
+  // as foreign: a Chicken the user installed with its own .cmd scripts has no marker and still
+  // reports, and its installer leftovers (.dfc-installer, CHICKEN-ASSIST.cmd, the ReShade.ini
+  // backups) are never in our list and so report even beside a deploy of ours.
+  try {
+    const dfcMarker = JSON.parse(fs.readFileSync(path.join(dir, '.dlss5ui-dfc.json'), 'utf8'));
+    add(dfcMarker.files);
+  } catch { /* no Chicken of ours here */ }
+  return ours;
 }
 
 function foreignToolchains(dir) {

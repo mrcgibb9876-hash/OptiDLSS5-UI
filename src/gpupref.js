@@ -19,6 +19,9 @@ const preflight = require('./preflight');
 
 const MARKER = '.dlss5ui-gpupref.json';
 const HOST64_EXE = path.join('host64', 'dlss5-feed-host64.exe');
+// Deep Fried Chicken's hidden x64 worker on its 32-bit route (dfc.js switchToDfc32): the same
+// cross-process frame hand-off, so the same need to sit on the card the game renders on.
+const DFC_HOST64_EXE = path.join('host64', 'dfc-universal-host64.exe');
 
 function readMarker(dir) {
   try {
@@ -34,8 +37,10 @@ function readMarker(dir) {
 function exesFor(dir, exes) {
   const out = new Map();
   for (const e of exes || []) if (e) out.set(String(e).toLowerCase(), String(e));
-  const host = path.join(dir, HOST64_EXE);
-  if (fs.existsSync(host)) out.set(host.toLowerCase(), host);
+  for (const rel of [HOST64_EXE, DFC_HOST64_EXE]) {
+    const host = path.join(dir, rel);
+    if (fs.existsSync(host)) out.set(host.toLowerCase(), host);
+  }
   return [...out.values()];
 }
 
