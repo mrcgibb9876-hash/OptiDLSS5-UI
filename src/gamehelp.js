@@ -136,6 +136,26 @@ function diagnose(ctx) {
     const why = mv.broken ? 'broken' : !mv.shaderPresent ? 'missing' : 'mismatched';
     return fix('feeder-mv-broken', 'redeploy-feeder', { provider: mv.displayName || mv.id, why });
   }
+  // A Feeder that is deployed but not all there. main.js has gathered feederReady for this since the
+  // field was added -- "a no-dlss verdict on this route is almost always one of them missing, above
+  // all ReShade, which the add-on needs to load at all" -- and no rule ever read it. Dolphin (#106,
+  // 2026-09-21) is what that costs: `feeder: INCOMPLETE -- missing ReShade, DLSS5_Feed.fx, the
+  // ReShade headers` in the report's own digest, and a card that said "no known fix".
+  //
+  // Only the three pieces that stop the add-on loading at all. The two nvngx DLLs are left to the
+  // dlss-runtime rules above, which read OptiScaler's own log and say it better, and ReShade is
+  // skipped on the Vulkan layer, where it is machine-wide rather than a file here and the
+  // vulkan-layer-* rules under no-dlss are the ones that know why it did not attach.
+  const fr = ctx.feederReady;
+  if (route.feederDeployed && fr && fr.supported !== false) {
+    const gone = [
+      fr.reshadeMode !== 'vulkan-layer' && !fr.reshadeInstalled && 'ReShade',
+      !fr.addonInstalled && 'the Feeder add-on',
+      !fr.fxInstalled && 'DLSS5_Feed.fx',
+      !fr.headersInstalled && 'the ReShade headers',
+    ].filter(Boolean);
+    if (gone.length) return fix('feeder-incomplete', 'install', { missing: gone.join(', '), count: gone.length });
+  }
   // The experimental legacy routes: dgVoodoo2 or the 32-bit helper still to place. Install does both.
   if (route.route === 'feeder32' && !route.complete) return fix('not-installed', 'install');
   // DXVK in dgVoodoo2's place counts as the wrapper being there: offering Install here would put
