@@ -5851,6 +5851,28 @@ async function findActiveOptiScalerFile(dir) {
   return null;
 }
 
+// The engine DLL alone brought up to the release, for a game kept as is: the full sync below does the
+// same copy among everything else it keeps current.
+async function copyEngineIfStale(dir, releaseFolder) {
+  const releaseDll = releaseFolder ? path.join(releaseFolder, 'OptiScaler.dll') : null;
+  if (!releaseDll || !fs.existsSync(releaseDll) || !hasDlssNrSection(releaseFolder)) return false;
+  const legacyMarker = legacy.readMarker(dir);
+  if (legacyMarker && legacyMarker.host32) {
+    const hostDll = path.join(dir, legacy.HOST_DIR, 'winmm.dll');
+    if (!fs.existsSync(hostDll) || sha256File(releaseDll) === sha256File(hostDll)) return false;
+    await fsp.copyFile(releaseDll, hostDll);
+    return true;
+  }
+  if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return false;
+  const active = await findActiveOptiScalerFile(dir);
+  if (!active || sha256File(releaseDll) === sha256File(active.file)) return false;
+  await fsp.copyFile(releaseDll, active.file);
+  const plain = path.join(dir, 'OptiScaler.dll');
+  if (active.file !== plain) await fsp.copyFile(releaseDll, plain).catch(() => {});
+  invalidateDetection(dir);
+  return true;
+}
+
 async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
   try {
     // OPTIDLSS5_NO_SYNC=1: a second copy of the app (screenshots, a demo, a source checkout pointed at a
@@ -5858,9 +5880,14 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
     if (process.env.OPTIDLSS5_NO_SYNC === '1') return { ok: true, updated: false, reason: 'sync disabled' };
     if (!exePath || !fs.existsSync(exePath)) return { ok: true, updated: false, reason: 'exe missing' };
     const dir = gameDir(exePath);
-    // The user asked for this game to be left exactly as it is: no engine update, no NR model update,
-    // no ini or REFramework changes on sync. Install, Edit and Remove still act when pressed.
-    if (keptAsIs(dir)) return { ok: true, updated: false, reason: 'kept as is' };
+    // The user asked for this game to be left as it is: no NR model update, no ini or REFramework
+    // changes on sync. Install, Edit and Remove still act when pressed. The engine is the exception: a
+    // library on two engines has an in-game panel, ini keys and Manager rows that disagree game to game
+    // (2026-09-22: Cyberpunk held on a test build by a forgotten marker showed none of v2.2.6's rows).
+    if (keptAsIs(dir)) {
+      const engineUpdated = await copyEngineIfStale(dir, releaseFolder);
+      return { ok: true, updated: engineUpdated, reason: 'kept as is' };
+    }
     // A 32-bit game on the helper route: its OptiScaler (winmm.dll) and NR model are in host64\ and
     // follow the engine and model in Settings the same way.
     const legacyMarker = legacy.readMarker(dir);

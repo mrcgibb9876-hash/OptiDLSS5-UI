@@ -359,7 +359,45 @@ async function pollRunningGames() {
     const now = next.has(exePath);
     if (was !== now) applyRunningState(card, now);
   }
+  // A game that just closed, or one the last sync pass could not finish, is synced now: its DLLs are
+  // no longer locked, and waiting for the next start-up is how a library ends up on two engines.
+  // A retry that keeps failing is asked again at most once a minute, not on every 5-second poll.
+  const at = Date.now();
+  const due = games.filter((g) => !next.has(g.exePath)
+    && (runningGames.has(g.exePath) || (syncRetry.has(g.exePath) && at - syncRetry.get(g.exePath) > 60000)));
   runningGames = next;
+  if (due.length > 0 && !resyncInFlight) resyncGames(due);
+}
+
+// Games a sync pass left behind -- almost always because the game was running and its DLLs were
+// locked -- with when it last failed. pollRunningGames retries them once it sees them closed.
+const syncRetry = new Map();
+let resyncInFlight = false;
+
+async function resyncGames(due) {
+  resyncInFlight = true;
+  try { await runResync(due); } finally { resyncInFlight = false; }
+}
+
+async function runResync(due) {
+  await autoSyncInFlight;
+  const updated = [];
+  for (const game of due) {
+    const engineId = engineOf(game);
+    const folder = engineFolder(engineId);
+    if (!folder) continue;
+    let res = null;
+    try { res = await window.api.syncGameIfStale({ exePath: game.exePath, releaseFolder: folder, nrDllPath: settings.nrDllPath }); } catch {}
+    if (!res || !res.ok) { syncRetry.set(game.exePath, Date.now()); continue; }
+    syncRetry.delete(game.exePath);
+    noteSyncResult(game, res);
+    if (res.updated) updated.push(game.name);
+  }
+  if (updated.length > 0) {
+    toast(updated.length > 1
+      ? t('Auto-updated OptiScaler in {count} games: {list}', { count: updated.length, list: updated.join(', ') })
+      : t('Auto-updated OptiScaler in 1 game: {list}', { list: updated.join(', ') }));
+  }
 }
 
 function startRunningPoll() {
@@ -5239,8 +5277,10 @@ async function runAutoSyncStaleGames() {
     const res = await window.api.syncGameIfStale({ exePath: game.exePath, releaseFolder: engineFolder(engineId), nrDllPath: settings.nrDllPath });
     if (!res.ok) {
       failed.push(`${game.name} (${res.error})`);
+      syncRetry.set(game.exePath, Date.now());
       continue;
     }
+    syncRetry.delete(game.exePath);
     if (noteSyncResult(game, res)) layerWarned.push(game.name);
     if (res.gameUpdated) (res.gameUpdated.needsReinstall ? gameBroken : gameRechecked).push(game.name);
     if (res.updated) updated.push(game.name);
