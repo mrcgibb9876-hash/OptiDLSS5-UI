@@ -155,3 +155,21 @@ test('a file with no trailing newline stays that way, and an append still lands 
   const { text } = cfg.applyEdits(noEol, { layers: 3 });
   assert.strictEqual(text, 'config_schema=13\nenabled=1\nlayers=3\n');
 });
+
+// Read out of Chicken 3.0's own menu (its add-on's draw code), 2026-09-22. The table had drifted from
+// it: a whole-number pass count where his slider is 1.0-30.0 in tenths, a 1-100 work range where his is
+// 10-150, and five keys his menu never shows.
+test('the offered fields match Chicken\'s own menu: its labels, its ranges, nothing it does not show', () => {
+  const by = Object.fromEntries(cfg.FIELDS.map((f) => [f.key, f]));
+  assert.deepStrictEqual({ min: by.passes.min, max: by.passes.max, step: by.passes.step, label: by.passes.label },
+    { min: 1, max: 30, step: 0.1, label: 'Pass amount' });
+  assert.deepStrictEqual({ min: by.neural_work_percent.min, max: by.neural_work_percent.max, label: by.neural_work_percent.label },
+    { min: 10, max: 150, label: 'Resolution scale' });
+  for (const gone of ['arm', 'layers', 'texture_boost', 'texture_boost_strength', 'preserve_native_tone_color',
+    'preserve_native_tone_color_strength', 'frame_generation_coexistence']) {
+    assert.ok(!cfg.FIELD_KEYS.has(gone), `${gone} is not in Chicken's menu, so it is not offered here`);
+  }
+  // A fractional pass count is written as the decimal it is, not rounded to a whole pass.
+  const { text } = cfg.applyEdits('config_schema=13\npasses=1.0\n', { passes: 2.5 });
+  assert.match(text, /^passes=2\.500$/m);
+});
