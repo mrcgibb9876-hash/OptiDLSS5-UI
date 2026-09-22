@@ -437,9 +437,12 @@ test('a folder is what import wants anyway, at any of the depths a release unpac
     for (const [n, c] of [[dfc.ADDON, 'a'], [dfc.NVNGX, 'n'], [dfc.CFG, 'enabled=1\n'], [dfc.LICENSE, 'theirs']]) {
       fs.writeFileSync(path.join(nested, n), c);
     }
-    const cache = path.join(base, 'cache');
-    fs.mkdirSync(cache, { recursive: true });
-
+    // The cache must NOT live inside the folder being picked. findPayloadDir descends two levels,
+    // so a cache under `base` looks like a payload on the third pick: dest is deleted, then copied
+    // from itself, and nothing lands. Windows found this and Linux did not -- readdir is sorted
+    // case-insensitively there and unordered here, so which of the two the scan meets first is
+    // luck on Linux and always the cache on Windows.
+    const cache = tmp('pickfolder-cache');
     for (const pick of [nested, path.dirname(nested), base]) {
       const r = await dfc.importDfcSource(pick, cache);
       assert.ok(r.files.includes(dfc.ADDON), `picking ${path.basename(pick) || 'the top folder'} works`);
