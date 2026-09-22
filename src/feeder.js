@@ -63,6 +63,28 @@ const FEEDER_ASSET_PATTERN = /^DLSS5-Feeder-.*\.zip$/i;
 // deleted src/native-feeder/reshade.js, commit 0738a9e removed it, ec3083d added it).
 const RESHADE_SETUP_URL = integrity.URLS.reshadeSetup;
 
+// Every ReShade setup this app knows how to install from, preferred first, each one hash-pinned in
+// integrity.js.
+//
+// It is a LIST because reshade.me's /downloads/ serves only the CURRENT version. The moment 6.9
+// ships, `ReShade_Setup_6.8.0_Addon.exe` stops being there, and a pin to one URL turns every fresh
+// Feeder install on every machine into a 404 at once -- nothing in the app would still work, and a
+// release would be the only way out. A machine that had already installed once would carry on from
+// its cache and never notice, which is the worst shape a fault like this can take: invisible to us,
+// total for anyone new.
+//
+// So: known versions are tried in turn, a version that has gone is skipped rather than fatal, and
+// adding the next one is one line here plus its sha256 in integrity.js. A hash that does not match
+// is still refused -- resilience never means installing something we cannot identify.
+const RESHADE_SETUPS = [
+  { version: '6.8.0', url: integrity.URLS.reshadeSetup },
+];
+
+// A ReShade setup the USER supplied, kept under its own name so a re-download never overwrites it
+// and `cachedReShadeSetup` can prefer it. Same shape as dgVoodoo2's userCacheName (legacy.js).
+const RESHADE_USER_SETUP = 'ReShade_Setup_user.exe';
+
+
 // Plain filename, not a proxy name -- see the file header for why ReShade no longer proxies
 // anything itself in this integration. OptiScaler.ini's [Plugins] LoadReshade=true is what
 // makes OptiScaler actually load this.
@@ -642,7 +664,7 @@ async function deployReShade(dir, cacheDir, ghHeaders, { force = false, api = 'd
         ? `The ReShade Vulkan layer on this PC (${status.dllPath || status.manifestPath}) is a build without add-on support, so the Feeder would never load. ${VULKAN_LAYER_INSTRUCTION}`
         : `ReShade is not installed as a Vulkan layer on this PC. ${VULKAN_LAYER_INSTRUCTION}`;
     if (layerWarnOnly) return { deployed: false, reason: 'Vulkan layer needs the user', warning: message, mode, manifestPath: status.manifestPath };
-    const setupPath = await downloadToCache(RESHADE_SETUP_URL, cacheDir, path.basename(RESHADE_SETUP_URL), ghHeaders);
+    const setupPath = await ensureReShadeSetup(cacheDir, ghHeaders);
     const err = new Error(message);
     err.needsReShadeInstaller = true;
     err.setupPath = setupPath;
@@ -658,7 +680,7 @@ async function deployReShade(dir, cacheDir, ghHeaders, { force = false, api = 'd
     await fsp.copyFile(dest, path.join(dir, OPENGL_BACKUP_NAME));
   }
 
-  const setupPath = await downloadToCache(RESHADE_SETUP_URL, cacheDir, path.basename(RESHADE_SETUP_URL), ghHeaders);
+  const setupPath = await ensureReShadeSetup(cacheDir, ghHeaders);
   const zip = openZip(setupPath);
   const entry = findEntry(zip, /^ReShade64\.dll$/i);
   if (!entry) throw new Error('ReShade64.dll not found in the downloaded ReShade setup');
@@ -669,6 +691,101 @@ async function deployReShade(dir, cacheDir, ghHeaders, { force = false, api = 'd
 // ReShade.fxh / ReShadeUI.fxh -- see the RESHADE_COMMON_HEADERS comment above for why these
 // are needed at all. Small text files, fetched directly rather than through the zip-cache
 // machinery the other deploy steps use.
+// The ReShade setup to install from, in the order that keeps an install working when the host has
+// moved on:
+//
+//   1. anything already in this app's cache -- a machine that has deployed once never needs
+//      reshade.me again, for any game, ever.
+//   2. a copy the user supplied, validated to be an ADD-ON build (below).
+//   3. each known version in turn.
+//
+// Only when all three come up empty is it an error, and then it says which step failed and what the
+// user can do about it, rather than handing on Node's bare "fetch failed".
+async function ensureReShadeSetup(cacheDir, ghHeaders, { fetchImpl = fetch } = {}) {
+  const cached = cachedReShadeSetup(cacheDir);
+  if (cached) return cached;
+
+  const tried = [];
+  for (const setup of RESHADE_SETUPS) {
+    try {
+      return await downloadToCache(setup.url, cacheDir, path.basename(setup.url), ghHeaders, { fetchImpl });
+    } catch (e) {
+      // A checksum mismatch is never retried elsewhere and is not retried here: the file is not the
+      // one we pinned, and the next version down would not explain that.
+      if (e && e.code === 'checksum-mismatch') throw e;
+      tried.push(`${setup.version}: ${describeFetchFailure(e, setup.url)}`);
+    }
+  }
+
+  const err = new Error(
+    `Could not get ReShade's installer. ${tried.join('; ')}. ` +
+    'reshade.me publishes only its current version, so a version this app pins disappears when the next one ships. ' +
+    'Update this app, or pick a ReShade setup you already have -- it must be the Add-on build (ReShade_Setup_<version>_Addon.exe), ' +
+    'because the Feeder never loads on the plain one.'
+  );
+  err.needsReShadeSetup = true;
+  err.code = 'reshade-setup-unavailable';
+  throw err;
+}
+
+// Node's fetch throws a bare "fetch failed" for everything that goes wrong below HTTP -- DNS, a
+// reset, a refused connection, a timeout -- with the only useful part hidden in error.cause. A user
+// on a filtered network got exactly those two words and neither they nor we could tell which host
+// or why (Fallout: New Vegas, 2026-09-22). Name the host and the cause.
+function describeFetchFailure(err, url) {
+  let host = url;
+  try { host = new URL(url).host; } catch {}
+  const cause = err && err.cause;
+  const code = (cause && (cause.code || cause.message)) || (err && err.message) || String(err);
+  return /fetch failed/i.test(String(err && err.message)) ? `could not reach ${host} (${code})` : `${host}: ${err && err.message ? err.message : err}`;
+}
+
+function cachedReShadeSetup(cacheDir) {
+  const names = [RESHADE_USER_SETUP, ...RESHADE_SETUPS.map((s) => path.basename(s.url))];
+  for (const name of names) {
+    const p = path.join(cacheDir, name);
+    try {
+      if (fs.statSync(p).size > 1024 * 1024) return p;
+    } catch {}
+  }
+  return null;
+}
+
+// A ReShade setup the user picked. Validated by what it CONTAINS, never by its file name: the
+// add-on and plain builds carry the same version and the same product name (README issue #53), so
+// the export table in the ReShade64.dll inside is the only honest tell -- the same check
+// isAddonReShadeDll already makes on a deployed DLL. A plain build here would deploy cleanly and
+// then never load the Feeder, which is a far worse outcome than refusing the file.
+async function importReShadeSetup(sourcePath, cacheDir) {
+  if (!sourcePath || !fs.existsSync(sourcePath)) throw new Error('the picked file does not exist');
+  let zip;
+  try {
+    zip = openZip(sourcePath);
+  } catch {
+    throw new Error(`${path.basename(sourcePath)} is not a ReShade setup (it does not open as one)`);
+  }
+  const entry = findEntry(zip, /^ReShade64\.dll$/i);
+  if (!entry) throw new Error(`${path.basename(sourcePath)} holds no ReShade64.dll, so it is not a ReShade setup`);
+
+  await fsp.mkdir(cacheDir, { recursive: true });
+  const probe = path.join(cacheDir, '.reshade-addon-probe.dll');
+  try {
+    extractEntryTo(zip, entry, probe);
+    if (!isAddonReShadeDll(probe)) {
+      throw new Error(
+        `${path.basename(sourcePath)} is ReShade's PLAIN build, not the Add-on build. The Feeder is a ReShade add-on ` +
+        'and never loads on it. Download ReShade_Setup_<version>_Addon.exe (the "with add-on support" download) and pick that.'
+      );
+    }
+  } finally {
+    try { await fsp.rm(probe, { force: true }); } catch {}
+  }
+
+  const dest = path.join(cacheDir, RESHADE_USER_SETUP);
+  await fsp.copyFile(sourcePath, dest);
+  return dest;
+}
+
 // The same two files, from a second host: jsDelivr serves any GitHub repo's files, so a bad
 // minute at raw.githubusercontent.com (a real HTTP 503 on a user's deploy, 2026-09-12) is not
 // the end of the install. Fetched once and kept in the cache folder with the other downloads,
@@ -1543,6 +1660,12 @@ module.exports = {
   isAddonReShadeDll,
   isReShadeDll,
   RESHADE_SETUP_URL,
+  RESHADE_SETUPS,
+  RESHADE_USER_SETUP,
+  ensureReShadeSetup,
+  cachedReShadeSetup,
+  importReShadeSetup,
+  describeFetchFailure,
   mvProviderList,
   defaultMvProviderId,
   mvProviderPresent,

@@ -112,6 +112,30 @@ redistribution, so the manager only links to the release page and fetches the mo
   OptiScaler as a plugin, and reading one back as ours) is not done and was promised only as a
   "if we can".
 
+- **reshade.me publishes only ReShade's CURRENT version, so one pinned URL is a time bomb.**
+  `/downloads/ReShade_Setup_<ver>_Addon.exe` stops existing the day the next version ships. A single
+  pin meant every *fresh* Feeder install on every machine would 404 at the same step at once, while
+  machines that had already deployed once carried on from cache and noticed nothing -- invisible to
+  us, total for anyone new. `feeder.RESHADE_SETUPS` is therefore a **list** of known versions, each
+  hash-pinned in `integrity.js`; `ensureReShadeSetup()` tries the cache, then a copy the user
+  supplied, then each known version. Adding the next version is one line plus its sha256. A hash
+  that does not match is still refused -- resilience never means installing something unidentified.
+  `importReShadeSetup()` takes a user's own setup and validates it by the **export table** of the
+  ReShade64.dll inside (`isAddonReShadeDll`), never by its file name: the plain and Add-on builds
+  carry the same version and product name, and the plain one deploys cleanly and then never loads
+  the Feeder.
+- **`fetch failed` is Node's, not ours, and it hides everything.** undici throws that bare string for
+  DNS, a reset, a refused connection or a timeout, with the real reason in `error.cause`.
+  `feeder.describeFetchFailure()` unwraps it and names the host. Also: the app has **no proxy
+  support at all** -- no `ProxyAgent`, nothing reading `HTTPS_PROXY` -- and Node's fetch ignores
+  Windows' system proxy, so a VPN only applies when it is a TUN/virtual adapter, never when it is a
+  local SOCKS/HTTP proxy or a browser extension. A Fallout: New Vegas user (2026-09-22) burned a
+  day on that. Still to do.
+- **Revo Uninstaller's "additional folders" sweep can empty `%APPDATA%\OptiDLSS5-UI\feeder-cache`.**
+  `downloadToCache` returns a cached file with **no network at all**, so a wiped cache turns a
+  marginal network into a total install failure. A user can drop the right file into that folder by
+  hand and the hash check will accept it.
+
 - **Nexus Mods is blocked by the egress proxy**, so a mod page's comments -- often the richest source
   on a specific game -- cannot be read from a session. The OptiScaler wiki and its issues can.
 
