@@ -43,6 +43,16 @@ function describeKeybind(code) {
 const PRESETS = [[0, 'Default'], [1, 'Model A'], [2, 'Model B'], [3, 'Model C']];
 const STYLES = [[0, 'Default (standard)'], [1, 'Natural'], [2, 'Cinematic']];
 const DOWNSCALERS = [[0, 'FSR1'], [1, 'Bicubic'], [2, 'Catmull-Rom'], [3, 'Lanczos2'], [4, 'Lanczos3'], [5, 'Kaiser2'], [6, 'Kaiser3'], [7, 'MAGIC']];
+// The other direction, and a different list, because a filter that answers "how do I average many
+// source pixels into one" is not the same question as "how do I invent the ones in between".
+// Engine [DlssNr] ScalingUpscaler; before it existed this direction had no control at all.
+// No FSR1. It stays a downscaler, which is what DOWNSCALERS above is; as an enlarging filter it is
+// not worth having beside the rest of these.
+const UPSCALERS = [[0, 'Bicubic'], [1, 'EWA Lanczos'], [2, 'xBR-lv2'], [3, 'Sharp bilinear'], [4, 'Integer scale'], [5, 'Nearest']];
+const EWA_LANCZOS = 1;
+// Every tuning row below is read by that one filter and by nothing else, so they all hide together
+// rather than each repeating the condition.
+const EWA_ONLY = { all: [{ key: 'WorkingScale', below: 1 }, { key: 'ScalingUpscaler', is: EWA_LANCZOS }] };
 const REVERSIBLE = [[0, 'Off (soft knee)'], [1, 'Neutwo proxy + composed'], [2, 'Neutwo proxy + replace'], [3, 'Hybrid proxy + composed'], [4, 'Hybrid proxy + replace']];
 // The codes the engine writes for [DlssNr] Language, lower-cased, as its own panel writes them.
 const LANGUAGES = [
@@ -139,6 +149,30 @@ const FIELDS = [
   { key: 'ScalingDownscaler', type: 'enum', default: 4, options: DOWNSCALERS, group: 'Speed vs quality',
     label: "Downscale filter", dependsOn: { key: 'WorkingScale', above: 1 },
     help: "The filter that averages the model's above-native answer back to display size -- this is what turns supersampling into LESS noise rather than more. Sharper filters (Lanczos3, Kaiser3) keep the most detail; softer ones (Bicubic, Catmull-Rom) are gentler on ringing. Independent of the Output Scaling downscaler, so the two can differ and run at the same time." },
+
+  // The up-leg's filter, and the two controls that shape it. Engine v2.2.4: before that this
+  // direction had no control of its own at all -- it was FSR1 if the downscaler above happened to
+  // be FSR1 and bicubic otherwise, which is exactly what leaving this on default still does. The
+  // default is null rather than a number for that reason: the answer depends on the row above, so
+  // naming one here would put a confident wrong label on the picture for anyone who changed it.
+  { key: 'ScalingUpscaler', type: 'enum', default: 0, options: UPSCALERS, group: 'Upscale filter',
+    label: "Filter", dependsOn: { key: 'WorkingScale', below: 1 },
+    help: "The filter that enlarges the model's answer back to display size when the model ran SMALLER than the frame.\n\nBicubic is the default because it is the cheapest and it cannot go wrong, not because it is good -- it is soft. For a rendered 3D game the one to try is EWA Lanczos.\n\nEWA Lanczos weighs pixels by how far away they really are rather than by row and column, so a diagonal edge comes out as clean as a horizontal one instead of as a staircase. Sharpness below is what makes it worth choosing, and it is much the most expensive here.\n\nxBR-lv2, Sharp bilinear, Integer scale and Nearest are for PIXEL ART and 2D. On a rendered 3D frame they will look wrong; on a sprite or a 2D game they are the only right answers in this list." },
+  // EWA Lanczos's four controls. Every one of them is a percentage where 0 is the gentlest setting,
+  // on purpose: four identical sliders read as one set to be balanced against each other, where a
+  // checkbox beside a preset name reads as four unrelated things that happen to sit together.
+  { key: 'ScalingSharpness', type: 'float', default: 0, min: 0, max: 1, step: 0.05, percent: true,
+    group: 'Upscale filter', label: 'Sharpness', dependsOn: EWA_ONLY,
+    help: "How hard the filter is pulled in.\n\nThe three EWA filters this one is built from differ only in two numbers, so they are points on a line rather than three things to choose between, and this slider is that line. 0% is the gentlest of them. Around 15% is the middle one. 100% is the sharpest, its wider reach included.\n\nThat reach is the cost: the top of the slider looks at 100 pixels for every one it draws, against 64 at the bottom. Raise Ring suppression as you raise this." },
+  { key: 'ScalingAntiRinging', type: 'float', default: 0.8, min: 0, max: 1, step: 0.05, percent: true,
+    group: 'Upscale filter', label: 'Ring suppression', dependsOn: EWA_ONLY,
+    help: "The bright or dark rim sharpening buys, held back.\n\nIt keeps the filter's answer inside the brightness range the pixels it is interpolating between already had. 0% leaves the filter's own answer. 100% allows no overshoot at all.\n\nNot the same control as Halo suppression under Picture: that one bounds what the MODEL did, this one bounds what the scaling filter did. They fix rims of different origin and neither reaches the other's." },
+  { key: 'ScalingSigmoid', type: 'float', default: 0, min: 0, max: 1, step: 0.05, percent: true,
+    group: 'Upscale filter', label: 'Sigmoidal light', dependsOn: EWA_ONLY,
+    help: "Resample on an S-shaped curve, so an overshoot near black or near white is compressed instead of clipping into a flat band. The slider is how hard the curve bends, with the reference setting at 100%.\n\nSDR only, by construction: the curve is only defined between black and white, so anything brighter passes through untouched and an HDR frame is barely affected. Leave it at 0 unless you are on an SDR display and seeing banding at the extremes." },
+  { key: 'ScalingDither', type: 'float', default: 0, min: 0, max: 1, step: 0.05, percent: true,
+    group: 'Upscale filter', label: 'Dither', dependsOn: EWA_ONLY,
+    help: "Breaks a band by adding a pattern finer than one step of colour, moved on each frame so it does not settle into something you can pick out.\n\n100% is half a step of an 8-bit picture. Eight bits is an assumption -- this pass cannot see what your display will be handed -- so on a wider output the pattern simply falls under the step size and changes nothing.\n\nFor banding in a sky or a gradient, where Ring suppression is for a rim along an edge." },
 
   // [DlssNr] ForceBorderless. Lossless Scaling turns it on for its games (main.js applyLosslessMarker);
   // this is the same switch offered directly, for the pop-out panel's sake as much as anything --
@@ -289,6 +323,7 @@ const GROUP_ORDER = [
   'Turn it on',
   'Picture',
   'Speed vs quality',
+  'Upscale filter',
   'Brightness & HDR',
   'What the model is told',
   'Compare & inspect',
@@ -301,6 +336,14 @@ const GROUPS = (() => {
   const ordered = GROUP_ORDER.filter((g) => present.includes(g));
   return [...ordered, ...present.filter((g) => !ordered.includes(g))];
 })();
+
+// Groups that open on a press instead of always being on screen. The panel is read mid-game, at a
+// glance, and these five rows only matter once someone has gone looking for them -- left open they
+// would push the rows that are checked every session off the bottom.
+//
+// The flag travels on each field rather than being exported on its own, because the panel window
+// only ever sees what readSettings hands it over IPC.
+const COLLAPSED_GROUPS = new Set(['Upscale filter']);
 
 const isAuto = (raw) => raw === null || raw === undefined || String(raw).trim() === '' || /^auto$/i.test(String(raw).trim());
 
@@ -356,6 +399,7 @@ function readSettings(iniPath) {
   return FIELDS.map((f) => ({
     key: f.key,
     group: f.group,
+    collapsed: COLLAPSED_GROUPS.has(f.group),
     label: f.label,
     help: f.help,
     type: f.type,
@@ -425,4 +469,4 @@ function writeSettings(iniPath, values) {
   return { ok: true, written };
 }
 
-module.exports = { FIELDS, GROUPS, SECTION, readSettings, writeSettings, parseValue, formatValue, isAuto };
+module.exports = { FIELDS, GROUPS, COLLAPSED_GROUPS, SECTION, readSettings, writeSettings, parseValue, formatValue, isAuto };

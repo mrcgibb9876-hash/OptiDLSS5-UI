@@ -231,8 +231,18 @@ redistribution, so the manager only links to the release page and fetches the mo
 - The engine's **build workflow fails at the SignPath step** ("Input required and not supplied:
   api-token") on every PR, because the fork has no signing token. The compile above it is what
   matters; scan the log for `error C` rather than trusting the red tick.
-- The engine's **Formatting Check** is red on files unrelated to a given change. clang-format 20 is
-  what CI uses.
+- The engine's **Formatting Check is yours now, and it will catch you.** It used to be permanently
+  red on files nobody here writes -- 96 of them, 93% generated or vendored -- so it was ignorable.
+  `clang-format.yml` has since been narrowed to hand-written code (its `exclude-regex` drops
+  `external/`, `include/`, `precompile/`, the FidelityFX SDK, the opticalflow shaders and
+  `DlssNr_I18n_Tables.cpp`), so a red tick now means a file the change touched. PR #10 cost a whole
+  extra commit to that assumption.
+  Reproduce it exactly rather than guessing: `pip install clang-format==20.1.7` puts the binary the
+  workflow pins on PATH in a sandbox, and `clang-format --dry-run -Werror <file>` is what the action
+  runs. Format only the files the branch touched -- the rest of the tree is already clean, so a
+  whole-tree run is noise in the diff. Raw string literals are safe: `.clang-format` sets no
+  `RawStringFormats`, so HLSL held in `R"( ... )"` is left alone (check it anyway, by comparing the
+  bodies before and after).
 - `test/legacy.test.js` "emulator profiles" **fails on Linux only**: `emulators.profileFor()` uses
   `path.basename()`, which does not treat `\` as a separator off Windows. CI runs on
   `windows-latest`, where it passes. Not a real bug. `test/feeder.test.js` "crashes inside dgVoodoo2"

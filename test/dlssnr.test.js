@@ -295,3 +295,111 @@ test('Before Super Resolution and UI correction are never both on', () => {
   dlssnr.writeSettings(file, { RunBeforeSR: true, UICorrection: false });
   assert.equal(valueOf(file, 'RunBeforeSR'), true);
 });
+
+// The up-leg's filter (engine v2.2.4). Before it existed this direction had no control at all: it
+// was FSR1 if the downscale filter happened to be FSR1 and bicubic otherwise. The engine keeps that
+// rule for an unset key, so the row's default has to be null -- a number here would be a confident
+// label over a picture that depends on the row above.
+test('the upscale filter offers no FSR1 and defaults to the one that cannot go wrong', () => {
+  const field = dlssnr.FIELDS.find((f) => f.key === 'ScalingUpscaler');
+
+  // FSR1 stays a DOWNscaler. It is still the first entry of the downscale list beside this one, so
+  // this also guards against the two lists being wired to the same constant by mistake.
+  assert.deepEqual(field.options.map(([, name]) => name),
+    ['Bicubic', 'EWA Lanczos', 'xBR-lv2', 'Sharp bilinear', 'Integer scale', 'Nearest']);
+  const downscaleRow = dlssnr.FIELDS.find((f) => f.key === 'ScalingDownscaler');
+  assert.equal(downscaleRow.options[0][1], 'FSR1');
+
+  assert.equal(field.default, 0);
+  assert.equal(field.options[field.default][1], 'Bicubic');
+
+  // It is the enlarging direction, so it belongs to a model running SMALLER than the frame. The
+  // downscale filter beside it is the opposite case, and showing both at once would offer a choice
+  // that does nothing.
+  assert.deepEqual(field.dependsOn, { key: 'WorkingScale', below: 1 });
+  const down = dlssnr.FIELDS.find((f) => f.key === 'ScalingDownscaler');
+  assert.deepEqual(down.dependsOn, { key: 'WorkingScale', above: 1 });
+});
+
+test('an ini with no upscale filter reads as auto and writing one puts the number in', () => {
+  const file = freshIni('nr-upscaler');
+  assert.equal(valueOf(file, 'ScalingUpscaler'), null);
+
+  const result = dlssnr.writeSettings(file, { ScalingUpscaler: 2 });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.written, ['ScalingUpscaler']);
+  assert.equal(getIniKey(fs.readFileSync(file, 'utf8'), 'DlssNr', 'ScalingUpscaler'), '2');
+  assert.equal(valueOf(file, 'ScalingUpscaler'), 2);
+});
+
+// Someone who tried xBR on a 3D game has to be able to get back, and picking the default in the
+// list is how they will do it -- so that has to land on disk as auto, the way every other row does.
+test('the upscale filter set back to its default is stored as auto', () => {
+  const file = freshIni('nr-upscaler-back');
+  dlssnr.writeSettings(file, { ScalingUpscaler: 2 });
+
+  const result = dlssnr.writeSettings(file, { ScalingUpscaler: 0 });
+  assert.deepEqual(result.written, ['ScalingUpscaler']);
+  assert.equal(getIniKey(fs.readFileSync(file, 'utf8'), 'DlssNr', 'ScalingUpscaler'), 'auto');
+  assert.equal(valueOf(file, 'ScalingUpscaler'), null);
+});
+
+// The four tuning rows only do anything to EWA Lanczos. The engine reads them for that filter
+// alone, so offering any of them beside Nearest would be a control that does nothing.
+const TUNING = ['ScalingSharpness', 'ScalingAntiRinging', 'ScalingSigmoid', 'ScalingDither'];
+
+test('the tuning rows are shown only for EWA Lanczos', () => {
+  const ewaLanczos = dlssnr.FIELDS.find((f) => f.key === 'ScalingUpscaler')
+    .options.find(([, name]) => name === 'EWA Lanczos')[0];
+
+  for (const key of TUNING) {
+    const field = dlssnr.FIELDS.find((f) => f.key === key);
+    assert.deepEqual(field.dependsOn, {
+      all: [{ key: 'WorkingScale', below: 1 }, { key: 'ScalingUpscaler', is: ewaLanczos }],
+    });
+  }
+});
+
+// Four identical sliders read as one set to be balanced against each other. A checkbox among them
+// would read as an unrelated thing that happens to sit there -- and Sigmoid WAS a checkbox before
+// the engine made its strength the curve's slope.
+test('every tuning row is a percentage slider from zero', () => {
+  for (const key of TUNING) {
+    const field = dlssnr.FIELDS.find((f) => f.key === key);
+    assert.equal(field.type, 'float', key);
+    assert.equal(field.min, 0, key);
+    assert.equal(field.max, 1, key);
+    assert.equal(field.percent, true, key);
+  }
+});
+
+// The panel window only ever sees what readSettings hands it over IPC, so the flag that makes a
+// group open on a press has to travel on the fields themselves.
+test('the upscale filter group is marked collapsed and the everyday groups are not', () => {
+  const rows = dlssnr.readSettings(freshIni('nr-collapsed'));
+  const upscale = rows.filter((f) => f.group === 'Upscale filter');
+
+  assert.equal(upscale.length, 5);
+  assert.ok(upscale.every((f) => f.collapsed === true));
+  assert.ok(rows.filter((f) => f.group !== 'Upscale filter').every((f) => f.collapsed === false));
+
+  // And it has to be somewhere in the order, or it would fall in after the panel's own settings.
+  assert.ok(dlssnr.GROUPS.includes('Upscale filter'));
+});
+
+// These are the NR pass's own keys, not Output Scaling's. Both passes have a set and they used to
+// share one, so setting one moved the other.
+test('the tuning rows write the DlssNr keys', () => {
+  const file = freshIni('nr-upscaler-tuning');
+  for (const key of TUNING) assert.equal(valueOf(file, key), null);
+
+  dlssnr.writeSettings(file, { ScalingSharpness: 0.5, ScalingAntiRinging: 0.5, ScalingSigmoid: 0.5, ScalingDither: 0.5 });
+  const text = fs.readFileSync(file, 'utf8');
+  for (const key of TUNING) assert.equal(getIniKey(text, 'DlssNr', key), '0.5', key);
+
+  // And the defaults still fold back to auto, the way every other row does. Ring suppression's is
+  // 0.8 and the other three are 0, so this also proves the fold is per-field and not a blanket zero.
+  dlssnr.writeSettings(file, { ScalingSharpness: 0, ScalingAntiRinging: 0.8, ScalingSigmoid: 0, ScalingDither: 0 });
+  const back = fs.readFileSync(file, 'utf8');
+  for (const key of TUNING) assert.equal(getIniKey(back, 'DlssNr', key), 'auto', key);
+});
