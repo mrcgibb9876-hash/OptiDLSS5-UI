@@ -54,6 +54,8 @@ const launchwatch = require('./launchwatch');
 const defender = require('./defender');
 const elevate = require('./elevate');
 const saferemove = require('./saferemove');
+const dfc = require('./dfc');
+const dfccfg = require('./dfccfg');
 const panelwindow = require('./panelwindow');
 const { netFetch } = require('./net');
 let electronAutoUpdater = null;
@@ -765,7 +767,10 @@ ipcMain.handle('lossless:setExePathInGameIni', (_evt, { exePath, losslessExePath
 // seen and confirmed that provider's real licence text in a dedicated dialog, never as a side
 // effect of the generic Deploy button. deployLumeniteFx() itself refuses without it regardless,
 // so a renderer bug can't turn this into a silent bypass.
-ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, licenseConfirmed, depthProfile }) => {
+// swapOnly: Install switching an already-deployed Feeder game between our engine and Chicken. The
+// Feeder stack is left exactly as it is -- redeploying it here would reset a motion-vector shader
+// the player picked (LumeniteFX needs its licence confirmed again) for a change that is not about it.
+ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, licenseConfirmed, depthProfile, consumer, nrDllPath, swapOnly }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
@@ -777,12 +782,58 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
       throw new Error('this is a 32-bit game, and the 64-bit Feeder cannot load in it -- use Install, which sets up the experimental 32-bit route');
     }
     const api = await resolveApi(dir, exePath);
+    // Refused before anything is fetched or touched when Chicken is not set up for this game
+    // (dfc.supportedFor), so nothing is left half-swapped.
+    const wantConsumer = dfc.isConsumer(consumer) ? consumer : dfc.DEFAULT_CONSUMER;
+    if (wantConsumer === 'dfc') {
+      const support = dfc.supportedFor({ api, bitness: 64 });
+      if (!support.ok) { const e = new Error(support.code); e.code = support.code; throw e; }
+    }
+    // Back to our engine: Chicken out FIRST, before the Feeder is deployed. On OpenGL its ReShade is
+    // the game's opengl32.dll, which the Feeder's deploy would take for its own ("already present")
+    // and removeDfc would then delete from under it; on Direct3D removeDfc puts ReShade64.dll back,
+    // which the deploy then finds where it expects it.
+    let dfcRemoved = null;
+    if (wantConsumer === 'optiscaler' && (dfc.dfcOurs(dir) || dfc.reshadeProxyOf(dir))) {
+      dfcRemoved = await dfc.removeDfc(dir, dfcRemoveOptions());
+      if (dfcRemoved.failed.length) throw new Error(`Chicken could not be taken out (${dfcRemoved.failed.map((f) => `${f.rel}: ${f.code}`).join(', ')}) -- close the game and try again`);
+    }
+    // Vulkan and OpenGL: Chicken's own producer replaces the Feeder rather than eating its contract
+    // ("Do not install another neural feeder alongside"), so the Feeder is not deployed at all.
+    if (wantConsumer === 'dfc' && (api === 'vulkan' || api === 'opengl')) {
+      await refreshDfcCopy('compat');
+      const r = await dfc.switchToDfcCompat(dir, dfcCacheDir(), {
+        api,
+        nrDllPath: nrDllPath || null,
+        removeOptiScaler: removeOptiScalerForSwap,
+        removeFeeder: (d) => (feeder.feederDeployed(d) ? feeder.removeFeederStack(d, { keepReShade: false }) : null),
+        vulkanLayerReady: async () => {
+          const s = await feeder.vulkanLayerStatus({ execFileAsync, exePath });
+          return !!(s.registered && s.addon && s.appListed !== false);
+        },
+        // ReShade's own setup, headless and elevated: it installs both layers and lists this exe
+        // (the same call the 32-bit DXVK route makes; the function's name is from that route).
+        setUpVulkanLayer: async () => {
+          const setupPath = await ensureReShadeSetupOrAsk();
+          const r = await legacy.setUpVulkanLayer32(dir, exePath, {
+            setupPath,
+            runElevated: (file, args) => elevate.runElevated(file, args, { execFileAsync }),
+            layerStatus: () => feeder.vulkanLayerStatus({ execFileAsync, exePath, bitness: 64 }),
+          });
+          return { ...r, exe: exePath };
+        },
+        reshadeSetup: () => ensureReShadeSetupOrAsk(),
+        placeNvngxDlss: (d) => feeder.deployNvngxDlss(d, getRhiManifest, compareStreamlineVersions, feederCacheDir(), GITHUB_HEADERS),
+      });
+      invalidateDetection(dir);
+      return { ok: true, consumer: 'dfc', dfc: r, consumerHere: 'dfc' };
+    }
     // Settle ReShade's installer before the deploy starts, so the "use one I have" door is offered
     // with the user standing right there rather than thrown from inside a half-finished stack. It
     // lands in the cache, which is the first place deployReShade looks, so the deploy below just
     // finds it. On the Vulkan layer no local setup is needed and this is a no-op.
     if (feeder.reshadeModeForApi(api) !== 'vulkan-layer') await ensureReShadeSetupOrAsk();
-    const results = await feeder.deployFeederStack(dir, api, mvProviderId || feeder.defaultMvProviderId(), {
+    const results = swapOnly && feeder.feederDeployed(dir) ? {} : await feeder.deployFeederStack(dir, api, mvProviderId || feeder.defaultMvProviderId(), {
       cacheDir: feederCacheDir(),
       getRhiManifest,
       compareVersions: compareStreamlineVersions,
@@ -800,6 +851,26 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
       execFileAsync,
       exePath,
     });
+    // Which neural consumer eats the contract the stack above manufactures. The Feeder allows
+    // exactly one (its v0.11.0-beta.1 notes), so this is a swap, done whole (dfc.js):
+    //   to Chicken  OptiScaler out (its journal says what is ours), ReShade in as the game's proxy
+    //               (nothing loads the plain ReShade64.dll once OptiScaler is gone), the NR model
+    //               beside Chicken's add-on, Chicken in.
+    //   back        Chicken out with its cfg kept for next time, ReShade back to ReShade64.dll --
+    //               the renderer's Install then puts OptiScaler back, which loads it again.
+    // One Chicken the user copied in by hand is never touched: switchToDfc refuses, removeDfc skips.
+    results.consumer = wantConsumer;
+    if (results.consumer === 'dfc') {
+      results.dfc = await dfc.switchToDfc(dir, dfcCacheDir(), {
+        nrDllPath: nrDllPath || null,
+        removeOptiScaler: removeOptiScalerForSwap,
+        fetchReShade: fetchReShadeForDfc,
+      });
+      invalidateDetection(dir);
+    } else if (dfcRemoved) {
+      results.dfcRemoved = dfcRemoved;
+    }
+    results.consumerHere = dfc.dfcOurs(dir) ? 'dfc' : 'optiscaler';
     return { ok: true, ...results };
   } catch (error) {
     return {
@@ -807,7 +878,285 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
       error: String(error && error.message ? error.message : error),
       // The Vulkan case this app hands to ReShade's own installer (feeder.js, deployReShade).
       needsReShadeInstaller: !!(error && error.needsReShadeInstaller),
+      code: (error && error.code) || null,
     };
+  }
+});
+
+// A plain ReShade64.dll (the add-on build this app pins, feeder.js), for a game switched to Chicken
+// that has no Feeder to have brought one.
+function fetchReShadeForDfc(dir) {
+  return feeder.deployReShade(dir, feederCacheDir(), GITHUB_HEADERS, { api: 'dx11' });
+}
+
+// This app's whole 32-bit route out of a game folder, for a switch to Chicken's own 32-bit route
+// (dfc.js switchToDfc32) -- the same stages uninstallEverything runs for it, in the same order: our
+// translation layer (DXVK or dgVoodoo2, with whatever it displaced put back), the exe's entry on
+// ReShade's Vulkan app list if our DXVK swap put it there, then the Feeder's 32-bit stack and its
+// host64\ helper (legacy.removeLegacy). Anything that fails is reported and the switch stops.
+async function removeOur32Stack(dir) {
+  const removed = [];
+  const failed = [];
+  const tl = translation.activeLayer(dir);
+  if (tl.ours) {
+    const r = await translation.purgeTranslationLayer(dir, { layer: tl.layer });
+    removed.push(...(r.removed || []));
+    for (const f of r.failed || []) failed.push({ rel: f.file, code: f.code });
+  }
+  const vkApp = legacy.vulkanLayerRecord(dir);
+  if (vkApp && vkApp.listedByUs) {
+    await legacy.unlistVulkanLayerApp(vkApp, {
+      runElevatedPowerShell: (command) => elevate.runElevatedPowerShell(command, { execFileAsync }),
+    }).catch(() => {});
+  }
+  if (legacy.readMarker(dir)) {
+    try {
+      const r = await legacy.removeLegacy(dir);
+      removed.push(...r.removed);
+    } catch (e) {
+      failed.push({ rel: 'the 32-bit route', code: (e && e.code) || 'failed' });
+    }
+  }
+  return { removed, failed };
+}
+
+// Would a file or folder by this name still be here once removeOur32Stack has run? A backup it would
+// put back under that name (the game's own d3d9.dll behind dgVoodoo2, say), or anything by that name
+// that none of this app's records own. Read-only: asked before anything is touched.
+function occupiedAfterOur32Removal(dir, rel) {
+  const lower = String(rel).toLowerCase();
+  const name = (x) => String(x && typeof x === 'object' ? (x.rel || x.file || '') : x).replace(/\\/g, '/').toLowerCase();
+  const lm = legacy.readMarker(dir) || {};
+  const tm = translation.readManifest(dir) || {};
+  const backups = [...(lm.backups || []), ...(tm.backups || [])];
+  if (backups.some((b) => name(b) === lower)) return true;
+  if (!fs.existsSync(path.join(dir, rel))) return false;
+  const ours = (lm.files || []).some((f) => name(f) === lower)
+    || (lm.dirs || []).some((d) => name(d) === lower)
+    || (tm.files || []).some((f) => name(f) === lower);
+  return !ours;
+}
+
+// What every removal of Chicken passes: the cache for the player's cfgs, and the way to take a
+// 32-bit Vulkan game back off ReShade's app list (the same call uninstallEverything makes for DXVK).
+function dfcRemoveOptions() {
+  return {
+    cacheDir: dfcCacheDir(),
+    unlistVulkanApp: (record) => legacy.unlistVulkanLayerApp(record, {
+      runElevatedPowerShell: (command) => elevate.runElevatedPowerShell(command, { execFileAsync }),
+    }),
+  };
+}
+
+async function dfcRouteFor(dir, exePath) {
+  const { vendor } = await getGpuInfo();
+  const effective = effectiveDetection(dir, exePath, await detectFor(dir, exePath));
+  return recommendRoute(dir, exePath, effective, vendor, { lumaMod: lumaModFor(exePath, effective) });
+}
+
+// The swap on any game Chicken is offered on (route.dfcSupport), Feeder or not -- the card menu and
+// Install on a plain-OptiScaler game come here; a Feeder game's Install goes through feeder:deploy,
+// which does the same with the Feeder brought up to date first.
+//   to 'dfc'         OptiScaler out, ReShade in as the proxy (the Feeder's, or fetched), the NR
+//                    model, Chicken (dfc.switchToDfc)
+//   to 'optiscaler'  Chicken out, its cfg kept; the renderer's Install then puts OptiScaler back
+ipcMain.handle('dfc:switch', async (_evt, { exePath, to, nrDllPath }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    if (to === 'dfc') {
+      const route = await dfcRouteFor(dir, exePath);
+      const support = route.dfcSupport;
+      if (!support || !support.ok) {
+        const e = new Error((support && support.code) || 'dfc-route');
+        e.code = (support && support.code) || 'dfc-route';
+        throw e;
+      }
+      if (route.dfcBits === 32) await refreshDfcCopy(32);
+      // A 32-bit game: Chicken's own companion route, with this app's 32-bit route taken out whole.
+      const r = route.dfcBits === 32
+        ? await dfc.switchToDfc32(dir, dfcCacheDir(), {
+          api: await resolveApi(dir, exePath),
+          nrDllPath: nrDllPath || null,
+          removeOurStack: removeOur32Stack,
+          occupiedAfterRemoval: (rel) => occupiedAfterOur32Removal(dir, rel),
+          reshadeSetup: () => feeder.downloadToCache(feeder.RESHADE_SETUP_URL, feederCacheDir(), path.basename(feeder.RESHADE_SETUP_URL), GITHUB_HEADERS),
+          placeNvngxDlss: (hostDir) => feeder.deployNvngxDlss(hostDir, getRhiManifest, compareStreamlineVersions, feederCacheDir(), GITHUB_HEADERS),
+          // 32-bit Vulkan: ReShade's 32-bit layer, on for this exe (one administrator prompt).
+          setUpVulkanLayer: async () => {
+            const setupPath = await feeder.downloadToCache(feeder.RESHADE_SETUP_URL, feederCacheDir(), path.basename(feeder.RESHADE_SETUP_URL), GITHUB_HEADERS);
+            const r32 = await legacy.setUpVulkanLayer32(dir, exePath, {
+              setupPath,
+              runElevated: (file, args) => elevate.runElevated(file, args, { execFileAsync }),
+              layerStatus: () => feeder.vulkanLayerStatus({ execFileAsync, exePath, bitness: 32 }),
+            });
+            return { ...r32, exe: exePath };
+          },
+        })
+        : await dfc.switchToDfc(dir, dfcCacheDir(), {
+          nrDllPath: nrDllPath || null,
+          removeOptiScaler: removeOptiScalerForSwap,
+          fetchReShade: fetchReShadeForDfc,
+        });
+      invalidateDetection(dir);
+      // Chicken's x64 worker on a hybrid laptop, on the card the game renders on (gpupref.js).
+      if (route.dfcBits === 32) await preferDiscreteGpu(dir, exePath);
+      return { ok: true, dfc: r, consumerHere: 'dfc' };
+    }
+    const r = (dfc.dfcOurs(dir) || dfc.reshadeProxyOf(dir)) ? await dfc.removeDfc(dir, dfcRemoveOptions()) : null;
+    if (r && r.failed.length) throw new Error(`Chicken could not be taken out (${r.failed.map((f) => `${f.rel}: ${f.code}`).join(', ')}) -- close the game and try again`);
+    invalidateDetection(dir);
+    return { ok: true, dfcRemoved: r, consumerHere: 'optiscaler' };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error), code: (error && error.code) || null };
+  }
+});
+
+// Where the user's own Deep Fried Chicken copy lives once they have supplied it. Beside the other
+// caches; never fetched into, only copied into from a file they picked.
+function dfcCacheDir() {
+  const dir = path.join(userDataDir(), 'dfc');
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+// Settings: the user points at Chicken's zip or the folder they unpacked it into, once, and every
+// game can use it after that. There is no download to offer -- see dfc.js for why.
+// 7-Zip, where its installer puts it. Chicken 3.0 is handed out as a .7z, which nothing built into
+// Windows can open when it is password-protected.
+function sevenZipExe() {
+  for (const base of [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.ProgramW6432]) {
+    if (!base) continue;
+    const p = path.join(base, '7-Zip', '7z.exe');
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
+// Chicken's .7z carries a password its author prints in the release post and in its own README
+// ("Archive password: chicken"), so that every player can open it -- used here only to unpack the
+// player's own download into a temporary folder that is removed again.
+const DFC_ARCHIVE_PASSWORD = 'chicken';
+
+// The player's copy into the cache, from whatever they picked: the .7z itself (unpacked with 7-Zip),
+// a .zip, a folder, or any file inside the folder they unpacked it into (the Windows picker cannot
+// offer files and folders at once). Remembered in full, for refreshDfcCopy.
+async function importChicken(picked) {
+  let source = picked;
+  let temp = null;
+  if (/\.7z$/i.test(picked)) {
+    const sz = sevenZipExe();
+    if (!sz) {
+      throw new Error(`${path.basename(picked)} is a password-protected .7z and 7-Zip is not installed -- unpack it (the password is in Chicken's post), then pick any file in the folder it unpacked into`);
+    }
+    temp = path.join(os.tmpdir(), `dlss5ui-dfc-${Date.now()}`);
+    try {
+      await execFileAsync(sz, ['x', '-y', `-p${DFC_ARCHIVE_PASSWORD}`, `-o${temp}`, picked], { windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
+    } catch (e) {
+      await fsp.rm(temp, { recursive: true, force: true }).catch(() => {});
+      throw new Error(`7-Zip could not unpack ${path.basename(picked)} -- unpack it yourself, then pick any file in the folder it unpacked into`);
+    }
+    source = temp;
+  } else if (fs.existsSync(picked) && fs.statSync(picked).isFile() && !/\.zip$/i.test(picked)) {
+    source = path.dirname(picked);
+  }
+  try {
+    const r = await dfc.importDfcSource(source, dfcCacheDir());
+    dfc.recordSource(dfcCacheDir(), picked);
+    return { ...r, from: path.basename(picked) };
+  } finally {
+    if (temp) await fsp.rm(temp, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+// A copy added before the app knew about Chicken's 32-bit or Vulkan/OpenGL parts, refreshed from
+// where it was picked when a switch needs one of them. Nothing happens when the part is there, or the
+// original is gone (the switch then says what to add).
+async function refreshDfcCopy(need) {
+  const cache = dfcCacheDir();
+  const missing = (need === 32 && !dfc.cached32(cache)) || (need === 'compat' && !dfc.cachedCompat(cache));
+  if (!missing) return;
+  const info = dfc.suppliedInfo(cache) || {};
+  if (!info.sourcePath || !fs.existsSync(info.sourcePath)) return;
+  try { await importChicken(info.sourcePath); } catch {}
+}
+
+ipcMain.handle('dfc:supply', async (_evt, sourcePath) => {
+  try {
+    const picked = sourcePath || (await (async () => {
+      const r = await dialog.showOpenDialog({
+        title: 'Pick Deep Fried Chicken\'s .7z, or any file in the folder you unpacked it into',
+        properties: ['openFile'],
+        filters: [
+          { name: 'Deep Fried Chicken (.7z, .zip)', extensions: ['7z', 'zip'] },
+          { name: 'Any file in the unpacked folder', extensions: ['*'] },
+        ],
+      });
+      return r.canceled || !r.filePaths.length ? null : r.filePaths[0];
+    })());
+    if (!picked) return { ok: true, cancelled: true };
+    const r = await importChicken(picked);
+    return { ok: true, ...r };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// Chicken's own settings, in our panel. Writing this file is what its LICENSE.txt expressly allows
+// ("create and share your own Deep Fried Chicken configuration and preset files"), while shipping
+// its binaries is what it forbids -- so this reads and writes the config and nothing fetches.
+ipcMain.handle('dfc:cfg-read', async (_evt, exePath) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) return { ok: false, error: 'game .exe not found' };
+    const text = dfc.readCfgText(gameDir(exePath));
+    if (text === null) return { ok: true, present: false };
+    return { ok: true, present: true, ...dfccfg.readFields(text) };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// One field at a time, straight to disk: Chicken re-reads its config itself, and a panel that
+// batched changes would leave the file disagreeing with what the user is looking at.
+ipcMain.handle('dfc:cfg-write', async (_evt, { exePath, edits }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) return { ok: false, error: 'game .exe not found' };
+    const dir = gameDir(exePath);
+    const text = dfc.readCfgText(dir);
+    if (text === null) return { ok: false, error: 'there is no deep-fried-chicken.cfg in this folder yet' };
+    const r = dfccfg.applyEdits(text, edits || {});
+    if (r.refused) return { ok: false, error: r.refused };
+    // Written through the same helper the rest of the app uses, so a read-only or locked file is
+    // reported rather than throwing an errno at the renderer (#96).
+    await fsp.writeFile(dfc.cfgPath(dir), r.text, 'utf8');
+    return { ok: true, changed: r.changed };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// What the UI needs to draw the choice: whether a copy has been supplied at all, and for one game,
+// whose Chicken is in the folder and what it last reported.
+ipcMain.handle('dfc:status', async (_evt, exePath) => {
+  try {
+    const supplied = dfc.cachedDfc(dfcCacheDir());
+    const out = { ok: true, supplied: !!supplied, suppliedFiles: supplied ? fs.readdirSync(supplied).sort() : [], suppliedInfo: dfc.suppliedInfo(dfcCacheDir()) };
+    if (exePath && fs.existsSync(exePath)) {
+      const dir = gameDir(exePath);
+      out.present = dfc.dfcPresent(dir);
+      out.ours = dfc.dfcOurs(dir);
+      out.state = dfc.readDfcState(dir);
+      out.cfg = dfc.readCfgText(dir);
+      out.optiScalerHere = !!(await findActiveOptiScalerFile(dir));
+      // Whether the swap is built for this game at all (64-bit Direct3D 11/12), so the choice can
+      // say why before Install would refuse.
+      // From the route, not the API alone: the route says whether Chicken is offered here at all
+      // (NVIDIA, a Feeder or plain-OptiScaler game) and, if so, whether this game qualifies.
+      out.support = (await dfcRouteFor(dir, exePath)).dfcSupport || null;
+    }
+    return out;
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
   }
 });
 
@@ -2005,7 +2354,11 @@ function detectInstalledBackends(dir) {
       if (LEGACY_PAYLOAD.includes(n) || LEGACY_PATTERNS.some((p) => p.test(n))) leftovers.push(n);
     }
   } catch {}
-  return { optiscaler, leftovers };
+  // A Feeder game switched to Deep Fried Chicken (dfc.js) has no OptiScaler on purpose, and is still
+  // an install of this app's: the card's "installed" state, Remove and the filters read `optiscaler`
+  // as exactly that. `dfc` says which, for what only makes sense with OptiScaler (Verify reads its log).
+  const dfcHere = dfc.dfcOurs(dir);
+  return { optiscaler: optiscaler || dfcHere, dfc: dfcHere, leftovers };
 }
 
 // The DLSS 5 settings for one game, read from and written to the ini OptiScaler really loads.
@@ -2246,7 +2599,7 @@ function storeOf(exePath) {
   return storeCache.get(key);
 }
 
-ipcMain.handle('game:status', (_evt, exePath) => {
+ipcMain.handle('game:status', async (_evt, exePath) => {
   if (!exePath || !fs.existsSync(exePath)) return { exeMissing: true };
   const dir = gameDir(exePath);
   const hasIni = fs.existsSync(path.join(dir, 'OptiScaler.ini'));
@@ -2259,10 +2612,23 @@ ipcMain.handle('game:status', (_evt, exePath) => {
   // Cheap marker checks on every card render: another DLSS 5 toolchain in the folder is the
   // one thing that makes an otherwise correct install crash, so it is said on the card itself.
   const foreign = foreignToolchains(dir);
-  const warnings = foreign.map((f) => ({
-    message: 'Another DLSS 5 toolchain is installed here ({tool}: {files}) -- two stacks hooking the same DLSS call crash the game. Remove it with its own uninstaller before using this one.',
-    vars: { tool: f.tool, files: f.files.join(', ') },
-  }));
+  // Deep Fried Chicken copied in by hand is the other neural pass this app can run, not a rival stack:
+  // the card says how to switch to it (the switch takes it over, dfc.js) rather than warning of a crash.
+  // Only where that is the answer: on NVIDIA (the only place the switch is offered), and with no
+  // OptiScaler of ours beside it -- both in one folder is the two-neural-passes clash, and the crash
+  // warning is right there. A Chicken this app runs does not flag its own installer's leftovers.
+  const gpuVendor = ((await getGpuInfo()) || {}).vendor;
+  const chickenIsChoice = gpuVendor === 'nvidia' && !(backends.optiscaler && !backends.dfc);
+  const shown = backends.dfc ? foreign.filter((f) => f.tool !== 'Deep Fried Chicken') : foreign;
+  const warnings = shown.map((f) => (f.tool === 'Deep Fried Chicken' && chickenIsChoice
+    ? {
+      message: 'Deep Fried Chicken was copied into this folder by hand ({files}). Switch this game to Chicken from its ⋯ menu and the app takes it over, or delete those files to stay on DLSS 5.',
+      vars: { files: f.files.join(', ') },
+    }
+    : {
+      message: 'Another DLSS 5 toolchain is installed here ({tool}: {files}) -- two stacks hooking the same DLSS call crash the game. Remove it with its own uninstaller before using this one.',
+      vars: { tool: f.tool, files: f.files.join(', ') },
+    }));
   const marker = engines.readEngineMarker(dir);
   const engine = marker && marker.engine ? engines.normalizeEngine(marker.engine) : null;
   return { exeMissing: false, hasIni, hasNr, hasUninstaller, dir, backends, foreign, warnings, engine, store: storeOf(exePath) };
@@ -2612,6 +2978,16 @@ async function uninstallEverything(dir) {
   if (lumaue.lumaUeDeployed(dir)) {
     const r = await stage('the Luma UE stack', () => lumaue.removeLumaStack(dir));
     if (r) { removed.push(...r.removed); kept.push(...r.kept); }
+  }
+  // Deep Fried Chicken, when it is this game's chosen neural consumer and WE deployed it (dfc.js).
+  // One the user installed with its own .cmd has no marker: removeDfc leaves it and says so, which
+  // is right -- its own uninstaller is the thing that knows how to take it out.
+  if (dfc.dfcPresent(dir) || dfc.readMarker(dir)) {
+    const r = await stage('Deep Fried Chicken', () => dfc.removeDfc(dir, { ...dfcRemoveOptions(), uninstall: true }));
+    if (r) {
+      removed.push(...r.removed); kept.push(...r.kept);
+      for (const f of r.failed || []) failed.push(f);
+    }
   }
   try {
     const fg = await framegen.restoreFrameGenDll(dir);
@@ -3241,6 +3617,8 @@ async function helpContext(exePath, detected, fixesTried = []) {
     legacyMv: route.route === 'feeder32' ? legacyMvSummary(dir) : null,
     foreign: foreignToolchains(dir),
     backends: detectInstalledBackends(dir),
+    // A game switched to Deep Fried Chicken: its own log is the evidence there, not OptiScaler's.
+    dfcState: route.consumerHere === 'dfc' ? dfc.readDfcState(dir) : null,
     lumaKnownBad: route.lumaDeployed ? lumaue.lumaUeKnownBad(exePath) : null,
     // Luma's Prey mod only replaces the game's TAA / SMAA 2TX pass: with anti-aliasing off, FXAA or SMAA 1X
     // there is no pass for DLSS to take over (Luma-Framework Games/Prey/main.cpp, shader_hashes_PostAA_TAA).
@@ -4064,7 +4442,7 @@ async function preflightFor(exePath, detected) {
   try { run = await runlog.analyzeRun(dir, { optiDir: optiScalerDirFor(dir) }); } catch {}
   const gathered = await preflight.gather({
     exePath, dir, exes, gpuInfo, detected: effective, route, run,
-    ourReShade: feeder.feederDeployed(dir) || lumaue.lumaUeDeployed(dir),
+    ourReShade: feeder.feederDeployed(dir) || lumaue.lumaUeDeployed(dir) || dfc.dfcPresent(dir),
     probe: probe.summary(facts),
   }, { execFileAsync, detect: { antiCheatPresent, antiCheatStub } });
   return { checks: preflight.evaluate(gathered), gpuPrefs: gathered.gpuPrefs };
@@ -5846,7 +6224,8 @@ async function installProxy(dir, proxyName = DEFAULT_PROXY) {
 //
 // Never deletes a file at a proxy name without confirming it is actually OptiScaler: if someone
 // renamed things by hand in between, the honest outcome is to leave their file alone and say so.
-async function uninstallOptiScaler(dir) {
+// keepNr: leave nvngx_dlssnr.dll where it is (a switch to Deep Fried Chicken, which loads the same file).
+async function uninstallOptiScaler(dir, { keepNr = false } = {}) {
   const removed = [];
   const kept = [];
   const failed = [];
@@ -5893,13 +6272,37 @@ async function uninstallOptiScaler(dir) {
 
   let nrDllRemoved = false;
   try {
-    nrDllRemoved = await removeSharedNrDllIfUnneeded(dir);
+    nrDllRemoved = keepNr ? false : await removeSharedNrDllIfUnneeded(dir);
     if (nrDllRemoved) removed.push('nvngx_dlssnr.dll');
   } catch (err) {
     failed.push({ rel: 'nvngx_dlssnr.dll', code: (err && err.code) || 'failed' });
   }
 
   return { removed, kept, failed, nrDllRemoved };
+}
+
+// OptiScaler out of a Feeder game that is switching to Deep Fried Chicken (dfc.js switchToDfc):
+// uninstallOptiScaler, and then the rest of OptiScaler's release that it leaves to
+// uninstallEverything -- the OptiScaler\ folder, the licences, "!! EXTRACT ALL FILES TO GAME
+// FOLDER !!" -- read off the install journal before uninstallOptiScaler deletes it. Tried on a real
+// install (2026-09-22), the swap without this left all three behind. Never the Feeder's files, the
+// NR model or ReShade: those are the half of the folder Chicken runs on.
+const SWAP_KEEPS = new Set(['nvngx_dlss.dll', 'nvngx_dlssnr.dll', 'reshade64.dll', 'reshade.ini', 'reshadepreset.ini', 'reshade-shaders', 'dlss5-feed.addon64', 'dlss5-feed.cfg']);
+async function removeOptiScalerForSwap(dir) {
+  const journal = readInstallMarker(dir) || {};
+  const core = await uninstallOptiScaler(dir, { keepNr: true });
+  if (core.failed.length) return core;
+  const rm = async (rel) => {
+    if (SWAP_KEEPS.has(String(rel).toLowerCase()) || !fs.existsSync(path.join(dir, rel))) return;
+    const r = await saferemove.removePath(path.join(dir, rel));
+    if (r.ok) core.removed.push(rel);
+    else core.failed.push({ rel, code: r.code });
+  };
+  for (const rel of journal.added || []) await rm(rel);
+  for (const rel of ['OptiScaler', '!! EXTRACT ALL FILES TO GAME FOLDER !!', 'setup_linux.sh']) await rm(rel);
+  for (const f of RELEASE_LICENSE_FILES) await rm(path.join('Licenses', f));
+  try { if (fs.readdirSync(path.join(dir, 'Licenses')).length === 0) fs.rmdirSync(path.join(dir, 'Licenses')); } catch {}
+  return core;
 }
 
 function bannersDir() {

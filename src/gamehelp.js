@@ -85,17 +85,27 @@ function diagnose(ctx) {
 
   // Hard stops first: nothing the app deploys can run in these. A 32-bit game has an experimental
   // route now (legacy.js); only one that route cannot serve (32-bit Vulkan) is a stop.
-  if (d.bitness === 32 && route.route !== 'feeder32') return out('unavailable', 'bit32');
+  if (d.bitness === 32 && route.route !== 'feeder32' && route.consumerHere !== 'dfc') return out('unavailable', 'bit32');
   // Anti-cheat is a warning, not a verdict of unavailable. It used to be the latter, which put "Not
   // available" on the card while Install was in fact possible -- the app answering a question that
   // belongs to whoever owns the account. What it will actually do is unchanged and is said plainly:
   // the anti-cheat very likely stops the DLL loading, and going online with it in place risks a ban.
   // 'step' rather than 'fix': there is nothing to press, only something to know before deciding.
   if (d.antiCheat && !d.protectedLauncher) return out('step', 'anticheat', { antiCheat: d.antiCheat });
-  if (route.route === 'unsupported') return out('unavailable', 'unsupported', { reason: route.reason || '' });
+  // A 32-bit Vulkan game has no route of this app's own, but can be running Deep Fried Chicken's.
+  if (route.route === 'unsupported' && route.consumerHere !== 'dfc') return out('unavailable', 'unsupported', { reason: route.reason || '' });
 
   // Two stacks on one DLSS call crash before anything else can be judged.
-  if (foreign.length) return fix('foreign', 'remove-foreign', { tool: foreign.map((f) => f.tool).join(', ') });
+  // Chicken's footprint beside a Chicken this app runs is its own installer's leftovers, not a rival.
+  // Chicken copied in by hand, and nothing else, where the switch is offered and no OptiScaler of ours
+  // is beside it: the answer is the switch, which takes it over. Anywhere else (another GPU, or our
+  // OptiScaler in the same folder -- two neural passes) the remove-foreign fix stands.
+  const rivals = route.consumerHere === 'dfc' ? foreign.filter((f) => f.tool !== 'Deep Fried Chicken') : foreign;
+  if (rivals.length && rivals.every((f) => f.tool === 'Deep Fried Chicken')
+      && route.dfcSupport && route.dfcSupport.ok && !route.optiInstalled) {
+    return out('step', 'dfc-hand-placed', { files: rivals.flatMap((f) => f.files).join(', ') });
+  }
+  if (rivals.length) return fix('foreign', 'remove-foreign', { tool: rivals.map((f) => f.tool).join(', ') });
   // The driver says DLSS 5 cannot run on it. No file in the game folder changes that, so it goes
   // before every per-folder finding -- otherwise the user fixes those first and still gets nothing.
   if (run.ran && run.verdict === 'driver-outdated') {
@@ -122,6 +132,14 @@ function diagnose(ctx) {
   // readily, and answering it three times over is how one of them gets missed. Only when the run
   // did not work -- a pass that dispatched has plainly not been stopped by anything.
   if (run.dlssRuntimeStub && run.verdict !== 'nr-ran') return dlssRuntimeStubAnswer();
+
+  // A Feeder game switched to Deep Fried Chicken (dfc.js): OptiScaler is out of the folder on purpose,
+  // so none of the OptiScaler answers below apply, and "not installed" would send Install to put it
+  // back on top of Chicken. Chicken's own state word is the answer; ARMED is working.
+  if (route.consumerHere === 'dfc') {
+    const state = (ctx.dfcState && ctx.dfcState.state) || '';
+    return out(state === 'ARMED' ? 'ok' : 'step', 'dfc-here', { state });
+  }
 
   // Not installed, or the route's first step is missing: Install is the fix.
   if (!route.optiInstalled) return fix('not-installed', 'install');

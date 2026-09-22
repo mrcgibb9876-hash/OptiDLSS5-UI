@@ -56,6 +56,7 @@ const catalog = require('./catalog');
 const layerdefault = require('./layerdefault');
 const routescore = require('./routescore');
 const emulators = require('./emulators');
+const dfc = require('./dfc');
 
 // A user's per-game API choice laid over the detection result: the chosen API becomes the
 // primary, joins the list of APIs the game runs on (so keepGamesOwnDlss writes its upscaler key
@@ -320,17 +321,48 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
   // DLSS 5 setup's sl.* files, and got an OptiScaler install its renderer never loads (2026-09-16).
   const legacyRenderer = nativeDlss.rendererCannotCallDlss(detected, dir);
   const shipsDlss = !legacyRenderer && nativeDlss.shipsNativeDlss(dir);
-  const shippedDlss = shipsDlss || (!legacyRenderer && !feeder.needsFeeder(dir) && !feederDeployed && !lumaDeployed);
+  // A game this app switched to Deep Fried Chicken (dfc.js): Chicken runs the neural pass there
+  // instead of OptiScaler, so "Install DLSS 5" is not a step it is missing. On Vulkan/OpenGL its own
+  // producer replaced the Feeder (dfc.switchToDfcCompat), taking the Feeder's marker with it -- the
+  // nvngx_dlss.dll the Feeder put beside the exe is still ours, not the game's own DLSS. Without this
+  // the route turned the game into "ships its own DLSS", and the way back installed OptiScaler with no
+  // Feeder for it (found switching an OpenGL game, 2026-09-22).
+  const dfcHere = dfc.dfcOurs(dir);
+  const dfcCompat = dfcHere && !!(dfc.readMarker(dir) || {}).compat;
+  const shippedDlss = shipsDlss || (!legacyRenderer && !feeder.needsFeeder(dir) && !feederDeployed && !lumaDeployed && !dfcCompat);
   // A Feeder on a game that ships DLSS: an older version of this app could not see DLSS kept
   // under an Unreal plugin folder and deployed it anyway. The two crash together.
   const feederMisdeployed = shipsDlss && feederDeployed;
 
   const finish = (route, label, reason, steps, reasonVars = null, extra = {}) => {
+    // Chicken is offered on NVIDIA, on a Feeder game or a plain-OptiScaler one (its 3.0 needs no
+    // Feeder on Direct3D); dfc.supportedFor then says whether this game qualifies.
+    // A 32-bit Vulkan game has no route of this app's own ('unsupported'), but Chicken's 32-bit
+    // companion runs on it through ReShade's 32-bit layer.
+    const vulkan32 = route === 'unsupported' && detected.bitness === 32 && api === 'vulkan';
+    const dfcOffered = gpuVendor === 'nvidia' && (route === 'feeder' || route === 'optiscaler' || route === 'feeder32' || vulkan32);
+    const onDfc = dfcOffered && dfcHere;
+    if (onDfc) {
+      label = route === 'feeder' && !dfcCompat ? 'Deep Fried Chicken + Feeder' : (route === 'feeder32' || vulkan32) ? 'Deep Fried Chicken (32-bit)' : 'Deep Fried Chicken';
+      // On a 32-bit game Chicken's own companion route replaced this app's whole stack: none of the
+      // route's steps (dgVoodoo2, the Feeder helper) apply any more.
+      steps = route === 'feeder32' || vulkan32 || dfcCompat
+        ? [{ key: 'dfc', label: 'Switch to Deep Fried Chicken', done: true }]
+        : steps.map((s) => (s.key === 'optiscaler' ? { key: 'dfc', label: 'Switch to Deep Fried Chicken', done: true } : s));
+    }
     const next = steps.find((s) => !s.done) || null;
     return {
       experimental: false, emulator: null, legacy: null, dgVoodooDeployed: legacyStatus.dgVoodoo, dxvkDeployed, wrapperPreference, dxvkBlocked, layerChoice: null,
       ...extra,
       route, label, reason, reasonVars, steps, gpuVendor,
+      // Which neural pass this folder is set up for; the renderer compares it with the game's choice.
+      // From the marker alone: a GPU probe that came back 'unknown', or a route the catalog steered
+      // elsewhere, must not make a Chicken folder read as ours -- Install would then lay OptiScaler on
+      // top of it (review of 2026-09-22).
+      consumerHere: dfcHere ? 'dfc' : 'optiscaler',
+      // Which of Chicken's routes the switch takes: its 32-bit companion, or the 64-bit one.
+      dfcBits: detected.bitness === 32 ? 32 : 64,
+      dfcSupport: dfcOffered ? dfc.supportedFor({ api, bitness: detected.bitness || 64 }) : null,
       optiInstalled, feederDeployed, lumaDeployed, feederMisdeployed, shipsDlss,
       verified: verified.verification(exePath),
       catalogDefault: steered,

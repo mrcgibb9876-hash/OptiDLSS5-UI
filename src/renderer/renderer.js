@@ -435,6 +435,7 @@ async function renderGrid() {
         <img class="card-banner hidden" alt="${escapeHtml(game.name)}" />
         <span class="card-banner-fallback hidden"></span>
         <span class="card-badge badge-none"></span>
+        <span class="card-mark hidden"></span>
       </div>
       <div class="card-body">
         <div class="card-title">${escapeHtml(game.name)}</div>
@@ -450,8 +451,9 @@ async function renderGrid() {
           <button class="btn btn-ghost btn-edit">${escapeHtml(t('Settings'))}</button>
           <button class="btn btn-ghost btn-help has-tip" data-tip="${escapeHtml(t('Checks this game\'s setup and its last run, applies the fix when the app has one, tells you plainly when DLSS 5 is not available here, and can save a bundle to share or ask an AI.'))}">${escapeHtml(t('Game Help'))}</button>
           <button class="btn btn-ghost btn-analyse has-tip" data-tip="${escapeHtml(t('Starts the game once, as it is, for about 25 seconds and writes down what it really loads -- the graphics API, which DLLs from where, and which process hands off to which. Nothing is changed; the game is closed at the end.'))}">${escapeHtml(t('Analyse game'))}</button>
-          <button class="btn btn-ghost btn-verify has-tip${backends.optiscaler ? '' : ' hidden'}" data-tip="${escapeHtml(t('Starts the game for about 30 seconds, reads its logs the way Game Help does, and closes it again: did DLSS 5 run?'))}">${escapeHtml(t('Verify install'))}</button>
+          <button class="btn btn-ghost btn-verify has-tip${backends.optiscaler && !backends.dfc ? '' : ' hidden'}" data-tip="${escapeHtml(t('Starts the game for about 30 seconds, reads its logs the way Game Help does, and closes it again: did DLSS 5 run?'))}">${escapeHtml(t('Verify install'))}</button>
           <button class="btn btn-ghost btn-swap-layer hidden"></button>
+          <button class="btn btn-ghost btn-neural-pass hidden"></button>
           <button class="btn btn-ghost btn-mv-provider hidden"></button>
           <button class="btn btn-ghost btn-open">${escapeHtml(t('Open folder'))}</button>
           <button class="btn btn-ghost btn-danger btn-install">${escapeHtml(backends.optiscaler ? t('Uninstall DLSS 5') : leftoverFiles.length ? t('Remove leftovers') : t('Install DLSS 5'))}</button>
@@ -655,6 +657,7 @@ async function renderGrid() {
     applyRunningState(card, runningGames.has(game.exePath));
     card.querySelector('.btn-open').addEventListener('click', () => window.api.openFolder(game.exePath));
     card.querySelector('.btn-swap-layer').addEventListener('click', (e) => applyLayerSwap(game, e.currentTarget.dataset.fix));
+    card.querySelector('.btn-neural-pass').addEventListener('click', (e) => switchNeuralPass(game, e.currentTarget.dataset.to));
     card.querySelector('.btn-edit').addEventListener('click', () => openGameModal(game));
     card.querySelector('.btn-mv-provider').addEventListener('click', () => openGameModal(game, { focus: 'legacy-mv' }));
     card.querySelector('.btn-remove').addEventListener('click', () => removeGame(game));
@@ -847,6 +850,35 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   mvBtn.classList.toggle('hidden', !lmv);
   if (lmv) mvBtn.textContent = t('Motion vectors: {provider} — change…', { provider: shortMvName(lmv.displayName) || t('unknown') });
 
+  // Which neural pass is live in the folder, at a glance, in the art's corner: a drumstick for Deep
+  // Fried Chicken, this app's own logo for our engine. What is installed, not what is chosen in Edit
+  // -- a choice not yet applied has its own "Press Install to switch" line.
+  const mark = card.querySelector('.card-mark');
+  const liveDfc = route.consumerHere === 'dfc';
+  const liveOurs = !liveDfc && !!route.optiInstalled;
+  mark.classList.toggle('hidden', !liveDfc && !liveOurs);
+  mark.classList.toggle('card-mark-dfc', liveDfc);
+  if (liveDfc) {
+    mark.textContent = '\u{1F357}';
+    mark.title = t('Deep Fried Chicken runs the neural pass here');
+  } else if (liveOurs) {
+    mark.innerHTML = '<img src="icon.png" alt="">';
+    mark.title = t('DLSS 5 (this app\x27s engine)');
+  }
+
+  // Which add-on runs the neural pass on this Feeder game, and the one click that swaps it (dfc.js).
+  // Named by what the folder has now, so the entry reads as a switch, not a setting.
+  const passBtn = card.querySelector('.btn-neural-pass');
+  const passOffered = !!(route.dfcSupport && route.dfcSupport.ok);
+  passBtn.classList.toggle('hidden', !passOffered);
+  if (passOffered) {
+    const onDfc = route.consumerHere === 'dfc';
+    passBtn.textContent = onDfc
+      ? t('Neural pass: Deep Fried Chicken — switch back to DLSS 5')
+      : t('Neural pass: DLSS 5 — switch to Deep Fried Chicken');
+    passBtn.dataset.to = onDfc ? 'optiscaler' : 'dfc';
+  }
+
   // What detection found beside the exe that the person should know before installing: none
   // of these block anything, all of them have bitten real installs. The card shows a few words
   // each; the full sentence is the hover text.
@@ -940,6 +972,14 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   // A bad run that the rule table had nothing to say about still has to reach the card.
   if (runBad) {
     claim({ bad: true, text: describeRun(run), title: describeRun(run), action: { label: t('Help'), run: () => openHelp(game) } });
+  }
+
+  // The neural pass chosen in Edit is not the one this folder is set up for: Install does the swap.
+  // Claimed before "Next:", because a route that is complete for the OTHER consumer says nothing.
+  if (route.dfcSupport && route.dfcSupport.ok && route.consumerHere && route.consumerHere !== chosenConsumer(game)) {
+    const to = chosenConsumer(game) === 'dfc' ? t('Deep Fried Chicken') : t('DLSS 5');
+    const words = t('Press Install to switch this game to {to}', { to });
+    claim({ bad: true, text: words, title: words, action: { label: t('Install'), run: () => installGame(game) } });
   }
 
   // OptiScaler is in but the rest of its route is not (a Feeder game installed before the
@@ -1164,6 +1204,10 @@ function emulatorRendererWords(r) {
 function helpWords(diag) {
   const v = diag.vars || {};
   switch (diag.code) {
+    case 'dfc-hand-placed': return t('Deep Fried Chicken was copied into this folder by hand ({files}). Switch this game to Chicken from its ⋯ menu and the app takes it over, or delete those files to stay on DLSS 5.', v);
+    case 'dfc-here': return v.state
+      ? t('This game is switched to Deep Fried Chicken, so OptiScaler is not in the folder on purpose. Chicken last reported {state} (ARMED means it is running).', v)
+      : t('This game is switched to Deep Fried Chicken, so OptiScaler is not in the folder on purpose. Chicken has not written a log yet: launch the game, press Home and open its tab.');
     case 'emulator-renderer': return t('{name} ran and nothing called DLSS. DLSS 5 is set up for {renderer}, so {name} has to render with it -- on any other renderer there is nothing for it to hook.', v);
     case 'emulator-renderer-mismatch': return emulatorRendererWords(v);
     case 'catalog-prefers': return t('What is known about this game points away from the route the app picked ({pick}): {why}. {route} has the better record here, and Fix it switches to it.', {
@@ -1291,6 +1335,8 @@ function helpSteps(diag) {
   const report = [t('Save the bundle (More…)'), t('Report it on GitHub (More…)')];
   switch (diag.code) {
     case 'driver-outdated': return [v.min ? t('Update the NVIDIA driver ({min} or newer)', v) : t('Update the NVIDIA driver'), t('Restart the PC'), launch];
+    case 'dfc-here': return [t('Launch the game'), t('Press Home and open the Deep Fried Chicken tab')];
+    case 'dfc-hand-placed': return [t('Open the game\'s ⋯ menu and pick Neural pass: switch to Deep Fried Chicken')];
     case 'emulator-renderer': case 'emulator-renderer-mismatch': return [t('In {name}: {hint}', v), t('Start {name} again', v)];
     case 'nr-model-crash-emulator': return [
       t('In {name}: Graphics > Backend > Direct3D 11', v),
@@ -1410,6 +1456,8 @@ function helpShort(diag) {
     case 'catalog-prefers': return t('Known to run better on {route}', { route: routeName(v.route, v.via) });
     case 'luma-needs-dx11': return t('Switch the game to DirectX 11 for Luma');
     case 'nr-model-crash-emulator': return t('DLSS 5 crashed on D3D12 -- switch to Direct3D 11');
+    case 'dfc-here': return v.state ? t('Deep Fried Chicken: {state}', v) : t('Deep Fried Chicken runs the neural pass here');
+    case 'dfc-hand-placed': return t('Chicken copied in by hand: switch to take it over');
     case 'emulator-renderer': return t('Set {name} to {renderer}', v);
     case 'emulator-renderer-mismatch': return t('{name} ran on {seen} -- set {renderer}', v);
     case 'nr-model-crash': return t('The DLSS 5 model crashed');
@@ -2196,6 +2244,32 @@ async function installGame(game) {
   }
   if (!(await preflightBeforeInstall(game))) return;
   const route = await window.api.gameRoute(game.exePath, game.detectedPath);
+  // Which add-on runs the neural pass here (Edit / the card menu). When the folder is set up for the
+  // other one, this Install is the swap.
+  const consumer = chosenConsumer(game);
+  const dfcOffered = !!(route.dfcSupport && route.dfcSupport.ok);
+  const swapNeeded = dfcOffered && (route.consumerHere || 'optiscaler') !== consumer;
+
+  // A 32-bit game on Chicken: its own companion route replaces this app's whole 32-bit stack, so the
+  // switch happens here, before dgVoodoo2 or the helper below would go in. On the way back, the
+  // switch takes Chicken out and the route below builds this app's stack again.
+  if (route.route === 'feeder32' && dfcOffered && (swapNeeded || consumer === 'dfc')) {
+    toast(!swapNeeded ? t('Deploying…') : consumer === 'dfc' ? t('Switching this game to Deep Fried Chicken…') : t('Switching this game back to DLSS 5…'));
+    const sw = await window.api.dfcSwitch(game.exePath, consumer, settings.nrDllPath);
+    if (!sw.ok) {
+      toast(sw.code && String(sw.code).startsWith('dfc-') ? dfcUnsupportedWords(sw.code) : t('Could not switch this game: {error}', { error: sw.error }));
+      renderGrid();
+      return;
+    }
+    if (consumer === 'dfc') {
+      toast(t('Installed with Deep Fried Chicken. Press Home in the game for its menu.'));
+      renderGrid();
+      return;
+    }
+    // Back to DLSS 5: this app's 32-bit route goes in below, from nothing, as on a first install.
+    route.dgVoodooDeployed = false;
+    route.dxvkDeployed = false;
+  }
 
   // Experimental DirectX 8/9 routes: dgVoodoo2 goes in first. The main process fetches it without
   // asking and only offers a zip of the user's own if that fails; a cancel there stops the install
@@ -2261,13 +2335,42 @@ async function installGame(game) {
     return;
   }
 
-  if (route.route === 'feeder' && !route.feederDeployed) {
-    toast(t('Deploying the DLSS5 Feeder first (ReShade, add-on, motion-vector shader, nvngx_dlss.dll)…'));
+  // Which add-on runs the neural pass here (Edit > Neural pass). When the folder is set up for the
+  // other one, this Install is the swap: feeder:deploy does it whole (dfc.js), and Chicken ends the
+  // install there -- OptiScaler going back in on top would put two neural passes in one folder.
+  if (route.route === 'feeder' && (!route.feederDeployed || swapNeeded || consumer === 'dfc')) {
+    toast(route.feederDeployed
+      ? (!swapNeeded ? t('Deploying…') : consumer === 'dfc' ? t('Switching this game to Deep Fried Chicken…') : t('Switching this game back to DLSS 5…'))
+      : t('Deploying the DLSS5 Feeder first (ReShade, add-on, motion-vector shader, nvngx_dlss.dll)…'));
     const providers = await window.api.feederMvProviders();
     const provider = providers.find((p) => p.default && p.autoFetchable) || providers.find((p) => p.autoFetchable);
     const deployed = provider
-      ? await window.api.feederDeploy(game.exePath, provider.id, { force: false, licenseConfirmed: false })
+      ? await window.api.feederDeploy(game.exePath, provider.id, { force: false, licenseConfirmed: false, consumer, nrDllPath: settings.nrDllPath, swapOnly: route.feederDeployed })
       : { ok: false, error: t('no auto-fetchable motion-vector provider') };
+    if (!deployed.ok && deployed.code === 'dfc-vulkan-layer') {
+      // The app's own set-up of ReShade's Vulkan layer did not finish (the administrator prompt
+      // declined, say): ReShade's installer is opened so the player can do it by hand.
+      toast(t('Could not switch this game: {error}', { error: deployed.error }));
+      const r = await window.api.feederOpenReShadeSetup();
+      if (r && r.ok) toast(t('ReShade\'s installer is open: pick this game\'s exe, choose Vulkan, tick "Enable loading of add-ons". Then press Install again.'));
+      renderGrid();
+      return;
+    }
+    if (!deployed.ok && deployed.code && String(deployed.code).startsWith('dfc-')) {
+      toast(dfcUnsupportedWords(deployed.code));
+      renderGrid();
+      return;
+    }
+    if (!deployed.ok && swapNeeded) {
+      toast(t('Could not switch this game: {error}', { error: deployed.error }));
+      renderGrid();
+      return;
+    }
+    if (deployed.ok && consumer === 'dfc') {
+      toast(t('Installed with Deep Fried Chicken. Press Home in the game for its menu.'));
+      renderGrid();
+      return;
+    }
     if (!deployed.ok) {
       if (deployed.needsReShadeInstaller) {
         // Vulkan: ReShade's own installer registers the machine-wide layer; this app opens it.
@@ -2280,7 +2383,29 @@ async function installGame(game) {
       renderGrid();
       return;
     }
-    feederNote = ' ' + t('Deployed the DLSS5 Feeder first ({provider}).', { provider: provider.displayName });
+    if (!route.feederDeployed) feederNote = ' ' + t('Deployed the DLSS5 Feeder first ({provider}).', { provider: provider.displayName });
+  } else if (route.route !== 'feeder' && dfcOffered && (swapNeeded || consumer === 'dfc')) {
+    // A game with no Feeder (its own DLSS, plain OptiScaler route): Chicken 3.0 needs none on
+    // Direct3D, so the swap is ReShade fetched in as the proxy, OptiScaler out, Chicken in.
+    toast(!swapNeeded ? t('Deploying…') : consumer === 'dfc' ? t('Switching this game to Deep Fried Chicken…') : t('Switching this game back to DLSS 5…'));
+    const sw = await window.api.dfcSwitch(game.exePath, consumer, settings.nrDllPath);
+    if (!sw.ok) {
+      toast(sw.code && String(sw.code).startsWith('dfc-') ? dfcUnsupportedWords(sw.code) : t('Could not switch this game: {error}', { error: sw.error }));
+      renderGrid();
+      return;
+    }
+    if (consumer === 'dfc') {
+      toast(t('Installed with Deep Fried Chicken. Press Home in the game for its menu.'));
+      renderGrid();
+      return;
+    }
+    // A 32-bit Vulkan game has no DLSS 5 route of this app's own: taking Chicken out is all there is.
+    if (route.route === 'unsupported') {
+      toast(t('Deep Fried Chicken is out. DLSS 5 has no route of its own for this game.'));
+      renderGrid();
+      return;
+    }
+    // Back to DLSS 5: OptiScaler goes in below, as on any install.
   }
 
   toast(t('Installing…'));
@@ -2615,6 +2740,9 @@ async function openGameModal(game, opts = {}) {
   await loadFrameGenSection(game);
   await loadInjectorSection(game);
   await loadFeederSection(game);
+  // Which add-on runs the neural pass: shown on every game Chicken is offered on (route.dfcSupport),
+  // Feeder or not -- Chicken 3.0 needs no Feeder on Direct3D.
+  await loadConsumerSection(game);
   await loadLegacyMvSection(game);
   await loadOptiFgSection(game);
   await loadDlssNrSection(game);
@@ -3045,6 +3173,7 @@ function layerName(via) {
 
 function layerSwapFor(route) {
   if (!(route && route.legacy && route.legacy.supported)) return null;
+  if (route.consumerHere === 'dfc') return null;
   const plan = route.legacy;
   const native = !!(plan.host32 && !plan.dgVoodoo && (plan.api === 'dx10' || plan.api === 'dx11'));
   if (!route.legacy.dgVoodoo && !native) return null;
@@ -3831,6 +3960,213 @@ async function loadFeederSection(game) {
 // provider) behind a real, per-action confirmation of its actual licence text -- never
 // silently, never just because it's selected in the dropdown. force=true is an update:
 // re-fetches and overwrites everything rather than skipping what's already present.
+// ── which neural consumer runs the pass ──────────────────────────────────────────────────────
+//
+// The Feeder manufactures a DLSS contract; exactly one add-on may consume it. Ours is this app's
+// own engine; Deep Fried Chicken is the other one people use. The choice is stored on the game and
+// acted on by feeder:deploy -- see src/dfc.js for why nothing here offers to download Chicken.
+const CONSUMER_LABELS = {
+  optiscaler: () => t('DLSS 5 (this app\x27s engine)'),
+  dfc: () => t('Deep Fried Chicken (your copy)'),
+};
+
+// The card menu's swap: record the choice, and let Install do the swap whole. Chicken not added to
+// the app yet is asked for right here, rather than sending the player off to find where.
+async function switchNeuralPass(game, to) {
+  // Said before anything happens, and said as what it is: one comes out, the other goes in.
+  const route = await window.api.gameRoute(game.exePath, game.detectedPath);
+  const vulkan = route && route.effectiveApi === 'vulkan';
+  let ask;
+  if (to === 'dfc') {
+    ask = t('Switch {game} to Deep Fried Chicken? This removes DLSS 5 from the game folder and installs Deep Fried Chicken in its place. Switch back from this menu at any time.', { game: game.name });
+    if (vulkan) ask += '\n\n' + t('Windows asks once for administrator permission: ReShade\'s Vulkan layer is set up for this game.');
+  } else if (route && route.route === 'unsupported') {
+    ask = t('Take Deep Fried Chicken out of {game}? DLSS 5 has no route of its own for this game, so nothing goes in its place.', { game: game.name });
+  } else {
+    ask = t('Switch {game} back to DLSS 5? This removes Deep Fried Chicken from the game folder and installs DLSS 5 in its place. Your Chicken settings are kept for next time.', { game: game.name });
+  }
+  if (!window.confirm(ask)) return;
+  if (to === 'dfc') {
+    const st = await window.api.dfcStatus(null);
+    if (!st || !st.supplied) {
+      if (!window.confirm(t('Deep Fried Chicken is not added to this app yet. Pick the folder you unpacked it into now?'))) return;
+      const res = await window.api.dfcSupply();
+      if (!res || res.cancelled) return;
+      if (!res.ok) { toast(t('That is not a Deep Fried Chicken download: {error}', { error: res.error })); return; }
+    }
+  }
+  game.neuralConsumer = to === 'dfc' ? 'dfc' : 'optiscaler';
+  window.api.saveGames(games);
+  await installGame(game);
+}
+
+async function loadSettingsDfc() {
+  const status = $('#settings-dfc-status');
+  const btn = $('#btn-settings-dfc');
+  const st = await window.api.dfcStatus(null);
+  const info = st && st.supplied ? (st.suppliedInfo || {}) : null;
+  btn.textContent = info ? t('Replace your Chicken copy…') : t('Add your Chicken copy…');
+  if (!info) { status.textContent = t('Not added yet.'); return; }
+  const when = info.addedAt ? new Date(info.addedAt).toLocaleDateString() : '';
+  status.textContent = info.from
+    ? t('Added from {from} on {date}. Switch a game to it from its ⋯ menu.', { from: info.from, date: when })
+    : t('Added. Switch a game to it from its ⋯ menu.');
+}
+
+$('#btn-settings-dfc').addEventListener('click', async () => {
+  const res = await window.api.dfcSupply();
+  if (!res || res.cancelled) return;
+  if (!res.ok) { toast(t('That is not a Deep Fried Chicken download: {error}', { error: res.error })); return; }
+  toast(t('Your Deep Fried Chicken copy is saved. Every game can use it now.'));
+  loadSettingsDfc();
+  renderGrid();
+});
+
+function dfcUnsupportedWords(code) {
+  if (code === 'dfc-vulkan-layer') return t('Chicken on Vulkan needs ReShade\'s Vulkan layer with add-on support, set up for this game.');
+  if (code === 'dfc-32bit') return t('Not for this game yet: on 32-bit games Chicken is set up here for DirectX 9 to 11, OpenGL and Vulkan.');
+  return t('Chicken is set up here for 64-bit DirectX 9 to 12 games only.');
+}
+
+function chosenConsumer(game) {
+  const id = game && game.neuralConsumer;
+  return CONSUMER_LABELS[id] ? id : 'optiscaler';
+}
+
+async function loadConsumerSection(game) {
+  const select = $('#game-neural-consumer');
+  const supplyBtn = $('#btn-dfc-supply');
+  const status = $('#game-consumer-status');
+  if (!select) return;
+
+  const chosen = chosenConsumer(game);
+  select.innerHTML = '';
+  for (const id of Object.keys(CONSUMER_LABELS)) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = CONSUMER_LABELS[id]();
+    if (id === chosen) opt.selected = true;
+    select.appendChild(opt);
+  }
+
+  const info = await window.api.dfcStatus(game && game.exePath);
+  // Not offered on this game's route at all (AMD/Intel, Luma, RE Engine's present route, ...).
+  const offered = !!(info && info.ok && info.support);
+  $('#game-consumer-section').classList.toggle('hidden', !offered);
+  if (!offered) return;
+  // The Add button only when it would do something: once a copy is supplied it is used for every
+  // game, so a button offering to add it again on each card is noise.
+  supplyBtn.classList.toggle('hidden', !!(info && info.supplied));
+
+  const lines = [];
+  if (!info || !info.ok) {
+    status.textContent = '';
+    return;
+  }
+  // Chicken is set up for 64-bit Direct3D 11/12 games only (dfc.supportedFor): elsewhere the option
+  // says why instead of building a folder that cannot run.
+  const support = info.support || { ok: true };
+  const dfcOpt = select.querySelector('option[value="dfc"]');
+  if (dfcOpt && !support.ok && chosen !== 'dfc') dfcOpt.disabled = true;
+  if (!support.ok) lines.push(dfcUnsupportedWords(support.code));
+  // What the folder is set up for against what the player chose: the gap is exactly what Install does.
+  const here = info.ours ? 'dfc' : 'optiscaler';
+  if (chosen === 'dfc' && support.ok) {
+    if (!info.supplied) lines.push(t('No Deep Fried Chicken copy yet -- add yours, then press Install.'));
+    else if (info.present && !info.ours) lines.push(t('Chicken is already here and this app did not place it. Delete its files to let this app manage it.'));
+    else if (here !== 'dfc') lines.push(t('Press Install on the card to switch this game to Chicken.'));
+  } else if (chosen === 'optiscaler' && here === 'dfc') {
+    lines.push(t('Press Install on the card to switch this game back to DLSS 5.'));
+  }
+  if (info.state && info.state.ran && info.state.state) {
+    lines.push(t('Chicken last reported: {state}.', { state: info.state.state }));
+  }
+  status.textContent = lines.join(' ');
+  await loadDfcSettings(game);
+}
+
+// Chicken's own settings, drawn from whatever dfccfg.js offers rather than from markup, so adding
+// a field there needs no change here. Each control writes straight to the cfg on change: Chicken
+// re-reads the file itself, and a Save button would let the panel and the file disagree.
+async function loadDfcSettings(game) {
+  const box = $('#dfc-settings');
+  const hint = $('#dfc-settings-hint');
+  const fields = $('#dfc-settings-fields');
+  if (!box) return;
+
+  const chosen = chosenConsumer(game);
+  if (chosen !== 'dfc' || !game || !game.exePath) { box.classList.add('hidden'); return; }
+  const r = await window.api.dfcCfgRead(game.exePath);
+  if (!r || !r.ok || !r.present) { box.classList.add('hidden'); return; }
+
+  box.classList.remove('hidden');
+  fields.innerHTML = '';
+  if (r.tooNew) {
+    // A cfg from a Chicken newer than the field table was read from. Shown, never written.
+    hint.textContent = t('This deep-fried-chicken.cfg was written by a newer Chicken ({schema}) than this app knows ({known}), so it is shown but not changed here. Use Chicken\x27s own overlay.', { schema: r.schema, known: r.knownSchema });
+    return;
+  }
+  // Said plainly, because it would otherwise read as all of Chicken's settings rather than a tenth.
+  hint.textContent = t('{offered} of this file\x27s {total} settings are offered here -- the ones whose meaning is unambiguous. Everything else stays exactly as Chicken wrote it, and its own in-game overlay still has the full set.', { offered: r.offeredKeys, total: r.totalKeys });
+
+  const byKey = Object.fromEntries(r.fields.map((f) => [f.key, f]));
+  for (const f of r.fields) {
+    if (!f.present) continue;
+    const row = document.createElement('div');
+    row.className = 'field-row';
+    const label = document.createElement('label');
+    label.textContent = t(f.label);
+    if (f.help) label.title = t(f.help);
+    const input = document.createElement('input');
+    input.id = `dfc-field-${f.key}`;
+    if (f.type === 'bool') {
+      input.type = 'checkbox';
+      input.checked = String(f.value).trim() !== '0';
+    } else {
+      input.type = 'number';
+      if (f.min !== undefined) input.min = String(f.min);
+      if (f.max !== undefined) input.max = String(f.max);
+      if (f.step !== undefined) input.step = String(f.step);
+      input.value = String(f.value);
+    }
+    // A field that only means anything while its switch is on says so by going dim, rather than
+    // disappearing -- someone looking for it should find it where they left it.
+    if (f.dependsOn && byKey[f.dependsOn] && String(byKey[f.dependsOn].value).trim() === '0') input.disabled = true;
+
+    input.addEventListener('change', async () => {
+      const value = f.type === 'bool' ? (input.checked ? 1 : 0) : Number(input.value);
+      const res = await window.api.dfcCfgWrite(game.exePath, { [f.key]: value });
+      if (!res.ok) { toast(t('Could not save that setting: {error}', { error: res.error })); return; }
+      loadDfcSettings(game);
+    });
+
+    row.appendChild(label);
+    row.appendChild(input);
+    if (f.unit) { const u = document.createElement('span'); u.textContent = f.unit; row.appendChild(u); }
+    fields.appendChild(row);
+  }
+}
+
+$('#game-neural-consumer').addEventListener('change', async () => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  if (!game) return;
+  game.neuralConsumer = $('#game-neural-consumer').value;
+  window.api.saveGames(games);
+  await loadConsumerSection(game);
+  toast(t('Saved. Press Install on the card to switch this game.'));
+  renderGrid();
+});
+
+$('#btn-dfc-supply').addEventListener('click', async () => {
+  const res = await window.api.dfcSupply();
+  if (res.cancelled) return;
+  if (!res.ok) { toast(t('That is not a Deep Fried Chicken download: {error}', { error: res.error })); return; }
+  toast(t('Your Deep Fried Chicken copy is saved. Every game can use it now.'));
+  if (!editingGameId) return;
+  await loadConsumerSection(games.find((x) => x.id === editingGameId));
+});
+
 async function deployFeederStack(game, providerId, force) {
   const status = $('#game-feeder-status');
   const licenseConfirmed = await confirmMvProviderLicense(providerId);
@@ -3840,7 +4176,7 @@ async function deployFeederStack(game, providerId, force) {
   }
 
   status.textContent = force ? t('Updating…') : t('Deploying…');
-  const res = await window.api.feederDeploy(game.exePath, providerId, { force, licenseConfirmed });
+  const res = await window.api.feederDeploy(game.exePath, providerId, { force, licenseConfirmed, consumer: chosenConsumer(game), nrDllPath: settings.nrDllPath });
   if (res.ok) {
     toast(force
       ? t('Feeder stack updated.')
@@ -3855,6 +4191,7 @@ async function deployFeederStack(game, providerId, force) {
     }
   }
   loadFeederSection(game);
+  loadConsumerSection(game);
 }
 
 $('#btn-feeder-deploy').addEventListener('click', () => {
@@ -4576,6 +4913,7 @@ function openSettingsModal() {
   $('#settings-nr-dll').value = settings.nrDllPath || '';
   checkNrDllStatus();
   loadStreamlineVersions();
+  loadSettingsDfc();
   settingsModal.classList.remove('hidden');
 }
 

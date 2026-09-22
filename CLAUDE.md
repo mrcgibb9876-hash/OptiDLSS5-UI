@@ -179,6 +179,38 @@ redistribution, so the manager only links to the release page and fetches the mo
 
 - **Nexus Mods is blocked by the egress proxy**, so a mod page's comments -- often the richest source
   on a specific game -- cannot be read from a session. The OptiScaler wiki and its issues can.
+  **discord.com is blocked too** (confirmed 2026-09-21), which matters more than it sounds: several
+  tools in this space are handed out only through Discord, so a link to a message there is unreadable
+  from a session no matter how relevant. Ask the user to paste the contents.
+- **Deep Fried Chicken: no public download, and its licence forbids the app shipping it.** It is
+  Alexander's neural consumer, the alternative to our OptiScaler in the Feeder's "exactly one neural
+  consumer" slot, and it is distributed through its author's Discord only -- no repository, no release
+  URL, so nothing for `integrity.js` to pin. Its `LICENSE.txt` (in the release, copyright 2026
+  Alexander) forbids copying, rehosting, mirroring, redistributing or bundling it without prior
+  written permission, so this is a licence term and not merely an unknown. `src/dfc.js` therefore takes a copy the USER supplies and
+  caches it, the way `importDgVoodooZip` does for dgVoodoo2; it never fetches, and a test fails if a
+  fetch appears. Same position as the AMD installer above. A permission request went to its author on
+  2026-09-21 (asked for: may the app fetch it, and is there a documented `deep-fried-chicken.cfg`
+  schema), with full credit offered -- **no reply yet**.
+- **Writing `deep-fried-chicken.cfg` IS allowed; shipping Chicken is not.** Its `LICENSE.txt` grants
+  "create and share your own Deep Fried Chicken configuration and preset files, provided they do not
+  contain or redistribute any part of the Software", and separately forbids copying, mirroring,
+  bundling or modifying the Software without **prior written permission**. So `dfccfg.js` writes the
+  config and `dfc.js` still never fetches a byte. An earlier note here said the README forbade editing
+  the cfg -- that was the *Feeder's* README describing Chicken. Chicken's own says the opposite: "Keep
+  your existing deep-fried-chicken.cfg when updating."
+- **The cfg is 663 flat `key=value` lines with `config_schema=13` (CP376 Beta).** `dfccfg.js` rewrites
+  only the keys asked for and returns every other byte untouched, refuses a file whose schema is newer
+  than it knows, and keeps **per-line** endings -- `dfc-universal-feed.cfg` really is mixed (3 CRLF, 36
+  LF) and a file-wide flag rewrote all of it. Round-tripping the real files is what caught that; the
+  hand-written fixture was uniform and passed happily.
+- **A Chicken release ships two trees.** `64-bit/` is the drop-in consumer for our Feeder route.
+  `32-bit/` is Chicken's OWN transport (`deep-fried-chicken.addon32`, `dfc-universal-feed.cfg`,
+  `host64\dfc-universal-host64.exe` + its own `dxgi.dll`, `DFC_Universal_Feed.fx`) and does not use
+  jlrouzies' Feeder at all. Its README: "Use the folder matching the GAME's bitness, not Windows'."
+  Only the 64-bit tree is deployed today.
+- The user's Chicken archives are 7z **AES-encrypted with encrypted headers**; the password is
+  `chicken`, given 2026-09-21 and stated in the release's own README.txt.
 
 - **A clone goes stale fast.** This repo moved about 180 commits in the first half of September
   alone. Always `git fetch origin master` and rebase before writing a patch, and re-check that a
