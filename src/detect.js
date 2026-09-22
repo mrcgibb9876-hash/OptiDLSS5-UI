@@ -42,7 +42,9 @@ const rtxmfg = require('./rtxmfg');
 // carries the old api and detectFromStored would keep it, so this has to force a re-detect.
 // 16: an emulator is set up for its best renderer for this app, not the one its last run used, and
 // carries the renderer's name and menu path (emulators.js, #106).
-const DETECT_VERSION = 16;
+// 17: an ASI loader's plugins are read (asiPlugins). A stored detection carries none, and its
+// absence reads as "no ASI loader here" -- the exact wrong answer that has to be refreshed (#108).
+const DETECT_VERSION = 17;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
@@ -538,6 +540,48 @@ function ourTranslationLayer(dir) {
   } catch {
     return null;
   }
+}
+
+// An ASI loader runs plugins named *.asi out of the game folder, and this app is blind to them: it
+// installs OptiScaler under a PROXY DLL name and everything it knows about a folder comes from
+// scanning those names (HOOK_DLLS). An OptiScaler loaded as an .asi is invisible to all of it.
+//
+// That blindness is not harmless, which is why it is detected rather than ignored. S.T.A.L.K.E.R.
+// GAMMA (#108) loads ReShade and OptiScaler as .asi plugins. The app could see only a stray
+// dxgi.dll left over from a reinstall, and reported `no-hook` / `no-dlss` -- confidently, and about
+// the wrong file. It cost a whole diagnosis before the reporter said "I use .asi", which explained
+// in one line what the logs could not.
+//
+// Anomaly and GAMMA are the common case, but nothing here is STALKER-specific: `.asi` is only ever
+// an ASI loader's plugin, so the extension alone is the evidence.
+const ASI_DIRS = ['', 'plugins', 'scripts'];
+const ASI_MAX = 40;
+
+async function inspectAsiPlugins(dir) {
+  const files = [];
+  for (const sub of ASI_DIRS) {
+    const from = sub ? path.join(dir, sub) : dir;
+    let names = [];
+    try { names = fs.readdirSync(from); } catch { continue; }
+    for (const name of names) {
+      if (!/\.asi$/i.test(name)) continue;
+      files.push(sub ? `${sub}/${name}` : name);
+      if (files.length >= ASI_MAX) break;
+    }
+    if (files.length >= ASI_MAX) break;
+  }
+  if (!files.length) return null;
+
+  // Which of them, if any, are the two this app also installs. Named separately from the rest
+  // because they are the ones that make the app's own verdicts wrong rather than merely incomplete:
+  // an OptiScaler running here is the thing that answers the game's NGX calls, and it is not ours.
+  const out = { files, optiScaler: null, reShade: null };
+  for (const rel of files) {
+    const hits = await scanFile(path.join(dir, ...rel.split('/')), HOOK_NEEDLES, { maxBytes: SIBLING_SCAN_MAX_BYTES });
+    if (!out.optiScaler && hits.has('OptiScaler')) out.optiScaler = rel;
+    if (!out.reShade && hits.has('ReShade')) out.reShade = rel;
+  }
+  return out;
 }
 
 async function inspectHookDlls(dir) {
@@ -1311,7 +1355,7 @@ async function detectGame(dir, exePath) {
   }
 
   // Bitness and the build facts come first now: they veto APIs before anything picks one.
-  const [bitness, hooks, build] = await Promise.all([peBitness(exePath), inspectHookDlls(dir), peBuildFacts(exePath)]);
+  const [bitness, hooks, build, asiPlugins] = await Promise.all([peBitness(exePath), inspectHookDlls(dir), peBuildFacts(exePath), inspectAsiPlugins(dir)]);
   const exeImports = exe ? exe.imports : bitness === 32 ? await peImports(exePath) : null;
   const vetoes = apiVetoes(build, { bitness, imports: exeImports });
 
@@ -1438,6 +1482,10 @@ async function detectGame(dir, exePath) {
     reshadeProxy: hooks.reshadeProxy,
     // An OptiScaler loading under a proxy name that is not the build this app installed.
     optiScalerProxy: hooks.optiScalerProxy,
+    // An ASI loader's plugins beside the exe. Named because this app cannot see inside them: an
+    // OptiScaler or ReShade loaded as an .asi answers the game while every check here looks at
+    // proxy DLL names and finds nothing (#108).
+    asiPlugins,
     antiCheat: antiCheatPresent(dir, exePath),
     // The door out of an anti-cheat stub, if there is one -- see antiCheatStub().
     protectedLauncher: antiCheatStub(dir),
@@ -1474,7 +1522,7 @@ async function detectGame(dir, exePath) {
 // following it put Dolphin's last OpenGL run in charge of the route (#106). An API chosen in Edit
 // still overrides (route.js).
 async function detectEmulator(dir, exePath, emu) {
-  const [bitness, hooks] = await Promise.all([peBitness(exePath), inspectHookDlls(dir)]);
+  const [bitness, hooks, asiPlugins] = await Promise.all([peBitness(exePath), inspectHookDlls(dir), inspectAsiPlugins(dir)]);
   const api = emu.apis[0];
   let reason = `${emu.name} (${emu.system}) is an emulator, so its renderer is one of its own settings: ` +
     `set up for ${emu.renderer || API_LABEL[api]}, the one that suits DLSS 5 best (${emu.hint})`;
@@ -1502,6 +1550,10 @@ async function detectEmulator(dir, exePath, emu) {
     reshadeProxy: hooks.reshadeProxy,
     // An OptiScaler loading under a proxy name that is not the build this app installed.
     optiScalerProxy: hooks.optiScalerProxy,
+    // An ASI loader's plugins beside the exe. Named because this app cannot see inside them: an
+    // OptiScaler or ReShade loaded as an .asi answers the game while every check here looks at
+    // proxy DLL names and finds nothing (#108).
+    asiPlugins,
     antiCheat: null,
     protectedLauncher: null,
     oldShaderCompiler: oldShaderCompiler(dir),
@@ -1551,13 +1603,17 @@ function detectSignature(dir, exePath) {
 // what lets a stored detection be reused for the expensive half -- the engine and API, which come
 // out of the exe and do not change until the game is patched.
 async function folderEvidence(dir, exePath) {
-  const hooks = await inspectHookDlls(dir);
+  const [hooks, asiPlugins] = await Promise.all([inspectHookDlls(dir), inspectAsiPlugins(dir)]);
   const logStat = optiScalerLogStat(dir);
   return {
     vulkanWrapper: hooks.vulkanWrapper,
     translatedBy: hooks.vulkanWrapper ? ourTranslationLayer(dir) : null,
     reshadeProxy: hooks.reshadeProxy,
     optiScalerProxy: hooks.optiScalerProxy,
+    // An ASI loader's plugins beside the exe. Named because this app cannot see inside them: an
+    // OptiScaler or ReShade loaded as an .asi answers the game while every check here looks at
+    // proxy DLL names and finds nothing (#108).
+    asiPlugins,
     antiCheat: antiCheatPresent(dir, exePath),
     protectedLauncher: antiCheatStub(dir),
     oldShaderCompiler: oldShaderCompiler(dir),
@@ -1717,4 +1773,4 @@ async function planForeignRemoval(dir, { ours = false } = {}) {
   return { found, del: [...del].sort(), restore, notes };
 }
 
-module.exports = { DETECT_VERSION, peBuildFacts, apiVetoes, exeStamp, openPeResources, RT_ICON, RT_GROUP_ICON, RT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, antiCheatPresent, oldShaderCompiler, apiFromFileName, pickModern, vulkanOverrideApplies, foreignToolchains, planForeignRemoval };
+module.exports = { DETECT_VERSION, peBuildFacts, apiVetoes, exeStamp, openPeResources, RT_ICON, RT_GROUP_ICON, RT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, inspectAsiPlugins, antiCheatPresent, oldShaderCompiler, apiFromFileName, pickModern, vulkanOverrideApplies, foreignToolchains, planForeignRemoval };

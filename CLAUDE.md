@@ -98,6 +98,74 @@ redistribution, so the manager only links to the release page and fetches the mo
   reachable *only* from the crash verdict. A feeder32 route still has to be `complete` before any
   run-based rule is reached (`gamehelp.js:83`), which is right: an unfinished stack explains "no
   DLSS" better than the wrapper does.
+- **An ASI loader makes every proxy-DLL finding a guess.** This app installs OptiScaler under a
+  proxy DLL name (`HOOK_DLLS`) and reads a game folder by those names, so it cannot see a thing an
+  `.asi` loads. S.T.A.L.K.E.R. GAMMA (#108, 2026-09-22) cost a whole diagnosis before the reporter
+  said he loads ReShade and OptiScaler as `.asi` and that the `dxgi.dll` the app had fixed on was
+  leftover clutter from a reinstall. `detect.inspectAsiPlugins` now lists `*.asi` in the folder,
+  `plugins/` and `scripts/`, and names any that carry the OptiScaler or ReShade string;
+  `DETECT_VERSION` went to 17 so stored detections do not keep the blind answer. An OptiScaler in an
+  `.asi` is never ours -- the app has no code that installs one that way -- so it is the same finding
+  as `foreign-optiscaler`, under the code `asi-optiscaler`. Where there is a loader but no upscaler
+  in it, `no-hook` becomes `asi-loader-blind`: an honest "this app cannot see what they load" beats
+  a confident verdict about the wrong file. Actually *supporting* an ASI install (deploying our
+  OptiScaler as a plugin, and reading one back as ours) is not done and was promised only as a
+  "if we can".
+
+- **reshade.me publishes only ReShade's CURRENT version, so one pinned URL is a time bomb.**
+  `/downloads/ReShade_Setup_<ver>_Addon.exe` stops existing the day the next version ships. A single
+  pin meant every *fresh* Feeder install on every machine would 404 at the same step at once, while
+  machines that had already deployed once carried on from cache and noticed nothing -- invisible to
+  us, total for anyone new. `feeder.RESHADE_SETUPS` is therefore a **list** of known versions, each
+  hash-pinned in `integrity.js`; `ensureReShadeSetup()` tries the cache, then a copy the user
+  supplied, then each known version. Adding the next version is one line plus its sha256. A hash
+  that does not match is still refused -- resilience never means installing something unidentified.
+  `importReShadeSetup()` takes a user's own setup and validates it by the **export table** of the
+  ReShade64.dll inside (`isAddonReShadeDll`), never by its file name: the plain and Add-on builds
+  carry the same version and product name, and the plain one deploys cleanly and then never loads
+  the Feeder.
+  **The mirror question is closed -- do not reopen it.** Checked 2026-09-22: `crosire/reshade`
+  publishes **no releases and no binary assets** (source only), so there is no official second host.
+  reshade.me's own terms are *"do not redistribute binaries or shader packs"* -- point people at a
+  legitimate download page. Third-party archives exist (reshade.mudrunner.net mirrors 40 add-on
+  builds with checksums; FileHorse, Uptodown; and the SEO clones reshade.cc / reshade.dev /
+  reshade.pro), but each redistributes against that, and an unofficial rehost of an injector DLL is
+  the obvious place to plant a modified one -- the pin would catch that, but it would not make the
+  dependency right. Same position as Deep Fried Chicken and the AMD installer. The user-supplied
+  copy is the only correct fallback.
+  Also note what the version list can and cannot do: reshade.me drops a version the moment the next
+  ships, so an **older pin is no safer than the current one**. The list makes our fix a one-line
+  release; it does not rescue a client already in the field. Only the cache and a user's own copy
+  do that.
+  **The handoff when a download fails** (`ensureReShadeSetupOrAsk` in main.js): say which host failed
+  and why, point at `https://reshade.me/` with a Copy button, and then **find what they downloaded**
+  in Downloads or on the Desktop (`findDownloadedReShadeSetups` / `adoptDownloadedReShadeSetup`),
+  check it is the Add-on build and carry on. The user clicks a link and saves a file; no path to
+  type, nothing to place. A **browser** usually succeeds where this app's fetch does not, because
+  Node ignores the system proxy a VPN or DPI-bypass tool sets up. Same shape as `pdplugin.js`'s
+  handoff for PureDark's plugin -- copy that, do not invent a new one.
+  Test trap: a fixture setup .exe must be filled with **random** bytes. A zip of zeros deflates to
+  a couple of KB and falls under the 1MB floor that rejects a part-finished download, so the
+  fixture silently tests nothing.
+- **`fetch failed` is Node's, not ours, and it hides everything.** undici throws that bare string for
+  DNS, a reset, a refused connection or a timeout, with the real reason in `error.cause`.
+  `feeder.describeFetchFailure()` unwraps it and names the host. Also: the app has **no proxy
+  support at all** -- no `ProxyAgent`, nothing reading `HTTPS_PROXY` -- and Node's fetch ignores
+  Windows' system proxy, so a VPN only applies when it is a TUN/virtual adapter, never when it is a
+  local SOCKS/HTTP proxy or a browser extension. A Fallout: New Vegas user (2026-09-22) burned a
+  day on that. Still to do.
+- **Revo Uninstaller's "additional folders" sweep can empty `%APPDATA%\OptiDLSS5-UI\feeder-cache`.**
+  `downloadToCache` returns a cached file with **no network at all**, so a wiped cache turns a
+  marginal network into a total install failure. A user can drop the right file into that folder by
+  hand and the hash check will accept it.
+
+- **The release title is derived from the tag.** It used to be a *required* `workflow_dispatch`
+  input whose default was the literal `"OptiScaler Manager v1.1.0"`, and since nobody ever passed
+  one, every release inherited it -- v2.3.23 shipped under that title, on the GitHub release page
+  and on the Discord card. Leave the `title` input empty and the release is named after the tag; a
+  title naming a *different* version is refused outright. A version written by hand in a second
+  place is a version that goes stale.
+
 - **Nexus Mods is blocked by the egress proxy**, so a mod page's comments -- often the richest source
   on a specific game -- cannot be read from a session. The OptiScaler wiki and its issues can.
   **discord.com is blocked too** (confirmed 2026-09-21), which matters more than it sounds: several

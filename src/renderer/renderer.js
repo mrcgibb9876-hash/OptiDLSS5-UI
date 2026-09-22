@@ -1241,8 +1241,11 @@ function helpWords(diag) {
     case 'nr-disabled': return t('DLSS ran but Neural Rendering is switched off in OptiScaler.ini. Reconfigure turns it on.');
     case 'dlss-no-nr': return t('DLSS was created and Neural Rendering is on, yet the pass never ran. This is not a known case. Save the bundle to share, or ask the AI.');
     case 'foreign-optiscaler': return t('Another OptiScaler build is in this folder as {file}, and it is not the one this app installed. That copy is what the game loads and what answers the DLSS calls -- an upstream OptiScaler has no neural pass, so DLSS 5 can never run while it is there, however complete everything else looks. Delete {file} (it is not ours to remove for you), then press Install here.', v);
+    case 'asi-optiscaler': return t('OptiScaler is here as {file}, an ASI loader\'s plugin. This app never installs it that way -- it always uses a proxy DLL name -- so that copy is not ours, and it is the one the game loads and the one that answers the DLSS calls. Whatever this app has put beside it makes no difference while it is there. Remove {file} (it is not ours to remove for you), then press Install here.', v);
     case 'dlss-runtime-missing': return t('OptiScaler switched DLSS off a second into the run, because nvngx_dlss.dll is not beside the game exe -- its log says so in as many words. Nothing this app builds can make a DLSS call without it: not the Feeder\x27s synthesised one, not REFramework\x27s upscaler on a Resident Evil, not a DLSS 5 only profile. On this route the deploy fetches and places it, so running that again puts it back.');
     case 'dlss-runtime-stub': return t('There is an nvngx_dlss.dll beside the game exe, but it is only {bytes} bytes -- far too small to be a DLL. It is a placeholder, a failed download, or a marker left by another DLSS tool. This is worse than the file being missing: OptiScaler checks the name, finds it, writes "Enabling DLSS" in its log and carries on, so everything downstream looks switched on while nothing can load it. Fix it deletes the placeholder and puts a real copy there.', v);
+    case 'optiscaler-no-native-dlss': return t('This game was routed as one that ships its own DLSS, and the last run says it does not: OptiScaler loaded, saw the game draw, and no DLSS call ever came. That routing rests on a single {file} sitting beside the game exe, which any DLSS tool could have left there -- not on finding the game\'s own DLSS in its files. If this game really has DLSS or DLAA in its graphics settings, turn it on and run again. If it has no upscaler at all, {file} is not the game\'s: delete it (it is not ours to remove for you) and press Install again, and the app will set up the Feeder route instead, which gives OptiScaler a DLSS call to hook.', v);
+    case 'feeder-incomplete': return t('The Feeder is deployed here, but not all of it arrived: {missing} still missing. The add-on cannot load without those, so nothing feeds DLSS and the game runs as if none of this were installed. Install again puts them back. If it keeps failing at the same piece, the download is being blocked rather than the game refusing it.', v);
     case 'feeder-technique': return t('DLSS initialised but the Feeder\'s shader technique was missing. Install again to redeploy the Feeder.');
     case 'luma-select-dlss': return t('Luma UE is deployed but no DLSS call happened. In-game, press Home for Luma\'s overlay and select DLSS as the upscaler, in gameplay. Then check again.');
     case 'init-no-feature': return t('DLSS initialised but no feature was ever created. This is not a known case. Save the bundle to share, or ask the AI.');
@@ -1276,6 +1279,7 @@ function helpWords(diag) {
         ? t('The DLSS5 Feeder stopped before its first frame: the Vulkan interop extensions it needs were not on the game\'s device -- its hook on vkCreateDevice was installed but this game creates its device some way the hook does not intercept.')
         : t('The DLSS5 Feeder stopped before its first frame: the Vulkan interop extensions it needs were not on the game\'s device.')) + ' ' +
       t('The Feeder\'s own fallback is its out-of-process layer: in its release zip, run layer\\run-with-feed-layer.bat with the path to this game\'s exe. This app does not deploy that layer; dlss5-feed.log has the driver\'s answer above the stop line.');
+    case 'asi-loader-blind': return t('Nothing called DLSS on the last run -- but there is an ASI loader in this folder, with {count} plugin(s) beside the game: {files}. This app installs OptiScaler under a proxy DLL name and reads the folder by those names, so it cannot see what an ASI loader loads, and the findings here may be about the wrong files entirely. Check what your .asi plugins are doing first. If none of them is an upscaler, save the bundle to share, or ask the AI.', v);
     case 'no-hook': return t('Nothing called DLSS on the last run, so nothing was hooked. Check the game\'s own graphics settings have DLSS or DLAA selected. If they do, this is not a known case: save the bundle or ask the AI.');
     case 'ue-crash-luma': return t('The game crashed (Unreal crash report: {message}) with Luma UE deployed, and Luma is not verified on this game. Remove Luma UE and try the Feeder route.', { message: (v.message || '').slice(0, 120) });
     case 'ue-crash-feeder': return t('The game crashed (Unreal crash report: {message}) with the Feeder deployed. Remove the Feeder and check whether it runs clean.', { message: (v.message || '').slice(0, 120) });
@@ -1346,8 +1350,12 @@ function helpSteps(diag) {
     ];
     case 'foreign': return fixIt(t('Press Fix it to remove {tool}', v));
     case 'foreign-optiscaler': return [t('Delete {file} from the game folder', v), t('Press Install')];
+    case 'asi-optiscaler': return [t('Remove {file} from the ASI loader', v), t('Press Install')];
+    case 'asi-loader-blind': return [t('Check the .asi plugins in the game folder: {files}', v), t('Save the bundle or ask the AI')];
     case 'feeder-misdeployed': case 'ue-crash-feeder': return fixIt(t('Press Fix it (removes the Feeder)'));
     case 'luma-known-bad': case 'ue-crash-luma': return fixIt(t('Press Fix it (removes Luma UE)'));
+    case 'optiscaler-no-native-dlss': return [t('Turn DLSS or DLAA on in the game, if it has one', v), t('If it has none, delete {file} from the game folder', v), t('Press Install')];
+    case 'feeder-incomplete': return [t('Press Install to fetch and place {missing}', v), launch];
     case 'not-installed': case 'feeder-missing': case 'dgvoodoo-missing': case 'feeder-technique': return [t('Press Install'), launch];
     case 'luma-missing': return [t('Press Fix it (sets up Luma)'), t('In the game: pick DirectX 11'), launch];
     case 'luma-available': return [t('Press Fix it (switches to Luma)'), t('In the game: pick DirectX 11'), launch];
@@ -1432,8 +1440,12 @@ function helpShort(diag) {
     case 'd3d11-native': return t('Wrong D3D11 upscaler setting');
     case 'nr-disabled': return t('Neural Rendering is switched off');
     case 'foreign-optiscaler': return t('Another OptiScaler loads first');
+    case 'asi-optiscaler': return t('Another OptiScaler loads as an .asi');
+    case 'asi-loader-blind': return t('An ASI loader is in charge here');
     case 'dlss-runtime-missing': return t('nvngx_dlss.dll is missing');
     case 'dlss-runtime-stub': return t('nvngx_dlss.dll is not a real DLL');
+    case 'optiscaler-no-native-dlss': return t('This game has no DLSS to hook');
+    case 'feeder-incomplete': return t('The Feeder is only half installed');
     case 'feeder-technique': return t('Feeder shader missing');
     case 'luma-select-dlss': return t('Select DLSS in Luma\'s overlay (Home)');
     case 'ue-crash-luma': return t('Crashed with Luma UE');

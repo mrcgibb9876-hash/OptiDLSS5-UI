@@ -8,9 +8,9 @@ on:
         required: true
         default: "v1.1.0"
       title:
-        description: "Release title"
-        required: true
-        default: "OptiScaler Manager v1.1.0"
+        description: "Release title. Leave empty to name it after the tag."
+        required: false
+        default: ""
       prerelease:
         description: "Mark as a pre-release"
         type: boolean
@@ -47,6 +47,30 @@ jobs:
         }
 
         Write-Output "package.json $pkg matches tag ${{ inputs.tag }}."
+
+    # The title used to be a required input whose DEFAULT was the literal string
+    # "OptiScaler Manager v1.1.0". Nobody ever passed one, so every release since has been titled
+    # v1.1.0 -- v2.3.23 shipped under it, on the GitHub release page and on the Discord card.
+    # A version written by hand in a second place is a version that goes stale, so it is derived
+    # from the tag now, and a title that names a DIFFERENT version is refused rather than published.
+    - name: Work out the release title
+      id: title
+      shell: pwsh
+      run: |
+        $tag = "${{ inputs.tag }}".Trim()
+        $given = "${{ inputs.title }}".Trim()
+        if (-not $given) {
+          $title = "OptiDLSS5-UI $tag"
+        } else {
+          $m = [regex]::Match($given, 'v?\d+\.\d+\.\d+')
+          if ($m.Success -and ("v" + $m.Value.TrimStart('v')) -ne $tag) {
+            Write-Error "The title '$given' names $($m.Value) but the tag is $tag. Leave the title empty to name it after the tag."
+            exit 1
+          }
+          $title = $given
+        }
+        Write-Output "Release title: $title"
+        "title=$title" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
     - name: Install
       run: npm ci
@@ -186,7 +210,7 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ inputs.tag }}
-        name: ${{ inputs.title }}
+        name: ${{ steps.title.outputs.title }}
         prerelease: ${{ inputs.prerelease }}
         body: |
           [![Join the Discord](https://img.shields.io/badge/Join%20the%20Discord-Help%20·%20Results%20·%20Releases-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/HFZTDdSNmJ)
@@ -244,7 +268,7 @@ jobs:
       env:
         DISCORD_RELEASE_WEBHOOK: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
         TAG: ${{ inputs.tag }}
-        TITLE: ${{ inputs.title }}
+        TITLE: ${{ steps.title.outputs.title }}
         PRERELEASE: ${{ inputs.prerelease }}
       run: |
         if (-not $env:DISCORD_RELEASE_WEBHOOK) {
