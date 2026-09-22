@@ -152,7 +152,7 @@ test('routes and Game Help for the experimental cases', { skip: !onWindows }, ()
   // needed the Feeder's cast_key set and the panel already open in the helper until v1.0.35, so this
   // text used to send the reader to Edit and to the real host window instead. Both are fixed and the
   // deploy writes the key, so the reader is told the one thing that is now true everywhere.
-  assert.match(r32.reason, /Press Alt\+Home in the game for the DLSS 5 panel/, 'the same key as every other route');
+  assert.match(r32.reason, /Press Insert in the game for the DLSS 5 panel/, 'the same key as every other route');
   assert.match(r32.reason, /take clicks/, 'the cast is no longer display-only');
   // Edit no longer carries the DLSS 5 field table -- it was a second copy of the in-game panel
   // writing the same ini, and the panel rewrites the whole file whenever it changes something. This
@@ -164,7 +164,7 @@ test('routes and Game Help for the experimental cases', { skip: !onWindows }, ()
   assert.deepEqual(r32gl.steps.map((s) => s.key), ['feeder32']);
   assert.equal(r32gl.legacy.reshadeName, 'opengl32.dll');
   assert.match(r32gl.reason, /On OpenGL, ReShade goes in as the game's opengl32\.dll/, 'the OpenGL half');
-  assert.match(r32gl.reason, /Press Alt\+Home in the game/, 'and the shared paragraph, from the one place it lives');
+  assert.match(r32gl.reason, /Press Insert in the game/, 'and the shared paragraph, from the one place it lives');
 
   const r64dx9 = route.recommendRoute(dir, exe, { api: 'dx9', apis: ['dx9'], bitness: 64, recommend: 'optiscaler' }, 'nvidia');
   assert.equal(r64dx9.route, 'feeder');
@@ -429,45 +429,48 @@ test('an older 32-bit install is brought to the borderless window once, and left
   assert.equal(legacy.ensureDgVoodooWindowed(game), false, 'already windowed: no rewrite');
 });
 
-test('the 32-bit in-game panel gets Alt+Home, and a key the player chose is left alone', () => {
+test('the 32-bit in-game panel gets Insert, and a key the player chose is left alone', () => {
   // Without this the Feeder's cast_key ships as 0 -- "no key" -- so the only way to put the panel
-  // on screen is to find "Show the DLSS 5 panel in-game" in ReShade's add-on tab. 0x24 is VK_HOME,
-  // and cast_mods=1 is Alt: since Feeder 1.16.0-beta.6 the cast matches its modifiers exactly in
-  // both directions, so the modifier has to be written or Alt+Home stops reaching it -- and a BARE
-  // Home is what opens ReShade's own overlay instead.
+  // on screen is to find "Show the DLSS 5 panel in-game" in ReShade's add-on tab. 45 is VK_INSERT,
+  // the key the engine's panel takes on every route since v2.2.7, and here the cast IS the panel.
+  // cast_mods=0 is bare: since Feeder 1.16.0-beta.6 the cast matches modifiers exactly, and nothing
+  // needs holding because ReShade's own overlay is Home.
   const game = scratchDir('legacy-cast-key');
   write(game, legacy.MARKER, JSON.stringify({ version: 1, files: [], backups: [], dirs: ['host64'], host32: { api: 'dx11', reshadeName: 'dxgi.dll' } }));
   write(game, 'dlss5-feed.cfg', 'enabled=1\nmode=2\ncast_key=0\ncast_scale=100\n');
 
   assert.equal(legacy.ensureCastKey(game), true);
   const cfg = fs.readFileSync(path.join(game, 'dlss5-feed.cfg'), 'utf8');
-  assert.match(cfg, /^cast_key=36$/m);
-  assert.match(cfg, /^cast_mods=1$/m);
+  assert.match(cfg, /^cast_key=45$/m);
+  assert.match(cfg, /^cast_mods=0$/m);
   assert.match(cfg, /^mode=2$/m, 'every other setting is left as it was');
   assert.match(cfg, /^cast_scale=100$/m);
 
   assert.equal(legacy.ensureCastKey(game), false, 'already set: no rewrite');
 
-  // The upgrade beta.6 forces: an install this app made before cast_mods existed carries our own
-  // Home with no modifier line. Left alone, that cast would answer to a bare Home on beta.6.
-  write(game, 'dlss5-feed.cfg', 'enabled=1\ncast_key=36\ncast_scale=100\n');
-  assert.equal(legacy.ensureCastKey(game), true, 'our own key without mods is upgraded once');
-  const upgraded = fs.readFileSync(path.join(game, 'dlss5-feed.cfg'), 'utf8');
-  assert.match(upgraded, /^cast_key=36$/m, 'the key itself is not touched');
-  assert.match(upgraded, /^cast_mods=1$/m);
-  assert.equal(legacy.ensureCastKey(game), false, 'and only once');
+  // Both forms this app ever wrote move to the panel's new key -- Home alone (before cast_mods
+  // existed) and Alt+Home -- because a cast on one key with the panel inside it on another is worse
+  // than either. A player who picked Home for themselves loses it here; nothing tells the two apart.
+  for (const before of ['enabled=1\ncast_key=36\ncast_scale=100\n', 'enabled=1\ncast_key=36\ncast_mods=1\n']) {
+    write(game, 'dlss5-feed.cfg', before);
+    assert.equal(legacy.ensureCastKey(game), true, 'our own old key is moved to the new one');
+    const upgraded = fs.readFileSync(path.join(game, 'dlss5-feed.cfg'), 'utf8');
+    assert.match(upgraded, /^cast_key=45$/m);
+    assert.match(upgraded, /^cast_mods=0$/m);
+    assert.equal(legacy.ensureCastKey(game), false, 'and only once');
+  }
 
-  // Modifiers the player chose in the Feeder's own panel are theirs, even on our key.
+  // Modifiers the player chose in the Feeder's own panel are theirs, even on our old key.
   write(game, 'dlss5-feed.cfg', 'enabled=1\ncast_key=36\ncast_mods=6\n');
   assert.equal(legacy.ensureCastKey(game), false);
   assert.match(fs.readFileSync(path.join(game, 'dlss5-feed.cfg'), 'utf8'), /^cast_mods=6$/m);
 
   // A key chosen in the Feeder's own panel is the player's, not ours to replace -- and neither are
-  // its modifiers, which stay the Feeder's own default rather than being given our Alt.
-  write(game, 'dlss5-feed.cfg', 'enabled=1\ncast_key=45\n');
+  // its modifiers, which stay the Feeder's own default rather than being given ours.
+  write(game, 'dlss5-feed.cfg', 'enabled=1\ncast_key=121\n');
   assert.equal(legacy.ensureCastKey(game), false);
   const chosen = fs.readFileSync(path.join(game, 'dlss5-feed.cfg'), 'utf8');
-  assert.match(chosen, /^cast_key=45$/m);
+  assert.match(chosen, /^cast_key=121$/m);
   assert.doesNotMatch(chosen, /^cast_mods=/m);
 
   // No cfg yet (the Feeder writes one on its first save): the key still lands, and the Feeder
@@ -475,7 +478,7 @@ test('the 32-bit in-game panel gets Alt+Home, and a key the player chose is left
   const fresh = scratchDir('legacy-cast-key-fresh');
   write(fresh, legacy.MARKER, JSON.stringify({ version: 1, files: [], backups: [], dirs: ['host64'], host32: { api: 'dx11', reshadeName: 'dxgi.dll' } }));
   assert.equal(legacy.ensureCastKey(fresh), true);
-  assert.equal(fs.readFileSync(path.join(fresh, 'dlss5-feed.cfg'), 'utf8'), 'cast_key=36\ncast_mods=1\n');
+  assert.equal(fs.readFileSync(path.join(fresh, 'dlss5-feed.cfg'), 'utf8'), 'cast_key=45\ncast_mods=0\n');
 
   // Not this route: a cast_key would toggle a picture of a host process that is not running.
   const other = scratchDir('legacy-cast-key-not-host32');

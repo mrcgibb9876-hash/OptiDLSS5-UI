@@ -250,7 +250,8 @@ test('the panel hotkey reads back whatever is set, listed or not', () => {
 
   const unset = panelKey('[DlssNr]\nPanelKey=auto\n');
   assert.equal(unset.value, null, 'auto is auto, not the default written out');
-  assert.equal(unset.default, VK_HOME | ALT, 'the default is Alt+Home, as the engine has it');
+  // Insert since engine v2.2.7: one key for this project's panel on every route.
+  assert.equal(unset.default, 0x2D, 'the default is Insert, as the engine has it');
 
   const plainHome = panelKey(`[DlssNr]\nPanelKey=${VK_HOME}\n`);
   assert.equal(plainHome.value, VK_HOME);

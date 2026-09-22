@@ -1441,7 +1441,15 @@ function restoreDxvkConf(dir, record) {
 // safe on older builds, which read only the keys they know and default the rest.
 //
 // 1 = Alt, 2 = Ctrl, 4 = Shift, added together.
-const CAST_KEY_HOME = 0x24;
+//
+// **Insert, bare, since engine v2.2.7** (2026-09-22). The engine's panel key moved to Insert on every
+// route, so the key that shows the cast has to be the same one: on this route the cast IS the panel.
+// ReShade's overlay is Home with no modifier and is matched exactly, so Insert never disturbs it and
+// no modifier is needed any more. An install this app made before today carries Alt+Home and is moved
+// across below; a key the player chose themselves is left alone.
+const CAST_KEY_INSERT = 0x2D;
+const CAST_MODS_NONE = 0;
+const CAST_KEY_HOME = 0x24; // what this app wrote until v2.5.4, recognised below so it can be upgraded
 const CAST_MODS_ALT = 1;
 
 function setLine(lines, key, value) {
@@ -1473,7 +1481,7 @@ function needsFullscreenHost(dir) {
   });
 }
 
-function configureFeedCfg(dir, { castKey = CAST_KEY_HOME, castMods = CAST_MODS_ALT } = {}) {
+function configureFeedCfg(dir, { castKey = CAST_KEY_INSERT, castMods = CAST_MODS_NONE } = {}) {
   const cfgPath = path.join(dir, 'dlss5-feed.cfg');
   const existing = fs.existsSync(cfgPath) ? fs.readFileSync(cfgPath, 'utf8') : '';
   const lines = existing ? existing.split(/\r?\n/) : [];
@@ -1493,15 +1501,18 @@ function configureFeedCfg(dir, { castKey = CAST_KEY_HOME, castMods = CAST_MODS_A
     const current = Number(String(lines[at]).split('=')[1]);
     // A key the user picked in the Feeder's own panel is theirs; only "none" is ours to fill in.
     if (Number.isFinite(current) && current > 0) {
-      // ... except for the one upgrade the beta.6 change forces. An install this app made before
-      // cast_mods existed carries our own Home with no modifier line, and on beta.6 that means the
-      // cast answers to a BARE Home -- the very chord that opens ReShade's overlay instead. The
-      // modifier is added only when the key is still the one we wrote and nobody has set mods of
-      // their own; a user who chose their own key or their own modifiers is left alone entirely.
-      if (current === CAST_KEY_HOME && !hasMods) {
+      // ... except for the key this app itself wrote, in either form it ever wrote it: Home alone
+      // (before cast_mods existed) or Alt+Home. Both move to the panel's new key, because on this
+      // route the cast IS the panel -- a cast on one key and the panel inside it on another is worse
+      // than either. A player who chose Home for themselves loses that choice here; nothing in the
+      // file tells the two apart. Any other key, or their own modifiers on ours, is left alone.
+      const modsLine = lines.find((line) => /^\s*cast_mods\s*=/i.test(line)) || '';
+      const mods = Number(String(modsLine).split('=')[1]);
+      if (current === CAST_KEY_HOME && (!hasMods || mods === CAST_MODS_ALT)) {
+        lines[at] = `cast_key=${castKey}`;
         setLine(lines, 'cast_mods', castMods);
         fs.writeFileSync(cfgPath, `${lines.join('\n')}\n`, 'utf8');
-        return { configured: true, castKey: current, castMods, kept: true };
+        return { configured: true, castKey, castMods, kept: false, upgraded: 'alt-home-to-insert' };
       }
       if (extra) fs.writeFileSync(cfgPath, `${lines.join('\n')}\n`, 'utf8');
       return { configured: extra, castKey: current, kept: true };
@@ -1792,7 +1803,7 @@ module.exports = {
   configureFeedCfg,
   needsFullscreenHost,
   FULLSCREEN_ONLY_EXES,
-  CAST_KEY_HOME,
+  CAST_KEY_HOME, CAST_KEY_INSERT,
   dxvkWrapperFile,
   readDxvkConf,
   configureDxvkConf,

@@ -103,7 +103,7 @@ const ROUTE_TEXT = {
   // cast_key and opening the panel in the helper on startup (engine v1.0.35), Alt+Home is all it takes -- the same
   // key as every other route. Verified on Alien: Isolation, 2026-09-16.
   host32Panel:
-    'Press Alt+Home in the game for the DLSS 5 panel, the same as any other game. It is drawn by the helper and shown over the game, and its controls take clicks there.',
+    'Press Insert in the game for the DLSS 5 panel, the same as any other game. It is drawn by the helper and shown over the game, and its controls take clicks there.',
   host32Lead:
     'Experimental. A 32-bit game cannot run DLSS in its own process -- NVIDIA ships no 32-bit version -- so the DLSS5 ' +
     'Feeder\'s 32-bit add-on sends each frame to its 64-bit helper beside the game, and DLSS 5 runs ' +
@@ -112,25 +112,25 @@ const ROUTE_TEXT = {
     'Experimental. {name} emulates {system} and makes no DLSS call, so the DLSS5 Feeder synthesises one inside it, for ' +
     'every game it runs. Set its renderer first ({hint}) and pick the same API in Edit if it is not {api}. Depth is the ' +
     'weak point: ReShade often cannot see the console game\'s depth buffer inside an emulator, and Neural Rendering has ' +
-    'less to work with then. The DLSS 5 panel (Alt+Home) opens over the emulator\'s window as in any game.',
+    'less to work with then. The DLSS 5 panel (Insert) opens over the emulator\'s window as in any game.',
   emulatorVulkan:
     'Experimental. {name} emulates {system} and makes no DLSS call, so the DLSS5 Feeder synthesises one inside it, for ' +
     'every game it runs. Set its renderer first ({hint}) and pick the same API in Edit if it is not {api}. Depth is the ' +
     'weak point: ReShade often cannot see the console game\'s depth buffer inside an emulator, and Neural Rendering has ' +
     'less to work with then. On Vulkan, ReShade runs as its machine-wide Vulkan layer (ReShade\'s own installer, with ' +
-    'add-on support), and NVIDIA Smooth Motion must be off. The DLSS 5 panel (Alt+Home) opens over the emulator\'s ' +
+    'add-on support), and NVIDIA Smooth Motion must be off. The DLSS 5 panel (Insert) opens over the emulator\'s ' +
     'window as in any game.',
   emulatorOpenGl:
     'Experimental. {name} emulates {system} and makes no DLSS call, so the DLSS5 Feeder synthesises one inside it, for ' +
     'every game it runs. Set its renderer first ({hint}) and pick the same API in Edit if it is not {api}. Depth is the ' +
     'weak point: ReShade often cannot see the console game\'s depth buffer inside an emulator, and Neural Rendering has ' +
     'less to work with then. On OpenGL, ReShade goes in as the emulator\'s opengl32.dll -- but DLSS 5 cannot draw ' +
-    'over OpenGL, so the DLSS 5 panel (Alt+Home) will not appear; use the emulator\'s Direct3D or Vulkan renderer ' +
+    'over OpenGL, so the DLSS 5 panel (Insert) will not appear; use the emulator\'s Direct3D or Vulkan renderer ' +
     'if it has one.',
   dx9:
     'Experimental. DirectX 9 has no Feeder path of its own, so dgVoodoo2 turns it into DirectX 11, ' +
     'then the DLSS5 Feeder synthesises the DLSS call and DLSS 5 ' +
-    'runs. The DLSS 5 panel (Alt+Home) opens over the game as usual. If dgVoodoo2 crashes the game, ' +
+    'runs. The DLSS 5 panel (Insert) opens over the game as usual. If dgVoodoo2 crashes the game, ' +
     'this route is not for it yet.',
 };
 
