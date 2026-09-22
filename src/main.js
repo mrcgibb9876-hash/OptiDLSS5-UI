@@ -509,20 +509,33 @@ function latestFeederTag() {
   return latestFeederTagPromise;
 }
 
+// The newest Feeder's zip in the cache, resolved once per app run like the tag above, for the
+// 32-bit route's sync (legacy.refreshFeeder32). null when offline.
+let latestFeederZipPromise = null;
+function latestFeederZip() {
+  if (latestFeederZipPromise === null) {
+    latestFeederZipPromise = feeder.resolveFeederAsset(GITHUB_HEADERS, { allowPrerelease: feederPrereleaseEnabled() })
+      .then((asset) => feeder.downloadToCache(asset.url, feederCacheDir(), asset.name, GITHUB_HEADERS, { sha256: asset.digest }))
+      .catch(() => null);
+  }
+  return latestFeederZipPromise;
+}
+
 // Brings a game's deployed Feeder up to the newest release, the same way Game Help's
 // "redeploy-feeder" does. Games were left on whatever the Feeder was when they were installed, so a
 // library built up over weeks ran a different Feeder per game -- and the fixes that matter most on
 // this route (a Close() failure, the cast's input forwarding) only arrive with the add-on itself.
 //
 // Only when the tag actually differs: the deploy rewrites the shader, the preset, both provider
-// levels and the ReShade ini, which is not something to do on every sync for no reason. Offline, or
-// a game whose marker predates version tracking, is left alone rather than force-redeployed.
+// levels and the ReShade ini, which is not something to do on every sync for no reason. Offline is
+// left alone; a marker that predates version tracking is not (see below).
 async function updateFeederIfStale(dir, exePath) {
   if (!feeder.feederDeployed(dir)) return null;
 
   const marker = feeder.readFeederDeployMarker(dir);
-  const current = marker && marker.feederVersion;
-  if (!current) return null;
+  // A marker from before versions were recorded counts as stale, not as "leave it alone": that rule
+  // kept such installs on their first Feeder for good.
+  const current = (marker && marker.feederVersion) || null;
 
   const latest = await latestFeederTag();
   if (!latest || latest === current) return null;
@@ -5851,6 +5864,28 @@ async function findActiveOptiScalerFile(dir) {
   return null;
 }
 
+// The engine DLL alone brought up to the release, for a game kept as is: the full sync below does the
+// same copy among everything else it keeps current.
+async function copyEngineIfStale(dir, releaseFolder) {
+  const releaseDll = releaseFolder ? path.join(releaseFolder, 'OptiScaler.dll') : null;
+  if (!releaseDll || !fs.existsSync(releaseDll) || !hasDlssNrSection(releaseFolder)) return false;
+  const legacyMarker = legacy.readMarker(dir);
+  if (legacyMarker && legacyMarker.host32) {
+    const hostDll = path.join(dir, legacy.HOST_DIR, 'winmm.dll');
+    if (!fs.existsSync(hostDll) || sha256File(releaseDll) === sha256File(hostDll)) return false;
+    await fsp.copyFile(releaseDll, hostDll);
+    return true;
+  }
+  if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return false;
+  const active = await findActiveOptiScalerFile(dir);
+  if (!active || sha256File(releaseDll) === sha256File(active.file)) return false;
+  await fsp.copyFile(releaseDll, active.file);
+  const plain = path.join(dir, 'OptiScaler.dll');
+  if (active.file !== plain) await fsp.copyFile(releaseDll, plain).catch(() => {});
+  invalidateDetection(dir);
+  return true;
+}
+
 async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
   try {
     // OPTIDLSS5_NO_SYNC=1: a second copy of the app (screenshots, a demo, a source checkout pointed at a
@@ -5858,9 +5893,14 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
     if (process.env.OPTIDLSS5_NO_SYNC === '1') return { ok: true, updated: false, reason: 'sync disabled' };
     if (!exePath || !fs.existsSync(exePath)) return { ok: true, updated: false, reason: 'exe missing' };
     const dir = gameDir(exePath);
-    // The user asked for this game to be left exactly as it is: no engine update, no NR model update,
-    // no ini or REFramework changes on sync. Install, Edit and Remove still act when pressed.
-    if (keptAsIs(dir)) return { ok: true, updated: false, reason: 'kept as is' };
+    // The user asked for this game to be left as it is: no NR model update, no ini or REFramework
+    // changes on sync. Install, Edit and Remove still act when pressed. The engine is the exception: a
+    // library on two engines has an in-game panel, ini keys and Manager rows that disagree game to game
+    // (2026-09-22: Cyberpunk held on a test build by a forgotten marker showed none of v2.2.6's rows).
+    if (keptAsIs(dir)) {
+      const engineUpdated = await copyEngineIfStale(dir, releaseFolder);
+      return { ok: true, updated: engineUpdated, reason: 'kept as is' };
+    }
     // A 32-bit game on the helper route: its OptiScaler (winmm.dll) and NR model are in host64\ and
     // follow the engine and model in Settings the same way.
     const legacyMarker = legacy.readMarker(dir);
@@ -5878,6 +5918,16 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
         await fsp.copyFile(releaseDll, hostDll);
         updated = true;
       }
+      // The engine's companions follow it into the helper folder, as they do beside a 64-bit game.
+      if (releaseDll && fs.existsSync(hostDll) && hasDlssNrSection(releaseFolder)) {
+        for (const name of engineCompanionsIn(releaseFolder)) {
+          const src = path.join(releaseFolder, name);
+          const dest = path.join(hostDir, name);
+          if (!fs.existsSync(src) || (fs.existsSync(dest) && sha256File(src) === sha256File(dest))) continue;
+          await fsp.copyFile(src, dest);
+          updated = true;
+        }
+      }
       const hostNr = path.join(hostDir, 'nvngx_dlssnr.dll');
       if (nrDllPath && fs.existsSync(nrDllPath) && fs.existsSync(hostNr) && fs.statSync(hostNr).size !== fs.statSync(nrDllPath).size) {
         await fsp.copyFile(nrDllPath, hostNr);
@@ -5891,9 +5941,17 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
       try { dgWindowed = legacy.ensureDgVoodooWindowed(dir, { vendor: gpuVendor }); } catch {}
       // Installs from before the deploy gave the in-game panel its Alt+Home key (legacy.js ensureCastKey).
       try { legacy.ensureCastKey(dir); } catch {}
+      // The Feeder follows its releases here too. A locked file (the game running) is thrown, so the
+      // sync fails and the renderer retries once the game closes.
+      let feederUpdated = null;
+      const feederZip = await latestFeederZip();
+      if (feederZip) {
+        const refreshed = await legacy.refreshFeeder32(dir, feederZip);
+        if (refreshed.updated) feederUpdated = { files: refreshed.files };
+      }
       // Installs from before High performance was set for the helper (Feeder #100, 2026-09-19).
       await preferDiscreteGpu(dir, exePath, { onlyNew: true });
-      return { ok: true, updated: updated || nrUpdated, nrUpdated, dgWindowed, reason: 'legacy 32-bit route', autoConfigured: [] };
+      return { ok: true, updated: updated || nrUpdated || !!feederUpdated, nrUpdated, feederUpdated, dgWindowed, reason: 'legacy 32-bit route', autoConfigured: [] };
     }
     // A 64-bit DirectX 8/9 game behind dgVoodoo2 gets the same scaled-to-screen display (legacy.js DG_DISPLAY).
     try { legacy.ensureDgVoodooWindowed(dir, { vendor: gpuVendor }); } catch {}
@@ -5949,7 +6007,7 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
     // route's motion vectors) follow the release too -- Install copies every release file, but a game
     // installed before a companion existed would otherwise never get it.
     let companionsUpdated = false;
-    for (const name of ENGINE_COMPANION_DLLS) {
+    for (const name of engineCompanionsIn(releaseFolder)) {
       const src = path.join(releaseFolder, name);
       const dest = path.join(dir, name);
       if (!fs.existsSync(src)) continue;
@@ -6016,7 +6074,22 @@ ipcMain.handle('game:sync-if-stale', async (evt, payload = {}) => {
 const INSTALL_MARKER = '.optiscaler-manager-install.json';
 
 // DLLs the engine release carries beside OptiScaler.dll, kept current by sync and taken by Remove.
-const ENGINE_COMPANION_DLLS = ['OptiScaler_OpticalFlow.dll'];
+// The forwarder rides along since 2026-09-22: it was never synced, so every installed game kept the one
+// it was installed with while OptiScaler.dll beside it moved on.
+const ENGINE_COMPANION_DLLS = ['OptiScaler_OpticalFlow.dll', 'nvngx.dll_dlssnr.dll'];
+
+// What sync keeps current: every DLL the release ships beside OptiScaler.dll, read from the release
+// itself, plus the list above. A hand-kept list alone is how the forwarder went unsynced -- the next DLL
+// the engine adds is covered without anyone remembering to add it here.
+function engineCompanionsIn(releaseFolder) {
+  let shipped = [];
+  try {
+    shipped = fs.readdirSync(releaseFolder, { withFileTypes: true })
+      .filter((e) => e.isFile() && /.dll$/i.test(e.name) && !/^OptiScaler.dll$/i.test(e.name))
+      .map((e) => e.name);
+  } catch {}
+  return [...new Set([...ENGINE_COMPANION_DLLS, ...shipped])];
+}
 
 // dxgi.dll is what the script offers as option 1 and what nearly every DX11/DX12/Vulkan game on
 // Windows already loads.

@@ -137,10 +137,10 @@ test('a value set in the game after install survives every later sync', { skip: 
   assert.equal(iniValue(ini, 'Passes'), '2', 'in-game Passes kept');
 });
 
-// Resident Evil Requiem (2026-09-14): working, and its owner wanted it kept on the engine it has when a
-// new engine shipped. A game marked keep-as-is gets nothing from sync: not the new OptiScaler.dll, not the
-// new NR model, not an ini edit.
-test('a game marked keep-as-is is not touched by sync: engine, model and ini all stay', { skip: !onWindows }, async () => {
+// Resident Evil Requiem (2026-09-14): working, and its owner wanted it kept as it is when a new engine
+// shipped. A game marked keep-as-is gets no new NR model and no ini edit from sync -- but it does get the
+// engine (2026-09-22): one library on two engines has panels and ini keys that disagree game to game.
+test('a game marked keep-as-is keeps its model and ini on sync, but still follows the engine', { skip: !onWindows }, async () => {
   const base = scratchDir('engine-keep');
   const release = fakeReleaseFolder(base);
   const nr = fakeNrModel(base);
@@ -161,11 +161,14 @@ test('a game marked keep-as-is is not touched by sync: engine, model and ini all
 
   const sync = await invoke('game:sync-if-stale', { exePath: exe, releaseFolder: release, nrDllPath: nr });
   assert.equal(sync.ok, true, sync.error);
-  assert.equal(sync.updated, false);
+  assert.equal(sync.updated, true);
   assert.equal(sync.reason, 'kept as is');
-  assert.equal(fs.readFileSync(dxgi, 'utf8'), 'the engine this game works on OptiScaler', 'engine not replaced');
+  assert.equal(fs.readFileSync(dxgi, 'utf8'), fs.readFileSync(path.join(release, 'OptiScaler.dll'), 'utf8'), 'engine follows the release');
   assert.equal(fs.readFileSync(model, 'utf8'), 'older model', 'model not replaced');
   assert.equal(fs.readFileSync(ini, 'utf8'), iniBefore, 'ini untouched');
+
+  const again = await invoke('game:sync-if-stale', { exePath: exe, releaseFolder: release, nrDllPath: nr });
+  assert.equal(again.updated, false, 'nothing left to copy the second time');
 
   // Remove still takes everything, the marker included.
   const un = await invoke('game:run-uninstall', exe);
@@ -356,4 +359,42 @@ test('a Vulkan Feeder game installed as dxgi.dll moves to an early proxy on sync
   const un = await invoke('game:run-uninstall', exe);
   assert.equal(un.ok, true, un.error);
   assert.equal(fs.readFileSync(path.join(game, 'dxgi.dll'), 'utf8'), 'the player\'s own dxgi.dll', 'the original is back under its own name');
+});
+
+// 2026-09-22: the forwarder was never synced, so every installed game kept the one it was installed
+// with while OptiScaler.dll beside it moved on.
+test('the engine\'s forwarder (nvngx.dll_dlssnr.dll) follows the release on sync', { skip: !onWindows }, async () => {
+  const base = scratchDir('engine-forwarder');
+  const release = fakeReleaseFolder(base);
+  const nr = fakeNrModel(base);
+  const game = path.join(base, 'game');
+  const exe = fakeExe(game, 'Game.exe');
+  const { invoke } = loadMain();
+  const inst = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: nr, proxyName: 'dxgi.dll' });
+  assert.equal(inst.ok, true, inst.error);
+
+  const forwarder = path.join(game, 'nvngx.dll_dlssnr.dll');
+  fs.writeFileSync(forwarder, 'the forwarder from an older engine');
+  const sync = await invoke('game:sync-if-stale', { exePath: exe, releaseFolder: release, nrDllPath: nr });
+  assert.equal(sync.ok, true, sync.error);
+  assert.equal(sync.updated, true);
+  assert.equal(fs.readFileSync(forwarder, 'utf8'), fs.readFileSync(path.join(release, 'nvngx.dll_dlssnr.dll'), 'utf8'));
+});
+
+// The guard against the next forwarder: a DLL the engine starts shipping reaches installed games on
+// sync without anyone adding its name to a list.
+test('a DLL the engine release starts shipping reaches an installed game on sync', { skip: !onWindows }, async () => {
+  const base = scratchDir('engine-new-dll');
+  const release = fakeReleaseFolder(base);
+  const nr = fakeNrModel(base);
+  const game = path.join(base, 'game');
+  const exe = fakeExe(game, 'Game.exe');
+  const { invoke } = loadMain();
+  const inst = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: nr, proxyName: 'dxgi.dll' });
+  assert.equal(inst.ok, true, inst.error);
+
+  write(release, 'OptiScaler_Future.dll', 'a DLL a later engine adds');
+  const sync = await invoke('game:sync-if-stale', { exePath: exe, releaseFolder: release, nrDllPath: nr });
+  assert.equal(sync.ok, true, sync.error);
+  assert.equal(fs.readFileSync(path.join(game, 'OptiScaler_Future.dll'), 'utf8'), 'a DLL a later engine adds');
 });
