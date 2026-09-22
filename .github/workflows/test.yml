@@ -20,4 +20,26 @@ jobs:
     # install/remove round trips, detection rules, routes, the last-run verdicts. PowerShell is
     # used the way the app uses it, so this runs on Windows.
     - name: Test
-      run: npm test
+      shell: pwsh
+      run: |
+        npm test 2>&1 | Tee-Object -FilePath test-output.txt
+        exit $LASTEXITCODE
+
+    # Which tests failed, at the END of the log.
+    #
+    # node --test prints "not ok <n> - <name>" inline, so on a 700-test suite the failures sit in
+    # the middle of a very long log. Reading a CI failure from outside the runner means reading the
+    # tail, and the tail is the summary counts -- "# fail 1" and nothing about which one. Diagnosing
+    # a Windows-only failure then costs far more than the fix does. This repeats the names where
+    # they can actually be read, and only when something failed.
+    - name: Which tests failed
+      if: failure()
+      shell: pwsh
+      run: |
+        if (Test-Path test-output.txt) {
+          Write-Output "── Failing tests ──"
+          Select-String -Path test-output.txt -Pattern '^not ok ' | ForEach-Object { $_.Line }
+          Write-Output "── Details ──"
+          # The YAML block node:test writes under each failure: the assertion and where it was.
+          Get-Content test-output.txt | Select-String -Pattern '^not ok ' -Context 0,18 | ForEach-Object { $_.Context.PostContext }
+        }

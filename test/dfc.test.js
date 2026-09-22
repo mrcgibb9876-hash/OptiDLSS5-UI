@@ -402,3 +402,116 @@ test('the licence and notices are placed but never rewritten', async () => {
     assert.ok(!again.files.includes(dfc.LICENSE));
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
+
+// ── picking the copy ─────────────────────────────────────────────────────────────────────────
+
+// The import has always accepted a folder. The DIALOG did not: it was a single openFile picker,
+// so a player who unpacked the archive could see their folder and not select it -- an openFile
+// dialog will not take a directory -- leaving them to guess which file inside it to point at.
+// Reported within a day of v2.4.0. Windows cannot offer both in one dialog (Electron: openFile and
+// openDirectory cannot be combined there), so the choice has to be asked.
+test('the picker can take a FOLDER, not only a file inside one', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8').replace(/\r\n/g, '\n');
+  const start = src.indexOf('async function askForChicken()');
+  assert.notStrictEqual(start, -1, 'the picker asks where the copy is');
+  const body = src.slice(start, src.indexOf('\n}\n', start));
+
+  assert.ok(/properties: \['openDirectory'\]/.test(body), 'a folder can be chosen');
+  assert.ok(/properties: \['openFile'\]/.test(body), 'and the .7z still can');
+  // The folder is the default: it is the route that needs nothing installed, and 7-Zip is not
+  // something this app can assume or offer to install.
+  assert.ok(/defaultId: 0/.test(body) && body.indexOf('openDirectory') < body.indexOf('openFile'),
+    'the folder is offered first and is the default');
+  // The single openFile picker this replaced must not come back. Comments are stripped first, or
+  // the note above askForChicken explaining what it replaced would trip this itself.
+  const code = src.replace(/^\s*\/\/.*$/gm, '');
+  assert.ok(!/any file in the folder you unpacked/i.test(code), 'no "pick a file inside the folder" picker');
+});
+
+test('a folder is what import wants anyway, at any of the depths a release unpacks to', async () => {
+  const base = tmp('pickfolder');
+  try {
+    // The release unpacks to <name>/64-bit/, and people pick any level of that.
+    const nested = path.join(base, 'Deep-Fried-Chicken-CP376', '64-bit');
+    fs.mkdirSync(nested, { recursive: true });
+    for (const [n, c] of [[dfc.ADDON, 'a'], [dfc.NVNGX, 'n'], [dfc.CFG, 'enabled=1\n'], [dfc.LICENSE, 'theirs']]) {
+      fs.writeFileSync(path.join(nested, n), c);
+    }
+    // The cache must NOT live inside the folder being picked. findPayloadDir descends two levels,
+    // so a cache under `base` looks like a payload on the third pick: dest is deleted, then copied
+    // from itself, and nothing lands. Windows found this and Linux did not -- readdir is sorted
+    // case-insensitively there and unordered here, so which of the two the scan meets first is
+    // luck on Linux and always the cache on Windows.
+    const cache = tmp('pickfolder-cache');
+    for (const pick of [nested, path.dirname(nested), base]) {
+      const r = await dfc.importDfcSource(pick, cache);
+      assert.ok(r.files.includes(dfc.ADDON), `picking ${path.basename(pick) || 'the top folder'} works`);
+    }
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+// Replacing the copy used to change the cache and nothing else: a player who updated Chicken had
+// the new build in the app's folder while every game they had switched kept the old binaries, with
+// nothing on screen saying so. That is not "change it at will".
+test('replacing the copy carries the new version into the games already using it', async () => {
+  const base = tmp('redeploy');
+  try {
+    const cache = path.join(base, 'cache');
+    fs.mkdirSync(cache, { recursive: true });
+    const game = path.join(base, 'game');
+    fs.mkdirSync(game, { recursive: true });
+
+    // v1 supplied and deployed.
+    await dfc.importDfcSource(fakeDfcFolder(path.join(base, 'v1')), cache);
+    await dfc.deployDfc(game, cache);
+    assert.strictEqual(fs.readFileSync(path.join(game, dfc.ADDON), 'utf8'), 'fake chicken addon');
+
+    // v2 supplied: the game follows.
+    const v2 = fakeDfcFolder(path.join(base, 'v2'));
+    fs.writeFileSync(path.join(v2, dfc.ADDON), 'NEWER chicken addon');
+    await dfc.importDfcSource(v2, cache);
+    const r = await dfc.redeployOurs([game], cache);
+    assert.deepStrictEqual(r.failed, []);
+    assert.deepStrictEqual(r.updated, [game]);
+    assert.strictEqual(fs.readFileSync(path.join(game, dfc.ADDON), 'utf8'), 'NEWER chicken addon',
+      'the game runs the copy the player just supplied');
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('a Chicken somebody placed by hand is never updated out from under them', async () => {
+  const base = tmp('redeploy-hand');
+  try {
+    const cache = path.join(base, 'cache');
+    fs.mkdirSync(cache, { recursive: true });
+    await dfc.importDfcSource(fakeDfcFolder(path.join(base, 'supplied')), cache);
+
+    // Their own copy: the files are there, but no marker of ours.
+    const game = path.join(base, 'game');
+    fs.mkdirSync(game, { recursive: true });
+    fs.writeFileSync(path.join(game, dfc.ADDON), 'THEIR addon');
+    fs.writeFileSync(path.join(game, dfc.NVNGX), 'THEIR nvngx');
+
+    const r = await dfc.redeployOurs([game], cache);
+    assert.deepStrictEqual(r.updated, [], 'not ours, so not touched');
+    assert.strictEqual(fs.readFileSync(path.join(game, dfc.ADDON), 'utf8'), 'THEIR addon');
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
+test('a game that is not on Chicken at all is skipped, and a bad folder does not stop the rest', async () => {
+  const base = tmp('redeploy-mixed');
+  try {
+    const cache = path.join(base, 'cache');
+    fs.mkdirSync(cache, { recursive: true });
+    await dfc.importDfcSource(fakeDfcFolder(path.join(base, 'supplied')), cache);
+
+    const onChicken = path.join(base, 'a');
+    fs.mkdirSync(onChicken, { recursive: true });
+    await dfc.deployDfc(onChicken, cache);
+    const plain = path.join(base, 'b');
+    fs.mkdirSync(plain, { recursive: true });
+
+    const r = await dfc.redeployOurs([plain, path.join(base, 'gone'), onChicken, null], cache);
+    assert.deepStrictEqual(r.updated, [onChicken]);
+    assert.deepStrictEqual(r.failed, [], 'a game folder that no longer exists is simply not ours');
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});

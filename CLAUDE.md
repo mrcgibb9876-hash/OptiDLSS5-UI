@@ -201,6 +201,17 @@ redistribution, so the manager only links to the release page and fetches the mo
 - The user's Chicken archives are 7z **AES-encrypted with encrypted headers**; the password is
   `chicken`, given 2026-09-21 and stated in the release's own README.txt.
 
+- **`readdir` is sorted on Windows and unordered on Linux, and a test can ride on that.** A new
+  test put the app's cache *inside* the folder it then asked `dfc.importDfcSource` to scan.
+  `findPayloadDir` descends two levels, so the cache looks like a payload: `dest` is deleted and
+  then copied from itself, `files` comes back empty and nothing throws. Windows met the cache first
+  every time (case-insensitive order) and failed; Linux met it second by luck and passed. Never put
+  a cache or output folder inside a tree a test asks the code to search.
+- **CI now says WHICH test failed.** `node --test` prints `not ok <n> - <name>` inline, so on a
+  700-test suite the failures sit in the middle of a very long log, and reading a run from outside
+  the runner means reading the tail -- which held only `# fail 1`. `.github/workflows/test.yml` has
+  a `if: failure()` step that repeats the failing names and their assertion blocks at the end. The
+  failure above cost hours to locate and was named by that step on its first run.
 - **A clone goes stale fast.** This repo moved about 180 commits in the first half of September
   alone. Always `git fetch origin master` and rebase before writing a patch, and re-check that a
   problem still exists before fixing it.
