@@ -12,7 +12,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
-const { scratchDir } = require(path.join(__dirname, 'helpers'));
+const { scratchDir, pinFixture } = require(path.join(__dirname, 'helpers'));
 const feeder = require(path.join(__dirname, '..', 'src', 'feeder'));
 
 const BIG = 2 * 1024 * 1024;
@@ -62,6 +62,30 @@ test('a cached setup is used without touching the network at all', async () => {
     fetchImpl: () => { throw new Error('the network must not be touched when the cache has it'); },
   });
   assert.equal(got, path.join(cache, name));
+});
+
+// THE ORDINARY PATH, and the one that must not have changed. Nobody adds ReShade by hand: with an
+// empty cache and a host that answers, the installer is fetched automatically exactly as before.
+// The user-supplied copy is a rescue for when that fails, never a step anyone is asked to take.
+test('an empty cache and a working host still fetch the installer automatically', async () => {
+  const cache = scratchDir('rs-auto');
+  const body = Buffer.concat([Buffer.from('MZ'), Buffer.alloc(BIG)]);
+  const setup = feeder.RESHADE_SETUPS[0];
+  const restore = pinFixture({ [setup.url]: body });
+  try {
+    let asked = null;
+    const got = await feeder.ensureReShadeSetup(cache, { 'User-Agent': 'test' }, {
+      fetchImpl: async (url) => {
+        asked = url;
+        return { ok: true, status: 200, url, headers: new Map(), arrayBuffer: async () => body };
+      },
+    });
+    assert.equal(asked, setup.url, 'it went to reshade.me on its own');
+    assert.equal(got, path.join(cache, path.basename(setup.url)));
+    assert.ok(fs.existsSync(got), 'and cached it, so the next game needs no network at all');
+  } finally {
+    restore();
+  }
 });
 
 test("a user's own copy is preferred, and survives a version this app no longer knows", async () => {
