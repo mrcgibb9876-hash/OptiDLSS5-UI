@@ -43,6 +43,11 @@ function describeKeybind(code) {
 const PRESETS = [[0, 'Default'], [1, 'Model A'], [2, 'Model B'], [3, 'Model C']];
 const STYLES = [[0, 'Default (standard)'], [1, 'Natural'], [2, 'Cinematic']];
 const DOWNSCALERS = [[0, 'FSR1'], [1, 'Bicubic'], [2, 'Catmull-Rom'], [3, 'Lanczos2'], [4, 'Lanczos3'], [5, 'Kaiser2'], [6, 'Kaiser3'], [7, 'MAGIC']];
+// The other direction, and a different list, because a filter that answers "how do I average many
+// source pixels into one" is not the same question as "how do I invent the ones in between".
+// Engine [DlssNr] ScalingUpscaler; before it existed this direction had no control at all.
+const UPSCALERS = [[0, 'FSR1'], [1, 'Bicubic'], [2, 'EWA Lanczos'], [3, 'xBR-lv2'], [4, 'Sharp bilinear'], [5, 'Integer scale'], [6, 'Nearest']];
+const EWA_LANCZOS = 2;
 const REVERSIBLE = [[0, 'Off (soft knee)'], [1, 'Neutwo proxy + composed'], [2, 'Neutwo proxy + replace'], [3, 'Hybrid proxy + composed'], [4, 'Hybrid proxy + replace']];
 // The codes the engine writes for [DlssNr] Language, lower-cased, as its own panel writes them.
 const LANGUAGES = [
@@ -139,6 +144,22 @@ const FIELDS = [
   { key: 'ScalingDownscaler', type: 'enum', default: 4, options: DOWNSCALERS, group: 'Speed vs quality',
     label: "Downscale filter", dependsOn: { key: 'WorkingScale', above: 1 },
     help: "The filter that averages the model's above-native answer back to display size -- this is what turns supersampling into LESS noise rather than more. Sharper filters (Lanczos3, Kaiser3) keep the most detail; softer ones (Bicubic, Catmull-Rom) are gentler on ringing. Independent of the Output Scaling downscaler, so the two can differ and run at the same time." },
+
+  // The up-leg's filter, and the two controls that shape it. Engine v2.2.4: before that this
+  // direction had no control of its own at all -- it was FSR1 if the downscaler above happened to
+  // be FSR1 and bicubic otherwise, which is exactly what leaving this on default still does. The
+  // default is null rather than a number for that reason: the answer depends on the row above, so
+  // naming one here would put a confident wrong label on the picture for anyone who changed it.
+  { key: 'ScalingUpscaler', type: 'enum', default: null, options: UPSCALERS, group: 'Speed vs quality',
+    label: "Upscale filter", dependsOn: { key: 'WorkingScale', below: 1 },
+    help: "The filter that enlarges the model's answer back to display size when the model ran SMALLER than the frame.\n\nLeft on default it follows the downscale filter above: FSR1 if that is FSR1, Bicubic otherwise -- what this pass did before the control existed.\n\nEWA Lanczos is the sharp one. It weighs pixels by how far away they really are rather than by row and column, so a diagonal edge comes out as clean as a horizontal one instead of as a staircase. It is also much the most expensive here.\n\nxBR-lv2, Sharp bilinear, Integer scale and Nearest are for PIXEL ART and 2D. On a rendered 3D frame they will look wrong; on a sprite or a 2D game they are the only right answers in this list." },
+  { key: 'ScalingAntiRinging', type: 'float', default: 0.8, min: 0, max: 1, step: 0.05, percent: true,
+    group: 'Speed vs quality', label: 'Ring suppression',
+    dependsOn: { all: [{ key: 'WorkingScale', below: 1 }, { key: 'ScalingUpscaler', is: EWA_LANCZOS }] },
+    help: "The bright or dark rim EWA Lanczos can leave along a hard edge, which is the price of how sharp it is.\n\nThis holds its answer inside the brightness range the pixels it is interpolating between already had. 0% leaves the filter's own answer. 100% allows no overshoot at all.\n\nNot the same control as Halo suppression under Picture: that one bounds what the MODEL did, this one bounds what the scaling filter did. They fix rims of different origin and neither reaches the other's." },
+  { key: 'ScalingSigmoid', type: 'bool', default: false, group: 'Speed vs quality', label: 'Sigmoidal light',
+    dependsOn: { all: [{ key: 'WorkingScale', below: 1 }, { key: 'ScalingUpscaler', is: EWA_LANCZOS }] },
+    help: "Resample on an S-shaped curve, so an overshoot near black or near white is compressed instead of clipping into a flat band.\n\nSDR only, by construction: the curve is only defined between black and white, so anything brighter passes through untouched and an HDR frame is barely affected. Off unless you are on an SDR display and seeing banding at the extremes." },
 
   // [DlssNr] ForceBorderless. Lossless Scaling turns it on for its games (main.js applyLosslessMarker);
   // this is the same switch offered directly, for the pop-out panel's sake as much as anything --

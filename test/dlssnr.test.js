@@ -295,3 +295,77 @@ test('Before Super Resolution and UI correction are never both on', () => {
   dlssnr.writeSettings(file, { RunBeforeSR: true, UICorrection: false });
   assert.equal(valueOf(file, 'RunBeforeSR'), true);
 });
+
+// The up-leg's filter (engine v2.2.4). Before it existed this direction had no control at all: it
+// was FSR1 if the downscale filter happened to be FSR1 and bicubic otherwise. The engine keeps that
+// rule for an unset key, so the row's default has to be null -- a number here would be a confident
+// label over a picture that depends on the row above.
+test('the upscale filter defaults to auto rather than naming a filter', () => {
+  const field = dlssnr.FIELDS.find((f) => f.key === 'ScalingUpscaler');
+  assert.equal(field.default, null);
+  assert.deepEqual(field.options.map(([, name]) => name),
+    ['FSR1', 'Bicubic', 'EWA Lanczos', 'xBR-lv2', 'Sharp bilinear', 'Integer scale', 'Nearest']);
+
+  // It is the enlarging direction, so it belongs to a model running SMALLER than the frame. The
+  // downscale filter beside it is the opposite case, and showing both at once would offer a choice
+  // that does nothing.
+  assert.deepEqual(field.dependsOn, { key: 'WorkingScale', below: 1 });
+  const down = dlssnr.FIELDS.find((f) => f.key === 'ScalingDownscaler');
+  assert.deepEqual(down.dependsOn, { key: 'WorkingScale', above: 1 });
+});
+
+test('an ini with no upscale filter reads as auto and writing one puts the number in', () => {
+  const file = freshIni('nr-upscaler');
+  assert.equal(valueOf(file, 'ScalingUpscaler'), null);
+
+  const result = dlssnr.writeSettings(file, { ScalingUpscaler: 3 });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.written, ['ScalingUpscaler']);
+  assert.equal(getIniKey(fs.readFileSync(file, 'utf8'), 'DlssNr', 'ScalingUpscaler'), '3');
+  assert.equal(valueOf(file, 'ScalingUpscaler'), 3);
+});
+
+// There is no default to fold back into, so "auto" has to be reachable explicitly -- otherwise a
+// user who tried xBR on a 3D game could never get back to what the engine was doing before.
+test('the upscale filter can be set back to auto', () => {
+  const file = freshIni('nr-upscaler-back');
+  dlssnr.writeSettings(file, { ScalingUpscaler: 3 });
+
+  const result = dlssnr.writeSettings(file, { ScalingUpscaler: null });
+  assert.deepEqual(result.written, ['ScalingUpscaler']);
+  assert.equal(getIniKey(fs.readFileSync(file, 'utf8'), 'DlssNr', 'ScalingUpscaler'), 'auto');
+  assert.equal(valueOf(file, 'ScalingUpscaler'), null);
+});
+
+// Ring suppression and sigmoidal light only do anything to EWA Lanczos. The engine reads them for
+// that filter alone, so a row offering them beside Nearest would be a control that does nothing.
+test('ring suppression and sigmoidal light are shown only for EWA Lanczos', () => {
+  const ewaLanczos = dlssnr.FIELDS.find((f) => f.key === 'ScalingUpscaler')
+    .options.find(([, name]) => name === 'EWA Lanczos')[0];
+
+  for (const key of ['ScalingAntiRinging', 'ScalingSigmoid']) {
+    const field = dlssnr.FIELDS.find((f) => f.key === key);
+    assert.deepEqual(field.dependsOn, {
+      all: [{ key: 'WorkingScale', below: 1 }, { key: 'ScalingUpscaler', is: ewaLanczos }],
+    });
+  }
+});
+
+// These are the NR pass's own keys, not Output Scaling's. Both passes have a pair and they used to
+// be the same pair, so setting one moved the other.
+test('ring suppression and sigmoidal light write the DlssNr keys', () => {
+  const file = freshIni('nr-upscaler-tuning');
+  assert.equal(valueOf(file, 'ScalingAntiRinging'), null);
+  assert.equal(valueOf(file, 'ScalingSigmoid'), null);
+
+  dlssnr.writeSettings(file, { ScalingAntiRinging: 0.5, ScalingSigmoid: true });
+  const text = fs.readFileSync(file, 'utf8');
+  assert.equal(getIniKey(text, 'DlssNr', 'ScalingAntiRinging'), '0.5');
+  assert.equal(getIniKey(text, 'DlssNr', 'ScalingSigmoid'), 'true');
+
+  // And the defaults still fold back to auto, the way every other row does.
+  dlssnr.writeSettings(file, { ScalingAntiRinging: 0.8, ScalingSigmoid: false });
+  const back = fs.readFileSync(file, 'utf8');
+  assert.equal(getIniKey(back, 'DlssNr', 'ScalingAntiRinging'), 'auto');
+  assert.equal(getIniKey(back, 'DlssNr', 'ScalingSigmoid'), 'auto');
+});
