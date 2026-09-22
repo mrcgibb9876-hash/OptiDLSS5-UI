@@ -360,3 +360,41 @@ test('a Vulkan Feeder game installed as dxgi.dll moves to an early proxy on sync
   assert.equal(un.ok, true, un.error);
   assert.equal(fs.readFileSync(path.join(game, 'dxgi.dll'), 'utf8'), 'the player\'s own dxgi.dll', 'the original is back under its own name');
 });
+
+// 2026-09-22: the forwarder was never synced, so every installed game kept the one it was installed
+// with while OptiScaler.dll beside it moved on.
+test('the engine\'s forwarder (nvngx.dll_dlssnr.dll) follows the release on sync', { skip: !onWindows }, async () => {
+  const base = scratchDir('engine-forwarder');
+  const release = fakeReleaseFolder(base);
+  const nr = fakeNrModel(base);
+  const game = path.join(base, 'game');
+  const exe = fakeExe(game, 'Game.exe');
+  const { invoke } = loadMain();
+  const inst = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: nr, proxyName: 'dxgi.dll' });
+  assert.equal(inst.ok, true, inst.error);
+
+  const forwarder = path.join(game, 'nvngx.dll_dlssnr.dll');
+  fs.writeFileSync(forwarder, 'the forwarder from an older engine');
+  const sync = await invoke('game:sync-if-stale', { exePath: exe, releaseFolder: release, nrDllPath: nr });
+  assert.equal(sync.ok, true, sync.error);
+  assert.equal(sync.updated, true);
+  assert.equal(fs.readFileSync(forwarder, 'utf8'), fs.readFileSync(path.join(release, 'nvngx.dll_dlssnr.dll'), 'utf8'));
+});
+
+// The guard against the next forwarder: a DLL the engine starts shipping reaches installed games on
+// sync without anyone adding its name to a list.
+test('a DLL the engine release starts shipping reaches an installed game on sync', { skip: !onWindows }, async () => {
+  const base = scratchDir('engine-new-dll');
+  const release = fakeReleaseFolder(base);
+  const nr = fakeNrModel(base);
+  const game = path.join(base, 'game');
+  const exe = fakeExe(game, 'Game.exe');
+  const { invoke } = loadMain();
+  const inst = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: nr, proxyName: 'dxgi.dll' });
+  assert.equal(inst.ok, true, inst.error);
+
+  write(release, 'OptiScaler_Future.dll', 'a DLL a later engine adds');
+  const sync = await invoke('game:sync-if-stale', { exePath: exe, releaseFolder: release, nrDllPath: nr });
+  assert.equal(sync.ok, true, sync.error);
+  assert.equal(fs.readFileSync(path.join(game, 'OptiScaler_Future.dll'), 'utf8'), 'a DLL a later engine adds');
+});

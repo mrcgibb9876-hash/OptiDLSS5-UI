@@ -527,14 +527,15 @@ function latestFeederZip() {
 // this route (a Close() failure, the cast's input forwarding) only arrive with the add-on itself.
 //
 // Only when the tag actually differs: the deploy rewrites the shader, the preset, both provider
-// levels and the ReShade ini, which is not something to do on every sync for no reason. Offline, or
-// a game whose marker predates version tracking, is left alone rather than force-redeployed.
+// levels and the ReShade ini, which is not something to do on every sync for no reason. Offline is
+// left alone; a marker that predates version tracking is not (see below).
 async function updateFeederIfStale(dir, exePath) {
   if (!feeder.feederDeployed(dir)) return null;
 
   const marker = feeder.readFeederDeployMarker(dir);
-  const current = marker && marker.feederVersion;
-  if (!current) return null;
+  // A marker from before versions were recorded counts as stale, not as "leave it alone": that rule
+  // kept such installs on their first Feeder for good.
+  const current = (marker && marker.feederVersion) || null;
 
   const latest = await latestFeederTag();
   if (!latest || latest === current) return null;
@@ -5917,6 +5918,16 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
         await fsp.copyFile(releaseDll, hostDll);
         updated = true;
       }
+      // The engine's companions follow it into the helper folder, as they do beside a 64-bit game.
+      if (releaseDll && fs.existsSync(hostDll) && hasDlssNrSection(releaseFolder)) {
+        for (const name of engineCompanionsIn(releaseFolder)) {
+          const src = path.join(releaseFolder, name);
+          const dest = path.join(hostDir, name);
+          if (!fs.existsSync(src) || (fs.existsSync(dest) && sha256File(src) === sha256File(dest))) continue;
+          await fsp.copyFile(src, dest);
+          updated = true;
+        }
+      }
       const hostNr = path.join(hostDir, 'nvngx_dlssnr.dll');
       if (nrDllPath && fs.existsSync(nrDllPath) && fs.existsSync(hostNr) && fs.statSync(hostNr).size !== fs.statSync(nrDllPath).size) {
         await fsp.copyFile(nrDllPath, hostNr);
@@ -5996,7 +6007,7 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
     // route's motion vectors) follow the release too -- Install copies every release file, but a game
     // installed before a companion existed would otherwise never get it.
     let companionsUpdated = false;
-    for (const name of ENGINE_COMPANION_DLLS) {
+    for (const name of engineCompanionsIn(releaseFolder)) {
       const src = path.join(releaseFolder, name);
       const dest = path.join(dir, name);
       if (!fs.existsSync(src)) continue;
@@ -6063,7 +6074,22 @@ ipcMain.handle('game:sync-if-stale', async (evt, payload = {}) => {
 const INSTALL_MARKER = '.optiscaler-manager-install.json';
 
 // DLLs the engine release carries beside OptiScaler.dll, kept current by sync and taken by Remove.
-const ENGINE_COMPANION_DLLS = ['OptiScaler_OpticalFlow.dll'];
+// The forwarder rides along since 2026-09-22: it was never synced, so every installed game kept the one
+// it was installed with while OptiScaler.dll beside it moved on.
+const ENGINE_COMPANION_DLLS = ['OptiScaler_OpticalFlow.dll', 'nvngx.dll_dlssnr.dll'];
+
+// What sync keeps current: every DLL the release ships beside OptiScaler.dll, read from the release
+// itself, plus the list above. A hand-kept list alone is how the forwarder went unsynced -- the next DLL
+// the engine adds is covered without anyone remembering to add it here.
+function engineCompanionsIn(releaseFolder) {
+  let shipped = [];
+  try {
+    shipped = fs.readdirSync(releaseFolder, { withFileTypes: true })
+      .filter((e) => e.isFile() && /.dll$/i.test(e.name) && !/^OptiScaler.dll$/i.test(e.name))
+      .map((e) => e.name);
+  } catch {}
+  return [...new Set([...ENGINE_COMPANION_DLLS, ...shipped])];
+}
 
 // dxgi.dll is what the script offers as option 1 and what nearly every DX11/DX12/Vulkan game on
 // Windows already loads.
