@@ -156,8 +156,13 @@ function helpMarker(text) {
   return el;
 }
 
-// Which collapsed groups are open. Survives a re-render; see renderFields.
+// Which foldable groups are currently open. Survives a re-render; see renderFields.
+//
+// They start open and are folded only by a press. A group that started closed hid the Upscale
+// filter rows so well that the person who asked for them could not find them across three
+// releases: in a long scrolling panel a closed heading reads as a label, not as a thing to press.
 const openGroups = new Set();
+const foldedOnce = new Set();
 
 function renderFields() {
   const host = $('#p-fields');
@@ -178,15 +183,21 @@ function renderFields() {
     cap.className = 'p-caption';
     cap.textContent = t(group);
 
-    // A group the fields mark collapsed is drawn as a heading you press, and its rows go in a box
-    // under it instead of straight onto the panel. This window is read mid-game at a glance, and a
-    // set of controls nobody touches twice a session should not push the ones they do off the end.
+    // A group the fields mark foldable is drawn as a heading you can press, with its rows in a box
+    // under it rather than straight onto the panel. It starts OPEN: folding is something to choose
+    // once you have seen what is in there, not a wall between you and ever seeing it.
     //
     // openGroups is module-level on purpose: renderFields clears the panel and rebuilds it on every
     // single change, so an open state held locally would snap the section shut under the hand of
     // whoever was moving a slider inside it.
     let body = host;
-    if (rows.length > 0 && rows[0].collapsed) {
+    if (rows.length > 0 && rows[0].foldable) {
+      // Open on first sight; after that whatever the player last chose.
+      if (!foldedOnce.has(group)) {
+        foldedOnce.add(group);
+        openGroups.add(group);
+      }
+
       cap.classList.add('is-toggle');
       cap.setAttribute('role', 'button');
       cap.tabIndex = 0;

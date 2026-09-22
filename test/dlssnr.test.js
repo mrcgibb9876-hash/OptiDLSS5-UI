@@ -374,17 +374,29 @@ test('every tuning row is a percentage slider from zero', () => {
 });
 
 // The panel window only ever sees what readSettings hands it over IPC, so the flag that makes a
-// group open on a press has to travel on the fields themselves.
-test('the upscale filter group is marked collapsed and the everyday groups are not', () => {
-  const rows = dlssnr.readSettings(freshIni('nr-collapsed'));
+// group foldable has to travel on the fields themselves.
+test('the upscale filter group is marked foldable and the everyday groups are not', () => {
+  const rows = dlssnr.readSettings(freshIni('nr-foldable'));
   const upscale = rows.filter((f) => f.group === 'Upscale filter');
 
   assert.equal(upscale.length, 5);
-  assert.ok(upscale.every((f) => f.collapsed === true));
-  assert.ok(rows.filter((f) => f.group !== 'Upscale filter').every((f) => f.collapsed === false));
+  assert.ok(upscale.every((f) => f.foldable === true));
+  assert.ok(rows.filter((f) => f.group !== 'Upscale filter').every((f) => f.foldable === false));
 
   // And it has to be somewhere in the order, or it would fall in after the panel's own settings.
   assert.ok(dlssnr.GROUPS.includes('Upscale filter'));
+});
+
+// Foldable means "you may fold this away", not "this is hidden until you find it". It shipped
+// closed, and the person who asked for those rows could not find them across three releases: in a
+// long scrolling panel a closed heading reads as a label rather than as something to press.
+test('a foldable group is open the first time the panel draws it', () => {
+  const panel = fs.readFileSync(path.join(REPO, 'src', 'renderer', 'panel.js'), 'utf8')
+    .split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
+
+  // Seeded into openGroups on first sight, and only on first sight, so a fold the player chose
+  // survives the re-render that every single change triggers.
+  assert.match(panel, /if \(!foldedOnce\.has\(group\)\)[\s\S]{0,120}openGroups\.add\(group\)/);
 });
 
 // These are the NR pass's own keys, not Output Scaling's. Both passes have a set and they used to

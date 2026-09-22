@@ -343,13 +343,17 @@ const GROUPS = (() => {
   return [...ordered, ...present.filter((g) => !ordered.includes(g))];
 })();
 
-// Groups that open on a press instead of always being on screen. The panel is read mid-game, at a
-// glance, and these five rows only matter once someone has gone looking for them -- left open they
-// would push the rows that are checked every session off the bottom.
+// Groups the panel draws with a heading you can press to fold away. They start OPEN.
+//
+// They started closed, and that was a mistake: the Upscale filter rows shipped, and the person who
+// asked for them could not find them across three releases, because a closed heading in a long
+// scrolling panel reads as a label rather than as a thing to press. Foldable is worth having --
+// the panel is read mid-game, at a glance -- but it has to be something you choose after seeing
+// the rows, not a thing standing between you and ever seeing them.
 //
 // The flag travels on each field rather than being exported on its own, because the panel window
 // only ever sees what readSettings hands it over IPC.
-const COLLAPSED_GROUPS = new Set(['Upscale filter']);
+const FOLDABLE_GROUPS = new Set(['Upscale filter']);
 
 const isAuto = (raw) => raw === null || raw === undefined || String(raw).trim() === '' || /^auto$/i.test(String(raw).trim());
 
@@ -405,7 +409,7 @@ function readSettings(iniPath) {
   return FIELDS.map((f) => ({
     key: f.key,
     group: f.group,
-    collapsed: COLLAPSED_GROUPS.has(f.group),
+    foldable: FOLDABLE_GROUPS.has(f.group),
     label: f.label,
     help: f.help,
     type: f.type,
@@ -475,4 +479,4 @@ function writeSettings(iniPath, values) {
   return { ok: true, written };
 }
 
-module.exports = { FIELDS, GROUPS, COLLAPSED_GROUPS, SECTION, readSettings, writeSettings, parseValue, formatValue, isAuto };
+module.exports = { FIELDS, GROUPS, FOLDABLE_GROUPS, SECTION, readSettings, writeSettings, parseValue, formatValue, isAuto };
