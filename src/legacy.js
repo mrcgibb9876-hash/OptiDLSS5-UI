@@ -41,7 +41,7 @@
 // and only those files are cached. Nothing is excluded or disabled -- the antivirus scans each file
 // as it is written, and if it does remove one, that is reported as quarantine, not retried.
 'use strict';
-
+const { netFetch } = require('./net');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
@@ -212,7 +212,7 @@ async function unpackDgVoodoo(buf, cacheDir, name, source) {
 // The pinned release, verified, as a folder of the files a route uses. Separate errors for "the
 // download was bad" and "it was verified, written, and then gone" -- the second is antivirus
 // quarantine, and retrying does not help.
-async function ensureDgVoodoo(cacheDir, { fetchImpl = fetch, headers = {} } = {}) {
+async function ensureDgVoodoo(cacheDir, { fetchImpl = netFetch, headers = {} } = {}) {
   const cached = cachedDgVoodoo(cacheDir);
   if (cached) return cached;
   await fsp.mkdir(cacheDir, { recursive: true });

@@ -159,6 +159,23 @@ redistribution, so the manager only links to the release page and fetches the mo
   marginal network into a total install failure. A user can drop the right file into that folder by
   hand and the hash check will accept it.
 
+- **Every download goes through `src/net.js` (`netFetch`), not Node's `fetch`.** Node's fetch ignores
+  the Windows system proxy entirely -- no `ProxyAgent`, nothing reads `HTTPS_PROXY` -- so a VPN or
+  DPI-bypass tool that works as a **proxy** rather than a virtual adapter does nothing for this app
+  while the user's browser sails through. Electron's `net.fetch` runs on Chromium's stack, which
+  reads the system proxy (PAC and WPAD included) and the OS certificate store. `test/net-proxy.test.js`
+  fails if any downloader goes back to `fetchImpl = fetch` or a bare `await fetch(`.
+  **The trap that cost an hour:** `require('electron')` must sit behind a `process.versions.electron`
+  guard and never at module scope. Outside Electron the package is still on disk as a devDependency,
+  and requiring it both returns a useless path *string* and poisons Node's per-(parent, request)
+  resolution cache -- after which `test/helpers.js`'s electron stub stops being reachable and every
+  `loadMain` throws on `ipcMain`. Seven tests went red on that, and making the require lazy was not
+  enough: the first download in a file still triggered it.
+- **The release title is derived from the tag.** It used to be a *required* workflow input whose
+  default was the literal `"OptiScaler Manager v1.1.0"`, and since nobody ever passed one, every
+  release since carried that title -- v2.3.23 shipped under it, on the GitHub release page and the
+  Discord card. A title naming a different version than the tag is now refused outright.
+
 - **Nexus Mods is blocked by the egress proxy**, so a mod page's comments -- often the richest source
   on a specific game -- cannot be read from a session. The OptiScaler wiki and its issues can.
 

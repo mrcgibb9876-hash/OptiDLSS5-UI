@@ -40,6 +40,7 @@ const fsp = require('node:fs/promises');
 
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const feeder = require('./feeder');
+const { netFetch } = require('./net');
 
 const AMDNR_REPO = 'danielblnc/DLSS-NR-on-AMD';
 const AMDNR_RELEASES_API = `https://api.github.com/repos/${AMDNR_REPO}/releases/latest`;
@@ -105,7 +106,7 @@ function versionHintFromLog(logPath) {
 }
 
 async function latestRelease(ghHeaders) {
-  const res = await fetch(AMDNR_RELEASES_API, { headers: ghHeaders });
+  const res = await netFetch(AMDNR_RELEASES_API, { headers: ghHeaders });
   if (!res.ok) throw new Error(`Could not check DLSS-NR-on-AMD's latest release: HTTP ${res.status}`);
   const release = await res.json();
   const asset = (release.assets || []).find((a) => a.name.toLowerCase() === AMDNR_SETUP_EXE);

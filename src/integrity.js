@@ -13,6 +13,7 @@
 // file, so the error says that. Hashes computed 2026-09-19 by fetching each exact URL once.
 'use strict';
 const crypto = require('node:crypto');
+const { netFetch } = require('./net');
 
 // Commits the text downloads are pinned to. A branch head moves; a commit does not, so the pin
 // below stays valid. Bumping one means re-hashing its files here.
@@ -92,7 +93,7 @@ function parseReleaseUrl(url) {
 // The published digest of a GitHub release asset, or null (not a release URL, no digest, offline).
 // One API call per distinct release per app run; only made when something is actually downloaded.
 const digestCache = new Map();
-async function releaseAssetDigest(url, { fetchImpl = fetch, headers = {} } = {}) {
+async function releaseAssetDigest(url, { fetchImpl = netFetch, headers = {} } = {}) {
   const parsed = parseReleaseUrl(url);
   if (!parsed) return null;
   const key = `${parsed.owner}/${parsed.repo}@${parsed.tag}`;
