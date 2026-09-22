@@ -124,6 +124,19 @@ redistribution, so the manager only links to the release page and fetches the mo
   ReShade64.dll inside (`isAddonReShadeDll`), never by its file name: the plain and Add-on builds
   carry the same version and product name, and the plain one deploys cleanly and then never loads
   the Feeder.
+  **The mirror question is closed -- do not reopen it.** Checked 2026-09-22: `crosire/reshade`
+  publishes **no releases and no binary assets** (source only), so there is no official second host.
+  reshade.me's own terms are *"do not redistribute binaries or shader packs"* -- point people at a
+  legitimate download page. Third-party archives exist (reshade.mudrunner.net mirrors 40 add-on
+  builds with checksums; FileHorse, Uptodown; and the SEO clones reshade.cc / reshade.dev /
+  reshade.pro), but each redistributes against that, and an unofficial rehost of an injector DLL is
+  the obvious place to plant a modified one -- the pin would catch that, but it would not make the
+  dependency right. Same position as Deep Fried Chicken and the AMD installer. The user-supplied
+  copy is the only correct fallback.
+  Also note what the version list can and cannot do: reshade.me drops a version the moment the next
+  ships, so an **older pin is no safer than the current one**. The list makes our fix a one-line
+  release; it does not rescue a client already in the field. Only the cache and a user's own copy
+  do that.
 - **`fetch failed` is Node's, not ours, and it hides everything.** undici throws that bare string for
   DNS, a reset, a refused connection or a timeout, with the real reason in `error.cause`.
   `feeder.describeFetchFailure()` unwraps it and names the host. Also: the app has **no proxy

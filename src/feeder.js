@@ -76,6 +76,22 @@ const RESHADE_SETUP_URL = integrity.URLS.reshadeSetup;
 // So: known versions are tried in turn, a version that has gone is skipped rather than fatal, and
 // adding the next one is one line here plus its sha256 in integrity.js. A hash that does not match
 // is still refused -- resilience never means installing something we cannot identify.
+//
+// A MIRROR IS NOT THE ANSWER HERE, and this was checked rather than assumed (2026-09-22):
+//   - crosire/reshade publishes no releases and no binary assets at all. It is source only, so
+//     there is no official second host to fall back to.
+//   - reshade.me's own terms are "do not redistribute binaries or shader packs -- point others to a
+//     legitimate download page". Third-party archives of the installers do exist and even publish
+//     checksums, but every one of them redistributes against that, and an unofficial rehost of an
+//     injector DLL is the obvious place to plant a modified one. The pin would catch a modified
+//     file; it would not make the dependency right. Same position this app already takes on Deep
+//     Fried Chicken and the AMD installer.
+// Which is why the user-supplied copy below is not a consolation prize -- it is the only correct
+// fallback, and the dialog points at reshade.me, the legitimate download page, as asked.
+//
+// Note what the list can and cannot do. reshade.me drops a version the moment the next one ships,
+// so an OLDER pin is no safer than the current one; the list makes OUR fix a one-line release, it
+// does not rescue a client already in the field. Only the cache and the user's own copy do that.
 const RESHADE_SETUPS = [
   { version: '6.8.0', url: integrity.URLS.reshadeSetup },
 ];
