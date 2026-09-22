@@ -156,14 +156,6 @@ function helpMarker(text) {
   return el;
 }
 
-// Which foldable groups are currently open. Survives a re-render; see renderFields.
-//
-// They start open and are folded only by a press. A group that started closed hid the Upscale
-// filter rows so well that the person who asked for them could not find them across three
-// releases: in a long scrolling panel a closed heading reads as a label, not as a thing to press.
-const openGroups = new Set();
-const foldedOnce = new Set();
-
 function renderFields() {
   const host = $('#p-fields');
   host.innerHTML = '';
@@ -183,56 +175,7 @@ function renderFields() {
     cap.className = 'p-caption';
     cap.textContent = t(group);
 
-    // A group the fields mark foldable is drawn as a heading you can press, with its rows in a box
-    // under it rather than straight onto the panel. It starts OPEN: folding is something to choose
-    // once you have seen what is in there, not a wall between you and ever seeing it.
-    //
-    // openGroups is module-level on purpose: renderFields clears the panel and rebuilds it on every
-    // single change, so an open state held locally would snap the section shut under the hand of
-    // whoever was moving a slider inside it.
-    let body = host;
-    if (rows.length > 0 && rows[0].foldable) {
-      // Open on first sight; after that whatever the player last chose.
-      if (!foldedOnce.has(group)) {
-        foldedOnce.add(group);
-        openGroups.add(group);
-      }
-
-      cap.classList.add('is-toggle');
-      cap.setAttribute('role', 'button');
-      cap.tabIndex = 0;
-
-      const chevron = document.createElement('span');
-      chevron.className = 'p-chev';
-      chevron.textContent = '\u25B8';
-      cap.prepend(chevron);
-
-      body = document.createElement('div');
-      body.className = 'p-collapse';
-
-      const paint = () => {
-        const open = openGroups.has(group);
-        body.hidden = !open;
-        cap.classList.toggle('is-open', open);
-        cap.setAttribute('aria-expanded', open ? 'true' : 'false');
-      };
-      const toggle = () => {
-        if (openGroups.has(group)) openGroups.delete(group);
-        else openGroups.add(group);
-        paint();
-      };
-
-      cap.addEventListener('click', toggle);
-      cap.addEventListener('keydown', (event) => {
-        if (event.key !== 'Enter' && event.key !== ' ') return;
-        event.preventDefault();
-        toggle();
-      });
-      paint();
-    }
-
     host.appendChild(cap);
-    if (body !== host) host.appendChild(body);
 
     for (const field of rows) {
       const held = forced[field.key] || null;
@@ -357,7 +300,7 @@ function renderFields() {
 
       el.classList.toggle('is-off', !met);
       el.appendChild(helpMarker(held ? t(held) : t(field.help)));
-      body.appendChild(el);
+      host.appendChild(el);
     }
 
     if (frameGenAfter && group === frameGenAfter) renderFrameGen(host);

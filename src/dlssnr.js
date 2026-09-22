@@ -155,23 +155,23 @@ const FIELDS = [
   // be FSR1 and bicubic otherwise, which is exactly what leaving this on default still does. The
   // default is null rather than a number for that reason: the answer depends on the row above, so
   // naming one here would put a confident wrong label on the picture for anyone who changed it.
-  { key: 'ScalingUpscaler', type: 'enum', default: 0, options: UPSCALERS, group: 'Upscale filter',
-    label: "Filter", dependsOn: { key: 'WorkingScale', below: 1 },
+  { key: 'ScalingUpscaler', type: 'enum', default: 0, options: UPSCALERS, group: 'Speed vs quality',
+    label: "Upscale filter", dependsOn: { key: 'WorkingScale', below: 1 },
     help: "The filter that enlarges the model's answer back to display size when the model ran SMALLER than the frame.\n\nBicubic is the default because it is the cheapest and it cannot go wrong, not because it is good -- it is soft. For a rendered 3D game the one to try is EWA Lanczos.\n\nEWA Lanczos weighs pixels by how far away they really are rather than by row and column, so a diagonal edge comes out as clean as a horizontal one instead of as a staircase. Sharpness below is what makes it worth choosing, and it is much the most expensive here.\n\nxBR-lv2, Sharp bilinear, Integer scale and Nearest are for PIXEL ART and 2D. On a rendered 3D frame they will look wrong; on a sprite or a 2D game they are the only right answers in this list." },
   // EWA Lanczos's four controls. Every one of them is a percentage where 0 is the gentlest setting,
   // on purpose: four identical sliders read as one set to be balanced against each other, where a
   // checkbox beside a preset name reads as four unrelated things that happen to sit together.
   { key: 'ScalingSharpness', type: 'float', default: 0, min: 0, max: 1, step: 0.05, percent: true,
-    group: 'Upscale filter', label: 'Sharpness', dependsOn: EWA_ONLY,
+    group: 'Speed vs quality', label: 'Sharpness', dependsOn: EWA_ONLY,
     help: "How hard the filter is pulled in.\n\nThe three EWA filters this one is built from differ only in two numbers, so they are points on a line rather than three things to choose between, and this slider is that line. 0% is the gentlest of them. Around 15% is the middle one. 100% is the sharpest, its wider reach included.\n\nThat reach is the cost: the top of the slider looks at 100 pixels for every one it draws, against 64 at the bottom. Raise Ring suppression as you raise this." },
   { key: 'ScalingAntiRinging', type: 'float', default: 0.8, min: 0, max: 1, step: 0.05, percent: true,
-    group: 'Upscale filter', label: 'Ring suppression', dependsOn: EWA_ONLY,
+    group: 'Speed vs quality', label: 'Ring suppression', dependsOn: EWA_ONLY,
     help: "The bright or dark rim sharpening buys, held back.\n\nIt keeps the filter's answer inside the brightness range the pixels it is interpolating between already had. 0% leaves the filter's own answer. 100% allows no overshoot at all.\n\nNot the same control as Halo suppression under Picture: that one bounds what the MODEL did, this one bounds what the scaling filter did. They fix rims of different origin and neither reaches the other's." },
   { key: 'ScalingSigmoid', type: 'float', default: 0, min: 0, max: 1, step: 0.05, percent: true,
-    group: 'Upscale filter', label: 'Sigmoidal light', dependsOn: EWA_ONLY,
+    group: 'Speed vs quality', label: 'Sigmoidal light', dependsOn: EWA_ONLY,
     help: "Resample on an S-shaped curve, so an overshoot near black or near white is compressed instead of clipping into a flat band. The slider is how hard the curve bends, with the reference setting at 100%.\n\nSDR only, by construction: the curve is only defined between black and white, so anything brighter passes through untouched and an HDR frame is barely affected. Leave it at 0 unless you are on an SDR display and seeing banding at the extremes." },
   { key: 'ScalingDither', type: 'float', default: 0, min: 0, max: 1, step: 0.05, percent: true,
-    group: 'Upscale filter', label: 'Dither', dependsOn: EWA_ONLY,
+    group: 'Speed vs quality', label: 'Dither', dependsOn: EWA_ONLY,
     help: "Breaks a band by adding a pattern finer than one step of colour, moved on each frame so it does not settle into something you can pick out.\n\n100% is half a step of an 8-bit picture. Eight bits is an assumption -- this pass cannot see what your display will be handed -- so on a wider output the pattern simply falls under the step size and changes nothing.\n\nFor banding in a sky or a gradient, where Ring suppression is for a rim along an edge." },
 
   // [DlssNr] ForceBorderless. Lossless Scaling turns it on for its games (main.js applyLosslessMarker);
@@ -329,7 +329,6 @@ const GROUP_ORDER = [
   'Turn it on',
   'Picture',
   'Speed vs quality',
-  'Upscale filter',
   'Brightness & HDR',
   'What the model is told',
   'Compare & inspect',
@@ -343,17 +342,6 @@ const GROUPS = (() => {
   return [...ordered, ...present.filter((g) => !ordered.includes(g))];
 })();
 
-// Groups the panel draws with a heading you can press to fold away. They start OPEN.
-//
-// They started closed, and that was a mistake: the Upscale filter rows shipped, and the person who
-// asked for them could not find them across three releases, because a closed heading in a long
-// scrolling panel reads as a label rather than as a thing to press. Foldable is worth having --
-// the panel is read mid-game, at a glance -- but it has to be something you choose after seeing
-// the rows, not a thing standing between you and ever seeing them.
-//
-// The flag travels on each field rather than being exported on its own, because the panel window
-// only ever sees what readSettings hands it over IPC.
-const FOLDABLE_GROUPS = new Set(['Upscale filter']);
 
 const isAuto = (raw) => raw === null || raw === undefined || String(raw).trim() === '' || /^auto$/i.test(String(raw).trim());
 
@@ -409,7 +397,6 @@ function readSettings(iniPath) {
   return FIELDS.map((f) => ({
     key: f.key,
     group: f.group,
-    foldable: FOLDABLE_GROUPS.has(f.group),
     label: f.label,
     help: f.help,
     type: f.type,
@@ -479,4 +466,4 @@ function writeSettings(iniPath, values) {
   return { ok: true, written };
 }
 
-module.exports = { FIELDS, GROUPS, FOLDABLE_GROUPS, SECTION, readSettings, writeSettings, parseValue, formatValue, isAuto };
+module.exports = { FIELDS, GROUPS, SECTION, readSettings, writeSettings, parseValue, formatValue, isAuto };
