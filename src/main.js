@@ -1046,14 +1046,14 @@ async function importChicken(picked) {
   if (/\.7z$/i.test(picked)) {
     const sz = sevenZipExe();
     if (!sz) {
-      throw new Error(`${path.basename(picked)} is a password-protected .7z and 7-Zip is not installed -- unpack it (the password is in Chicken's post), then pick any file in the folder it unpacked into`);
+      throw new Error(`${path.basename(picked)} is a password-protected .7z and 7-Zip is not installed -- unpack it yourself (the password is in Chicken's own README), then add it again and choose "Pick the folder I unpacked it into"`);
     }
     temp = path.join(os.tmpdir(), `dlss5ui-dfc-${Date.now()}`);
     try {
       await execFileAsync(sz, ['x', '-y', `-p${DFC_ARCHIVE_PASSWORD}`, `-o${temp}`, picked], { windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
     } catch (e) {
       await fsp.rm(temp, { recursive: true, force: true }).catch(() => {});
-      throw new Error(`7-Zip could not unpack ${path.basename(picked)} -- unpack it yourself, then pick any file in the folder it unpacked into`);
+      throw new Error(`7-Zip could not unpack ${path.basename(picked)} -- unpack it yourself, then add it again and choose "Pick the folder I unpacked it into"`);
     }
     source = temp;
   } else if (fs.existsSync(picked) && fs.statSync(picked).isFile() && !/\.zip$/i.test(picked)) {
@@ -1080,19 +1080,51 @@ async function refreshDfcCopy(need) {
   try { await importChicken(info.sourcePath); } catch {}
 }
 
+// Where the player's copy of Chicken is, asked as a plain question.
+//
+// It used to be one openFile dialog whose title said ".7z, or any file in the folder you unpacked
+// it into". That made the natural action impossible: somebody who unpacks the archive sees the
+// folder, tries to select it, and cannot -- an openFile dialog will not take a directory, so they
+// are left hunting for a file inside it with no idea which one. Reported within a day of v2.4.0.
+//
+// Windows cannot offer both in one dialog (Electron: openFile and openDirectory cannot be
+// combined there), so the choice is asked first rather than guessed at. The folder is the default
+// because it is the one that needs nothing installed.
+async function askForChicken() {
+  const answer = await dialog.showMessageBox({
+    type: 'question',
+    buttons: ['Pick the folder I unpacked it into', 'Pick the .7z file', 'Cancel'],
+    defaultId: 0,
+    cancelId: 2,
+    noLink: true,
+    title: 'Add your copy of Deep Fried Chicken',
+    message: 'Where is your copy of Deep Fried Chicken?',
+    detail: 'Chicken is handed out on its author\u2019s Discord as a password-protected .7z, so this app cannot download it for you.\n\n'
+      + 'Already unpacked it? Pick the folder \u2014 the whole folder, not a file inside it. The app finds the parts it needs. This needs nothing installed.\n\n'
+      + 'Picking the .7z instead needs 7-Zip installed, and the app unpacks it with the password from Chicken\u2019s own README.',
+  });
+  if (answer.response === 2) return null;
+  if (answer.response === 0) {
+    const r = await dialog.showOpenDialog({
+      title: 'Pick the folder you unpacked Deep Fried Chicken into',
+      properties: ['openDirectory'],
+    });
+    return r.canceled || !r.filePaths.length ? null : r.filePaths[0];
+  }
+  const r = await dialog.showOpenDialog({
+    title: 'Pick Deep Fried Chicken\u2019s .7z',
+    properties: ['openFile'],
+    filters: [
+      { name: 'Deep Fried Chicken (.7z, .zip)', extensions: ['7z', 'zip'] },
+      { name: 'Any file', extensions: ['*'] },
+    ],
+  });
+  return r.canceled || !r.filePaths.length ? null : r.filePaths[0];
+}
+
 ipcMain.handle('dfc:supply', async (_evt, sourcePath) => {
   try {
-    const picked = sourcePath || (await (async () => {
-      const r = await dialog.showOpenDialog({
-        title: 'Pick Deep Fried Chicken\'s .7z, or any file in the folder you unpacked it into',
-        properties: ['openFile'],
-        filters: [
-          { name: 'Deep Fried Chicken (.7z, .zip)', extensions: ['7z', 'zip'] },
-          { name: 'Any file in the unpacked folder', extensions: ['*'] },
-        ],
-      });
-      return r.canceled || !r.filePaths.length ? null : r.filePaths[0];
-    })());
+    const picked = sourcePath || (await askForChicken());
     if (!picked) return { ok: true, cancelled: true };
     const r = await importChicken(picked);
     return { ok: true, ...r };

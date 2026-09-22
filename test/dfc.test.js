@@ -402,3 +402,47 @@ test('the licence and notices are placed but never rewritten', async () => {
     assert.ok(!again.files.includes(dfc.LICENSE));
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
+
+// ── picking the copy ─────────────────────────────────────────────────────────────────────────
+
+// The import has always accepted a folder. The DIALOG did not: it was a single openFile picker,
+// so a player who unpacked the archive could see their folder and not select it -- an openFile
+// dialog will not take a directory -- leaving them to guess which file inside it to point at.
+// Reported within a day of v2.4.0. Windows cannot offer both in one dialog (Electron: openFile and
+// openDirectory cannot be combined there), so the choice has to be asked.
+test('the picker can take a FOLDER, not only a file inside one', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8').replace(/\r\n/g, '\n');
+  const start = src.indexOf('async function askForChicken()');
+  assert.notStrictEqual(start, -1, 'the picker asks where the copy is');
+  const body = src.slice(start, src.indexOf('\n}\n', start));
+
+  assert.ok(/properties: \['openDirectory'\]/.test(body), 'a folder can be chosen');
+  assert.ok(/properties: \['openFile'\]/.test(body), 'and the .7z still can');
+  // The folder is the default: it is the route that needs nothing installed, and 7-Zip is not
+  // something this app can assume or offer to install.
+  assert.ok(/defaultId: 0/.test(body) && body.indexOf('openDirectory') < body.indexOf('openFile'),
+    'the folder is offered first and is the default');
+  // The single openFile picker this replaced must not come back. Comments are stripped first, or
+  // the note above askForChicken explaining what it replaced would trip this itself.
+  const code = src.replace(/^\s*\/\/.*$/gm, '');
+  assert.ok(!/any file in the folder you unpacked/i.test(code), 'no "pick a file inside the folder" picker');
+});
+
+test('a folder is what import wants anyway, at any of the depths a release unpacks to', async () => {
+  const base = tmp('pickfolder');
+  try {
+    // The release unpacks to <name>/64-bit/, and people pick any level of that.
+    const nested = path.join(base, 'Deep-Fried-Chicken-CP376', '64-bit');
+    fs.mkdirSync(nested, { recursive: true });
+    for (const [n, c] of [[dfc.ADDON, 'a'], [dfc.NVNGX, 'n'], [dfc.CFG, 'enabled=1\n'], [dfc.LICENSE, 'theirs']]) {
+      fs.writeFileSync(path.join(nested, n), c);
+    }
+    const cache = path.join(base, 'cache');
+    fs.mkdirSync(cache, { recursive: true });
+
+    for (const pick of [nested, path.dirname(nested), base]) {
+      const r = await dfc.importDfcSource(pick, cache);
+      assert.ok(r.files.includes(dfc.ADDON), `picking ${path.basename(pick) || 'the top folder'} works`);
+    }
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
