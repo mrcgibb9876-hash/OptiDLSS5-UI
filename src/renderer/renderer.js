@@ -1052,13 +1052,13 @@ async function applyRecommendation(game, card, backends, generation = renderGene
     // only way in, so the card says just that.
     : route.optiInstalled && !popoutHotkeyUsable()
       ? {
-          text: t('Press Alt+Home in the game for the DLSS 5 panel'),
+          text: t('Press Insert in the game for the DLSS 5 panel'),
           title: t('The DLSS 5 panel, inside the game, with its controls live on the frame. Needs the game windowed or borderless if it does not show. The pop-out panel\'s hotkey is off or taken by another program -- see Settings.'),
         }
     : route.optiInstalled
       ? {
           text: t('{hotkey} opens the DLSS 5 panel', { hotkey: settings.panelHotkey || DEFAULT_PANEL_HOTKEY }),
-          title: t('The pop-out panel, over the game, with every DLSS 5 control live on the frame you are looking at -- which is why they are no longer copied into Settings. OptiScaler\'s own menu is on Alt+Home inside the game. Both need the game windowed or borderless; Windows will not draw over exclusive fullscreen.'),
+          title: t('The pop-out panel, over the game, with every DLSS 5 control live on the frame you are looking at -- which is why they are no longer copied into Settings. The DLSS 5 panel is on Insert inside the game, and OptiScaler\'s own menu on Alt+O. Both need the game windowed or borderless; Windows will not draw over exclusive fullscreen.'),
         }
       : null;
 
@@ -1271,7 +1271,7 @@ function helpWords(diag) {
     case 'needs-run': return t('No run to judge yet. Launch the game, reach actual gameplay (not a menu), play a minute, then quit. Come back here and it is checked.');
     case 'needs-run-after-fix': return t('"{fix}" was applied. The old log still says what it said, so launch the game, reach gameplay, play a minute, quit, and this is checked again.', { fix: helpFixLabel(v.fix) });
     case 'ok': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}{api}.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '', api: v.api ? ' (' + v.api + ')' : '' });
-    case 'ok-panel-in-helper': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}. A 32-bit game cannot run DLSS itself, so the neural pass and OptiScaler run in the 64-bit helper beside the game. Press Alt+Home in the game for the DLSS 5 panel: the helper draws it, the game shows it over itself, and its controls take clicks there -- the same key as every other game.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '' })
+    case 'ok-panel-in-helper': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}. A 32-bit game cannot run DLSS itself, so the neural pass and OptiScaler run in the 64-bit helper beside the game. Press Insert in the game for the DLSS 5 panel: the helper draws it, the game shows it over itself, and its controls take clicks there -- the same key as every other game.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '' })
       // Assassin's Creed II (2026-09-18): the picture, UI included, jumped on VORT.
       + (v.otherMv ? ' ' + t('If the picture jumps or smears when things move, try LumeniteFX for motion vectors instead of {provider}: card menu > Motion vectors > change.', { provider: v.otherMv }) : '');
     case 'ok-exit-crash': return t('Neural Rendering ran ({count} passes). The game crashed only on the way out, inside NVIDIA\'s shutdown, which does not affect play.', v);
@@ -1306,7 +1306,7 @@ function helpWords(diag) {
     case 'dxvk-addon-not-loaded': return t('The game ran under DXVK and ReShade\'s Vulkan layer loaded (it wrote ReShade.log), but the DLSS5 Feeder add-on did not: dlss5-feed.log has not been written since the swap. Open ReShade\'s overlay in the game (Home) and look at its Add-ons tab for DLSS 5 Feed and any error beside it; ReShade.log in the game folder names add-ons it refused. If it is not there at all, switch the game back off DXVK.', v);
     // Worded for both routes DXVK serves: in place of dgVoodoo2 (DX8/9) or of native Direct3D (32-bit DX10/11).
     case 'dxvk-needs-run': return t('DXVK is in front of the game, and it has not been run since. Launch it, reach gameplay, play a minute and quit. If ReShade.log and dlss5-feed.log in the game folder are still older than the swap after that, ReShade\'s Vulkan layer did not attach to this game.');
-    case 'dxvk-panel-fullscreen': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run. But the game was in exclusive fullscreen when the DLSS5 Feeder started its helper, so the helper has no window and the Alt+Home panel has nothing to show -- under dgVoodoo2 this app held the game borderless, and DXVK has no such setting. Switch the game to borderless or windowed in its own options and restart it for the panel.', v);
+    case 'dxvk-panel-fullscreen': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run. But the game was in exclusive fullscreen when the DLSS5 Feeder started its helper, so the helper has no window and the Insert panel has nothing to show -- under dgVoodoo2 this app held the game borderless, and DXVK has no such setting. Switch the game to borderless or windowed in its own options and restart it for the panel.', v);
     case 'nr-model-only': return t('The game never loaded OptiScaler ({file}), and it does not need to: this game ships its own DLSS, so Neural Rendering only wants the model file beside the exe -- the game\'s own Streamline loads it and the driver dispatches the pass. Taking OptiScaler out removes the one thing this app put into the game\'s loader, which is what a game that will not start with it needs. The cost is the in-game panel and the DLSS 5 controls that live on it; Install puts them back.', v);
     case 'opti-not-loaded': return t('The DLSS5 Feeder ran and reported OptiScaler as not present: the game never loaded {file}, so the Feeder\'s DLSS calls went to the driver and no neural pass ran. OptiScaler has to sit under a DLL name this exe imports at start (winmm.dll or version.dll suit most games; never dxgi.dll on a Vulkan, OpenGL or DirectX 9 game). Rename it in the game folder, then launch again -- or save the bundle so the name can be picked from the exe.', v);
     case 'opti-not-fork': return t('The DLSS5 Feeder found a stock OptiScaler in this game, not the DLSS-NR fork: it takes the DLSS calls and upscales, and no neural pass can ever run. Install puts the fork this app ships back in its place.');
@@ -1418,7 +1418,7 @@ function helpSteps(diag) {
       : [t('Play a minute of actual gameplay, then quit'), t("In the game: Home > Luma > select DLSS"), launch];
     case 'needs-run': case 'needs-run-after-fix': return [t('Launch the game'), t('Play a minute of actual gameplay, then quit'), t('Come back here')];
     // The pop-out line only when that panel can actually answer its hotkey (see popoutHotkeyUsable).
-    case 'ok-panel-in-helper': return [t('Press Alt+Home in the game for the DLSS 5 panel'), t('Its controls take clicks there, as in any other game'),
+    case 'ok-panel-in-helper': return [t('Press Insert in the game for the DLSS 5 panel'), t('Its controls take clicks there, as in any other game'),
       ...(popoutHotkeyUsable() ? [t('Or press {hotkey} for the pop-out panel', { hotkey: settings.panelHotkey || DEFAULT_PANEL_HOTKEY })] : []),
       ...(v.otherMv ? [t('Picture jumps or smears in motion? Card menu > Motion vectors > change: pick LumeniteFX')] : [])];
     case 'vulkan-layer-missing': return [t('Install ReShade with add-on support for this exe, choosing Vulkan'), t('Or switch the emulator to Direct3D 11, if it has it, and pick DX11 in Edit'), t('Press Install here again')];
@@ -1438,11 +1438,11 @@ function helpSteps(diag) {
     case 'dxvk-two-reshades': return [t('Switch the game back off DXVK (More…), or move the extra ReShade out'), launch];
     case 'dxvk-addon-not-loaded': return [t('In the game, press Home and check ReShade\'s Add-ons tab for DLSS 5 Feed'), t('Read ReShade.log in the game folder'), ...report];
     case 'dxvk-needs-run': return [t('Launch the game'), t('Play a minute of actual gameplay, then quit'), t('Come back here')];
-    case 'dxvk-panel-fullscreen': return [t('Set the game to borderless or windowed in its own options'), t('Restart it and press Alt+Home')];
+    case 'dxvk-panel-fullscreen': return [t('Set the game to borderless or windowed in its own options'), t('Restart it and press Insert')];
     case 'nr-model-only': return [t('Press Fix it -- OptiScaler comes out and the model goes in'), t('Turn DLSS on in the game\'s own video settings'), launch, ...report];
     case 'opti-not-loaded': return [t('Rename OptiScaler in the game folder to a DLL this exe imports (winmm.dll or version.dll)'), launch, ...report];
     case 'feed-vulkan-interop': return [t('Launch through the Feeder\'s layer\\run-with-feed-layer.bat'), ...report];
-    case 'ok': return [t('Tune it in Edit, or with Alt+Home in the game')];
+    case 'ok': return [t('Tune it in Edit, or with Insert in the game')];
     case 'ok-exit-crash': return [t('Nothing to do -- it only crashes when quitting')];
     case 'smooth-motion-stacked': return [t('Open the NVIDIA app -- Graphics -- Program Settings, and pick this game'), t('Under Driver Settings, turn Smooth Motion off'), t('Or turn off {generator} in Settings here instead', v)];
     case 'wrapper-crash-swap': return [t('Press Fix it to swap dgVoodoo2 for DXVK'), t('Launch the game and reach gameplay'), t('Come back here -- if it still crashes, the next step is putting the game back')];
@@ -1510,7 +1510,7 @@ function helpShort(diag) {
     case 'feed-agility-redist': case 'feed-agility-redist-elsewhere': return t('D3D12 refused every device (redist)');
     case 'upscale-skipped': return t('Black screen: every frame dropped');
     case 'sr-backend-fallback': return t('Not DLSS -- fell back to {backend}', v);
-    case 'ok-panel-in-helper': return t('Working -- press Alt+Home in the game for the panel');
+    case 'ok-panel-in-helper': return t('Working -- press Insert in the game for the panel');
     case 'vulkan-layer-missing': return t('ReShade\'s Vulkan layer is not installed');
     case 'vulkan-layer-no-addon': return t('ReShade\'s Vulkan layer has no add-on support');
     case 'vulkan-layer-not-loaded': return t('ReShade\'s Vulkan layer did not load here');
@@ -3643,7 +3643,7 @@ $('#btn-framegen-multiplier-apply').addEventListener('click', async () => {
   if (!res || !res.ok) return toast(t('Could not set the multiplier: {error}', { error: res ? res.error : '?' }));
   if (res.cleared) toast(t("Frame Generation multiplier back to the game's own setting."));
   else if (res.deferred) toast(t('Saved -- applied once OptiScaler is installed for this game.'));
-  else toast(t('Frame Generation multiplier applied. It takes effect on the next launch (or right away from the Alt+Home panel).'));
+  else toast(t('Frame Generation multiplier applied. It takes effect on the next launch (or right away from the Insert panel).'));
   loadFrameGenMultiplier(game);
 });
 

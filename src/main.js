@@ -5221,8 +5221,15 @@ async function deployStreamlineFolder(dir, exePath) {
 // crash as "the compute restore fought the quirks table". On this evidence that was the wrong half:
 // the graphics restore is the one that kills it, and the compute restore is required. Setting them
 // explicitly and in opposite directions is what was actually needed.
+//   PanelKey (DlssNr)       The DLSS 5 panel moved to Insert everywhere else (engine v2.2.7), so one
+//                           key opens this app's panel whatever a game runs on. Not here: Insert is
+//                           REFramework's own menu key, and its DirectInput proxy evicts OptiScaler's
+//                           subclass seconds into startup, so on an RE Engine game Insert can only
+//                           ever reach REFramework. The panel keeps Alt+Home (292) here -- a key that
+//                           works beats a key that is consistent and does nothing.
 const RE_ENGINE_HOTFIX = [
   { section: 'Menu', key: 'ShortcutKey', value: '0x14F' },
+  { section: 'DlssNr', key: 'PanelKey', value: '292' },
   { section: 'Hotfix', key: 'RestoreComputeSignature', value: 'true' },
   { section: 'Hotfix', key: 'RestoreGraphicSignature', value: 'false' },
   { section: 'Hotfix', key: 'ExtendedStateRestore', value: 'false' },
