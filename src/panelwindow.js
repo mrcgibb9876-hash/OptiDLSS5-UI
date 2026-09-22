@@ -169,6 +169,16 @@ function registerHotkey(settings, onPressed) {
   return { ok: true, accelerator: wanted };
 }
 
+// "Reset layout", at the foot of the panel's Main page -- the in-game panel's own button, for the
+// window this copy of the panel lives in: back to the size it opens at, centred on the display it is
+// on. The caller throws the remembered bounds away, since settings.json is its.
+function resetBounds() {
+  if (panel === null || panel.isDestroyed()) return false;
+  panel.setBounds({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT });
+  panel.center();
+  return true;
+}
+
 function unregisterHotkey() {
   if (registered !== null) {
     try { electron().globalShortcut.unregister(registered); } catch { /* going away anyway */ }
@@ -185,6 +195,7 @@ module.exports = {
   hide,
   destroy,
   toggle,
+  resetBounds,
   registerHotkey,
   unregisterHotkey,
 };

@@ -2455,7 +2455,10 @@ ipcMain.handle('dlssnr:get', async (_evt, exePath) => {
       forced.BorderlessWidth = borderlessReason;
       forced.BorderlessHeight = borderlessReason;
     }
-    return { ok: true, inHelper, iniPath, forced, fields: dlssnr.readSettings(iniPath) };
+    // The pages travel with the fields: the pop-out panel draws the in-game panel's own six pages,
+    // and PAGES is where that layout is written (src/dlssnr.js).
+    return { ok: true, inHelper, iniPath, forced, pages: dlssnr.PAGES, headerKeys: dlssnr.HEADER_KEYS,
+             fields: dlssnr.readSettings(iniPath) };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -2526,6 +2529,19 @@ ipcMain.handle('panel:hotkeyState', () => panelHotkeyState);
 ipcMain.handle('panel:close', () => {
   panelwindow.hide();
   return true;
+});
+
+// "Reset layout", at the foot of the panel's Main page. The remembered bounds go as well as the
+// window's current ones, or the next open would put it straight back where it was.
+ipcMain.handle('panel:reset-layout', () => {
+  try {
+    const current = readJson(settingsFile(), {});
+    delete current.panelBounds;
+    writeJson(settingsFile(), current);
+  } catch {
+    // The window still moves; only the memory of where it was is lost, which is the point.
+  }
+  return { ok: panelwindow.resetBounds() };
 });
 
 // Settings' "Open it now": the same thing the hotkey does, for a user checking it works before

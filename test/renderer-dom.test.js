@@ -80,7 +80,10 @@ test('the pop-out panel still renders every group', () => {
   // renderers read the same dlssnr.js field list, so narrowing one and then "tidying" the other to
   // match would take that route's settings away without a single test going red.
   const panel = fs.readFileSync(path.join(root, 'panel.js'), 'utf8');
-  assert.match(panel, /for \(const group of \[\.\.\.new Set\(fields\.map\(\(f\) => f\.group\)\)\]\)/);
+  // It draws the pages the main process hands it, whole: every section, and every key in each one.
+  // dlssnr.test.js is what makes sure those pages account for every field.
+  assert.match(panel, /for \(const section of shown\.sections\)/);
+  assert.match(panel, /for \(const key of section\.keys\)/);
   assert.ok(!panel.includes('EDITABLE_GROUPS'), 'the pop-out panel must not filter groups');
 });
 

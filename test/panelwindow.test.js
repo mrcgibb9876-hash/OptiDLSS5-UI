@@ -83,13 +83,15 @@ test('rubbish in settings.json does not produce a window with NaN bounds', () =>
 // region it cannot be moved at all, and a button inside that region drags instead of clicking.
 // These read the files rather than the running window, which is weak, but the failure they guard
 // against is silent -- a panel that cannot be moved looks exactly like one that can.
-test('the panel is draggable by its title bar, and its buttons are not', () => {
+test('the panel is draggable by its top strip, and the picker in it is not', () => {
   const css = require('node:fs').readFileSync(path.join(REPO, 'src', 'renderer', 'panel.css'), 'utf8');
-  const title = css.slice(css.indexOf('.p-title {'), css.indexOf('.p-title h1'));
-  assert.match(title, /-webkit-app-region:\s*drag/, 'the title bar must be the drag handle');
+  const title = css.slice(css.indexOf('.p-title {'), css.indexOf('.p-game {'));
+  assert.match(title, /-webkit-app-region:\s*drag/, 'the top strip must be the drag handle');
 
-  const actions = css.slice(css.indexOf('.p-title-actions'));
-  assert.match(actions.slice(0, 200), /-webkit-app-region:\s*no-drag/, 'the buttons must opt out of it');
+  // The strip holds the game picker and nothing else now -- the title, the theme button and the
+  // close X went when the in-game panel dropped its own title row (2026-09-22).
+  const game = css.slice(css.indexOf('.p-game {'));
+  assert.match(game.slice(0, 200), /-webkit-app-region:\s*no-drag/, 'the game picker must opt out of it');
 });
 
 test('the window is created resizable, with a floor', () => {
