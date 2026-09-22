@@ -30,6 +30,17 @@ function diagnose(ctx) {
     else if (e && e.id) ((e.runAt || null) === runAt ? pending : tried).add(e.id);
   }
   const foreign = ctx.foreign || [];
+  // An ASI loader's plugins beside the exe (detect.js inspectAsiPlugins). Everything this app knows
+  // about a folder comes from scanning proxy DLL names, so it is blind to whatever an .asi loads --
+  // and "nothing hooked the game" is exactly the verdict that blindness produces. S.T.A.L.K.E.R.
+  // GAMMA (#108) cost a whole diagnosis of a leftover dxgi.dll before the reporter said he loads
+  // OptiScaler and ReShade as .asi. Saying so is a better answer than a confident wrong one.
+  const asi = d.asiPlugins || null;
+  const asiFiles = asi ? asi.files || [] : [];
+  const asiBlind = asiFiles.length
+    ? { count: asiFiles.length, files: asiFiles.slice(0, 6).join(', '), reShade: (asi && asi.reShade) || '' }
+    : null;
+  const noHook = () => (asiBlind ? out('unknown', 'asi-loader-blind', asiBlind) : out('unknown', 'no-hook'));
 
   const out = (status, code, vars = {}) => ({ status, code, vars, fix: null });
   const fix = (code, id, vars = {}) => {
@@ -98,6 +109,10 @@ function diagnose(ctx) {
   if (otherOpti && otherOpti.file && otherOpti.matchesOurBuild === false) {
     return out('step', 'foreign-optiscaler', { file: otherOpti.file });
   }
+  // The same fault by a route the proxy scan cannot see. This app installs OptiScaler under a proxy
+  // DLL name and never as an .asi, so an OptiScaler in an ASI loader's plugin folder is always
+  // somebody else's build -- and it is the one that loads and answers the game's NGX calls.
+  if (asi && asi.optiScaler) return out('step', 'asi-optiscaler', { file: asi.optiScaler });
   if (route.feederMisdeployed) return fix('feeder-misdeployed', 'remove-feeder');
   if (route.lumaDeployed && ctx.lumaKnownBad) return fix('luma-known-bad', 'remove-luma', { reason: ctx.lumaKnownBad });
   // An nvngx_dlss.dll too small to be one. Judged here rather than under a verdict because it is a
@@ -324,9 +339,9 @@ function diagnose(ctx) {
         const r = route.emulatorRenderer;
         return out('step', r.seen ? 'emulator-renderer-mismatch' : 'emulator-renderer', { name: r.name, renderer: r.renderer, hint: r.hint, seen: r.seen || '' });
       }
-      if (route.route === 'feeder' && route.feederDeployed) return out('unknown', 'no-hook');
+      if (route.route === 'feeder' && route.feederDeployed) return noHook();
       if (route.route === 'lumaue') return out('step', 'luma-missing');
-      return out('unknown', 'no-hook');
+      return noHook();
     case 'ue-crash':
       if (route.lumaDeployed && !(route.verified && route.verified.route === 'lumaue')) return fix('ue-crash-luma', 'remove-luma', { message: run.detail || '' });
       if (route.feederDeployed && !(route.verified && route.verified.route === 'feeder')) return fix('ue-crash-feeder', 'remove-feeder', { message: run.detail || '' });

@@ -98,6 +98,20 @@ redistribution, so the manager only links to the release page and fetches the mo
   reachable *only* from the crash verdict. A feeder32 route still has to be `complete` before any
   run-based rule is reached (`gamehelp.js:83`), which is right: an unfinished stack explains "no
   DLSS" better than the wrapper does.
+- **An ASI loader makes every proxy-DLL finding a guess.** This app installs OptiScaler under a
+  proxy DLL name (`HOOK_DLLS`) and reads a game folder by those names, so it cannot see a thing an
+  `.asi` loads. S.T.A.L.K.E.R. GAMMA (#108, 2026-09-22) cost a whole diagnosis before the reporter
+  said he loads ReShade and OptiScaler as `.asi` and that the `dxgi.dll` the app had fixed on was
+  leftover clutter from a reinstall. `detect.inspectAsiPlugins` now lists `*.asi` in the folder,
+  `plugins/` and `scripts/`, and names any that carry the OptiScaler or ReShade string;
+  `DETECT_VERSION` went to 17 so stored detections do not keep the blind answer. An OptiScaler in an
+  `.asi` is never ours -- the app has no code that installs one that way -- so it is the same finding
+  as `foreign-optiscaler`, under the code `asi-optiscaler`. Where there is a loader but no upscaler
+  in it, `no-hook` becomes `asi-loader-blind`: an honest "this app cannot see what they load" beats
+  a confident verdict about the wrong file. Actually *supporting* an ASI install (deploying our
+  OptiScaler as a plugin, and reading one back as ours) is not done and was promised only as a
+  "if we can".
+
 - **Nexus Mods is blocked by the egress proxy**, so a mod page's comments -- often the richest source
   on a specific game -- cannot be read from a session. The OptiScaler wiki and its issues can.
 
