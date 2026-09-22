@@ -156,8 +156,12 @@ const FIELDS = [
   // default is null rather than a number for that reason: the answer depends on the row above, so
   // naming one here would put a confident wrong label on the picture for anyone who changed it.
   { key: 'ScalingUpscaler', type: 'enum', default: 0, options: UPSCALERS, group: 'Speed vs quality',
-    label: "Upscale filter", dependsOn: { key: 'WorkingScale', below: 1 },
-    help: "The filter that enlarges the model's answer back to display size when the model ran SMALLER than the frame.\n\nBicubic is the default because it is the cheapest and it cannot go wrong, not because it is good -- it is soft. For a rendered 3D game the one to try is EWA Lanczos.\n\nEWA Lanczos weighs pixels by how far away they really are rather than by row and column, so a diagonal edge comes out as clean as a horizontal one instead of as a staircase. Sharpness below is what makes it worth choosing, and it is much the most expensive here.\n\nxBR-lv2, Sharp bilinear, Integer scale and Nearest are for PIXEL ART and 2D. On a rendered 3D frame they will look wrong; on a sprite or a 2D game they are the only right answers in this list." },
+    // Either direction since engine v2.2.7: it enlarges the model's answer when the model ran
+    // smaller than the frame, and enlarges the frame for the model when it ran larger. Only at exactly
+    // 100% is nothing being resized.
+    label: "Upscale filter",
+    dependsOn: { any: [{ key: 'WorkingScale', below: 1 }, { key: 'WorkingScale', above: 1 }] },
+    help: "The filter used whenever the model is not working at the frame's own size: it enlarges the model's answer back up when Model resolution is below 100%, and enlarges the frame for the model when it is above.\n\nBicubic is the default because it is the cheapest and it cannot go wrong, not because it is good -- it is soft. For a rendered 3D game the one to try is EWA Lanczos.\n\nEWA Lanczos weighs pixels by how far away they really are rather than by row and column, so a diagonal edge comes out as clean as a horizontal one instead of as a staircase. Sharpness below is what makes it worth choosing, and it is much the most expensive here.\n\nxBR-lv2, Sharp bilinear, Integer scale and Nearest are for PIXEL ART and 2D. On a rendered 3D frame they will look wrong; on a sprite or a 2D game they are the only right answers in this list." },
   // EWA Lanczos's four controls. Every one of them is a percentage where 0 is the gentlest setting,
   // on purpose: four identical sliders read as one set to be balanced against each other, where a
   // checkbox beside a preset name reads as four unrelated things that happen to sit together.
@@ -346,6 +350,64 @@ const GROUPS = (() => {
   return [...ordered, ...present.filter((g) => !ordered.includes(g))];
 })();
 
+// ── The panel's pages ───────────────────────────────────────────────────────────────────────────
+//
+// The in-game panel is six pages picked at the top (DlssNr_Menu.cpp, enum PanelPage), and the pop-out
+// is that panel outside the game -- so it is the same six pages, holding the same sections, in the
+// same order, under the same names. This table is that layout, written once. The group above is what
+// a row AFFECTS and drives the game card's settings dialog; this is where the row SITS.
+//
+// A field added to FIELDS has to be named here too, and dlssnr.test.js fails on one that is not --
+// otherwise it would quietly never be drawn in the panel.
+const HEADER_KEYS = ['Enabled', 'RunBeforeSR', 'RunBeforeRR'];
+
+const PAGES = [
+  // Main carries those header rows above it, then Frame Generation -- which is not a list of ini
+  // fields but the game's own DLSS-G, written through its per-game marker, so the renderer draws it
+  // rather than this table naming keys.
+  { page: 'Main', sections: [{ caption: 'Frame Generation', frameGen: true, keys: [] }] },
+  { page: 'Model', sections: [
+    { caption: 'Global Controls', keys: ['LocalStructure', 'LocalTone'] },
+    { caption: 'Models', keys: ['Preset', 'Style', 'Intensity', 'Pass2Preset', 'Pass2Style', 'Pass3Preset', 'Pass3Style'] },
+  ] },
+  { page: 'Cost', sections: [
+    { caption: 'Cost', keys: ['Passes', 'PassRate', 'ChainedHistory', 'WorkingScale', 'AutoScale', 'AutoScaleMode',
+                              'AutoScaleFps', 'AutoScaleMs', 'AutoScaleShare', 'AutoScaleFloor', 'ScalingDownscaler'] },
+  ] },
+  { page: 'Image', sections: [
+    // No caption on the first block, as in the engine: the page button above already says Image, and
+    // these are the filters that make it.
+    { caption: null, keys: ['Transfer', 'ScalingUpscaler', 'ScalingSharpness', 'ScalingAntiRinging',
+                            'ScalingSigmoid', 'ScalingDither'] },
+    { caption: 'How much of it lands', keys: ['TransferStrength', 'ColourStrength', 'HaloGuard', 'DepthEdge'] },
+    { caption: 'Colour', keys: ['ReversibleMode', 'WhitePointSource', 'WhitePointTrim', 'WhitePointScale', 'MaxRatio'] },
+    { caption: 'Exposure scan', keys: ['ScanMeter', 'ScanTrim', 'ScanInverted'] },
+  ] },
+  { page: 'Inspect', sections: [
+    { caption: 'Guide', keys: ['DepthConvention', 'OpticalFlow', 'UICorrection', 'ResetWhenBlind'] },
+    { caption: 'Inspect', keys: ['ApplyModel', 'AutoCapture', 'HoldFrame', 'Compare', 'CompareSwap', 'CompareTags',
+                                 'TagScale', 'CompareZoom', 'CompareSplit', 'DebugView'] },
+  ] },
+  { page: 'Setup', sections: [
+    { caption: 'Keys', keys: ['PanelKey'] },
+    { caption: 'Appearance', keys: ['LightTheme', 'VendorColours', 'Language', 'FontScale'] },
+    // The in-game panel has no Window section: this is the 64-bit helper's window, which only exists
+    // for a 32-bit game and can only be set from out here.
+    { caption: 'Window', keys: ['ForceBorderless', 'BorderlessWidth', 'BorderlessHeight'] },
+  ] },
+];
+
+// key -> the page it sits on, so a field can carry its page without the layout being written twice.
+const PAGE_OF = (() => {
+  const map = new Map();
+  for (const { page, sections } of PAGES) {
+    for (const section of sections) {
+      for (const key of section.keys) map.set(key, page);
+    }
+  }
+  for (const key of HEADER_KEYS) map.set(key, 'Main');
+  return map;
+})();
 
 const isAuto = (raw) => raw === null || raw === undefined || String(raw).trim() === '' || /^auto$/i.test(String(raw).trim());
 
@@ -401,6 +463,8 @@ function readSettings(iniPath) {
   return FIELDS.map((f) => ({
     key: f.key,
     group: f.group,
+    // Where the panel draws it: the in-game panel's own page (PAGES above).
+    page: PAGE_OF.get(f.key) || null,
     label: f.label,
     help: f.help,
     type: f.type,
@@ -470,4 +534,4 @@ function writeSettings(iniPath, values) {
   return { ok: true, written };
 }
 
-module.exports = { FIELDS, GROUPS, SECTION, readSettings, writeSettings, parseValue, formatValue, isAuto };
+module.exports = { FIELDS, GROUPS, PAGES, HEADER_KEYS, SECTION, readSettings, writeSettings, parseValue, formatValue, isAuto };

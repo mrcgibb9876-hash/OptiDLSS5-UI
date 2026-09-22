@@ -314,10 +314,12 @@ test('the upscale filter offers no FSR1 and defaults to the one that cannot go w
   assert.equal(field.default, 0);
   assert.equal(field.options[field.default][1], 'Bicubic');
 
-  // It is the enlarging direction, so it belongs to a model running SMALLER than the frame. The
-  // downscale filter beside it is the opposite case, and showing both at once would offer a choice
-  // that does nothing.
-  assert.deepEqual(field.dependsOn, { key: 'WorkingScale', below: 1 });
+  // Engine v2.2.7 gave it both directions: it enlarges the model's answer when the model ran smaller
+  // than the frame, and enlarges the frame for the model when it ran larger. Only at exactly 100% is
+  // nothing being resized, and that is the one case it stays greyed. The downscale filter beside it
+  // is still the shrinking leg alone.
+  assert.deepEqual(field.dependsOn,
+    { any: [{ key: 'WorkingScale', below: 1 }, { key: 'WorkingScale', above: 1 }] });
   const down = dlssnr.FIELDS.find((f) => f.key === 'ScalingDownscaler');
   assert.deepEqual(down.dependsOn, { key: 'WorkingScale', above: 1 });
 });
@@ -444,23 +446,43 @@ test('the default folds back to auto so the engine decides, like every other row
   assert.equal(getIniKey(fs.readFileSync(file, 'utf8'), 'DlssNr', 'ResetWhenBlind'), 'auto');
 });
 
-// The panel draws Frame Generation after the model rows. It used to find them by comparing against
-// a group literally named 'Models'; the 2026-09-20 regroup renamed that group and the whole section
-// stopped rendering, with nothing failing loudly enough for anyone to notice. The anchor is the
-// model picker's FIELD now, so this test is what keeps the next rename from doing it again.
-test('the group holding the model picker still exists for the panel to hang Frame Generation on', () => {
-  const rows = dlssnr.readSettings(freshIni('nr-framegen-anchor'));
-  const preset = rows.find((f) => f.key === 'Preset');
+// Frame Generation used to be hung off a group literally named 'Models'; the 2026-09-20 regroup
+// renamed that group and the whole section stopped rendering, with nothing failing loudly enough for
+// anyone to notice. It is a named section of the page table now -- this is what keeps the next
+// rename from doing it again.
+test('Frame Generation has a section of its own for the panel to draw into', () => {
+  const sections = dlssnr.PAGES.flatMap((p) => p.sections);
+  const fg = sections.filter((s) => s.frameGen);
+  assert.equal(fg.length, 1, 'exactly one section draws Frame Generation');
+  assert.equal(fg[0].caption, 'Frame Generation');
+  assert.deepEqual(fg[0].keys, [], 'it is the game\'s own DLSS-G, not a list of ini rows');
 
-  assert.ok(preset, 'the model picker is offered');
-  assert.ok(dlssnr.GROUPS.includes(preset.group), `${preset.group} is a real group`);
-
-  // And panel.js must still be anchoring to the field rather than to a group name, which is the
-  // thing that rotted last time. Comments are stripped first: the explanation of the old anchor
-  // names it, and a test that matches its own commentary proves nothing (the same way the "no
-  // picker inside the folder" guard once matched the comment saying there wasn't one).
   const panel = fs.readFileSync(path.join(REPO, 'src', 'renderer', 'panel.js'), 'utf8')
     .split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
-  assert.match(panel, /frameGenAfter\s*=\s*\(fields\.find\(\(f\) => f\.key === 'Preset'\)/);
+  assert.match(panel, /if \(section\.frameGen\) renderFrameGen\(host\)/);
   assert.doesNotMatch(panel, /group === 'Models'/);
+});
+
+// Both panels are the same panel: the in-game one is six pages picked at the top, and the pop-out
+// draws those same pages from this table. A field that is in FIELDS but on no page is drawn nowhere
+// at all -- silently, since nothing else reads the table -- which is what this is here to catch.
+test('every setting sits on exactly one page of the panel', () => {
+  const placed = [];
+  for (const { page, sections } of dlssnr.PAGES) {
+    assert.ok(page, 'every page is named');
+    for (const section of sections) placed.push(...section.keys);
+  }
+  placed.push(...dlssnr.HEADER_KEYS);
+
+  const dupes = placed.filter((k, i) => placed.indexOf(k) !== i);
+  assert.deepEqual(dupes, [], 'no setting is drawn twice');
+
+  const keys = dlssnr.FIELDS.map((f) => f.key);
+  assert.deepEqual(placed.filter((k) => !keys.includes(k)), [], 'no page names a setting that does not exist');
+  assert.deepEqual(keys.filter((k) => !placed.includes(k)), [], 'every setting is on a page');
+
+  // And the page travels with the field, so the panel does not have to work it out again.
+  const rows = dlssnr.readSettings(freshIni('nr-pages'));
+  assert.equal(rows.find((f) => f.key === 'Preset').page, 'Model');
+  assert.equal(rows.find((f) => f.key === 'PanelKey').page, 'Setup');
 });

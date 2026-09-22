@@ -143,6 +143,7 @@ contextBridge.exposeInMainWorld('api', {
   panelLive: (exePath) => ipcRenderer.invoke('panel:live', exePath),
   panelLiveStop: (exePath) => ipcRenderer.invoke('panel:live-stop', exePath),
   panelClose: () => ipcRenderer.invoke('panel:close'),
+  panelResetLayout: () => ipcRenderer.invoke('panel:reset-layout'),
   panelOpen: () => ipcRenderer.invoke('panel:open'),
   panelHotkeyState: () => ipcRenderer.invoke('panel:hotkeyState'),
   onPanelOpened: (cb) => { ipcRenderer.on('panel:opened', () => cb()); },

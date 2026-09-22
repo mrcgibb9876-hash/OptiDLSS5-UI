@@ -6,23 +6,21 @@
 <link rel="stylesheet" href="panel.css" />
 </head>
 <body class="dlss5">
-  <!-- The title row is the drag handle: the window is frameless, so this is its title bar. The
-       buttons opt back out, or they would drag instead of click. Every edge resizes it (Windows
+  <!-- The top strip is the drag handle: the window is frameless, so this is its title bar. It holds
+       the game this panel is pointed at and nothing else -- the in-game panel dropped its title row,
+       its theme button and its close X on 2026-09-22, and this window is that panel. The select opts
+       back out of the drag, or it would drag instead of open. Every edge resizes the window (Windows
        gives a frameless resizable window its own borders). -->
   <header class="p-title">
-    <h1 data-i18n>DLSS 5 Developer Controls</h1>
+    <select id="p-game" class="p-select p-game"></select>
     <span class="p-help" data-tip-key="Drag the title bar to move this window, or drag any edge or corner to resize it. Where it is and how big it is are remembered.">(?)</span>
-    <div class="p-title-actions">
-      <button id="p-theme" class="p-small" data-i18n>Light</button>
-      <button id="p-close" class="p-close" data-tip-key="Close the panel. Its key opens it again.">X</button>
-    </div>
   </header>
 
   <div class="p-scroll">
-    <div class="p-row">
-      <span class="p-row-label" data-i18n>Game</span>
-      <span class="p-row-ctl"><select id="p-game" class="p-select"></select></span>
-    </div>
+    <!-- The six pages, then the rows that are drawn whatever page is open: whether the pass runs,
+         where it sits, and the badge that says whether it is actually doing anything. -->
+    <div id="p-pages" class="p-pages"></div>
+    <div id="p-head"></div>
     <div id="p-status" class="p-note"></div>
     <!-- The same number the in-game panel shows as "Running - N ms per frame". Hidden until there
          is one to show, so a game that has never run does not carry an empty readout. -->

@@ -54,7 +54,6 @@ function applyPalette() {
   const vendor = vendorField ? (vendorField.value === null ? vendorField.default : vendorField.value) : true;
   document.body.classList.toggle('is-light', !!light);
   document.body.classList.toggle('is-amd', !!vendor && amd);
-  $('#p-theme').textContent = light ? t('Dark') : t('Light');
 }
 
 let tipEl = null;
@@ -156,160 +155,299 @@ function helpMarker(text) {
   return el;
 }
 
+// One row, drawn the way the in-game panel draws that kind of row.
+function fieldRow(field) {
+    const held = forced[field.key] || null;
+    const met = dependencyMet(field) && !held;
+    const shown = field.value === null ? field.default : field.value;
+
+    const label = document.createElement('span');
+    label.className = 'p-row-label';
+    label.textContent = t(field.label);
+
+    const ctl = document.createElement('span');
+    ctl.className = 'p-row-ctl';
+
+    const value = document.createElement('span');
+    value.className = 'p-row-value';
+
+    let el;
+
+    if (field.type === 'bool') {
+      el = row(field, 'is-check');
+      const box = document.createElement('button');
+      box.className = `p-check${shown ? ' on' : ''}`;
+      box.disabled = !met;
+      box.addEventListener('click', () => apply(field.key, !shown));
+      ctl.appendChild(box);
+      value.textContent = held ? t('held off') : field.value === null ? t('default') : '';
+      el.append(ctl, label, value);
+    } else if (field.type === 'enum' && (field.segmented || boxedChoices(field))) {
+      // Boxed choices rather than a dropdown: the Models row across the whole width, and -- since
+      // engine v2.2.8 -- any short list, because the in-game panel now draws a two-to-four option
+      // choice as boxes with the active one ringed in the accent. A dropdown hides what the
+      // alternatives are until it is opened, and these are choices you flick between.
+      el = row(field, 'is-seg');
+      if (!field.segmented) el.append(label);
+      const seg = document.createElement('span');
+      seg.className = 'p-seg';
+      // Only where the default is "follow something else" rather than one of the listed values:
+      // picking a listed value that happens to be the default is stored as auto anyway.
+      const choices = field.default === null ? [[null, t('Default')], ...(field.options || [])] : (field.options || []);
+      for (const [v, text] of choices) {
+        const b = document.createElement('button');
+        b.textContent = t(text);
+        b.disabled = !met;
+        b.setAttribute('data-tip', t(field.help));
+        const on = v === null ? field.value === null : String(shown) === String(v);
+        if (on) b.classList.add('on');
+        b.addEventListener('click', () => apply(field.key, v));
+        seg.appendChild(b);
+      }
+      ctl.appendChild(seg);
+      el.append(ctl);
+    } else if (field.type === 'enum' || field.type === 'code') {
+      el = row(field);
+      const sel = document.createElement('select');
+      sel.className = 'p-select';
+      sel.disabled = !met;
+      const def = document.createElement('option');
+      def.value = 'auto';
+      const defOption = (field.options || []).find(([v]) => v === field.default);
+      def.textContent = field.default === null
+        ? t(field.type === 'code' ? 'Default (follow Windows)' : 'Default (follow pass 1)')
+        : t('Default ({state})', { state: defOption ? t(defOption[1]) : String(field.default) });
+      sel.appendChild(def);
+      for (const [v, text] of field.options || []) {
+        const o = document.createElement('option');
+        o.value = String(v);
+        o.textContent = t(text);
+        sel.appendChild(o);
+      }
+      sel.value = field.value === null ? 'auto' : String(field.value);
+      sel.addEventListener('change', () => apply(field.key, sel.value === 'auto' ? null : sel.value));
+      ctl.appendChild(sel);
+      el.append(label, ctl, value);
+    } else {
+      el = row(field);
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.className = 'p-slider';
+      slider.min = '0';
+      slider.max = '1000';
+      slider.step = '1';
+      slider.disabled = !met;
+      slider.value = String(Math.round(toSlider(field, Number(shown)) * 1000));
+      slider.style.setProperty('--fill', `${(Number(slider.value) / 10).toFixed(1)}%`);
+      value.textContent = held ? t('held off') : formatNumber(field, shown);
+
+      const live = () => {
+        const v = fromSlider(field, Number(slider.value) / 1000);
+        slider.style.setProperty('--fill', `${(Number(slider.value) / 10).toFixed(1)}%`);
+        value.textContent = formatNumber(field, field.type === 'int' ? Math.round(v) : v);
+        return v;
+      };
+      slider.addEventListener('input', live);
+
+      // Held keys repeat, and one ini write per repeat would be dozens a second, so the picture
+      // moves at once and the write follows the last press.
+      let pending = null;
+      slider.addEventListener('keydown', (e) => {
+        const dir = STEP_DIR[e.key];
+        const ends = e.key === 'Home' || e.key === 'End';
+        if (dir === undefined && !ends) return;
+        e.preventDefault();
+        const at = fromSlider(field, Number(slider.value) / 1000);
+        const next = ends ? (e.key === 'Home' ? field.min : field.max)
+                          : steppedValue(field, at, dir, e.key.startsWith('Page'));
+        slider.value = String(Math.round(toSlider(field, next) * 1000));
+        live();
+        value.textContent = formatNumber(field, next);
+        clearTimeout(pending);
+        pending = setTimeout(() => apply(field.key, next), 180);
+      });
+      // Applied when the handle is let go, not while it is moving -- the engine does the same,
+      // because every move would otherwise rewrite the ini and rebuild the feature.
+      slider.addEventListener('change', () => {
+        const v = fromSlider(field, Number(slider.value) / 1000);
+        apply(field.key, field.type === 'int' ? Math.round(v) : Number(v.toFixed(4)));
+      });
+      ctl.appendChild(slider);
+
+      const reset = document.createElement('button');
+      reset.className = 'p-small';
+      reset.textContent = t('Reset');
+      reset.disabled = !met || field.value === null;
+      reset.addEventListener('click', () => apply(field.key, null));
+
+      el.append(label, ctl, value, reset);
+    }
+
+    el.classList.toggle('is-off', !met);
+    el.appendChild(helpMarker(held ? t(held) : t(field.help)));
+  return el;
+}
+
+// Two to four options are drawn as boxes rather than a dropdown, as the in-game panel's NrCombo
+// does. More than four and the boxes are too narrow to read, so those stay a dropdown -- and a
+// keybind is a list of every key on the keyboard, whatever it is offering today.
+function boxedChoices(field) {
+  if (field.keybind || !Array.isArray(field.options)) return false;
+  const count = field.options.length + (field.default === null ? 1 : 0);
+  return count >= 2 && count <= 4;
+}
+
+// A label wider than its column used to run into the slider beside it. When it does, the row stacks:
+// label on its own line, control under it -- the same thing the in-game panel does when the label
+// measures wider than 44% of the row.
+function stackLongLabels(host) {
+  for (const label of host.querySelectorAll('.p-row > .p-row-label')) {
+    if (label.scrollWidth > label.clientWidth + 1) label.parentElement.classList.add('is-stack');
+  }
+  // The same for boxed choices whose words do not fit the boxes. The engine measures the widest
+  // option first and falls back to a dropdown; here the row gets the whole width instead, which
+  // keeps the choice visible rather than folding it away.
+  for (const box of host.querySelectorAll('.p-row.is-seg .p-seg button')) {
+    if (box.scrollWidth > box.clientWidth + 1) box.closest('.p-row').classList.add('is-stack');
+  }
+}
+
+// ── The panel's pages ───────────────────────────────────────────────────────────────────────────
+//
+// The in-game panel is six pages picked at the top, and this window is that panel: the same pages,
+// holding the same sections, in the same order, under the same names. The layout comes with the
+// fields (src/dlssnr.js PAGES), so there is one description of it rather than two that drift.
+//
+// The page is where you are, not a setting: it lasts as long as the window and opens on Main, which
+// is exactly what the engine's own does.
+let pages = [];
+let headerKeys = [];
+let page = 'Main';
+
+function renderPages() {
+  const host = $('#p-pages');
+  host.innerHTML = '';
+  if (pages.length === 0) return;
+
+  for (const p of pages) {
+    const b = document.createElement('button');
+    b.textContent = t(p.page);
+    if (p.page === page) b.classList.add('on');
+    b.addEventListener('click', () => { page = p.page; renderPages(); renderFields(); });
+    host.appendChild(b);
+  }
+}
+
+// Above the pages' rows and on every one of them: whether the pass runs, where it sits, and the
+// badge saying whether it is actually doing anything. The in-game panel draws these three rows and
+// the badge before any page, for the same reason -- they are the answer to "is this on", and going
+// looking for that on a page would be one click too many.
+function renderHead() {
+  const host = $('#p-head');
+  host.innerHTML = '';
+  if (fields.length === 0) return;
+
+  for (const key of headerKeys) {
+    const field = fields.find((f) => f.key === key);
+    if (field) host.appendChild(fieldRow(field));
+  }
+
+  const badge = document.createElement('div');
+  badge.id = 'p-badge';
+  host.appendChild(badge);
+  renderBadge();
+}
+
+// The state of the pass in one word, filled in the accent when it is running and flat when it is
+// not, so "is this doing anything" is answered before a sentence is read. The engine's StatusBadge,
+// in the same place and the same words.
+function renderBadge() {
+  const el = document.getElementById('p-badge');
+  if (!el) return;
+  const nr = (lastLive && lastLive.nr) || null;
+  const enabled = !!valueOf('Enabled');
+  const live = enabled && !!(nr && nr.running);
+  const text = !enabled ? t('Paused')
+    : live ? t('Ready')
+    : nr && nr.reason ? t('Blocked')
+    : t('Waiting');
+  el.className = `p-badge${live ? ' is-live' : ''}`;
+  el.textContent = text;
+}
+
+// The two resets, at the foot of Main: one puts the window back where it opens, the other puts this
+// game's tuning back to what it ships with. Together at the bottom rather than in the top strip --
+// a reset is a thing you go looking for, not something to have under a thumb.
+function renderResets(host) {
+  const foot = document.createElement('div');
+  foot.className = 'p-foot';
+
+  const layout = document.createElement('button');
+  layout.className = 'p-small';
+  layout.textContent = t('Reset layout');
+  layout.addEventListener('click', () => window.api.panelResetLayout());
+  foot.append(layout, helpMarker(t('Puts this window back where it opens, at its own size.')));
+
+  const all = document.createElement('button');
+  all.className = 'p-small';
+  all.textContent = t('Reset all to defaults');
+  all.addEventListener('click', resetAll);
+  foot.append(all, helpMarker(t('Every DLSS 5 setting for this game back to what it ships with. Kept: the keys that open the panel, and whether it is light or dark.')));
+
+  host.appendChild(foot);
+}
+
+// What the engine's ResetSettingsToDefaults keeps: the keys that open the panel, and how the panel
+// itself looks. Those are the user's, not this game's tuning, and a reset that changed the language
+// out from under someone would be a poor way to find that out.
+const PERSONAL_KEYS = ['PanelKey', 'LightTheme', 'VendorColours', 'Language', 'FontScale'];
+
+async function resetAll() {
+  const values = {};
+  for (const f of fields) {
+    if (!PERSONAL_KEYS.includes(f.key) && f.value !== null) values[f.key] = null;
+  }
+  if (Object.keys(values).length === 0) { setStatus(t('Nothing to change.'), true); return; }
+  await applyMany(values);
+}
+
 function renderFields() {
   const host = $('#p-fields');
   host.innerHTML = '';
   if (fields.length === 0) return;
 
-  // Frame Generation goes after the model rows, the way the in-game panel orders it. Anchored to
-  // the model picker's FIELD rather than to a group name: it used to read `group === 'Models'`, the
-  // 2026-09-20 regroup renamed that group, and the whole section silently stopped rendering -- a
-  // string compare against a group name is only ever one rename away from dead, and nothing failed
-  // loudly enough for anyone to notice.
-  const frameGenAfter = (fields.find((f) => f.key === 'Preset') || {}).group || null;
+  const shown = pages.find((p) => p.page === page) || pages[0];
+  if (!shown) return;
 
-  for (const group of [...new Set(fields.map((f) => f.group))]) {
-    const rows = fields.filter((f) => f.group === group);
-
-    const cap = document.createElement('div');
-    cap.className = 'p-caption';
-    cap.textContent = t(group);
-
-    host.appendChild(cap);
-
-    for (const field of rows) {
-      const held = forced[field.key] || null;
-      const met = dependencyMet(field) && !held;
-      const shown = field.value === null ? field.default : field.value;
-
-      const label = document.createElement('span');
-      label.className = 'p-row-label';
-      label.textContent = t(field.label);
-
-      const ctl = document.createElement('span');
-      ctl.className = 'p-row-ctl';
-
-      const value = document.createElement('span');
-      value.className = 'p-row-value';
-
-      let el;
-
-      if (field.type === 'bool') {
-        el = row(field, 'is-check');
-        const box = document.createElement('button');
-        box.className = `p-check${shown ? ' on' : ''}`;
-        box.disabled = !met;
-        box.addEventListener('click', () => apply(field.key, !shown));
-        ctl.appendChild(box);
-        value.textContent = held ? t('held off') : field.value === null ? t('default') : '';
-        el.append(ctl, label, value);
-      } else if (field.type === 'enum' && field.segmented) {
-        // The Models row: one pill per model across the whole row, the selected one filled with the
-        // accent. No label column -- the section caption above it already says Models, and the
-        // engine gives the pills the full row width so four model names fit without being cut.
-        el = row(field, 'is-seg');
-        const seg = document.createElement('span');
-        seg.className = 'p-seg';
-        for (const [v, text] of field.options || []) {
-          const b = document.createElement('button');
-          b.textContent = t(text);
-          b.disabled = !met;
-          b.setAttribute('data-tip', t(field.help));
-          if (String(shown) === String(v)) b.classList.add('on');
-          b.addEventListener('click', () => apply(field.key, v));
-          seg.appendChild(b);
-        }
-        ctl.appendChild(seg);
-        el.append(ctl);
-      } else if (field.type === 'enum' || field.type === 'code') {
-        el = row(field);
-        const sel = document.createElement('select');
-        sel.className = 'p-select';
-        sel.disabled = !met;
-        const def = document.createElement('option');
-        def.value = 'auto';
-        const defOption = (field.options || []).find(([v]) => v === field.default);
-        def.textContent = field.default === null
-          ? t(field.type === 'code' ? 'Default (follow Windows)' : 'Default (follow pass 1)')
-          : t('Default ({state})', { state: defOption ? t(defOption[1]) : String(field.default) });
-        sel.appendChild(def);
-        for (const [v, text] of field.options || []) {
-          const o = document.createElement('option');
-          o.value = String(v);
-          o.textContent = t(text);
-          sel.appendChild(o);
-        }
-        sel.value = field.value === null ? 'auto' : String(field.value);
-        sel.addEventListener('change', () => apply(field.key, sel.value === 'auto' ? null : sel.value));
-        ctl.appendChild(sel);
-        el.append(label, ctl, value);
-      } else {
-        el = row(field);
-        const slider = document.createElement('input');
-        slider.type = 'range';
-        slider.className = 'p-slider';
-        slider.min = '0';
-        slider.max = '1000';
-        slider.step = '1';
-        slider.disabled = !met;
-        slider.value = String(Math.round(toSlider(field, Number(shown)) * 1000));
-        slider.style.setProperty('--fill', `${(Number(slider.value) / 10).toFixed(1)}%`);
-        value.textContent = held ? t('held off') : formatNumber(field, shown);
-
-        const live = () => {
-          const v = fromSlider(field, Number(slider.value) / 1000);
-          slider.style.setProperty('--fill', `${(Number(slider.value) / 10).toFixed(1)}%`);
-          value.textContent = formatNumber(field, field.type === 'int' ? Math.round(v) : v);
-          return v;
-        };
-        slider.addEventListener('input', live);
-
-        // Held keys repeat, and one ini write per repeat would be dozens a second, so the picture
-        // moves at once and the write follows the last press.
-        let pending = null;
-        slider.addEventListener('keydown', (e) => {
-          const dir = STEP_DIR[e.key];
-          const ends = e.key === 'Home' || e.key === 'End';
-          if (dir === undefined && !ends) return;
-          e.preventDefault();
-          const at = fromSlider(field, Number(slider.value) / 1000);
-          const next = ends ? (e.key === 'Home' ? field.min : field.max)
-                            : steppedValue(field, at, dir, e.key.startsWith('Page'));
-          slider.value = String(Math.round(toSlider(field, next) * 1000));
-          live();
-          value.textContent = formatNumber(field, next);
-          clearTimeout(pending);
-          pending = setTimeout(() => apply(field.key, next), 180);
-        });
-        // Applied when the handle is let go, not while it is moving -- the engine does the same,
-        // because every move would otherwise rewrite the ini and rebuild the feature.
-        slider.addEventListener('change', () => {
-          const v = fromSlider(field, Number(slider.value) / 1000);
-          apply(field.key, field.type === 'int' ? Math.round(v) : Number(v.toFixed(4)));
-        });
-        ctl.appendChild(slider);
-
-        const reset = document.createElement('button');
-        reset.className = 'p-small';
-        reset.textContent = t('Reset');
-        reset.disabled = !met || field.value === null;
-        reset.addEventListener('click', () => apply(field.key, null));
-
-        el.append(label, ctl, value, reset);
-      }
-
-      el.classList.toggle('is-off', !met);
-      el.appendChild(helpMarker(held ? t(held) : t(field.help)));
-      host.appendChild(el);
+  for (const section of shown.sections) {
+    if (section.caption) {
+      const cap = document.createElement('div');
+      cap.className = 'p-caption';
+      cap.textContent = t(section.caption);
+      host.appendChild(cap);
     }
 
-    if (frameGenAfter && group === frameGenAfter) renderFrameGen(host);
+    for (const key of section.keys) {
+      const field = fields.find((f) => f.key === key);
+      if (field) host.appendChild(fieldRow(field));
+    }
+
+    // Frame Generation is the game's own DLSS-G rather than a list of ini rows, so it draws itself.
+    if (section.frameGen) renderFrameGen(host);
   }
+
+  if (shown.page === 'Main') renderResets(host);
+  stackLongLabels(host);
 }
 
-async function apply(key, value) {
+const apply = (key, value) => applyMany({ [key]: value });
+
+// One write, whatever it touches: a row, or every row at once for "Reset all to defaults". The ini
+// is written once either way, so a reset is a single change for a running game to pick up rather
+// than sixty.
+async function applyMany(values) {
   if (!current) return;
-  const res = await window.api.dlssNrSet(current.exePath, { [key]: value });
+  const res = await window.api.dlssNrSet(current.exePath, values);
   if (!res || !res.ok) {
     setStatus(t('Could not save: {error}', { error: (res && res.error) || t('unknown') }));
     return;
@@ -319,6 +457,7 @@ async function apply(key, value) {
   setStatus(res.written.length
     ? (current.running ? t('Saved. A running game picks it up within a second.') : t('Saved. Applies the next time the game starts.'))
     : t('Nothing to change.'), true);
+  renderHead();
   renderFields();
 }
 
@@ -330,6 +469,7 @@ async function loadGame(exePath) {
   if (!current) {
     stopTimingPoll();
     renderTiming(null);
+    renderHead();
     renderFields();
     setStatus(t('Pick a game.'));
     return;
@@ -339,6 +479,7 @@ async function loadGame(exePath) {
   if (!res || !res.ok) {
     stopTimingPoll();
     renderTiming(null);
+    renderHead();
     renderFields();
     setStatus(res && res.error === 'not-installed'
       ? t('OptiScaler is not installed for this game yet.')
@@ -348,8 +489,14 @@ async function loadGame(exePath) {
 
   fields = res.fields || [];
   forced = res.forced || {};
+  // The page layout comes with the fields, so this window cannot end up drawing a different panel
+  // from the one in the game.
+  pages = res.pages || pages;
+  headerKeys = res.headerKeys || headerKeys;
   await loadFrameGen();
   applyChrome();
+  renderPages();
+  renderHead();
   renderFields();
   setStatus(res.inHelper
     ? t('Editing the 64-bit helper this 32-bit game uses.')
@@ -459,6 +606,7 @@ async function refreshLive() {
   lastLive = res && res.ok ? res.live : null;
   if (lastLive) renderLive(lastLive);
   else if (had) refreshTiming();
+  renderBadge();
   renderFrameGenStatus();
 }
 
@@ -560,12 +708,9 @@ function renderFrameGenStatus() {
     : t('Game\'s DLSS Frame Generation: off in the game\'s video settings.');
 }
 
+// The caption is the section's, drawn by renderFields from the page table -- this draws what goes
+// under it.
 function renderFrameGen(host) {
-  const cap = document.createElement('div');
-  cap.className = 'p-caption';
-  cap.textContent = t('Frame Generation');
-  host.appendChild(cap);
-
   if (!fgState || !fgState.hasFrameGen) {
     const note = document.createElement('div');
     note.className = 'p-note';
@@ -681,10 +826,10 @@ async function refreshTargets() {
 }
 
 $('#p-game').addEventListener('change', (e) => loadGame(e.target.value));
-$('#p-close').addEventListener('click', () => window.api.panelClose());
-// Writes [DlssNr] LightTheme, so the in-game panel changes with it.
-$('#p-theme').addEventListener('click', () => apply('LightTheme', !light));
 
+// No close button and no theme button in the top strip: the in-game panel dropped both on
+// 2026-09-22 (Light panel is a setting and lives under Setup; the panel closes on its own key), and
+// this window is that panel. Escape closes it, as does the key that opened it.
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.api.panelClose(); });
 
 function applyStaticTips() {
@@ -699,7 +844,13 @@ async function reload() {
 }
 
 window.api.onPanelOpened(() => reload());
-window.api.onSettingsChanged((next) => { settings = next || {}; applyChrome(); renderFields(); });
+window.api.onSettingsChanged((next) => {
+  settings = next || {};
+  applyChrome();
+  renderPages();
+  renderHead();
+  renderFields();
+});
 
 (async () => {
   try {
