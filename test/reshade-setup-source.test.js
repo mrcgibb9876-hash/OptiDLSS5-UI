@@ -20,8 +20,10 @@ const BIG = 2 * 1024 * 1024;
 // A stand-in ReShade setup: a real zip holding a ReShade64.dll, add-on build or not. The app reads
 // the export table out of the DLL inside, so the zip has to be genuine.
 function fakeSetup(file, { addon = true } = {}) {
+  // Random filler on purpose: zeros deflate to nothing and the zip would land under the 1MB floor
+  // that rejects a part-finished download, so the fixture would be testing the wrong thing.
   const dll = Buffer.concat([
-    Buffer.from('MZ'), Buffer.alloc(BIG),
+    Buffer.from('MZ'), require('node:crypto').randomBytes(BIG),
     Buffer.from(addon ? 'ReShadeRegisterAddon' : 'ReShade', 'latin1'),
   ]);
   const name = Buffer.from('ReShade64.dll', 'latin1');
@@ -106,8 +108,9 @@ test('a 404 on every known version is an error that says what happened and what 
     (err) => {
       assert.equal(err.code, 'reshade-setup-unavailable');
       assert.ok(err.needsReShadeSetup, 'flagged so the caller can offer the picker');
-      assert.match(err.message, /only its current version/, 'names the real cause');
-      assert.match(err.message, /Addon\.exe/, 'and says which build to pick');
+      assert.match(err.message, /Could not download ReShade's installer/, 'names what failed');
+      assert.match(err.message, /reshade\.me/, 'and where to get it');
+      assert.match(err.message, /Addon\.exe/, 'and which build to pick');
       return true;
     },
   );
@@ -165,6 +168,78 @@ test('a Vulkan layer fault is still reported when the installer cannot be fetche
       assert.match(err.message, /could not fetch it for you/, 'and the download failure is added, not substituted');
       assert.equal(err.setupPath, null, 'so the caller can offer the user their own copy');
       assert.match(err.setupError, /reshade\.me/, 'naming the host');
+      return true;
+    },
+  );
+});
+
+// ── The handoff: the user downloads it, the app takes it from there ──────────────────────────
+//
+// A failed download must never be where an install ends. reshade.me drops the pinned version when
+// the next ships; a filtered network, or a VPN that is a proxy rather than a tunnel (Node ignores
+// the system proxy, a browser does not), lands in the same place. So the app points at reshade.me
+// and then finds what the user downloaded by itself -- no path to type, nothing to place. The same
+// handoff pdplugin.js already makes for PureDark's plugin.
+
+test('a setup in Downloads is found, Add-on build first, then newest', () => {
+  const dl = scratchDir('rs-dl-find');
+  const old = fakeSetup(path.join(dl, 'ReShade_Setup_6.7.3.exe'), { addon: false });
+  fs.utimesSync(old, new Date(1000), new Date(1000));
+  const addon = fakeSetup(path.join(dl, 'ReShade_Setup_6.8.0_Addon.exe'), { addon: true });
+  fs.writeFileSync(path.join(dl, 'ReShade_Setup_truncated.exe'), Buffer.alloc(200));  // half a download
+  fs.writeFileSync(path.join(dl, 'some_other_game_patch.exe'), Buffer.alloc(BIG + 1));
+
+  const found = feeder.findDownloadedReShadeSetups([dl]);
+  assert.deepEqual(found.map((f) => f.name), ['ReShade_Setup_6.8.0_Addon.exe', 'ReShade_Setup_6.7.3.exe'],
+    'the Add-on build leads; the part-file and the unrelated exe are not candidates');
+  assert.equal(found[0].path, addon);
+  assert.deepEqual(feeder.findDownloadedReShadeSetups([scratchDir('rs-dl-empty')]), []);
+  assert.deepEqual(feeder.findDownloadedReShadeSetups(null), [], 'no folders is not a crash');
+});
+
+test('the plain build in Downloads is rejected with a reason, not silently skipped', async () => {
+  const dl = scratchDir('rs-dl-plain');
+  const cache = scratchDir('rs-dl-plain-cache');
+  fakeSetup(path.join(dl, 'ReShade_Setup_6.8.0.exe'), { addon: false });
+  const got = await feeder.adoptDownloadedReShadeSetup([dl], cache);
+  assert.equal(got.path, null);
+  assert.equal(got.rejected.length, 1);
+  assert.match(got.rejected[0].why, /PLAIN build/, 'so the dialog can say which mistake they made');
+});
+
+// THE POINT OF THE WHOLE THING.
+test('with the host unreachable, a downloaded setup finishes the install by itself', async () => {
+  const dl = scratchDir('rs-dl-rescue');
+  const cache = scratchDir('rs-dl-rescue-cache');
+  fakeSetup(path.join(dl, 'ReShade_Setup_6.9.0_Addon.exe'), { addon: true });
+
+  const got = await feeder.ensureReShadeSetup(cache, {}, {
+    downloadDirs: [dl],
+    fetchImpl: async () => { throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } }); },
+  });
+  assert.equal(got, path.join(cache, feeder.RESHADE_USER_SETUP), 'adopted into the cache');
+  assert.ok(fs.existsSync(got));
+
+  // A version this app has never pinned is fine here: it was validated by what is inside it, and
+  // the alternative is telling a user with the right file in hand that they cannot install.
+  const again = await feeder.ensureReShadeSetup(cache, {}, {
+    fetchImpl: () => { throw new Error('must not be called -- it is cached now'); },
+  });
+  assert.equal(again, got);
+});
+
+test('when there is nothing to adopt, the error carries the page to send the user to', async () => {
+  const cache = scratchDir('rs-dl-none');
+  await assert.rejects(
+    () => feeder.ensureReShadeSetup(cache, {}, {
+      downloadDirs: [scratchDir('rs-dl-none-empty')],
+      fetchImpl: async () => ({ ok: false, status: 404, headers: new Map(), url: feeder.RESHADE_SETUPS[0].url }),
+    }),
+    (err) => {
+      assert.equal(err.downloadPage, feeder.RESHADE_DOWNLOAD_PAGE);
+      assert.equal(err.downloadPage, 'https://reshade.me/', 'the legitimate download page, as their terms ask');
+      assert.ok(err.downloadUrl, 'and the direct link, for the Copy button');
+      assert.match(err.message, /Leave it in your Downloads folder/, 'tells them they need not place it');
       return true;
     },
   );
