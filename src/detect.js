@@ -44,7 +44,7 @@ const rtxmfg = require('./rtxmfg');
 // carries the renderer's name and menu path (emulators.js, #106).
 // 17: an ASI loader's plugins are read (asiPlugins). A stored detection carries none, and its
 // absence reads as "no ASI loader here" -- the exact wrong answer that has to be refreshed (#108).
-const DETECT_VERSION = 17;
+const DETECT_VERSION = 18;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
@@ -1160,8 +1160,15 @@ async function optiScalerRuntimeApi(dir) {
   }
   if (/Vulkan is creating swapchain/.test(text)) return { api: 'vulkan', evidence: 'a Vulkan swapchain' };
   if (/creating Dx11 swapchain!|hkD3D11CreateDeviceAndSwapChain Device captured|Created Dx11wDx12SC/.test(text)) return { api: 'dx11', evidence: 'a D3D11 swapchain' };
+  // No swapchain line either way: then the devices decide. A D3D12 device wins over a D3D11 one, because
+  // every real D3D11 game logs its swapchain above (a Feeder or interop game's own D3D12 device included
+  // -- Yakuza 0 and The Hong Kong Massacre both do), so a D3D11 device with D3D12 ones beside it and no
+  // D3D11 swapchain is a D3D12 game making a throwaway D3D11 device -- Shadow of the Tomb Raider does it
+  // at startup, and read as DX11 it was refused OptiScaler's frame generation (2026-09-23).
   const d3d11Device = /hkD3D11CreateDevice Device captured/.test(text);
-  if (/hkD3D12CreateDevice/.test(text) && !d3d11Device) return { api: 'dx12', evidence: 'a D3D12 device' };
+  if (/hkD3D12CreateDevice/.test(text)) {
+    return { api: 'dx12', evidence: d3d11Device ? 'a D3D12 device (its D3D11 device made no swapchain)' : 'a D3D12 device' };
+  }
   if (d3d11Device) return { api: 'dx11', evidence: 'a D3D11 device' };
   return null;
 }

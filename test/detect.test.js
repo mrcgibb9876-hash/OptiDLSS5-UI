@@ -51,6 +51,13 @@ test('optiScalerRuntimeApi reads the swapchain the game really created', async (
   const d3d12 = scratchDir('rt12');
   write(d3d12, 'OptiScaler.log', '[00:00:01.000000] [I] hkD3D12CreateDevice Adapter Desc: NVIDIA\n');
   assert.equal((await detect.optiScalerRuntimeApi(d3d12)).api, 'dx12');
+  // Shadow of the Tomb Raider: a throwaway D3D11 device at startup, then D3D12 -- and no D3D11 swapchain.
+  const sottr = scratchDir('rt12with11');
+  write(sottr, 'OptiScaler.log', '[21:37:49.654079] [I] hkD3D11CreateDevice Device captured\n[21:37:52.726083] [I] hkD3D12CreateDevice Adapter Desc: NVIDIA\n');
+  assert.equal((await detect.optiScalerRuntimeApi(sottr)).api, 'dx12', 'a D3D11 device that made no swapchain is not the renderer');
+  const only11 = scratchDir('rt11dev');
+  write(only11, 'OptiScaler.log', '[00:00:01.000000] [I] hkD3D11CreateDevice Device captured\n');
+  assert.equal((await detect.optiScalerRuntimeApi(only11)).api, 'dx11');
   const vk = scratchDir('rtvk');
   write(vk, 'OptiScaler.log', '[00:00:01.000000] [W] Vulkan is creating swapchain!\n');
   assert.equal((await detect.optiScalerRuntimeApi(vk)).api, 'vulkan');
