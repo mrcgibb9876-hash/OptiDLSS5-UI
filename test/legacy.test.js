@@ -540,6 +540,48 @@ test('emulators: a renderer the emulator does not have is not what it ran on (RP
   assert.equal(emulators.canRender({ apis: [] }, 'dx12'), true);
 });
 
+test('emulators: a renderer the emulator does not have cannot be installed either (RPCS3, DX12)', () => {
+  const dir = scratchDir('emu-rpcs3-override');
+  write(dir, 'rpcs3.exe', 'x');
+  const emu = emulators.profileFor('rpcs3.exe');
+  const det = {
+    api: 'vulkan', apis: emu.apis, bitness: 64, recommend: 'optiscaler',
+    emulator: { key: emu.key, name: emu.name, system: emu.system, hint: emu.hint, apis: emu.apis, renderer: emu.renderer, where: emu.where },
+  };
+
+  // Picking DX12 in Edit used to configure the whole DX12 route for an emulator that has had no
+  // Direct3D backend since 2017. Refused now -- and said, not silently dropped back to Auto.
+  const forced = route.withApiOverride(det, 'dx12');
+  assert.equal(forced.api, 'vulkan', 'DX12 never becomes the route API on RPCS3');
+  assert.equal(forced.apiOverride, null);
+  assert.equal(forced.apiOverrideRefused.api, 'dx12');
+  assert.deepEqual(forced.apiOverrideRefused.apis, emu.apis);
+  assert.ok(!route.recommendRoute(dir, path.join(dir, 'rpcs3.exe'), forced, 'nvidia').steps.some((st) => /dx12/i.test(st.label)));
+
+  // The legacy overrides are the same answer: RPCS3 has no Direct3D at all.
+  for (const api of ['dx11', 'dx10', 'dx9', 'dx8']) {
+    const r = route.withApiOverride(det, api);
+    assert.equal(r.api, 'vulkan', `${api} is not a renderer RPCS3 has`);
+    assert.equal(r.apiOverrideRefused.api, api);
+  }
+
+  // A renderer it DOES have is honoured exactly as before.
+  const gl = route.withApiOverride(det, 'opengl');
+  assert.equal(gl.api, 'opengl');
+  assert.equal(gl.apiOverride, 'opengl');
+  assert.equal(gl.apiOverrideRefused, null);
+
+  // Dolphin has Direct3D 12, so choosing it there is still the user's to make.
+  const dol = emulators.profileFor('Dolphin.exe');
+  const dolDet = { api: 'dx11', apis: dol.apis, bitness: 64, recommend: 'optiscaler', emulator: { key: dol.key, name: dol.name, apis: dol.apis } };
+  assert.equal(route.withApiOverride(dolDet, 'dx12').api, 'dx12');
+
+  // And a game that is not an emulator is untouched: nothing here narrows an ordinary override.
+  const plain = route.withApiOverride({ api: 'dx11', apis: ['dx11'], bitness: 64, recommend: 'optiscaler' }, 'dx12');
+  assert.equal(plain.api, 'dx12');
+  assert.equal(plain.apiOverrideRefused, null);
+});
+
 test('emulators: DX11 stays DX11 (no DX12 preference), and the route carries the renderer advice', () => {
   const dir = scratchDir('emu-106');
   write(dir, 'Dolphin.exe', 'x');

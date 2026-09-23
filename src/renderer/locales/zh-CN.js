@@ -1543,4 +1543,6 @@ window.I18N.register("zh-CN", {
   "The shader is compiled for provider {defined}, but this game is set to {expected}. No vectors reach DLSS.": "着色器是按提供者 {defined} 编译的，但本游戏设为 {expected}。没有任何矢量到达 DLSS。",
   "The enabled technique belongs to a different provider than the one the shader is compiled for. No vectors reach DLSS.": "已启用的技术属于另一个提供者，与着色器编译所针对的并不一致。没有任何矢量到达 DLSS。",
   "Use {name}": "使用 {name}",
+  "{api} is ignored: {name} has no such renderer, so nothing is installed for it. Its own are {apis}.": "已忽略 {api}：{name} 没有这个渲染器，因此不会为它安装任何东西。它自己的是 {apis}。",
+  "this emulator": "此模拟器",
 });

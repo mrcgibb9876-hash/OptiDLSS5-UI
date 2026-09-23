@@ -1543,4 +1543,6 @@ window.I18N.register("ko", {
   "The shader is compiled for provider {defined}, but this game is set to {expected}. No vectors reach DLSS.": "셰이더는 제공자 {defined}용으로 컴파일되었지만 이 게임은 {expected}(으)로 설정되어 있습니다. DLSS에 벡터가 전혀 전달되지 않습니다.",
   "The enabled technique belongs to a different provider than the one the shader is compiled for. No vectors reach DLSS.": "활성화된 기법이 셰이더가 컴파일된 제공자와 다른 제공자의 것입니다. DLSS에 벡터가 전혀 전달되지 않습니다.",
   "Use {name}": "{name} 사용",
+  "{api} is ignored: {name} has no such renderer, so nothing is installed for it. Its own are {apis}.": "{api}은(는) 무시됩니다. {name}에는 그런 렌더러가 없으므로 해당 항목으로는 아무것도 설치되지 않습니다. 사용 가능한 것은 {apis}입니다.",
+  "this emulator": "이 에뮬레이터",
 });

@@ -91,8 +91,15 @@ const API_LABEL = { dx12: 'Direct3D 12', dx11: 'Direct3D 11', vulkan: 'Vulkan', 
 // The profile's own API list is the check, and it is a fact about the emulator rather than a
 // guess about the log: a renderer the emulator does not offer is not one it can have used. Where
 // the profile lists no APIs at all, nothing is claimed and the evidence stands.
-function canRender(profile, api) {
-  const apis = (profile && profile.apis) || [];
+// The full profile behind an emulator recorded on a detection. A stored detection carries a copy
+// of the profile, which can be older than the table; the table wins where the key still matches.
+function profileOf(emu) {
+  if (!emu) return null;
+  return PROFILES.find((p) => p.key === emu.key) || emu;
+}
+
+function canRender(emu, api) {
+  const apis = (profileOf(emu) || {}).apis || [];
   return !api || apis.length === 0 || apis.includes(api);
 }
 
@@ -102,9 +109,7 @@ function canRender(profile, api) {
 // rather than reported -- see canRender.
 function seenApi(detected) {
   const d = detected || {};
-  const emu = d.emulator;
-  const profile = emu ? (PROFILES.find((p) => p.key === emu.key) || emu) : null;
-  const real = (api) => (api && canRender(profile, api) ? api : null);
+  const real = (api) => (api && canRender(d.emulator, api) ? api : null);
   const probeApi = real(d.probe && d.probe.api ? d.probe.api : null);
   const runtimeApi = real(d.runtimeApi || null);
   const probeAt = probeApi ? Date.parse(d.probe.capturedAt || '') || 0 : 0;
@@ -118,7 +123,7 @@ function seenApi(detected) {
 function rendererAdvice(detected, api) {
   const emu = detected && detected.emulator;
   if (!emu || !api) return null;
-  const profile = PROFILES.find((p) => p.key === emu.key) || emu;
+  const profile = profileOf(emu);
   const best = api === (profile.apis || [])[0];
   const seen = seenApi(detected);
   return {
@@ -133,4 +138,4 @@ function rendererAdvice(detected, api) {
   };
 }
 
-module.exports = { PROFILES, profileFor, rendererAdvice, seenApi, canRender };
+module.exports = { PROFILES, profileFor, rendererAdvice, seenApi, canRender, profileOf };

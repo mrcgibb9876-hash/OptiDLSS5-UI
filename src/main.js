@@ -21,6 +21,7 @@ const lumaue = require('./lumaue');
 const nativeDlss = require('./native-dlss');
 const { recommendRoute, withApiOverride, API_OVERRIDE_VALUES } = require('./route');
 const gpu = require('./gpu');
+const emulators = require('./emulators');
 const amdnr = require('./amdnr');
 const nrmodelonly = require('./nrmodelonly');
 const helpfix = require('./helpfix');
@@ -2921,6 +2922,13 @@ ipcMain.handle('game:route', async (_evt, { exePath, detected }) => {
   return {
     ...route,
     apiOverride: effective.apiOverride,
+    // A choice Edit cannot honour, and why (route.js withApiOverride): an emulator has no renderer
+    // of that name, so the choice was refused rather than installed.
+    apiOverrideRefused: effective.apiOverrideRefused || null,
+    // The renderers this game can actually be set to. An emulator's are a closed list; every other
+    // game's is empty, meaning "no restriction" -- detection can be wrong about a normal game, which
+    // is what the override is for.
+    apiChoices: effective.emulator ? (emulators.profileOf(effective.emulator) || {}).apis || [] : [],
     effectiveApi: effective.api || null,
     detectedApi: (detected && detected.api) || null,
     detectedApis: (detected && detected.apis) || [],

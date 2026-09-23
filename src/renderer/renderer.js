@@ -3355,7 +3355,14 @@ async function loadApiSection(game) {
   auto.value = '';
   auto.textContent = t('Auto (detected: {api})', { api: detectedLabel });
   select.appendChild(auto);
-  for (const api of ['dx12', 'dx11', 'vulkan', 'opengl', 'dx10', 'dx9', 'dx8']) {
+  // An emulator renders with one of its own backends and there is no other (emulators.js), so only
+  // those are offered: RPCS3 used to list DX12, DX10, DX9 and DX8, none of which it has had since
+  // 2017, and picking one installed that route (2026-09-23). Every other game offers the lot --
+  // detection can be wrong about a single-API game, which is the whole point of the override.
+  const choices = (route.apiChoices || []).length
+    ? route.apiChoices
+    : ['dx12', 'dx11', 'vulkan', 'opengl', 'dx10', 'dx9', 'dx8'];
+  for (const api of choices) {
     const opt = document.createElement('option');
     opt.value = api;
     opt.textContent = API_LABEL[api];
@@ -3364,8 +3371,17 @@ async function loadApiSection(game) {
   select.value = route.apiOverride || '';
 
   const multi = (route.detectedApis || []).length > 1;
-  status.className = `status-line ${route.apiOverride ? 'status-ok' : ''}`.trim();
-  status.textContent = route.apiOverride
+  // A choice stored before the list was narrowed, or set outside the app: say it was refused rather
+  // than let the dropdown quietly read Auto.
+  const refused = route.apiOverrideRefused;
+  status.className = `status-line ${refused ? 'status-warn' : route.apiOverride ? 'status-ok' : ''}`.trim();
+  status.textContent = refused
+    ? t('{api} is ignored: {name} has no such renderer, so nothing is installed for it. Its own are {apis}.', {
+      api: API_LABEL[refused.api] || refused.api,
+      name: refused.name || t('this emulator'),
+      apis: (refused.apis || []).map((a) => API_LABEL[a] || a).join(', '),
+    })
+    : route.apiOverride
     ? t('Set to {api} -- everything API-dependent follows this, not the detected {detected}.', { api: API_LABEL[route.apiOverride], detected: detectedLabel })
     : multi
       ? t('This game ships {detected}: detection picked {picked}; choose the one you run if that is not it.', { detected: detectedLabel, picked: API_LABEL[route.detectedApi] || t('the first') })
