@@ -2791,7 +2791,7 @@ async function routePanelKey() {
     }
     const mode = game ? panelModeForGame(game.exePath) : null;
     if (mode === panelroute.MODES.POPOUT) {
-      const reg = panelwindow.registerHotkey(settings, () => panelwindow.toggle({ ...panelOptions(), overGame: true }));
+      const reg = panelwindow.registerHotkey(settings, () => panelwindow.toggle(panelOptions()));
       panelHotkeyState = { ...reg, smart: true, mode, game: game.name || path.basename(game.exePath) };
     } else {
       panelwindow.unregisterHotkey();

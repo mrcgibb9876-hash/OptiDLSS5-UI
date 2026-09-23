@@ -1,4 +1,6 @@
 'use strict';
+// Never the machine's real registry: legacy.js RENDERER_RENAMES would set a game's own setting.
+process.env.OPTIDLSS5_NO_REGISTRY = '1';
 // Experimental routes: emulators (emulators.js), 32-bit games through the Feeder's 64-bit helper and
 // DirectX 8/9 through dgVoodoo2 (legacy.js). Detection on real 32/64-bit Windows executables carrying
 // the API entry-point names; deploys against zips shaped like the real Feeder release (backslash entry
@@ -136,8 +138,11 @@ test('Max Payne 2: the renderer is pointed at dgd8.dll, and Remove puts the orig
 
   const patched = fs.readFileSync(path.join(game, 'e2driver', 'e2_d3d8_driver_mfc.dll'));
   assert.equal(patched.length, original.length, 'same length -- nothing in the file moves');
-  assert.ok(patched.includes(Buffer.from('dgd8.dll')) && patched.includes(Buffer.from('DGD8.DLL')));
-  assert.ok(!patched.includes(Buffer.from('d3d8.dll')) && !patched.includes(Buffer.from('D3D8.DLL')));
+  // Only the name it loads. D3D8.DLL in upper case is its DirectX version check, which has to keep
+  // reading Windows' own file -- renamed too, the game refused to start ("requires a DirectX 9.0
+  // compatible display adapter", 2026-09-23).
+  assert.ok(patched.includes(Buffer.from('dgd8.dll')) && !patched.includes(Buffer.from('d3d8.dll')));
+  assert.ok(patched.includes(Buffer.from('D3D8.DLL')) && !patched.includes(Buffer.from('DGD8.DLL')));
   assert.deepEqual(fs.readFileSync(path.join(game, 'dgd8.dll')), fs.readFileSync(path.join(game, 'D3D8.dll')),
     'dgVoodoo under the new name');
 
