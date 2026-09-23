@@ -1536,4 +1536,11 @@ window.I18N.register("ru", {
   "Install DLSS 5 on this game first -- then you can switch between these in one press.": "Сначала установите DLSS 5 для этой игры -- после этого переключаться между ними можно одним нажатием.",
   "Switching to {name}…": "Переключение на {name}…",
   "Motion vectors now come from {name}. Launch the game and see how it looks.": "Теперь векторы движения берутся из {name}. Запустите игру и посмотрите, как выглядит.",
+  "Motion": "Движение",
+  "This provider cannot compile on the ReShade this app installs, so it feeds nothing.": "Этот источник не компилируется на той версии ReShade, которую ставит приложение, поэтому он ничего не даёт.",
+  "Its shader is not in reshade-shaders\\Shaders, so nothing writes motion vectors.": "Его шейдера нет в reshade-shaders\\Shaders, поэтому векторы движения никто не пишет.",
+  "This one is your own copy and it is not in the shader folder yet, so nothing writes motion vectors.": "Это ваша собственная копия, и её пока нет в папке шейдеров, поэтому векторы движения никто не пишет.",
+  "The shader is compiled for provider {defined}, but this game is set to {expected}. No vectors reach DLSS.": "Шейдер собран под источник {defined}, а игра настроена на {expected}. До DLSS не доходит ни одного вектора.",
+  "The enabled technique belongs to a different provider than the one the shader is compiled for. No vectors reach DLSS.": "Включённая техника принадлежит не тому источнику, под который собран шейдер. До DLSS не доходит ни одного вектора.",
+  "Use {name}": "Взять {name}",
 });

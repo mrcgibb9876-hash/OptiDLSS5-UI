@@ -2747,6 +2747,50 @@ ipcMain.handle('panel:targets', async () => {
 // routes where the in-game one cannot draw at all (OpenGL, and the 32-bit helper) left no way to
 // see it. Read from OptiScaler.log rather than asked of the engine: it is already written there
 // every 600 frames, and this needs no engine release to reach installs that already exist.
+// What is feeding motion to the model, for the pop-out panel's Guide section -- the same row the
+// in-game panel shows, from the other side of the glass.
+//
+// The two sides know different things and neither is complete. The engine knows the truth --
+// whether vectors actually reached the model this frame -- and shows it in-game. Out here the
+// manager cannot see into the process, but it CAN see what the in-game panel cannot: which
+// provider is configured, whether its shader is even in the folder, and whether the preset and the
+// compiled-for value agree. Those three are exactly the faults that produce "no vectors", and they
+// are checkable without the game running at all.
+//
+// So this row does not guess at live state. It reports the configuration and names the fault when
+// the configuration is broken, which is a claim it can actually support.
+ipcMain.handle('panel:motion', async (_evt, exePath) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) return { ok: false };
+    const dir = gameDir(exePath);
+    const status = feeder.feederProviderStatus(dir);
+    const route = feeder.readFeederDeployMarker(dir) ? 'feeder' : null;
+
+    // Why it cannot work, in the order someone would check. Each is provable from the files.
+    let fault = null;
+    if (status.id && status.broken) fault = 'broken';
+    else if (status.id && !status.bringYourOwn && !status.shaderPresent) fault = 'shader-missing';
+    else if (status.id && status.bringYourOwn && !status.shaderPresent) fault = 'byo-missing';
+    else if (status.valueMismatch) fault = 'value-mismatch';
+    else if (status.techniqueMismatch) fault = 'technique-mismatch';
+
+    return {
+      ok: true, route, fault,
+      id: status.id,
+      displayName: status.displayName,
+      unsupportedReason: status.unsupportedReason,
+      enabledTechnique: status.enabledTechnique,
+      definedValue: status.definedValue,
+      expectedValue: status.expectedValue,
+      // So the panel can offer the swap rather than only naming the problem.
+      providers: feeder.mvProviderList().filter((p) => p.selectable !== false)
+        .map((p) => ({ id: p.id, displayName: p.displayName, license: p.license, recommended: !!p.recommended })),
+    };
+  } catch {
+    return { ok: false };
+  }
+});
+
 ipcMain.handle('panel:timing', async (_evt, exePath) => {
   if (!exePath || !fs.existsSync(exePath)) return { ok: false, reason: 'no-log' };
   try {

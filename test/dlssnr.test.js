@@ -486,3 +486,24 @@ test('every setting sits on exactly one page of the panel', () => {
   assert.equal(rows.find((f) => f.key === 'Preset').page, 'Model');
   assert.equal(rows.find((f) => f.key === 'PanelKey').page, 'Setup');
 });
+
+// The Motion row is the one thing on Guide that can be WRONG rather than merely set badly, and it
+// is read-only on both panels by design: naming the fault is the manager's job, feeding the model
+// is the provider's, and neither panel guesses at the other's half.
+test('the Guide section carries the read-only Motion row, and it is not an ini setting', () => {
+  const guide = dlssnr.PAGES.flatMap((p) => p.sections).find((s) => s.caption === 'Guide');
+  assert.ok(guide, 'Guide is still a section');
+  assert.equal(guide.motion, true, 'and it draws the Motion row');
+  // Not a key. If it were, "every setting is on exactly one page" would have to know about a
+  // setting that does not exist in the ini -- the same reason Frame Generation is a flag.
+  assert.ok(!guide.keys.includes('Motion'));
+  assert.ok(!dlssnr.FIELDS.find((f) => f.key === 'Motion'), 'nothing writes a Motion key to the ini');
+
+  // Drawn by the renderer, from panel:motion, with the swap offered when the setup cannot work.
+  const fs = require('node:fs');
+  const panel = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'panel.js'), 'utf8')
+    .split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
+  assert.match(panel, /if \(section\.motion\) renderMotion\(host\)/);
+  assert.match(panel, /window\.api\.panelMotion/);
+  assert.match(panel, /window\.api\.addonsSetMvProvider/, 'the fault comes with the fix, not just the name');
+});
