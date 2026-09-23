@@ -1565,4 +1565,5 @@ window.I18N.register("ko", {
   "Takes effect at once. To change the generator, use Edit -- that applies on the next launch.": "바로 적용됩니다. 생성기를 바꾸려면 편집을 쓰세요 -- 그건 다음 실행부터 적용됩니다.",
   "HUD fix": "HUD 수정",
   "Keeps the HUD and subtitles from warping in generated frames. OptiScaler warns it can crash some games -- if this game crashes with it on, leave it off.": "생성된 프레임에서 HUD와 자막이 일그러지지 않게 합니다. OptiScaler는 일부 게임에서 충돌이 날 수 있다고 경고합니다 -- 이 게임이 켜둔 상태에서 종료되면 꺼 두세요.",
+  "Auto": "자동",
 });

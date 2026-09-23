@@ -237,9 +237,18 @@ function fieldRow(field) {
       slider.max = '1000';
       slider.step = '1';
       slider.disabled = !met;
-      slider.value = String(Math.round(toSlider(field, Number(shown)) * 1000));
+      // Auto in charge (dlssnr.js autoKey): the slider shows what Auto is applying, from the live
+      // readings, the way the in-game panel does -- and updates with them (renderAutoTone).
+      const autoOn = !!(field.autoKey && valueOf(field.autoKey));
+      const autoNow = autoOn ? autoToneValue(field) : null;
+      const drawn = autoNow !== null ? autoNow : Number(shown);
+      slider.value = String(Math.round(toSlider(field, drawn) * 1000));
       slider.style.setProperty('--fill', `${(Number(slider.value) / 10).toFixed(1)}%`);
-      value.textContent = held ? t('held off') : formatNumber(field, shown);
+      value.textContent = held ? t('held off') : formatNumber(field, drawn);
+      if (field.autoKey) {
+        slider.dataset.autoFor = field.key;
+        value.dataset.autoFor = field.key;
+      }
 
       const live = () => {
         const v = fromSlider(field, Number(slider.value) / 1000);
@@ -281,9 +290,26 @@ function fieldRow(field) {
       reset.addEventListener('click', () => apply(field.key, null));
 
       el.append(label, ctl, value, reset);
+
+      // Auto, right beside Reset, as in the in-game panel. Never greyed by the slider's own condition --
+      // it is the thing that turns that condition off again.
+      if (field.autoKey) {
+        const auto = document.createElement('button');
+        auto.className = `p-check${autoOn ? ' on' : ''}`;
+        auto.disabled = !!held;
+        auto.addEventListener('click', () => apply(field.autoKey, !autoOn));
+        const autoLabel = document.createElement('span');
+        autoLabel.className = 'p-auto-label';
+        autoLabel.textContent = t('Auto');
+        el.append(auto, autoLabel);
+      }
     }
 
-    el.classList.toggle('is-off', !met);
+    // An Auto row greyed because Auto is on dims only the slider side: the Auto box in the same row is
+    // live, and opacity on the whole row would make it look switched off too.
+    const autoInCharge = !!(field.autoKey && valueOf(field.autoKey)) && !held;
+    el.classList.toggle('is-off', !met && !autoInCharge);
+    el.classList.toggle('is-auto', autoInCharge);
     el.appendChild(helpMarker(held ? t(held) : t(field.help)));
   return el;
 }
@@ -594,6 +620,31 @@ let liveTimer = null;
 let lastLive = null;
 let liveFor = null;
 
+// What Auto brightness / Auto contrast are applying now (OptiScaler.live.json tone), or null before the
+// first reading -- the slider then shows its own value.
+function autoToneValue(field) {
+  const tone = lastLive && lastLive.tone;
+  const v = tone && field.autoLive ? tone[field.autoLive] : null;
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+// Moves the greyed sliders with the live readings, without redrawing the page under the cursor.
+function renderAutoTone() {
+  for (const field of fields) {
+    if (!field.autoKey || !valueOf(field.autoKey)) continue;
+    const v = autoToneValue(field);
+    if (v === null) continue;
+    for (const el of document.querySelectorAll(`[data-auto-for="${field.key}"]`)) {
+      if (el.tagName === 'INPUT') {
+        el.value = String(Math.round(toSlider(field, v) * 1000));
+        el.style.setProperty('--fill', `${(Number(el.value) / 10).toFixed(1)}%`);
+      } else {
+        el.textContent = formatNumber(field, v);
+      }
+    }
+  }
+}
+
 function stopLive() {
   if (liveFor) window.api.panelLiveStop(liveFor).catch(() => {});
   liveFor = null;
@@ -613,6 +664,7 @@ async function refreshLive() {
   else if (had) refreshTiming();
   renderBadge();
   renderFrameGenStatus();
+  renderAutoTone();
 }
 
 // The status line Adaptive resolution shows under its rows in the in-game panel, in the same words.
