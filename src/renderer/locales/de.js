@@ -1545,4 +1545,6 @@ window.I18N.register("de", {
   "Use {name}": "{name} nehmen",
   "{api} is ignored: {name} has no such renderer, so nothing is installed for it. Its own are {apis}.": "{api} wird ignoriert: {name} hat keinen solchen Renderer, also wird dafür nichts installiert. Die eigenen sind {apis}.",
   "this emulator": "dieser Emulator",
+  "Insert": "Einfg",
+  "Insert opens this window while a 32-bit game, or one with no in-game panel, is running. On every other game Insert opens the DLSS 5 panel inside the game -- bind a different key here to have this window on every game.": "Einfg öffnet dieses Fenster, während ein 32-Bit-Spiel oder eines ohne Panel im Spiel läuft. In jedem anderen Spiel öffnet Einfg das DLSS-5-Panel im Spiel -- leg hier eine andere Taste fest, um dieses Fenster in jedem Spiel zu haben.",
 });

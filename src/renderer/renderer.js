@@ -1059,7 +1059,7 @@ async function applyRecommendation(game, card, backends, generation = renderGene
         }
     : route.optiInstalled
       ? {
-          text: t('{hotkey} opens the DLSS 5 panel', { hotkey: settings.panelHotkey || DEFAULT_PANEL_HOTKEY }),
+          text: t('{hotkey} opens the DLSS 5 panel', { hotkey: panelHotkey() }),
           title: t('The pop-out panel, over the game, with every DLSS 5 control live on the frame you are looking at -- which is why they are no longer copied into Settings. The DLSS 5 panel is on Insert inside the game, and OptiScaler\'s own menu on Alt+O. Both need the game windowed or borderless; Windows will not draw over exclusive fullscreen.'),
         }
       : null;
@@ -1420,8 +1420,13 @@ function helpSteps(diag) {
       : [t('Play a minute of actual gameplay, then quit'), t("In the game: Home > Luma > select DLSS"), launch];
     case 'needs-run': case 'needs-run-after-fix': return [t('Launch the game'), t('Play a minute of actual gameplay, then quit'), t('Come back here')];
     // The pop-out line only when that panel can actually answer its hotkey (see popoutHotkeyUsable).
-    case 'ok-panel-in-helper': return [t('Press Insert in the game for the DLSS 5 panel'), t('Its controls take clicks there, as in any other game'),
-      ...(popoutHotkeyUsable() ? [t('Or press {hotkey} for the pop-out panel', { hotkey: settings.panelHotkey || DEFAULT_PANEL_HOTKEY })] : []),
+    // On the shared Insert the pop-out IS what Insert opens on this route (panelroute.js), so it is one
+    // step, not "Insert for one panel, or Insert for the other".
+    case 'ok-panel-in-helper': return [
+      ...(popoutHotkeyUsable() && panelKeyIsShared()
+        ? [t('{hotkey} opens the DLSS 5 panel', { hotkey: panelHotkey() })]
+        : [t('Press Insert in the game for the DLSS 5 panel'), t('Its controls take clicks there, as in any other game'),
+          ...(popoutHotkeyUsable() ? [t('Or press {hotkey} for the pop-out panel', { hotkey: panelHotkey() })] : [])]),
       ...(v.otherMv ? [t('Picture jumps or smears in motion? Card menu > Motion vectors > change: pick LumeniteFX')] : [])];
     case 'vulkan-layer-missing': return [t('Install ReShade with add-on support for this exe, choosing Vulkan'), t('Or switch the emulator to Direct3D 11, if it has it, and pick DX11 in Edit'), t('Press Install here again')];
     case 'vulkan-layer-no-addon': return [t('Reinstall ReShade with "Enable loading of add-ons"'), t('Press Install here again')];
@@ -3421,10 +3426,11 @@ $('#game-api-select').addEventListener('change', async (e) => {
 function popoutPanelSentence(popout) {
   if (!popout) return '';
   if (popoutHotkeyUsable()) {
-    const vars = { hotkey: settings.panelHotkey || DEFAULT_PANEL_HOTKEY };
-    return popout === 'only'
-      ? t('Nothing is drawn inside the game here: press {hotkey} for this app\'s own panel window, which changes the same settings while the game runs.', vars)
-      : t('If the game will not show it, press {hotkey} for this app\'s own panel window, which needs nothing from the game.', vars);
+    const vars = { hotkey: panelHotkey() };
+    if (popout === 'only') return t('Nothing is drawn inside the game here: press {hotkey} for this app\'s own panel window, which changes the same settings while the game runs.', vars);
+    // On the shared Insert, a game with its own panel keeps Insert for that panel, so pointing at
+    // Insert as the fallback would be wrong; Settings' "Open it now" still is one.
+    return panelKeyIsShared() ? '' : t('If the game will not show it, press {hotkey} for this app\'s own panel window, which needs nothing from the game.', vars);
   }
   // Off or refused. On 'fallback' the in-game panel is still the answer, so there is nothing to add;
   // on 'only' there is no other way in, and saying so beats silence.
@@ -4968,7 +4974,7 @@ function openSettingsModal() {
   $('#settings-engine').value = engineIdOrDefault(settings.engine);
   showEngineChoiceState();
   $('#settings-panel-enabled').checked = panelEnabled();
-  $('#settings-panel-hotkey').value = settings.panelHotkey || DEFAULT_PANEL_HOTKEY;
+  $('#settings-panel-hotkey').value = panelHotkey();
   showPanelHotkeyState();
   $('#settings-ai-key').value = settings.anthropicApiKey || '';
   $('#settings-steamgrid-key').value = settings.steamGridDbKey || '';
@@ -5083,7 +5089,7 @@ function showEngineChoiceState() {
   // nothing -- the 2026-09-18 bug renderer-dom.test.js guards against. Off, the honest answer is to
   // say so, because on this build there is no other panel to fall back to.
   el.textContent = `${ready} ${popoutHotkeyUsable()
-    ? t('No in-game panel on this build: press {hotkey} for the pop-out panel instead.', { hotkey: settings.panelHotkey || DEFAULT_PANEL_HOTKEY })
+    ? t('No in-game panel on this build: press {hotkey} for the pop-out panel instead.', { hotkey: panelHotkey() })
     : t('No in-game panel on this build, and the pop-out panel is switched off -- turn it on above, or this build has no panel at all.')}`;
 }
 
@@ -5105,7 +5111,21 @@ $('#settings-engine').addEventListener('change', async (e) => {
 
 // The pop-out DLSS 5 panel (src/panelwindow.js). Its hotkey belongs to the OS rather than to this
 // window, so saving the setting is what re-registers it; main.js does that on every settings save.
-const DEFAULT_PANEL_HOTKEY = 'Alt+Shift+Home';
+const DEFAULT_PANEL_HOTKEY = 'Insert';
+
+// The pop-out's key as main.js reads it (panelwindow.accelerator): the player's own, else Insert. A
+// saved Alt+Shift+Home is the old default an older build wrote, not a choice, so it reads as Insert.
+function panelHotkey() {
+  const value = typeof settings.panelHotkey === 'string' ? settings.panelHotkey.trim() : '';
+  return !value || value.toLowerCase() === 'alt+shift+home' ? DEFAULT_PANEL_HOTKEY : value;
+}
+
+// On Insert the pop-out shares the in-game panel's key, and main.js hands it the key only while a game
+// that needs it runs (32-bit, OpenGL, overlay off). Everywhere else Insert is the in-game panel, so
+// "press {hotkey} for the pop-out" would be false there.
+function panelKeyIsShared() {
+  return panelHotkey().toLowerCase() === DEFAULT_PANEL_HOTKEY.toLowerCase();
+}
 
 function panelEnabled() {
   return settings.panelEnabled === undefined || !!settings.panelEnabled;
@@ -5132,7 +5152,9 @@ async function showPanelHotkeyState() {
     return;
   }
   el.textContent = state.ok
-    ? t('{key} opens and closes it, even while a game has focus.', { key: state.accelerator })
+    ? (state.smart
+      ? t('Insert opens this window while a 32-bit game, or one with no in-game panel, is running. On every other game Insert opens the DLSS 5 panel inside the game -- bind a different key here to have this window on every game.')
+      : t('{key} opens and closes it, even while a game has focus.', { key: state.accelerator }))
     : t('Windows would not give this app {key} — another program already has it. Pick a different combination.', { key: state.accelerator });
   el.className = `status-line ${state.ok ? 'status-ok' : 'status-bad'}`;
 }
@@ -5158,9 +5180,11 @@ $('#settings-panel-hotkey').addEventListener('keydown', async (e) => {
   if (e.altKey) parts.push('Alt');
   if (e.shiftKey) parts.push('Shift');
   if (e.metaKey) parts.push('Super');
-  // Windows hands a plain letter or F-key to whatever has focus, so one on its own would be taken
-  // from every other program in the system. A modifier is required.
-  if (parts.length === 0) {
+  // A plain letter, digit or space on its own would be taken from every other program in the system,
+  // so those need a modifier. A key nobody types text with -- Insert, the default, or Home, End, the
+  // F-keys -- is fine bare.
+  const bareOk = /^(Insert|Home|End|PageUp|PageDown|F([1-9]|1[0-9]|2[0-4]))$/.test(key);
+  if (parts.length === 0 && !bareOk) {
     const el = $('#panel-hotkey-status');
     el.textContent = t('Hold Ctrl, Alt or Shift as well — a key on its own would be taken from every other program.');
     el.className = 'status-line status-bad';

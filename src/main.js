@@ -59,6 +59,7 @@ const saferemove = require('./saferemove');
 const dfc = require('./dfc');
 const dfccfg = require('./dfccfg');
 const panelwindow = require('./panelwindow');
+const panelroute = require('./panelroute');
 const { netFetch } = require('./net');
 let electronAutoUpdater = null;
 try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
@@ -2677,14 +2678,90 @@ function panelOptions() {
   };
 }
 
+// The pop-out's key: Insert unless the player bound another in Settings.
+//
+// On Insert -- the in-game panel's key too -- which panel it opens follows the running game
+// (panelroute.js), and the pop-out only takes the key while a game that needs it runs: a hotkey Windows
+// has registered never reaches the game, so holding Insert all the time would break the in-game panel
+// everywhere else, and Insert in every other program besides. On any other key there is nothing to
+// share, so it is held the whole time the app runs, as the pop-out's hotkey always was.
+//
+// Its own poll rather than the renderer's games:running: that one stops when this window loses focus,
+// which is exactly when a game is in front. One tasklist every few seconds, shared by all games.
+const PANEL_ROUTE_POLL_MS = 3000;
+let panelRouteTimer = null;
+let panelRouteBusy = false;
+
+function panelModeForGame(exePath) {
+  const dir = gameDir(exePath);
+  if (dfc.dfcPresent(dir)) return panelroute.panelModeFor({ chicken: true });
+  const host32 = optiScalerDirFor(dir) !== dir;
+  let overlayOff = false;
+  try { overlayOff = panelroute.overlayMenuOff(fs.readFileSync(path.join(optiScalerDirFor(dir), 'OptiScaler.ini'), 'utf8')); } catch {}
+  const detected = detectGameCached(exePath) || {};
+  return panelroute.panelModeFor({
+    host32,
+    api: effectiveDetection(dir, exePath, detected).api,
+    overlayMenuOff: overlayOff,
+    fullscreenOnly: host32 && feeder.needsFullscreenHost(dir),
+    engineHasPanel: engines.engine((engines.readEngineMarker(dir) || {}).engine).panel !== false,
+  });
+}
+
+// Whether the pop-out's key is the one the in-game panel uses, so the two have to take turns.
+function sharesInGameKey(settings) {
+  return panelwindow.accelerator(settings).toLowerCase() === panelwindow.DEFAULT_ACCELERATOR.toLowerCase();
+}
+
+async function routePanelKey() {
+  if (panelRouteBusy) return;
+  panelRouteBusy = true;
+  try {
+    const settings = readJson(settingsFile(), {});
+    if (!panelEnabled(settings) || !sharesInGameKey(settings)) return;
+    const running = await runningImageSet();
+    let game = null;
+    for (const g of readJson(gamesFile(), [])) {
+      try {
+        if (g && g.exePath && running.has(path.basename(launchTarget(g.exePath)).toLowerCase())) { game = g; break; }
+      } catch {}
+    }
+    const mode = game ? panelModeForGame(game.exePath) : null;
+    if (mode === panelroute.MODES.POPOUT) {
+      const reg = panelwindow.registerHotkey(settings, () => panelwindow.toggle(panelOptions()));
+      panelHotkeyState = { ...reg, smart: true, mode, game: game.name || path.basename(game.exePath) };
+    } else {
+      panelwindow.unregisterHotkey();
+      panelHotkeyState = { ok: true, smart: true, accelerator: panelwindow.accelerator(settings), mode, game: game ? (game.name || path.basename(game.exePath)) : null };
+    }
+  } catch {
+    // A failed process listing leaves the key as it was; the next poll tries again.
+  } finally {
+    panelRouteBusy = false;
+  }
+}
+
 function applyPanelHotkey(settings = readJson(settingsFile(), {})) {
   if (!panelEnabled(settings)) {
+    if (panelRouteTimer) clearInterval(panelRouteTimer);
+    panelRouteTimer = null;
     panelwindow.unregisterHotkey();
     panelwindow.hide();
     panelHotkeyState = { ok: false, accelerator: panelwindow.accelerator(settings), disabled: true };
     return panelHotkeyState;
   }
-  panelHotkeyState = panelwindow.registerHotkey(settings, () => panelwindow.toggle(panelOptions()));
+  if (!sharesInGameKey(settings)) {
+    // A key of the player's own: held all the time, and the router has nothing to do.
+    if (panelRouteTimer) clearInterval(panelRouteTimer);
+    panelRouteTimer = null;
+    panelHotkeyState = panelwindow.registerHotkey(settings, () => panelwindow.toggle(panelOptions()));
+    return panelHotkeyState;
+  }
+  // Insert: let go of whatever key was held before, then the router takes and releases Insert by game.
+  panelwindow.unregisterHotkey();
+  panelHotkeyState = { ok: true, smart: true, accelerator: panelwindow.accelerator(settings), mode: null, game: null };
+  if (!panelRouteTimer) panelRouteTimer = setInterval(() => { routePanelKey(); }, PANEL_ROUTE_POLL_MS);
+  routePanelKey();
   return panelHotkeyState;
 }
 

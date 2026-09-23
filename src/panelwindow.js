@@ -22,9 +22,11 @@
 const electron = () => require('electron');
 const editmenu = require('./editmenu');
 
-// Not Alt+Home: that is OptiScaler's own panel key, and a hotkey that fights the thing it stands in
-// for would be a poor default. Shift makes it distinct while staying in the same finger position.
-const DEFAULT_ACCELERATOR = 'Alt+Shift+Home';
+// Insert by default, the same key as the in-game panel (2026-09-23): one key opens this project's
+// panel whatever the game; Settings can bind another. It is only registered while a game that needs the pop-out is running --
+// main.js routePanelKey and panelroute.js decide that -- because a registered hotkey never reaches the
+// game, and the in-game panel lives on Insert everywhere else.
+const DEFAULT_ACCELERATOR = 'Insert';
 
 // Wide enough that a slider row still fits its label, the slider, the readout and its Default
 // button side by side; below that the row wraps and the window stops being readable at a glance.
@@ -36,9 +38,13 @@ const DEFAULT_HEIGHT = 640;
 let panel = null;
 let registered = null;
 
+// The player's own key if they bound one in Settings, else Insert. The one value this app itself
+// ever wrote as the default, Alt+Shift+Home, is read as "never chosen": it is the old default saved
+// by an older build, not a choice, and it moves to Insert with everyone else.
 function accelerator(settings) {
   const value = settings && typeof settings.panelHotkey === 'string' ? settings.panelHotkey.trim() : '';
-  return value || DEFAULT_ACCELERATOR;
+  if (!value || value.toLowerCase() === 'alt+shift+home') return DEFAULT_ACCELERATOR;
+  return value;
 }
 
 // Bounds are remembered so the panel comes back where it was left, but only after being checked

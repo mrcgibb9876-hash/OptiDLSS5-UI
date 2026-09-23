@@ -1545,4 +1545,6 @@ window.I18N.register("zh-CN", {
   "Use {name}": "使用 {name}",
   "{api} is ignored: {name} has no such renderer, so nothing is installed for it. Its own are {apis}.": "已忽略 {api}：{name} 没有这个渲染器，因此不会为它安装任何东西。它自己的是 {apis}。",
   "this emulator": "此模拟器",
+  "Insert": "Insert",
+  "Insert opens this window while a 32-bit game, or one with no in-game panel, is running. On every other game Insert opens the DLSS 5 panel inside the game -- bind a different key here to have this window on every game.": "运行 32 位游戏或没有游戏内面板的游戏时，Insert 会打开此窗口。在其他所有游戏中，Insert 会打开游戏内的 DLSS 5 面板 -- 在这里绑定其他按键，即可在所有游戏中使用此窗口。",
 });

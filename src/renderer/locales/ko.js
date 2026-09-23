@@ -1545,4 +1545,6 @@ window.I18N.register("ko", {
   "Use {name}": "{name} 사용",
   "{api} is ignored: {name} has no such renderer, so nothing is installed for it. Its own are {apis}.": "{api}은(는) 무시됩니다. {name}에는 그런 렌더러가 없으므로 해당 항목으로는 아무것도 설치되지 않습니다. 사용 가능한 것은 {apis}입니다.",
   "this emulator": "이 에뮬레이터",
+  "Insert": "Insert",
+  "Insert opens this window while a 32-bit game, or one with no in-game panel, is running. On every other game Insert opens the DLSS 5 panel inside the game -- bind a different key here to have this window on every game.": "32비트 게임이나 게임 내 패널이 없는 게임이 실행 중일 때 Insert 키로 이 창이 열립니다. 그 밖의 게임에서는 Insert 키가 게임 안의 DLSS 5 패널을 엽니다 -- 모든 게임에서 이 창을 쓰려면 여기서 다른 키를 지정하세요.",
 });
