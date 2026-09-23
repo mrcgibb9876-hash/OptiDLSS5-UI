@@ -250,6 +250,14 @@ const FIELDS = [
   { key: 'ColourStrength', type: 'float', default: 0.5, min: 0, max: 4, step: 0.01, group: 'Picture',
     label: 'Colour strength',
     help: "Washed out, grey, colour sucked out of the game? This is the control, and the answer is to turn it DOWN.\n\nIt decides whose colour you see. 0 is the game's own, exactly: every pixel its original colour, with only the brightness carrying the model's verdict. 1 is the model's colour INSTEAD of the game's -- and the model's is usually the less saturated of the two, which is exactly what that washed-out look is. 0.5, the default, lets it contribute without overruling the game's art direction.\n\nAbove 1 goes the other way and makes the picture MORE colourful than the game ever was -- the same job a colourfulness shader does, done here instead. Hue is kept and only saturation grows, and it rolls off at the edge of what the display can show rather than clipping into a flat blown patch. Try 1.5 to 2 for punch." },
+  // The tone trim, engine v2.2.11 (2026-09-23: "some games come out so dark"). Both on the finished
+  // picture, both exactly nothing at 1.0, and both read every frame -- no rebuild while dragging.
+  { key: 'Brightness', type: 'float', default: 1.0, min: 0.5, max: 2, step: 0.01, group: 'Picture',
+    label: 'Brightness',
+    help: "Game too dark? Turn this UP.\n\nIt lifts the shadows and midtones. Black stays black and white stays white -- only what lies between is raised -- so the highlights do not blow out and the colours keep their hue. Below 1 darkens the same way. 1 changes nothing." },
+  { key: 'Contrast', type: 'float', default: 1.0, min: 0.5, max: 2, step: 0.01, group: 'Picture',
+    label: 'Contrast',
+    help: "How far apart the darks and the lights sit. Above 1 is punchier: darks go deeper and lights brighter around the middle grey. Below 1 is flatter and shows more in the shadows. Black and white themselves never move. 1 changes nothing.\n\nFor a picture that is simply too dark, Brightness is the one to reach for first." },
 
   { key: 'ReversibleMode', type: 'enum', default: 0, options: REVERSIBLE, group: 'Brightness & HDR', label: "Tone-mapping mode",
     help: "What the model is shown, and how its answer comes back. Experimental.\n\nOff (soft knee): the default, and byte-identical to before. It rolls highlights off so hard the model cannot resolve detail in them -- fine in soft-lit scenes, weak in bright ones.\n\nNeutwo composed: an unclipped curve, so the model sees highlight detail, then everything above it (strengths, highlight guard, palette). Wins in bright scenes, but the curve compresses midtones too, so soft-lit content can be worse than Off. It also shifts paper white -- re-check that when you switch.\n\nHybrid composed: the one to use. Identity in the midtones -- as good as Off there -- with the unclipped roll only in the highlights, so it recovers the detail Off crushes without giving up the midtones Neutwo does. Barely shifts paper white.\n\nReplace: the raw model straight back through the exact inverse, none of the composition -- no guard, no palette, no strengths. Gorgeous where there are no bright lights, but they FLASH in motion. A reference, not a daily setting.\n\nHybrid replace: Replace's raw model on the hybrid curve, so the flashing is confined to genuine highlights instead of everywhere. Most of Replace's detail, far more stable." },
@@ -389,7 +397,7 @@ const PAGES = [
     // these are the filters that make it.
     { caption: null, keys: ['Transfer', 'ScalingUpscaler', 'ScalingSharpness', 'ScalingAntiRinging',
                             'ScalingSigmoid', 'ScalingDither'] },
-    { caption: 'How much of it lands', keys: ['TransferStrength', 'ColourStrength', 'HaloGuard', 'DepthEdge'] },
+    { caption: 'How much of it lands', keys: ['TransferStrength', 'ColourStrength', 'Brightness', 'Contrast', 'HaloGuard', 'DepthEdge'] },
     { caption: 'Colour', keys: ['ReversibleMode', 'WhitePointSource', 'WhitePointTrim', 'WhitePointScale', 'MaxRatio'] },
     { caption: 'Exposure scan', keys: ['ScanMeter', 'ScanTrim', 'ScanInverted'] },
   ] },
