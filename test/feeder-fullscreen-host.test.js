@@ -34,6 +34,23 @@ test('a fresh install of a fullscreen-only game gets host_window=3 and cast_mode
   assert.match(cfg, /^cast_mode=1$/m);
 });
 
+test('Max Payne 2 gets the in-game cast too, but not the minimal dgVoodoo.conf', () => {
+  // Any second window minimises it, the pop-out included, so the panel has to be drawn in the game by
+  // ReShade -- and Insert stays with the in-game panel (panelroute.js) instead of opening the pop-out.
+  const game = scratchDir('feeder-incast-mp2');
+  write(game, 'MaxPayne2.exe', 'x');
+  assert.equal(feeder.needsInGameCast(game), true);
+  assert.equal(feeder.needsFullscreenHost(game), false, 'it runs windowed; the minimal dgVoodoo.conf is not for it');
+
+  feeder.configureFeedCfg(game);
+  const cfg = read(game);
+  assert.match(cfg, /^host_window=3$/m);
+  assert.match(cfg, /^cast_mode=1$/m);
+
+  const panelroute = require('../src/panelroute');
+  assert.equal(panelroute.panelModeFor({ host32: true, fullscreenOnly: feeder.needsInGameCast(game) }), panelroute.MODES.ENGINE);
+});
+
 test('an ordinary game gets neither: it is borderless, and the thumbnail cast works there', () => {
   const game = scratchDir('feeder-fullscreen-ordinary');
   write(game, 'SomeOtherGame.exe', 'x');

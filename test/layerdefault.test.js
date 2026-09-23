@@ -143,17 +143,26 @@ test('a 64-bit DirectX 9 game proven on DXVK names DXVK as the step Install owes
 
 // ── the shipped catalog ──────────────────────────────────────────────────────────────────────────
 
-test('the shipped catalog moves no game off its standard layer today; Alien: Isolation is proven on native', () => {
+test('a shipped DXVK default needs a real run behind it; Max Payne 2 is the one, Alien: Isolation is proven on native', () => {
+  // Moving a game off its standard layer by default is a claim about that game, so the entry has to
+  // carry the run that proved it: a success count and a live-run source. Max Payne 2 (2026-09-24) is
+  // the first -- 4,500 DLSS 5 frames on DXVK, where dgVoodoo2 cannot work at all (its dead end).
   const doc = JSON.parse(fs.readFileSync(catalog.SHIPPED_FILE, 'utf8'));
+  const dxvkDefaults = [];
   for (const e of doc.entries) {
     const p = catalog.provenLayer(e, { route: (e.setup || {}).route, dxvkBlocked: !!translation.dxvkBlockedFor(e.exe) });
-    assert.notEqual(p && p.via, 'dxvk', `${e.exe}: a shipped DXVK default needs a real run behind it`);
+    if (!p || p.via !== 'dxvk') continue;
+    dxvkDefaults.push(e.exe);
+    assert.ok(((e.reports || {}).works || 0) > 0, `${e.exe}: a shipped DXVK default needs a successful run counted`);
+    assert.ok((e.sources || []).some((s) => /^live (test|run)/.test(s)), `${e.exe}: a shipped DXVK default needs a real run behind it`);
   }
+  assert.deepEqual(dxvkDefaults, ['maxpayne2.exe']);
   assert.deepEqual(catalog.provenLayer(catalog.lookup('D:\\Games\\Alien Isolation\\AI.exe'), { route: 'feeder32' }).via, 'native');
   const lines = build.provenLayerLines(doc.entries).join('\n');
   assert.match(lines, /proven layer: ai\.exe feeder32:native/);
   assert.match(lines, /dead-end layer: assassinscreediigame\.exe feeder32:dxvk/);
-  assert.doesNotMatch(lines, /defaults to DXVK/);
+  assert.match(lines, /proven layer: maxpayne2\.exe feeder32:dxvk {2}<- Install now defaults to DXVK for this game/);
+  assert.match(lines, /dead-end layer: maxpayne2\.exe feeder32:dgvoodoo/);
 });
 
 // ── learning from this machine's runs ────────────────────────────────────────────────────────────

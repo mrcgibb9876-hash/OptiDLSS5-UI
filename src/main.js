@@ -1511,7 +1511,17 @@ async function deployDxvkFor(dir, plan) {
     const why = (r.refused || []).map((x) => `${x.file} (${x.reason})`).join(', ');
     return { ok: false, text: `DXVK was not deployed: ${why || 'refused'}` };
   }
-  return { ok: true, deployed: r.deployed, backedUp: r.backedUp };
+  // A game whose renderer cannot load DXVK under its own names (Max Payne 2: legacy.js
+  // RENDERER_RENAMES) gets it under the renamed pair too. A no-op for every other game.
+  let rendererRename = null;
+  if (plan.api === 'dx8' && plan.host32) {
+    try {
+      rendererRename = await legacy.applyRendererRenameForDxvk(dir, path.join(sourceDir, 'x32'));
+    } catch (error) {
+      return { ok: false, text: `DXVK is in, but its renamed copy for this game's renderer failed: ${error && error.message ? error.message : error}` };
+    }
+  }
+  return { ok: true, deployed: r.deployed, backedUp: r.backedUp, rendererRename };
 }
 
 // A 32-bit DirectX 10/11 game: DXVK in place of its own Direct3D (legacy.swapNativeToDxvk parks the
@@ -2766,7 +2776,7 @@ function panelModeForGame(exePath) {
     host32,
     api: effectiveDetection(dir, exePath, detected).api,
     overlayMenuOff: overlayOff,
-    fullscreenOnly: host32 && feeder.needsFullscreenHost(dir),
+    fullscreenOnly: host32 && feeder.needsInGameCast(dir),
     engineHasPanel: engines.engine((engines.readEngineMarker(dir) || {}).engine).panel !== false,
   });
 }

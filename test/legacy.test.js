@@ -162,6 +162,38 @@ test('Max Payne 2: the renderer is pointed at dgd8.dll, and Remove puts the orig
   assert.equal(plain.rendererRename, null);
 });
 
+test('Max Payne 2 on DXVK: dgd8.dll is DXVK\'s d3d8 pointed at dgd9.dll, and Remove undoes all of it', { skip: !onWindows }, async () => {
+  // DXVK's d3d8.dll imports d3d9.dll, and Windows' own D3D9.DLL is already loaded by the DxDiag probe,
+  // so the chain is renamed one level further down. The layer that actually runs DLSS 5 on this game.
+  const base = scratchDir('mp2-dxvk');
+  const dxvk = path.join(base, 'dxvk', 'x32');
+  write(dxvk, 'd3d8.dll', Buffer.from('DXVK d3d8\0imports d3d9.dll\0LoadLibraryA d3d9.dll\0', 'latin1'));
+  write(dxvk, 'd3d9.dll', 'DXVK d3d9');
+  const game = path.join(base, 'game');
+  exeWith(game, 'MaxPayne2.exe', { bits: 32 });
+  const original = Buffer.from('MZ renderer\0LoadLibraryA\0d3d8.dll\0D3D8.DLL\0', 'latin1');
+  write(game, 'e2driver/e2_d3d8_driver_mfc.dll', original);
+
+  const res = await legacy.applyRendererRenameForDxvk(game, dxvk);
+  assert.equal(res.renamed, true);
+  const dgd8 = fs.readFileSync(path.join(game, 'dgd8.dll'));
+  assert.ok(dgd8.includes(Buffer.from('dgd9.dll')) && !dgd8.includes(Buffer.from('d3d9.dll')), 'DXVK d3d8 now asks for dgd9.dll');
+  assert.equal(fs.readFileSync(path.join(game, 'dgd9.dll'), 'utf8'), 'DXVK d3d9');
+  const renderer = fs.readFileSync(path.join(game, 'e2driver', 'e2_d3d8_driver_mfc.dll'));
+  assert.ok(renderer.includes(Buffer.from('dgd8.dll')) && renderer.includes(Buffer.from('D3D8.DLL')));
+
+  // Remove: both renamed copies out, the renderer back as it shipped.
+  await legacy.removeLegacy(game);
+  assert.equal(fs.existsSync(path.join(game, 'dgd8.dll')), false);
+  assert.equal(fs.existsSync(path.join(game, 'dgd9.dll')), false);
+  assert.deepEqual(fs.readFileSync(path.join(game, 'e2driver', 'e2_d3d8_driver_mfc.dll')), original);
+
+  // Any other game: nothing.
+  const other = path.join(base, 'other');
+  exeWith(other, 'Other.exe', { bits: 32 });
+  assert.equal(await legacy.applyRendererRenameForDxvk(other, dxvk), null);
+});
+
 test('detection: emulators, 32-bit and DirectX 8/9 games are offered experimental routes', { skip: !onWindows }, async () => {
   const base = scratchDir('legacy-detect');
   const pcsx2 = await detect.detectGame(path.join(base, 'pcsx2'), exeWith(path.join(base, 'pcsx2'), 'pcsx2-qt.exe'));

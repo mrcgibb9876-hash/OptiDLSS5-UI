@@ -690,6 +690,41 @@ async function applyRendererRename(dir, rule, dllBytes, rec) {
   return { renamed: true, file: rule.file, as: rule.as, occurrences: count, registry };
 }
 
+// The same rename for DXVK in dgVoodoo2's place -- the layer that actually works on Max Payne 2
+// (2026-09-23: DLSS 5 over 4,500 frames, ReShade as its Vulkan layer). dgVoodoo2 cannot: it creates its
+// D3D11 device past ReShade's hooks, so nothing is ever drawn and the Feeder has no frames.
+//
+// DXVK's d3d8.dll imports d3d9.dll, and by then Windows' own D3D9.DLL is loaded too (the same DxDiag
+// probe), so a d3d9.dll beside the exe would lose exactly as d3d8.dll did. One level further down, then:
+// dgd8.dll is DXVK's d3d8 with that import renamed to dgd9.dll, and dgd9.dll is DXVK's d3d9. The
+// renderer is patched as on the dgVoodoo2 route, so switching layers swaps only what dgd8 is.
+// dxvkArchDir: the DXVK release's x32 folder.
+async function applyRendererRenameForDxvk(dir, dxvkArchDir) {
+  const rule = rendererRenameFor(dir, 'D3D8.dll');
+  if (!rule) return null;
+  let d3d8;
+  let d3d9;
+  try {
+    d3d8 = fs.readFileSync(path.join(dxvkArchDir, 'd3d8.dll'));
+    d3d9 = fs.readFileSync(path.join(dxvkArchDir, 'd3d9.dll'));
+  } catch {
+    return { renamed: false, reason: 'this DXVK release has no x32 d3d8.dll/d3d9.dll' };
+  }
+  const { buf: d8, count } = swapAscii(d3d8, [['d3d9.dll', 'dgd9.dll']]);
+  if (count === 0) return { renamed: false, reason: 'DXVK\'s d3d8.dll names no d3d9.dll' };
+
+  const prior = readMarker(dir) || {};
+  const priorRegistry = prior.rendererRegistry || ((prior.dgVoodoo || {}).rendererRename || {}).registry || null;
+  const marker = emptyMarker(prior);
+  const rec = recorder(dir, marker);
+  const renamed = await applyRendererRename(dir, rule, d8, rec);
+  if (!renamed.renamed) return renamed;
+  await rec.write(path.join(dir, 'dgd9.dll'), d3d9, { ours: () => true });
+  marker.rendererRegistry = priorRegistry || renamed.registry || null;
+  writeMarker(dir, marker);
+  return { ...renamed, dxvk: true, alsoAs: 'dgd9.dll' };
+}
+
 // source: a cache folder from ensureDgVoodoo/importDgVoodooZip.
 async function deployDgVoodoo(dir, plan, source, { vendor = null } = {}) {
   if (!plan || !plan.dgVoodoo) throw new Error('this game does not need dgVoodoo2');
@@ -1320,7 +1355,7 @@ async function removeLegacy(dir) {
     if (fs.existsSync(p)) { await fsp.rm(p, { force: true }); removed.push(rel); }
   }
   // A game setting a renderer rename changed (Max Payne 2's AllowTaskSwitching) goes back to what it was.
-  const renameRegistry = ((marker.dgVoodoo || {}).rendererRename || {}).registry;
+  const renameRegistry = marker.rendererRegistry || ((marker.dgVoodoo || {}).rendererRename || {}).registry;
   if (renameRegistry) restoreGameRegistryDword(renameRegistry);
   for (const b of marker.backups || []) {
     const cur = path.join(dir, ...b.rel.split('/'));
@@ -1351,5 +1386,5 @@ module.exports = {
   MARKER, HOST_DIR, DGVOODOO, PARK_SUFFIX, planFor, dxvkReplacesNative, status, readMarker, ensureDgVoodoo, importDgVoodooZip, cachedDgVoodoo,
   isDgVoodooZip, configureDgVoodoo, DG_COLORSPACE_VALID, ensureDgVoodooWindowed, ensureCastKey, refreshFeeder32, deployDgVoodoo, deployHost32, removalPlan, removeLegacy,
   parkReShadeProxy, unparkReShadeProxy, swapNativeToDxvk, swapDxvkToNative, setUpVulkanLayer32, vulkanLayerRecord, unlistVulkanLayerApp,
-  currentMvProvider, deployLegacyShaders, setMvProvider, swapAscii, rendererRenameFor, RENDERER_RENAMES,
+  currentMvProvider, deployLegacyShaders, setMvProvider, swapAscii, rendererRenameFor, RENDERER_RENAMES, applyRendererRenameForDxvk,
 };
