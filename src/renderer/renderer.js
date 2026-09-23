@@ -5895,7 +5895,9 @@ async function openAddonsModal(game) {
 }
 
 async function renderAddons() {
-  const res = await window.api.addonsForGame(addonsGame.exePath);
+  // A rejected invoke (a reply Electron cannot send, say) must say so, not leave "Looking…" up.
+  const res = await window.api.addonsForGame(addonsGame.exePath)
+    .catch((error) => ({ ok: false, error: String(error && error.message ? error.message : error) }));
   if (!res || !res.ok) {
     $('#addons-list').innerHTML = `<p class="field-hint status-bad">${escapeHtml(res && res.error ? res.error : t('Could not read this game.'))}</p>`;
     return;
