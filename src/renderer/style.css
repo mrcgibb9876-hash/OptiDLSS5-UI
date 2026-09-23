@@ -562,6 +562,9 @@ select:focus { outline: 1px solid var(--accent); }
 .status-line { font-size: 12px; margin-top: 6px; }
 .status-ok { color: var(--accent-text); }
 .status-bad { color: var(--danger); }
+/* The add-ons list needs a third level between ok and bad: "this will work, and here is what
+   to watch for" -- a name-only RenoDX match, or RenoDX beside the neural pass. */
+.status-warn { color: var(--warn); }
 /* A route's short explanation (route-explain.js): on the card folded under "How this route works",
    in Edit under the route line and the translation layer select. */
 .route-explain { font-size: 12px; line-height: 1.45; color: var(--text-dim); margin-top: 6px; }
@@ -740,3 +743,15 @@ html[lang="ko"] { word-break: keep-all; }
 .check-warn { border-left-color: var(--warn); }
 .check-ok { border-left-color: var(--accent-text); }
 .check-resolved > span { opacity: 0.6; }
+
+/* ReShade add-ons list: one row per catalogue entry, the action on the right so the column of
+   buttons lines up however long a summary runs. */
+.addon-row {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.addon-row:last-child { border-bottom: none; }
+.addon-body { flex: 1 1 auto; min-width: 0; }
+.addon-action { flex: 0 0 auto; padding-top: 2px; }
+.addon-name { font-weight: 600; margin-bottom: 2px; }
+.addon-row .field-hint { margin: 2px 0; }

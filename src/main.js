@@ -12,6 +12,7 @@ const { scanForGames } = discover;
 const framegen = require('./framegen');
 const injector = require('./injector');
 const feeder = require('./feeder');
+const addons = require('./addons');
 const lossless = require('./lossless');
 const reengine = require('./reengine');
 const integrity = require('./integrity');
@@ -466,6 +467,125 @@ ipcMain.handle('feeder:openReShadeSetup', async () => {
 ipcMain.handle('feeder:mvProviders', () => {
   return feeder.mvProviderList();
 });
+
+// ---- the ReShade add-on catalogue (addons.js) ------------------------------------------------
+
+// Everything the catalogue needs goes through the Feeder's downloader, so an add-on arrives the
+// same way every other file this app places does: integrity-checked against a pin or GitHub's own
+// published digest, and cached, so a second game on the same machine costs no network at all.
+const addonCtx = () => ({
+  fetchBuffer: async (url, { sha256 = null } = {}) => {
+    const name = url.split('/').pop().replace(/[^A-Za-z0-9._-]/g, '_');
+    const file = await feeder.downloadToCache(url, feederCacheDir(), name, GITHUB_HEADERS, { sha256 });
+    return fs.readFileSync(file);
+  },
+  resolveRelease: async (repo, tag) => {
+    const url = `https://api.github.com/repos/${repo}/releases/${tag ? `tags/${tag}` : 'latest'}`;
+    const res = await netFetch(url, { headers: GITHUB_HEADERS });
+    if (!res.ok) throw new Error(`GitHub: HTTP ${res.status} for ${repo} releases`);
+    return res.json();
+  },
+});
+
+// RenoDX's games-index.json, memoised for the session. It is ~260 KB and the picker asks for it
+// every time a card is opened, so re-fetching per card would be a download per click; and it is
+// an ordinary release asset, so it is digest-checked like the add-ons themselves.
+let renodxIndexMemo = null;
+async function renodxIndex() {
+  if (renodxIndexMemo) return renodxIndexMemo;
+  const buf = await addonCtx().fetchBuffer(addons.renodxIndexUrl());
+  renodxIndexMemo = JSON.parse(buf.toString('utf8'));
+  return renodxIndexMemo;
+}
+
+// The catalogue as this game sees it: what is installed here, and which RenoDX add-on (if any)
+// this particular game has. The index fetch is allowed to fail -- offline, or GitHub down -- and
+// the rest of the list still works, because only the RenoDX row depends on it.
+ipcMain.handle('addons:forGame', async (_evt, { exePath } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const detected = detectGameCached(exePath) || {};
+    const steam = library.steamManifestFor(exePath);
+    const installed = new Set(addons.installedIds(dir));
+
+    let match = null;
+    let indexError = null;
+    try {
+      match = addons.matchRenodx(await renodxIndex(), {
+        steamAppid: steam ? steam.appid : null,
+        title: (steam && steam.name) || path.basename(dir),
+        bitness: detected.bitness || null,
+      });
+    } catch (error) {
+      indexError = String(error && error.message ? error.message : error);
+    }
+
+    return {
+      ok: true,
+      dir,
+      // The neural pass being installed here is what decides whether the RenoDX row shows its
+      // "untested together" line, so the renderer is told rather than guessing from the card.
+      neuralRendering: !!(detected && detected.optiscaler) || fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll')),
+      catalogue: addons.catalogue().map((a) => ({ ...a, installed: installed.has(a.id) })),
+      renodx: match,
+      indexError,
+    };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+ipcMain.handle('addons:install', async (_evt, { exePath, id } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const detected = detectGameCached(exePath) || {};
+    const opts = { bitness: detected.bitness || null };
+    if (id === 'renodx') {
+      const steam = library.steamManifestFor(exePath);
+      opts.match = addons.matchRenodx(await renodxIndex(), {
+        steamAppid: steam ? steam.appid : null,
+        title: (steam && steam.name) || path.basename(dir),
+        bitness: detected.bitness || null,
+      });
+      if (!opts.match) throw new Error('No RenoDX mod is built for this game');
+    }
+    const res = await addons.installAddon(dir, id, addonCtx(), opts);
+    // A pack that brought techniques changes the run order, so the preset is re-sorted now rather
+    // than at the next Feeder deploy -- which might never come.
+    reorderPresetFor(dir);
+    return { ok: true, ...res };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+ipcMain.handle('addons:remove', async (_evt, { exePath, id } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const res = await addons.removeAddon(dir, id);
+    reorderPresetFor(dir);
+    return { ok: true, ...res };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// Re-sort this game's preset after the set of installed add-ons changed. Only touches a preset
+// that already exists: a game with no ReShade here has nothing to order, and writing one would
+// be this app creating a file nobody asked for.
+function reorderPresetFor(dir) {
+  try {
+    if (!fs.existsSync(path.join(dir, 'ReShadePreset.ini'))) return;
+    const marker = feeder.readFeederDeployMarker(dir);
+    feeder.configurePreset(dir, (marker && marker.mvProviderId) || feeder.defaultMvProviderId());
+  } catch {
+    // A preset that cannot be parsed or written is not worth failing an install over; the
+    // add-on is in place and the next deploy re-sorts.
+  }
+}
 
 // A real native dialog showing a provider's actual licence text, for the one MV provider that
 // can't be auto-fetched without it (LumeniteFX). Same dialog.showMessageBox pattern as

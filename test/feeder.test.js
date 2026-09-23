@@ -348,9 +348,21 @@ test('the preset names the provider\'s real technique first, at both definition 
   write(dir, 'ReShadePreset.ini', 'Techniques=MyOwnEffect@MyOwn.fx\nTechniqueSorting=MyOwnEffect@MyOwn.fx\n');
   feeder.configurePreset(dir, 'vort');
   let preset = fs.readFileSync(path.join(dir, 'ReShadePreset.ini'), 'utf8');
-  // Order matters: the provider writes the vectors DLSS5_Feed reads in the same frame.
-  assert.match(preset, /Techniques=MyOwnEffect@MyOwn\.fx,vort_MotionEffects@vort_Motion\.fx,DLSS5_Feed@DLSS5_Feed\.fx/);
-  assert.match(preset, /TechniqueSorting=.*vort_MotionEffects@vort_Motion\.fx,DLSS5_Feed@DLSS5_Feed\.fx/);
+  // Order matters twice over, and the second one changed in 2026-09-23.
+  //
+  // The provider writes the vectors DLSS5_Feed reads in the same frame, so it is first. That was
+  // always the rule and is unchanged.
+  //
+  // What moved is where the pair sits relative to the player's OWN effects. It used to append,
+  // so MyOwnEffect ran first and the model was handed an image someone had already sharpened or
+  // graded -- and VORT estimated its motion vectors from that same altered image. Neither is
+  // what you want: a denoiser should see the renderer's output, and a post-process should run on
+  // the reconstructed picture rather than be baked into its input. That placement was never a
+  // decision, it was where list.push() happened to put them.
+  //
+  // preset-order.js's bands make it explicit: MV_PROVIDER, then FEED, then EFFECT.
+  assert.match(preset, /Techniques=vort_MotionEffects@vort_Motion\.fx,DLSS5_Feed@DLSS5_Feed\.fx,MyOwnEffect@MyOwn\.fx/);
+  assert.match(preset, /TechniqueSorting=vort_MotionEffects@vort_Motion\.fx,DLSS5_Feed@DLSS5_Feed\.fx,MyOwnEffect@MyOwn\.fx/);
   // Both levels ReShade reads, so a reload from the overlay cannot disagree with the deploy.
   assert.match(preset, /\[DLSS5_Feed\.fx\][\s\S]*PreprocessorDefinitions=DLSS5_MV_PROVIDER=2/);
   assert.match(preset.split('[')[0], /PreprocessorDefinitions=DLSS5_MV_PROVIDER=2/);
