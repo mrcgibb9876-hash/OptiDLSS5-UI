@@ -577,6 +577,68 @@ function emptyMarker(existing) {
     : { version: 1, files: [], backups: [], dirs: [] };
 }
 
+// Games whose renderer can never pick up a d3d8.dll/d3d9.dll placed beside the exe, because Windows
+// has already loaded its own copy by the time the renderer asks: a module of the same name already
+// loaded is what LoadLibrary returns, whatever folder it came from.
+//
+// Max Payne 1 and 2 run a DxDiag probe at startup (dxdiagn.dll, which loads C:\Windows\system32\
+// d3d8.dll by full path) before e2driver\e2_d3d8_driver_mfc.dll calls LoadLibraryA("d3d8.dll") -- so
+// dgVoodoo's D3D8.dll was never loaded, and nothing on the route ran (2026-09-23, confirmed from the
+// running process's module list). No switch skips the probe (-skipstartup and -nodialog both tried).
+// The renderer is pointed at a name nothing else loads instead: its two spellings of the import are
+// rewritten in place, same length, and dgVoodoo's DLL is placed under that name as well. The original
+// renderer goes through the recorder's backup, so Remove puts it back.
+const RENDERER_RENAMES = [
+  {
+    exe: /^maxpayne2?\.exe$/i,
+    file: 'e2driver/e2_d3d8_driver_mfc.dll',
+    wrapper: 'D3D8.dll',
+    as: 'dgd8.dll',
+    replace: [['d3d8.dll', 'dgd8.dll'], ['D3D8.DLL', 'DGD8.DLL']],
+  },
+];
+
+function rendererRenameFor(dir, dll) {
+  let exes = [];
+  try { exes = fs.readdirSync(dir).filter((f) => /\.exe$/i.test(f)); } catch { return null; }
+  return RENDERER_RENAMES.find((r) => r.wrapper.toLowerCase() === String(dll).toLowerCase()
+    && exes.some((e) => r.exe.test(e))
+    && fs.existsSync(path.join(dir, ...r.file.split('/')))) || null;
+}
+
+// Every occurrence of each ASCII pair swapped in place. Same length both ways, so nothing moves.
+function swapAscii(buf, pairs) {
+  const out = Buffer.from(buf);
+  let count = 0;
+  for (const [from, to] of pairs) {
+    const a = Buffer.from(from, 'latin1');
+    const b = Buffer.from(to, 'latin1');
+    if (a.length !== b.length) throw new Error(`renderer rename ${from} -> ${to} changes the length`);
+    for (let i = out.indexOf(a); i !== -1; i = out.indexOf(a, i + a.length)) {
+      b.copy(out, i);
+      count++;
+    }
+  }
+  return { buf: out, count };
+}
+
+async function applyRendererRename(dir, rule, dllBytes, rec) {
+  const target = path.join(dir, ...rule.file.split('/'));
+  const backup = target + BACKUP_SUFFIX;
+  // Patched from the game's own file: the backup when one is already set aside, so a second Install
+  // never patches a patched copy (and an old hand-made backup counts as the original too).
+  const original = fs.readFileSync(fs.existsSync(backup) ? backup : target);
+  const { buf, count } = swapAscii(original, rule.replace);
+  if (count === 0) {
+    // Already renamed by hand, or a different build of the renderer: nothing to rewrite, and writing
+    // the wrapper under the new name would do no good either.
+    return { renamed: false, reason: `${rule.file} names no ${rule.replace[0][0]}` };
+  }
+  await rec.write(path.join(dir, rule.as), dllBytes, { ours: (p) => translation.identifyWrapper(p) === 'dgvoodoo' });
+  await rec.write(target, buf, { ours: () => false });
+  return { renamed: true, file: rule.file, as: rule.as, occurrences: count };
+}
+
 // source: a cache folder from ensureDgVoodoo/importDgVoodooZip.
 async function deployDgVoodoo(dir, plan, source, { vendor = null } = {}) {
   if (!plan || !plan.dgVoodoo) throw new Error('this game does not need dgVoodoo2');
@@ -609,13 +671,17 @@ async function deployDgVoodoo(dir, plan, source, { vendor = null } = {}) {
   // resource), so a latin1 search never recognised it (Assassin's Creed II's D3D9.dll, 2026-09-18).
   const isDg = (p) => translation.identifyWrapper(p) === 'dgvoodoo';
   await rec.write(path.join(dir, plan.dgVoodoo.dll), dll, { ours: isDg });
+  // A renderer that could never load that file under its own name gets pointed at another one.
+  const renameRule = rendererRenameFor(dir, plan.dgVoodoo.dll);
+  const renamed = renameRule ? await applyRendererRename(dir, renameRule, dll, rec) : null;
   await rec.write(path.join(dir, 'dgVoodooCpl.exe'), cpl, { ours: isDg });
   const confPath = path.join(dir, 'dgVoodoo.conf');
   const base = fs.existsSync(confPath) ? fs.readFileSync(confPath, 'utf8') : conf.toString('utf8');
   await rec.write(confPath,
                   Buffer.from(configureDgVoodoo(base, { windowed: !!plan.host32, minimal: needsMinimalDgVoodoo(dir), vendor }), 'utf8'),
                   { ours: () => true });
-  marker.dgVoodoo = { arch: plan.dgVoodoo.arch, dll: plan.dgVoodoo.dll, source: path.basename(source) };
+  marker.dgVoodoo = { arch: plan.dgVoodoo.arch, dll: plan.dgVoodoo.dll, source: path.basename(source),
+    ...(renamed && renamed.renamed ? { rendererRename: { file: renamed.file, as: renamed.as } } : {}) };
   marker.placedAt = new Date().toISOString();
   writeMarker(dir, marker);
   // And the translation manifest, so activeLayer answers from a record for dgVoodoo2 just as it does
@@ -634,7 +700,7 @@ async function deployDgVoodoo(dir, plan, source, { vendor = null } = {}) {
       `${plan.dgVoodoo.dll} (dgVoodoo2) was placed beside the game and then removed or blocked -- that is what antivirus ` +
       'quarantine looks like. Check Windows Security\'s protection history.'), { code: 'dgvoodoo-quarantined' });
   }
-  return { deployed: true, dll: plan.dgVoodoo.dll, arch: plan.dgVoodoo.arch };
+  return { deployed: true, dll: plan.dgVoodoo.dll, arch: plan.dgVoodoo.arch, rendererRename: renamed };
 }
 
 // deps (all required):
@@ -1227,5 +1293,5 @@ module.exports = {
   MARKER, HOST_DIR, DGVOODOO, PARK_SUFFIX, planFor, dxvkReplacesNative, status, readMarker, ensureDgVoodoo, importDgVoodooZip, cachedDgVoodoo,
   isDgVoodooZip, configureDgVoodoo, DG_COLORSPACE_VALID, ensureDgVoodooWindowed, ensureCastKey, refreshFeeder32, deployDgVoodoo, deployHost32, removalPlan, removeLegacy,
   parkReShadeProxy, unparkReShadeProxy, swapNativeToDxvk, swapDxvkToNative, setUpVulkanLayer32, vulkanLayerRecord, unlistVulkanLayerApp,
-  currentMvProvider, deployLegacyShaders, setMvProvider,
+  currentMvProvider, deployLegacyShaders, setMvProvider, swapAscii, rendererRenameFor, RENDERER_RENAMES,
 };

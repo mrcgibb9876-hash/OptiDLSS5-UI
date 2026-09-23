@@ -116,14 +116,23 @@ function create({ preload, page, savedBounds, onBoundsChanged }) {
   return win;
 }
 
-function show(options) {
+function show(options = {}) {
   if (panel === null || panel.isDestroyed()) panel = create(options);
   panel.setAlwaysOnTop(true, 'screen-saver');
-  panel.show();
-  // The panel is useless without focus -- it is there to be typed into and clicked. A borderless
-  // game keeps rendering behind it; an exclusive-fullscreen one will minimise, which is why the
-  // window says so rather than pretending otherwise.
-  panel.focus();
+  if (options.overGame) {
+    // Opened by the hotkey over a running game: shown without taking the focus, and kept from ever
+    // taking it (WS_EX_NOACTIVATE on Windows), so clicks and drags land on the panel while the game
+    // stays the active window. A game that minimises itself the moment it loses focus -- Max Payne 2
+    // did, 2026-09-23, behind dgVoodoo -- then keeps running under the panel. The cost is the
+    // keyboard: arrow-key stepping needs focus, so over a game the panel is mouse-driven.
+    panel.setFocusable(false);
+    panel.showInactive();
+  } else {
+    // Opened from Settings: an ordinary window, focused, with the keyboard.
+    panel.setFocusable(true);
+    panel.show();
+    panel.focus();
+  }
   // On the very first open this lands before the page exists and is dropped; that open is covered
   // by the renderer reading its targets as it loads. Every later open needs this, because the panel
   // was only hidden and would otherwise still be showing whatever was true when it was put away.

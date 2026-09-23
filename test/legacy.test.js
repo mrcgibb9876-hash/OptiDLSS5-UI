@@ -119,6 +119,44 @@ test('Max Payne 2 is Direct3D 8, so dgVoodoo goes in as D3D8.dll, not D3D9.dll',
   assert.equal(plan.dgVoodoo.dll, 'D3D8.dll');
 });
 
+test('Max Payne 2: the renderer is pointed at dgd8.dll, and Remove puts the original back', { skip: !onWindows }, async () => {
+  // Its DxDiag probe loads Windows' own d3d8.dll first, and LoadLibraryA("d3d8.dll") then returns that
+  // one -- so dgVoodoo only runs under a name nothing else has loaded.
+  const base = scratchDir('mp2-rename');
+  const comps = fakeComponents(base);
+  const dgSource = await legacy.importDgVoodooZip(comps.dgZip, path.join(base, 'cache'));
+  const game = path.join(base, 'game');
+  exeWith(game, 'MaxPayne2.exe', { bits: 32 });
+  const original = Buffer.from('MZ renderer\0LoadLibraryA\0d3d8.dll\0Direct3DCreate8\0D3D8.DLL\0end', 'latin1');
+  write(game, 'e2driver/e2_d3d8_driver_mfc.dll', original);
+
+  const plan = legacy.planFor({ api: 'dx8', apis: ['dx8'], bitness: 32 });
+  const res = await legacy.deployDgVoodoo(game, plan, dgSource);
+  assert.equal(res.rendererRename && res.rendererRename.renamed, true);
+
+  const patched = fs.readFileSync(path.join(game, 'e2driver', 'e2_d3d8_driver_mfc.dll'));
+  assert.equal(patched.length, original.length, 'same length -- nothing in the file moves');
+  assert.ok(patched.includes(Buffer.from('dgd8.dll')) && patched.includes(Buffer.from('DGD8.DLL')));
+  assert.ok(!patched.includes(Buffer.from('d3d8.dll')) && !patched.includes(Buffer.from('D3D8.DLL')));
+  assert.deepEqual(fs.readFileSync(path.join(game, 'dgd8.dll')), fs.readFileSync(path.join(game, 'D3D8.dll')),
+    'dgVoodoo under the new name');
+
+  // A second Install patches from the original again, not from the patched copy.
+  await legacy.deployDgVoodoo(game, plan, dgSource);
+  assert.deepEqual(fs.readFileSync(path.join(game, 'e2driver', 'e2_d3d8_driver_mfc.dll')), patched);
+
+  await legacy.removeLegacy(game);
+  assert.deepEqual(fs.readFileSync(path.join(game, 'e2driver', 'e2_d3d8_driver_mfc.dll')), original, 'the renderer is back as it shipped');
+  assert.equal(fs.existsSync(path.join(game, 'dgd8.dll')), false);
+  assert.equal(fs.existsSync(path.join(game, 'e2driver', 'e2_d3d8_driver_mfc.dll.dlss5ui-orig')), false);
+
+  // Any other game's D3D8 route is untouched.
+  const other = path.join(base, 'other');
+  exeWith(other, 'Other.exe', { bits: 32 });
+  const plain = await legacy.deployDgVoodoo(other, plan, dgSource);
+  assert.equal(plain.rendererRename, null);
+});
+
 test('detection: emulators, 32-bit and DirectX 8/9 games are offered experimental routes', { skip: !onWindows }, async () => {
   const base = scratchDir('legacy-detect');
   const pcsx2 = await detect.detectGame(path.join(base, 'pcsx2'), exeWith(path.join(base, 'pcsx2'), 'pcsx2-qt.exe'));
