@@ -1548,4 +1548,6 @@ window.I18N.register("ru", {
   "Insert": "Insert",
   "Insert opens this window while a 32-bit game, or one with no in-game panel, is running. On every other game Insert opens the DLSS 5 panel inside the game -- bind a different key here to have this window on every game.": "Insert открывает это окно, пока запущена 32-битная игра или игра без встроенной панели. В любой другой игре Insert открывает панель DLSS 5 внутри игры -- назначьте здесь другую клавишу, чтобы это окно открывалось в любой игре.",
   "No Insert key? On many laptops \"Ins\" is printed on the numpad's 0 key, and it only sends Insert with Num Lock off. Turn Num Lock off, or click the box above and press the key you want — numpad keys work too. The DLSS 5 panel inside the game has its own key, under Edit.": "Нет клавиши Insert? На многих ноутбуках «Ins» нанесена на клавишу 0 цифрового блока, и Insert она отправляет только при выключенном Num Lock. Выключите Num Lock или нажмите на поле выше и затем нужную клавишу — клавиши цифрового блока тоже подходят. У панели DLSS 5 внутри игры своя клавиша, в разделе «Изменить».",
+  "Brightness": "Яркость",
+  "Contrast": "Контраст",
 });

@@ -1548,4 +1548,6 @@ window.I18N.register("de", {
   "Insert": "Einfg",
   "Insert opens this window while a 32-bit game, or one with no in-game panel, is running. On every other game Insert opens the DLSS 5 panel inside the game -- bind a different key here to have this window on every game.": "Einfg öffnet dieses Fenster, während ein 32-Bit-Spiel oder eines ohne Panel im Spiel läuft. In jedem anderen Spiel öffnet Einfg das DLSS-5-Panel im Spiel -- leg hier eine andere Taste fest, um dieses Fenster in jedem Spiel zu haben.",
   "No Insert key? On many laptops \"Ins\" is printed on the numpad's 0 key, and it only sends Insert with Num Lock off. Turn Num Lock off, or click the box above and press the key you want — numpad keys work too. The DLSS 5 panel inside the game has its own key, under Edit.": "Keine Einfg-Taste? Auf vielen Laptops steht „Einfg“ auf der 0-Taste des Ziffernblocks, und sie sendet Einfg nur bei ausgeschaltetem Num-Lock. Schalte Num-Lock aus, oder klicke in das Feld oben und drücke die gewünschte Taste — Ziffernblocktasten gehen auch. Das DLSS-5-Panel im Spiel hat eine eigene Taste, unter Bearbeiten.",
+  "Brightness": "Helligkeit",
+  "Contrast": "Kontrast",
 });
