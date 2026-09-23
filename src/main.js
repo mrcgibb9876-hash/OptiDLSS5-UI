@@ -527,9 +527,25 @@ ipcMain.handle('addons:forGame', async (_evt, { exePath } = {}) => {
       // The neural pass being installed here is what decides whether the RenoDX row shows its
       // "untested together" line, so the renderer is told rather than guessing from the card.
       neuralRendering: !!(detected && detected.optiscaler) || fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll')),
-      catalogue: addons.catalogue().map((a) => ({ ...a, installed: installed.has(a.id) })),
+      catalogue: addons.catalogue().map((a) => ({
+        ...a,
+        installed: installed.has(a.id),
+        // What pressing Install would swap out. The renderer says so up front rather than the
+        // other row silently flipping to "Install" afterwards.
+        replaces: addons.conflictsFor(dir, a.id),
+      })),
       renodx: match,
       indexError,
+      // The motion-vector providers, shown in this same list. They are not add-ons in the
+      // catalogue's sense -- the Feeder picks exactly one and the deploy owns it -- but this is
+      // where someone looks for "what ReShade things can this game have", and having to know to
+      // open Edit instead is the kind of hiding this app has been told off for before.
+      mvProviders: feeder.mvProviderList().filter((p) => p.selectable !== false).map((p) => ({
+        id: p.id, displayName: p.displayName, license: p.license,
+        mvProviderValue: p.mvProviderValue, officialUrl: p.officialUrl || null,
+        bringYourOwn: !!p.bringYourOwn, recommended: !!p.recommended, isDefault: !!p.default,
+      })),
+      mvProviderId: (feeder.readFeederDeployMarker(dir) || {}).mvProviderId || null,
     };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
@@ -555,6 +571,29 @@ ipcMain.handle('addons:install', async (_evt, { exePath, id } = {}) => {
     // A pack that brought techniques changes the run order, so the preset is re-sorted now rather
     // than at the next Feeder deploy -- which might never come.
     reorderPresetFor(dir);
+    return { ok: true, ...res };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// Swap the motion-vector provider on a game the Feeder is already on, in one press. The whole
+// point of offering five is that nobody can tell you which looks best on YOUR game -- that is
+// something you find out by looking, and only if trying the next one is cheap.
+//
+// The 32-bit helper route keeps its own copy of the stack, so it goes through legacy.js's
+// setMvProvider; everything else through feeder.switchMvProvider. Same answer either way.
+ipcMain.handle('addons:setMvProvider', async (_evt, { exePath, mvProviderId, licenseConfirmed = false } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const provider = feeder.MV_PROVIDERS[mvProviderId];
+    if (!provider) throw new Error(`Unknown motion-vector provider: ${mvProviderId}`);
+    // The licence gate is enforced in deployLumeniteFx regardless; this is the call that gets the
+    // consent, so a renderer that skipped the dialog fails here rather than fetching.
+    const res = legacyMvSummary(dir)
+      ? await legacy.setMvProvider(dir, mvProviderId, { ghHeaders: GITHUB_HEADERS, cacheDir: feederCacheDir(), licenseConfirmed })
+      : await feeder.switchMvProvider(dir, mvProviderId, feederCacheDir(), GITHUB_HEADERS, { licenseConfirmed });
     return { ok: true, ...res };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };

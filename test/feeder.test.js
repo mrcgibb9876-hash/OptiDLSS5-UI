@@ -1251,3 +1251,64 @@ test('a game keeps the Feeder it was deployed with only until a newer one is rel
   write(dir, '.dlss5ui-feeder-deploy.json', JSON.stringify({ mvProviderId: 'vort' }));
   assert.equal(feeder.readFeederDeployMarker(dir).feederVersion, undefined);
 });
+
+test('every DLSS5_MV_PROVIDER value the Feeder documents has a provider, and each states its licence', () => {
+  const list = feeder.mvProviderList();
+  // The comment above MV_PROVIDERS has said "five values, per the Feeder's README" since the
+  // table was written, and for just as long only four of them were listed -- value 4,
+  // LumeniteFX QuantMotion, was simply missing. This is the guard that would have caught it.
+  const values = new Set(list.map((p) => p.mvProviderValue));
+  assert.deepEqual([...values].sort(), [0, 1, 2, 3, 4], 'all five documented values are covered');
+
+  for (const p of list) {
+    assert.ok(p.license, `${p.id} states its licence`);
+    assert.ok(p.techniqueFile && p.techniqueName, `${p.id} names the technique that must run first`);
+    // Fetchability follows the licence, not convenience. Anything this app downloads must be
+    // something it is allowed to download.
+    if (p.autoFetchable) {
+      // MIT, GPL and CC BY-NC all grant redistribution; "all rights reserved" and AGNYA's
+      // official-links-only clause do not, and those are exactly the ones below.
+      assert.ok(/MIT|GPL|CC BY/.test(p.license), `${p.id} is only auto-fetched because its licence allows it`);
+    } else {
+      assert.ok(p.bringYourOwn || p.licenseSummary, `${p.id} explains why it is not fetched`);
+    }
+  }
+});
+
+test('the two LumeniteFX providers share one licence path, and qUINT is never fetched', () => {
+  const quant = feeder.MV_PROVIDERS['lumenite-quantmotion'];
+  const kernel = feeder.MV_PROVIDERS['lumenite-kernel'];
+  assert.equal(quant.mvProviderValue, 4);
+  assert.equal(kernel.mvProviderValue, 3);
+  // Same repo, same AGNYA terms, so the same per-action consent gate -- neither is autoFetchable,
+  // and deployLumeniteFx is the only path to either.
+  assert.equal(quant.autoFetchable, false);
+  assert.equal(kernel.autoFetchable, false);
+  assert.match(quant.licenseSummary, /official/);
+
+  // qUINT is Pascal Gilcher's, all rights reserved, with no redistribution grant -- the same
+  // answer as iMMERSE for the same reason.
+  const quint = feeder.MV_PROVIDERS.quint;
+  assert.equal(quint.autoFetchable, false);
+  assert.equal(quint.bringYourOwn, true);
+  assert.deepEqual(quint.files, [], 'never ours to remove: the user installed it');
+
+  // dh_uber_motion is GPL-2.0, which is what makes it the one value-0 provider that CAN be
+  // fetched -- DRME does not compile on the ReShade this app installs, and qUINT may not be.
+  const dh = feeder.MV_PROVIDERS['dh-uber-motion'];
+  assert.equal(dh.mvProviderValue, 0);
+  assert.equal(dh.autoFetchable, true);
+  assert.equal(dh.rawBase, 'dhShadersRaw');
+  const integrity = require('../src/integrity');
+  assert.match(integrity.PINS[integrity.URLS.dhShadersRaw + 'dh_uber_motion.fx'], /^[0-9a-f]{64}$/);
+});
+
+test('deployLumeniteFx refuses anything that is not a LumeniteFX provider, consent or not', async () => {
+  await assert.rejects(
+    () => feeder.deployLumeniteFx(scratchDir('lum-guard'), { 'User-Agent': 'x' }, { licenseConfirmed: true, providerId: 'vort' }),
+    /only for the LumeniteFX providers/);
+  // And still refuses the real ones without consent, which is the check that matters.
+  await assert.rejects(
+    () => feeder.deployLumeniteFx(scratchDir('lum-guard2'), { 'User-Agent': 'x' }, { providerId: 'lumenite-quantmotion' }),
+    /requires explicit licence confirmation/);
+});

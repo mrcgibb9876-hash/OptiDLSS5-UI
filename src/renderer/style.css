@@ -755,3 +755,13 @@ html[lang="ko"] { word-break: keep-all; }
 .addon-action { flex: 0 0 auto; padding-top: 2px; }
 .addon-name { font-weight: 600; margin-bottom: 2px; }
 .addon-row .field-hint { margin: 2px 0; }
+/* The motion-vector list inside the add-ons dialog: a plain list, not buttons -- the deploy owns
+   which one is in place, so this says what exists and which one is here. */
+.addon-mv-list { margin: 4px 0 6px; padding-left: 18px; font-size: 12px; }
+.addon-mv-list li { margin: 2px 0; }
+/* One row per provider: name and marks on the left, the switch button on the right. */
+.addon-mv-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.addon-mv-item > div { min-width: 0; }
+.addon-mv-name-here { font-weight: 600; color: var(--accent-text); }
+.addon-mv-here { font-size: 11px; color: var(--accent-text); flex: 0 0 auto; }
+.addon-mv-item .btn { flex: 0 0 auto; font-size: 11px; padding: 3px 8px; }

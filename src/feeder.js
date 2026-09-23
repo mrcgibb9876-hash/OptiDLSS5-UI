@@ -142,6 +142,7 @@ const RESHADE_SHADERS_REPO_RAW = integrity.URLS.reshadeShadersRaw;
 // Still the official repo, fetched live -- at a pinned commit, so each file's sha256 is checked.
 const LUMENITEFX_REPO_RAW = integrity.URLS.lumeniteRaw;
 const LUMENITEFX_KERNEL_FILE = 'lumenite_Kernel.fx';
+const LUMENITEFX_QUANTMOTION_FILE = 'lumenite_QuantMotion.fx';
 const LUMENITEFX_KERNEL_INCLUDES = [
   'include/lumenite_Projections.fxh',
   'include/lumenite_Helpers.fxh',
@@ -245,6 +246,76 @@ const MV_PROVIDERS = {
     techniqueFile: 'lumenite_Kernel.fx',
     techniqueName: 'Lumenite_Kernel',
     files: [LUMENITEFX_KERNEL_FILE, ...LUMENITEFX_KERNEL_INCLUDES],
+  },
+  // DLSS5_MV_PROVIDER=4, and it was simply missing: the comment above this table has said "five
+  // values, per the Feeder's README" since the table was written, and only four were ever listed.
+  // Same repo and same commit as Kernel, so the same AGNYA consent applies and no new pin was
+  // needed beyond the file's own hash.
+  //
+  // It is not a better Kernel, it is a cheaper one -- its own header calls it "superfast motion
+  // vectors for low-end hardware". Kernel produces 1/8-resolution flow plus a confidence map that
+  // the feed uses; QuantMotion does not. So this is the row for a machine that cannot afford
+  // Kernel's cost, not an upgrade from it.
+  'lumenite-quantmotion': {
+    id: 'lumenite-quantmotion',
+    displayName: 'LumeniteFX QuantMotion (cheaper than Kernel)',
+    mvProviderValue: 4,
+    license: 'AGNYA (all rights reserved) -- umar-afzaal/LumeniteFX',
+    // Same reasoning as Kernel's, and the same enforcement: deployLumeniteFx() is the only path,
+    // it fetches live from the official repo, and it refuses without licenseConfirmed.
+    autoFetchable: false,
+    selectable: true,
+    officialUrl: 'https://github.com/umar-afzaal/LumeniteFX',
+    licenseUrl: 'https://github.com/umar-afzaal/LumeniteFX/blob/mainline/LICENSE.md',
+    licenseSummary: 'AGNYA licence (Rev 1.4), Copyright (C) 2025-2026 Afzaal (Kaidō). All rights '
+      + 'reserved. Redistribution must exclusively use the author\'s own official links -- '
+      + 'independently hosting a copy is explicitly prohibited, which is why this always '
+      + 'fetches live from the official repo rather than a cached copy. No warranty of any kind.',
+    techniqueFile: 'lumenite_QuantMotion.fx',
+    techniqueName: 'Lumenite_QuantMotion',
+    files: [LUMENITEFX_QUANTMOTION_FILE],
+  },
+  // DLSS5_MV_PROVIDER=0 is the shared-texture convention: "anything writing texMotionVectors".
+  // DRME is the entry below and cannot compile; these two are the other shaders the Feeder's
+  // README names for that value, and between them they cover the case DRME used to.
+  //
+  // dh_uber_motion is GPL-2.0, which is what makes it the only value-0 provider this app can
+  // fetch: qUINT below is all rights reserved, and DRME does not build. One self-contained file
+  // whose only include is ReShade.fxh, which every deploy already places.
+  'dh-uber-motion': {
+    id: 'dh-uber-motion',
+    displayName: 'dh_uber_motion (AlucardDH)',
+    mvProviderValue: 0,
+    license: 'GPL-2.0 -- AlucardDH/dh-reshade-shaders',
+    autoFetchable: true,
+    selectable: true,
+    officialUrl: 'https://github.com/AlucardDH/dh-reshade-shaders',
+    rawBase: 'dhShadersRaw',
+    techniqueFile: 'dh_uber_motion.fx',
+    techniqueName: 'DH_UBER_MOTION_020',
+    files: ['dh_uber_motion.fx'],
+  },
+  // The other value-0 shader the README names. Pascal Gilcher again, and the same answer as
+  // iMMERSE below for the same reason: "Copyright (c) Pascal Gilcher / Marty McFly. All rights
+  // reserved", with no permission to redistribute, so this app never fetches it. It lights up
+  // when the user's own qUINT install is already in the game's shader folder.
+  quint: {
+    id: 'quint',
+    displayName: 'qUINT motion vectors (MartysMods) -- your own copy',
+    mvProviderValue: 0,
+    license: 'All rights reserved -- martymcmodding/qUINT',
+    autoFetchable: false,
+    bringYourOwn: true,
+    selectable: true,
+    officialUrl: 'https://github.com/martymcmodding/qUINT',
+    licenseSummary: 'Copyright (c) Pascal Gilcher / Marty McFly. All rights reserved. No licence '
+      + 'grants redistribution, so this app never fetches or ships it -- install qUINT yourself '
+      + 'and this provider lights up. Superseded by iMMERSE Launchpad, which is the same author\'s '
+      + 'newer work.',
+    techniqueFile: 'qUINT_motionvectors.fx',
+    techniqueName: 'qUINT_MotionVectors',
+    // Never ours to remove: the user installed it, and other qUINT effects share its includes.
+    files: [],
   },
   'immerse-launchpad': {
     id: 'immerse-launchpad',
@@ -991,6 +1062,25 @@ async function deployMvProvider(dir, providerId, cacheDir, ghHeaders) {
   }
 
   const rootDir = path.join(dir, 'reshade-shaders');
+
+  // A provider that is a handful of loose files from a pinned commit (dh_uber_motion) rather than
+  // a repo zip. Same shape of answer -- reshade-shaders-relative paths, so the deploy marker's
+  // mvFiles list means one thing whichever provider wrote it -- and the same integrity check,
+  // because downloadToCache looks the pin up by URL.
+  if (provider.rawBase) {
+    const base = integrity.URLS[provider.rawBase];
+    if (!base) throw new Error(`${provider.displayName}: no pinned base URL ${provider.rawBase}`);
+    const shaderDir = path.join(rootDir, 'Shaders');
+    await fsp.mkdir(shaderDir, { recursive: true });
+    const written = [];
+    for (const name of provider.files) {
+      const cached = await downloadToCache(base + name, cacheDir, `${providerId}-${name}`, ghHeaders);
+      await fsp.copyFile(cached, path.join(shaderDir, name));
+      written.push(`Shaders/${name}`);
+    }
+    return { deployed: true, files: written };
+  }
+
   const zipName = `${providerId}.zip`;
   const zipPath = await downloadToCache(provider.zipUrl, cacheDir, zipName, ghHeaders);
   const zip = openZip(zipPath);
@@ -1045,7 +1135,7 @@ async function deployMvProvider(dir, providerId, cacheDir, ghHeaders) {
   return { deployed: true, files: deployedFiles };
 }
 
-// LumeniteFX Kernel -- the ONLY path that ever fetches it, and only with real, per-action
+// LumeniteFX -- the ONLY path that ever fetches it, and only with real, per-action
 // consent. Deliberately separate from deployMvProvider(): that function's autoFetchable guard
 // exists precisely so nothing generic ever reaches this licence by accident. Fetches every
 // file individually and live from LUMENITEFX_REPO_RAW (the official repo, not a cache/mirror)
@@ -1053,17 +1143,25 @@ async function deployMvProvider(dir, providerId, cacheDir, ghHeaders) {
 // just tidiness, it's the actual condition the licence sets for redistribution.
 // fetchImpl is for tests, which must never reach the network; the app passes nothing, so every
 // real call is a live fetch from the official repo, as the licence requires.
-async function deployLumeniteFx(dir, ghHeaders, { licenseConfirmed = false, fetchImpl = netFetch } = {}) {
+//
+// Takes the provider id because the repo holds TWO of them at the same commit under the same
+// licence -- Kernel (value 3) and QuantMotion (value 4). Defaults to Kernel so every existing
+// caller keeps its behaviour.
+async function deployLumeniteFx(dir, ghHeaders, { licenseConfirmed = false, fetchImpl = netFetch, providerId = 'lumenite-kernel' } = {}) {
+  const provider = MV_PROVIDERS[providerId];
+  if (!provider || provider.license.indexOf('AGNYA') !== 0) {
+    throw new Error(`deployLumeniteFx is only for the LumeniteFX providers, not ${providerId}`);
+  }
   if (!licenseConfirmed) {
     throw new Error('LumeniteFX requires explicit licence confirmation before it can be fetched -- ' +
-      'see MV_PROVIDERS["lumenite-kernel"].licenseSummary. Refusing.');
+      `see MV_PROVIDERS["${providerId}"].licenseSummary. Refusing.`);
   }
 
   const shaderDir = path.join(dir, 'reshade-shaders', 'Shaders');
   const includeDir = path.join(shaderDir, 'include');
   await fsp.mkdir(includeDir, { recursive: true });
 
-  const files = [LUMENITEFX_KERNEL_FILE, ...LUMENITEFX_KERNEL_INCLUDES];
+  const files = provider.files;
   const deployed = [];
   for (const relPath of files) {
     const res = await fetchImpl(LUMENITEFX_REPO_RAW + relPath, { headers: { 'User-Agent': ghHeaders['User-Agent'] } });
@@ -1123,6 +1221,85 @@ function presetRanks({ mvTechnique, feedTechnique, dir }) {
     // install before this feature had.
   }
   return ranks;
+}
+
+// Swap the motion-vector provider on a game the Feeder is already deployed to, without
+// redeploying the rest of the stack.
+//
+// Why this exists as its own function: the whole point of offering five providers is that nobody
+// can tell you which one looks best on YOUR game -- the differences are in how each one handles
+// flames, transparents and fast pans, and you find that out by looking. That is only useful if
+// trying the next one costs one press. Before this, changing provider meant a full deploy through
+// the Edit dialog: ReShade re-checked, the DLSS runtime re-checked, the add-on re-checked, all to
+// replace two files and one number.
+//
+// The 32-bit route has had this since legacy.js's setMvProvider; this is the same idea for the
+// route almost every game is on. What moves:
+//
+//   1. the outgoing provider's shader files come out (the marker says which, exactly) -- never
+//      for a bring-your-own provider, whose files are the user's own install;
+//   2. the incoming provider's files go in, by whichever path its licence allows;
+//   3. the preset is rewritten: the technique swapped and re-sorted into the MV band, and
+//      DLSS5_MV_PROVIDER set at both levels ReShade reads (configurePreset);
+//   4. the marker records the new provider and exactly what was written, so Remove still takes
+//      back what this app placed and nothing else.
+//
+// Refuses when the Feeder is not deployed here: there is no marker to update, and writing one
+// would claim files this app did not place.
+async function switchMvProvider(dir, providerId, cacheDir, ghHeaders, { licenseConfirmed = false } = {}) {
+  const provider = MV_PROVIDERS[providerId];
+  if (!provider) throw new Error(`Unknown motion-vector provider: ${providerId}`);
+  if (provider.selectable === false) {
+    throw new Error(`${provider.displayName} cannot be used: ${provider.unsupportedReason}`);
+  }
+  const marker = readFeederDeployMarker(dir);
+  if (!marker || !marker.feederVersion) {
+    throw new Error('The Feeder is not deployed in this game, so there is no motion-vector ' +
+      'provider to change -- press Install first.');
+  }
+  if (marker.mvProviderId === providerId) return { changed: false, providerId, files: marker.mvFiles || [] };
+
+  await removeOutgoingMvProvider(dir, marker, providerId);
+
+  let result;
+  if (provider.bringYourOwn) {
+    if (!mvProviderPresent(dir, providerId)) {
+      throw new Error(`${provider.displayName}: ${provider.techniqueFile} is not in this game's ` +
+        'reshade-shaders\\Shaders folder. Install it there yourself (this app cannot redistribute ' +
+        'it), or pick VORT, which it can fetch.');
+    }
+    result = { deployed: false, bringYourOwn: true, files: [] };
+  } else if (provider.autoFetchable) {
+    result = await deployMvProvider(dir, providerId, cacheDir, ghHeaders);
+  } else {
+    result = await deployLumeniteFx(dir, ghHeaders, { licenseConfirmed, providerId });
+  }
+
+  const preset = configurePreset(dir, providerId);
+  writeFeederDeployMarker(dir, {
+    ...marker,
+    mvProviderId: providerId,
+    mvFiles: result.files || [],
+    mvSwitchedAt: new Date().toISOString(),
+  });
+  return {
+    changed: true, from: marker.mvProviderId || null, providerId,
+    files: result.files || [], mvProviderValue: preset.mvProviderValue,
+  };
+}
+
+// The outgoing provider's files, from the marker. Shared by switchMvProvider and the deploy, so
+// "what did the last provider write" has one answer in one place.
+async function removeOutgoingMvProvider(dir, outgoingMarker, incomingId) {
+  if (!outgoingMarker || !outgoingMarker.mvProviderId || outgoingMarker.mvProviderId === incomingId) return;
+  const outgoing = MV_PROVIDERS[outgoingMarker.mvProviderId];
+  if (!outgoing || outgoing.bringYourOwn) return;
+  const stale = (Array.isArray(outgoingMarker.mvFiles) && outgoingMarker.mvFiles.length)
+    ? outgoingMarker.mvFiles
+    : (outgoing.files || []).map((f) => `Shaders/${f}`);
+  for (const rel of stale) {
+    await fsp.rm(path.join(dir, 'reshade-shaders', ...rel.split('/')), { force: true }).catch(() => {});
+  }
 }
 
 // ReShadePreset.ini: the motion-vector provider's technique must run before DLSS5_Feed, and
@@ -1622,25 +1799,13 @@ async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifes
   // technique being enabled, but its files would otherwise stay in the shader folder for good --
   // ReShade would go on compiling them, and a later Remove works from the marker, which records
   // one provider. Never for a bring-your-own provider: those files are the user's own install.
-  const outgoingMarker = readFeederDeployMarker(dir);
-  if (outgoingMarker && outgoingMarker.mvProviderId && outgoingMarker.mvProviderId !== providerId) {
-    const outgoing = MV_PROVIDERS[outgoingMarker.mvProviderId];
-    if (outgoing && !outgoing.bringYourOwn) {
-      // What the deploy recorded, or -- for a marker written before mvFiles existed -- that
-      // provider's own static list. The fallback is the case that actually bites: every game
-      // deployed before v1.57.0 carries DRME, whose marker has no file list, so a re-deploy with
-      // VORT used to leave MotionEstimation.fx sitting there. ReShade then compiles it on every
-      // launch and fails ("error X3020 ... cannot sample from texture that is also used as render
-      // target"), which is both the noise that made DRME unusable and a second provider in the
-      // folder for the Feeder's own "which one is enabled" check to trip over.
-      const stale = (Array.isArray(outgoingMarker.mvFiles) && outgoingMarker.mvFiles.length)
-        ? outgoingMarker.mvFiles
-        : (outgoing.files || []).map((f) => `Shaders/${f}`);
-      for (const rel of stale) {
-        await fsp.rm(path.join(dir, 'reshade-shaders', ...rel.split('/')), { force: true }).catch(() => {});
-      }
-    }
-  }
+  // The fallback inside removeOutgoingMvProvider is the case that actually bites: every game
+  // deployed before v1.57.0 carries DRME, whose marker has no file list, so a re-deploy with VORT
+  // used to leave MotionEstimation.fx sitting there. ReShade then compiles it on every launch and
+  // fails ("error X3020 ... cannot sample from texture that is also used as render target"),
+  // which is both the noise that made DRME unusable and a second provider in the folder for the
+  // Feeder's own "which one is enabled" check to trip over.
+  await removeOutgoingMvProvider(dir, readFeederDeployMarker(dir), providerId);
   if (provider.bringYourOwn) {
     // Never fetched (see the licence note on the provider). Either the user's own copy is in the
     // game's shader folder and this is just a preset/definition change, or there is nothing to
@@ -1654,7 +1819,7 @@ async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifes
   } else if (provider.autoFetchable) {
     results.mvProvider = await deployMvProvider(dir, providerId, cacheDir, ghHeaders);
   } else {
-    results.mvProvider = await deployLumeniteFx(dir, ghHeaders, { licenseConfirmed });
+    results.mvProvider = await deployLumeniteFx(dir, ghHeaders, { licenseConfirmed, providerId });
   }
 
   results.dlss = await deployNvngxDlss(dir, getRhiManifest, compareVersions, cacheDir, ghHeaders);
@@ -1813,6 +1978,7 @@ module.exports = {
   feederReadiness,
   feederUpdateCheck,
   readFeederDeployMarker,
+  writeFeederDeployMarker,
   removeFeederStack,
   deployReShade,
   deployReShadeCommonHeaders,
@@ -1821,6 +1987,7 @@ module.exports = {
   deployLumeniteFx,
   deployNvngxDlss,
   configurePreset,
+  switchMvProvider,
   configureReShadeIni,
   configureFeedCfg,
   needsFullscreenHost,

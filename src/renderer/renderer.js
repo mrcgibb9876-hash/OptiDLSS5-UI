@@ -5917,6 +5917,16 @@ async function renderAddons() {
     if (a.wants && a.wants.length && !res.catalogue.find((x) => a.wants.includes(x.id) && x.installed)) {
       bits.push(`<div class="field-hint status-warn">${escapeHtml(t('Needs an inverse tonemapper to do anything -- install the Lilium HDR shaders too.'))}</div>`);
     }
+    // A swap, said before it happens rather than discovered afterwards. The button stays live.
+    if (!a.installed && (a.replaces || []).length) {
+      const other = res.catalogue.find((x) => x.id === a.replaces[0]);
+      bits.push(`<div class="field-hint status-warn">${escapeHtml(t('Installing this replaces {other} -- both are ways of getting an HDR signal and only one can run. You can swap back any time.', { other: other ? other.displayName : a.replaces[0] }))}</div>`);
+    }
+    // The pack everyone assumes conflicts with RenoDX, and does not -- but half of it becomes
+    // redundant, and saying which half is the difference between a useful pack and a wrong picture.
+    if (a.id === 'lilium-hdr' && res.catalogue.find((x) => x.id === 'renodx' && x.installed)) {
+      bits.push(`<div class="field-hint">${escapeHtml(t('RenoDX already gives this game native HDR, so leave this pack\'s inverse tonemapper switched off in ReShade. Its analysis shaders and its final tone mapping are still worth having -- that is what keeps highlights inside what your display can show.'))}</div>`);
+    }
     bits.push(`<div class="field-hint">${escapeHtml(a.licence)} &middot; <a href="#" class="addon-home" data-url="${escapeHtml(a.homepage)}">${escapeHtml(t('project page'))}</a></div>`);
 
     const button = unavailable
@@ -5926,7 +5936,61 @@ async function renderAddons() {
     return `<div class="addon-row"><div class="addon-body">${bits.join('')}</div><div class="addon-action">${button}</div></div>`;
   });
 
-  $('#addons-list').innerHTML = rows.join('');
+  // The motion-vector providers, listed in the same place for the same reason: this is where
+  // someone looks. Read-only here -- the Feeder deploy owns which one is in place, so changing it
+  // is Settings' job -- but at least the list of what exists, and which one this game is on, is
+  // no longer behind a dialog you have to know about.
+  const mv = res.mvProviders || [];
+  const current = mv.find((p) => p.id === res.mvProviderId);
+  const mvRows = mv.map((p) => {
+    const here = p.id === res.mvProviderId;
+    const marks = [];
+    if (p.isDefault) marks.push(t('default'));
+    if (p.recommended) marks.push(t('recommended by the Feeder'));
+    if (p.bringYourOwn) marks.push(t('your own copy -- its licence forbids us fetching it'));
+    // One press per provider. The differences between these are in how each handles flames,
+    // transparents and fast pans -- nobody can tell you which is best on your game, you look.
+    // That is only worth offering if trying the next one is cheap, so the button switches it in
+    // place rather than sending anyone back through a deploy.
+    const button = here
+      ? `<span class="addon-mv-here">${escapeHtml(t('in use'))}</span>`
+      : `<button class="btn btn-ghost addon-mv-pick" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.displayName)}"${res.mvProviderId ? '' : ' disabled'}>${escapeHtml(t('Use this'))}</button>`;
+    return `<li class="addon-mv-item"><div><span class="${here ? 'addon-mv-name-here' : ''}">${escapeHtml(p.displayName)}</span>${marks.length ? ` <span class="field-hint">&mdash; ${escapeHtml(marks.join(', '))}</span>` : ''}</div>${button}</li>`;
+  }).join('');
+  const mvBlock = mv.length ? `
+    <div class="addon-row"><div class="addon-body">
+      <div class="addon-name">${escapeHtml(t('Motion vectors'))}</div>
+      <div class="field-hint">${escapeHtml(t('DLSS 5 needs to know how things are moving, and that comes from one of these. They differ most on flames, glass and fast pans -- if a game looks wrong in motion, try the next one.'))}</div>
+      <ul class="addon-mv-list">${mvRows}</ul>
+      ${current ? '' : `<div class="field-hint">${escapeHtml(t('Install DLSS 5 on this game first -- then you can switch between these in one press.'))}</div>`}
+    </div></div>` : '';
+
+  $('#addons-list').innerHTML = mvBlock + rows.join('');
+  for (const el of $('#addons-list').querySelectorAll('.addon-mv-pick')) {
+    el.addEventListener('click', async () => {
+      const id = el.dataset.id;
+      const spec = mv.find((p) => p.id === id) || {};
+      // The two providers whose licence needs real per-action consent get the same native dialog
+      // the deploy uses. deployLumeniteFx refuses without it regardless, so skipping it here
+      // cannot turn into a silent fetch -- this is what gets the answer, not what enforces it.
+      let licenseConfirmed = false;
+      if (/AGNYA/.test(spec.license || '')) {
+        licenseConfirmed = await window.api.feederConfirmProviderLicense(id);
+        if (!licenseConfirmed) return;
+      }
+      el.disabled = true;
+      $('#addons-status').className = 'field-hint';
+      $('#addons-status').textContent = t('Switching to {name}…', { name: el.dataset.name });
+      const out = await window.api.addonsSetMvProvider(addonsGame.exePath, id, { licenseConfirmed });
+      if (out && out.ok) {
+        $('#addons-status').textContent = t('Motion vectors now come from {name}. Launch the game and see how it looks.', { name: el.dataset.name });
+      } else {
+        $('#addons-status').className = 'field-hint status-bad';
+        $('#addons-status').textContent = (out && out.error) || t('That did not work.');
+      }
+      await renderAddons();
+    });
+  }
 
   for (const el of $('#addons-list').querySelectorAll('.addon-home')) {
     el.addEventListener('click', (e) => { e.preventDefault(); window.api.openExternal(el.dataset.url); });
@@ -5942,9 +6006,15 @@ async function renderAddons() {
         ? await window.api.addonsRemove(addonsGame.exePath, id)
         : await window.api.addonsInstall(addonsGame.exePath, id);
       if (out && out.ok) {
+        const swapped = (out.swappedOut || []).map((sid) => {
+          const s2 = res.catalogue.find((x) => x.id === sid);
+          return s2 ? s2.displayName : sid;
+        });
         $('#addons-status').textContent = removing
           ? t('Removed. {count} files taken back out.', { count: (out.removed || []).length })
-          : t('Installed. {count} files placed, and the effect order was rewritten.', { count: (out.files || []).length });
+          : swapped.length
+            ? t('Installed, replacing {other}. {count} files placed, and the effect order was rewritten.', { other: swapped.join(', '), count: (out.files || []).length })
+            : t('Installed. {count} files placed, and the effect order was rewritten.', { count: (out.files || []).length });
       } else {
         $('#addons-status').className = 'field-hint status-bad';
         $('#addons-status').textContent = (out && out.error) || t('That did not work.');
