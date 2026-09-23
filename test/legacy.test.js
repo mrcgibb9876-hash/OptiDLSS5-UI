@@ -105,6 +105,20 @@ test('FIFA 16: a protected exe that names no API is still DX11, so the Feeder is
   assert.equal((await detect.detectGame(path.dirname(other), other)).api, null, 'only the named game is assumed');
 });
 
+test('Max Payne 2 is Direct3D 8, so dgVoodoo goes in as D3D8.dll, not D3D9.dll', { skip: !onWindows }, async () => {
+  // Its exe names D3D9 in a version check and renders through e2driver\e2_d3d8_driver_mfc.dll, which
+  // the sibling scan cannot see. Read as DX9, the route placed a D3D9.dll the game never loads.
+  const dir = scratchDir('maxpayne2');
+  const exe = exeWith(dir, 'MaxPayne2.exe');
+  const det = await detect.detectGame(dir, exe);
+  assert.deepEqual(det.legacyApis, ['dx8']);
+  assert.notEqual(det.api, 'dx9');
+  // The real exe is 32-bit, which is what makes DX8 reachable; the route that follows places D3D8.dll.
+  const plan = legacy.planFor({ ...det, api: 'dx8', apis: ['dx8'], bitness: 32 });
+  assert.equal(plan.supported, true);
+  assert.equal(plan.dgVoodoo.dll, 'D3D8.dll');
+});
+
 test('detection: emulators, 32-bit and DirectX 8/9 games are offered experimental routes', { skip: !onWindows }, async () => {
   const base = scratchDir('legacy-detect');
   const pcsx2 = await detect.detectGame(path.join(base, 'pcsx2'), exeWith(path.join(base, 'pcsx2'), 'pcsx2-qt.exe'));
