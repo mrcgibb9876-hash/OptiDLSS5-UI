@@ -1223,6 +1223,85 @@ function presetRanks({ mvTechnique, feedTechnique, dir }) {
   return ranks;
 }
 
+// Swap the motion-vector provider on a game the Feeder is already deployed to, without
+// redeploying the rest of the stack.
+//
+// Why this exists as its own function: the whole point of offering five providers is that nobody
+// can tell you which one looks best on YOUR game -- the differences are in how each one handles
+// flames, transparents and fast pans, and you find that out by looking. That is only useful if
+// trying the next one costs one press. Before this, changing provider meant a full deploy through
+// the Edit dialog: ReShade re-checked, the DLSS runtime re-checked, the add-on re-checked, all to
+// replace two files and one number.
+//
+// The 32-bit route has had this since legacy.js's setMvProvider; this is the same idea for the
+// route almost every game is on. What moves:
+//
+//   1. the outgoing provider's shader files come out (the marker says which, exactly) -- never
+//      for a bring-your-own provider, whose files are the user's own install;
+//   2. the incoming provider's files go in, by whichever path its licence allows;
+//   3. the preset is rewritten: the technique swapped and re-sorted into the MV band, and
+//      DLSS5_MV_PROVIDER set at both levels ReShade reads (configurePreset);
+//   4. the marker records the new provider and exactly what was written, so Remove still takes
+//      back what this app placed and nothing else.
+//
+// Refuses when the Feeder is not deployed here: there is no marker to update, and writing one
+// would claim files this app did not place.
+async function switchMvProvider(dir, providerId, cacheDir, ghHeaders, { licenseConfirmed = false } = {}) {
+  const provider = MV_PROVIDERS[providerId];
+  if (!provider) throw new Error(`Unknown motion-vector provider: ${providerId}`);
+  if (provider.selectable === false) {
+    throw new Error(`${provider.displayName} cannot be used: ${provider.unsupportedReason}`);
+  }
+  const marker = readFeederDeployMarker(dir);
+  if (!marker || !marker.feederVersion) {
+    throw new Error('The Feeder is not deployed in this game, so there is no motion-vector ' +
+      'provider to change -- press Install first.');
+  }
+  if (marker.mvProviderId === providerId) return { changed: false, providerId, files: marker.mvFiles || [] };
+
+  await removeOutgoingMvProvider(dir, marker, providerId);
+
+  let result;
+  if (provider.bringYourOwn) {
+    if (!mvProviderPresent(dir, providerId)) {
+      throw new Error(`${provider.displayName}: ${provider.techniqueFile} is not in this game's ` +
+        'reshade-shaders\\Shaders folder. Install it there yourself (this app cannot redistribute ' +
+        'it), or pick VORT, which it can fetch.');
+    }
+    result = { deployed: false, bringYourOwn: true, files: [] };
+  } else if (provider.autoFetchable) {
+    result = await deployMvProvider(dir, providerId, cacheDir, ghHeaders);
+  } else {
+    result = await deployLumeniteFx(dir, ghHeaders, { licenseConfirmed, providerId });
+  }
+
+  const preset = configurePreset(dir, providerId);
+  writeFeederDeployMarker(dir, {
+    ...marker,
+    mvProviderId: providerId,
+    mvFiles: result.files || [],
+    mvSwitchedAt: new Date().toISOString(),
+  });
+  return {
+    changed: true, from: marker.mvProviderId || null, providerId,
+    files: result.files || [], mvProviderValue: preset.mvProviderValue,
+  };
+}
+
+// The outgoing provider's files, from the marker. Shared by switchMvProvider and the deploy, so
+// "what did the last provider write" has one answer in one place.
+async function removeOutgoingMvProvider(dir, outgoingMarker, incomingId) {
+  if (!outgoingMarker || !outgoingMarker.mvProviderId || outgoingMarker.mvProviderId === incomingId) return;
+  const outgoing = MV_PROVIDERS[outgoingMarker.mvProviderId];
+  if (!outgoing || outgoing.bringYourOwn) return;
+  const stale = (Array.isArray(outgoingMarker.mvFiles) && outgoingMarker.mvFiles.length)
+    ? outgoingMarker.mvFiles
+    : (outgoing.files || []).map((f) => `Shaders/${f}`);
+  for (const rel of stale) {
+    await fsp.rm(path.join(dir, 'reshade-shaders', ...rel.split('/')), { force: true }).catch(() => {});
+  }
+}
+
 // ReShadePreset.ini: the motion-vector provider's technique must run before DLSS5_Feed, and
 // DLSS5_Feed.fx's own DLSS5_MV_PROVIDER preprocessor definition must match. Structure-
 // preserving (setIniKey/getIniKey from ini-merge.js) rather than a template overwrite -- this
@@ -1720,25 +1799,13 @@ async function deployFeederStack(dir, api, providerId, { cacheDir, getRhiManifes
   // technique being enabled, but its files would otherwise stay in the shader folder for good --
   // ReShade would go on compiling them, and a later Remove works from the marker, which records
   // one provider. Never for a bring-your-own provider: those files are the user's own install.
-  const outgoingMarker = readFeederDeployMarker(dir);
-  if (outgoingMarker && outgoingMarker.mvProviderId && outgoingMarker.mvProviderId !== providerId) {
-    const outgoing = MV_PROVIDERS[outgoingMarker.mvProviderId];
-    if (outgoing && !outgoing.bringYourOwn) {
-      // What the deploy recorded, or -- for a marker written before mvFiles existed -- that
-      // provider's own static list. The fallback is the case that actually bites: every game
-      // deployed before v1.57.0 carries DRME, whose marker has no file list, so a re-deploy with
-      // VORT used to leave MotionEstimation.fx sitting there. ReShade then compiles it on every
-      // launch and fails ("error X3020 ... cannot sample from texture that is also used as render
-      // target"), which is both the noise that made DRME unusable and a second provider in the
-      // folder for the Feeder's own "which one is enabled" check to trip over.
-      const stale = (Array.isArray(outgoingMarker.mvFiles) && outgoingMarker.mvFiles.length)
-        ? outgoingMarker.mvFiles
-        : (outgoing.files || []).map((f) => `Shaders/${f}`);
-      for (const rel of stale) {
-        await fsp.rm(path.join(dir, 'reshade-shaders', ...rel.split('/')), { force: true }).catch(() => {});
-      }
-    }
-  }
+  // The fallback inside removeOutgoingMvProvider is the case that actually bites: every game
+  // deployed before v1.57.0 carries DRME, whose marker has no file list, so a re-deploy with VORT
+  // used to leave MotionEstimation.fx sitting there. ReShade then compiles it on every launch and
+  // fails ("error X3020 ... cannot sample from texture that is also used as render target"),
+  // which is both the noise that made DRME unusable and a second provider in the folder for the
+  // Feeder's own "which one is enabled" check to trip over.
+  await removeOutgoingMvProvider(dir, readFeederDeployMarker(dir), providerId);
   if (provider.bringYourOwn) {
     // Never fetched (see the licence note on the provider). Either the user's own copy is in the
     // game's shader folder and this is just a preset/definition change, or there is nothing to
@@ -1911,6 +1978,7 @@ module.exports = {
   feederReadiness,
   feederUpdateCheck,
   readFeederDeployMarker,
+  writeFeederDeployMarker,
   removeFeederStack,
   deployReShade,
   deployReShadeCommonHeaders,
@@ -1919,6 +1987,7 @@ module.exports = {
   deployLumeniteFx,
   deployNvngxDlss,
   configurePreset,
+  switchMvProvider,
   configureReShadeIni,
   configureFeedCfg,
   needsFullscreenHost,

@@ -1530,4 +1530,10 @@ window.I18N.register("ko", {
   "Nothing deployed here yet.": "여기에는 아직 아무것도 배치되지 않았습니다.",
   "Change in Settings…": "설정에서 변경…",
   "Installed, replacing {other}. {count} files placed, and the effect order was rewritten.": "{other}을(를) 대체하여 설치했습니다. 파일 {count}개를 배치하고 효과 순서를 다시 썼습니다.",
+  "in use": "사용 중",
+  "Use this": "이걸로 사용",
+  "DLSS 5 needs to know how things are moving, and that comes from one of these. They differ most on flames, glass and fast pans -- if a game looks wrong in motion, try the next one.": "DLSS 5는 화면 속 사물이 어떻게 움직이는지 알아야 하고, 그 정보는 이 중 하나에서 옵니다. 차이는 불꽃, 유리, 빠른 패닝에서 가장 크게 드러납니다 -- 움직일 때 이상해 보이면 다음 것을 써 보세요.",
+  "Install DLSS 5 on this game first -- then you can switch between these in one press.": "먼저 이 게임에 DLSS 5를 설치하세요 -- 그러면 여기서 한 번만 눌러 바꿀 수 있습니다.",
+  "Switching to {name}…": "{name}(으)로 전환하는 중…",
+  "Motion vectors now come from {name}. Launch the game and see how it looks.": "이제 모션 벡터는 {name}에서 옵니다. 게임을 실행해 어떻게 보이는지 확인해 보세요.",
 });

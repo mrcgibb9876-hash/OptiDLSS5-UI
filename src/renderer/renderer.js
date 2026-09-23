@@ -5943,27 +5943,54 @@ async function renderAddons() {
   const mv = res.mvProviders || [];
   const current = mv.find((p) => p.id === res.mvProviderId);
   const mvRows = mv.map((p) => {
+    const here = p.id === res.mvProviderId;
     const marks = [];
-    if (p.id === res.mvProviderId) marks.push(t('in use here'));
-    else if (p.isDefault) marks.push(t('default'));
+    if (p.isDefault) marks.push(t('default'));
     if (p.recommended) marks.push(t('recommended by the Feeder'));
     if (p.bringYourOwn) marks.push(t('your own copy -- its licence forbids us fetching it'));
-    return `<li>${escapeHtml(p.displayName)}${marks.length ? ` &mdash; <span class="field-hint">${escapeHtml(marks.join(', '))}</span>` : ''}</li>`;
+    // One press per provider. The differences between these are in how each handles flames,
+    // transparents and fast pans -- nobody can tell you which is best on your game, you look.
+    // That is only worth offering if trying the next one is cheap, so the button switches it in
+    // place rather than sending anyone back through a deploy.
+    const button = here
+      ? `<span class="addon-mv-here">${escapeHtml(t('in use'))}</span>`
+      : `<button class="btn btn-ghost addon-mv-pick" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.displayName)}"${res.mvProviderId ? '' : ' disabled'}>${escapeHtml(t('Use this'))}</button>`;
+    return `<li class="addon-mv-item"><div><span class="${here ? 'addon-mv-name-here' : ''}">${escapeHtml(p.displayName)}</span>${marks.length ? ` <span class="field-hint">&mdash; ${escapeHtml(marks.join(', '))}</span>` : ''}</div>${button}</li>`;
   }).join('');
   const mvBlock = mv.length ? `
     <div class="addon-row"><div class="addon-body">
       <div class="addon-name">${escapeHtml(t('Motion vectors'))}</div>
-      <div class="field-hint">${escapeHtml(t('DLSS5_Feed does not estimate motion itself -- it reads whichever of these is enabled, which is why this one always runs first in the effect order. One per game, chosen when the Feeder is deployed.'))}</div>
+      <div class="field-hint">${escapeHtml(t('DLSS 5 needs to know how things are moving, and that comes from one of these. They differ most on flames, glass and fast pans -- if a game looks wrong in motion, try the next one.'))}</div>
       <ul class="addon-mv-list">${mvRows}</ul>
-      ${current ? '' : `<div class="field-hint">${escapeHtml(t('Nothing deployed here yet.'))}</div>`}
-      <button class="btn btn-ghost addon-mv-edit">${escapeHtml(t('Change in Settings…'))}</button>
+      ${current ? '' : `<div class="field-hint">${escapeHtml(t('Install DLSS 5 on this game first -- then you can switch between these in one press.'))}</div>`}
     </div></div>` : '';
 
   $('#addons-list').innerHTML = mvBlock + rows.join('');
-  $('#addons-list').querySelector('.addon-mv-edit')?.addEventListener('click', () => {
-    $('#addons-modal').classList.add('hidden');
-    openGameModal(addonsGame, { focus: 'legacy-mv' });
-  });
+  for (const el of $('#addons-list').querySelectorAll('.addon-mv-pick')) {
+    el.addEventListener('click', async () => {
+      const id = el.dataset.id;
+      const spec = mv.find((p) => p.id === id) || {};
+      // The two providers whose licence needs real per-action consent get the same native dialog
+      // the deploy uses. deployLumeniteFx refuses without it regardless, so skipping it here
+      // cannot turn into a silent fetch -- this is what gets the answer, not what enforces it.
+      let licenseConfirmed = false;
+      if (/AGNYA/.test(spec.license || '')) {
+        licenseConfirmed = await window.api.feederConfirmProviderLicense(id);
+        if (!licenseConfirmed) return;
+      }
+      el.disabled = true;
+      $('#addons-status').className = 'field-hint';
+      $('#addons-status').textContent = t('Switching to {name}…', { name: el.dataset.name });
+      const out = await window.api.addonsSetMvProvider(addonsGame.exePath, id, { licenseConfirmed });
+      if (out && out.ok) {
+        $('#addons-status').textContent = t('Motion vectors now come from {name}. Launch the game and see how it looks.', { name: el.dataset.name });
+      } else {
+        $('#addons-status').className = 'field-hint status-bad';
+        $('#addons-status').textContent = (out && out.error) || t('That did not work.');
+      }
+      await renderAddons();
+    });
+  }
 
   for (const el of $('#addons-list').querySelectorAll('.addon-home')) {
     el.addEventListener('click', (e) => { e.preventDefault(); window.api.openExternal(el.dataset.url); });

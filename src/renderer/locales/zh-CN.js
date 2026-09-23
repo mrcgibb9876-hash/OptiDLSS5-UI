@@ -1530,4 +1530,10 @@ window.I18N.register("zh-CN", {
   "Nothing deployed here yet.": "这里还没有部署任何内容。",
   "Change in Settings…": "在设置中更改…",
   "Installed, replacing {other}. {count} files placed, and the effect order was rewritten.": "已安装并替换 {other}，放置 {count} 个文件，并重写了效果顺序。",
+  "in use": "使用中",
+  "Use this": "改用这个",
+  "DLSS 5 needs to know how things are moving, and that comes from one of these. They differ most on flames, glass and fast pans -- if a game looks wrong in motion, try the next one.": "DLSS 5 需要知道画面里的东西怎么移动，而这来自其中之一。它们的差别主要体现在火焰、玻璃和快速横摇上 —— 如果游戏在动起来时看着不对，就试下一个。",
+  "Install DLSS 5 on this game first -- then you can switch between these in one press.": "请先为这款游戏安装 DLSS 5 —— 之后在这里一按即可切换。",
+  "Switching to {name}…": "正在切换到 {name}…",
+  "Motion vectors now come from {name}. Launch the game and see how it looks.": "现在运动矢量来自 {name}。启动游戏看看效果。",
 });

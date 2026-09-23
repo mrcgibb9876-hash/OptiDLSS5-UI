@@ -1530,4 +1530,10 @@ window.I18N.register("ru", {
   "Nothing deployed here yet.": "Здесь пока ничего не развёрнуто.",
   "Change in Settings…": "Изменить в настройках…",
   "Installed, replacing {other}. {count} files placed, and the effect order was rewritten.": "Установлено взамен {other}. Размещено файлов: {count}, порядок эффектов переписан.",
+  "in use": "используется",
+  "Use this": "Взять этот",
+  "DLSS 5 needs to know how things are moving, and that comes from one of these. They differ most on flames, glass and fast pans -- if a game looks wrong in motion, try the next one.": "DLSS 5 нужно знать, как движутся объекты, и это даёт один из них. Разница заметнее всего на пламени, стекле и быстрых панорамах -- если в движении картинка выглядит неправильно, попробуйте следующий.",
+  "Install DLSS 5 on this game first -- then you can switch between these in one press.": "Сначала установите DLSS 5 для этой игры -- после этого переключаться между ними можно одним нажатием.",
+  "Switching to {name}…": "Переключение на {name}…",
+  "Motion vectors now come from {name}. Launch the game and see how it looks.": "Теперь векторы движения берутся из {name}. Запустите игру и посмотрите, как выглядит.",
 });

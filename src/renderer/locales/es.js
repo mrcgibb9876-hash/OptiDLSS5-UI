@@ -1530,4 +1530,10 @@ window.I18N.register("es", {
   "Nothing deployed here yet.": "Aquí no hay nada desplegado todavía.",
   "Change in Settings…": "Cambiar en Ajustes…",
   "Installed, replacing {other}. {count} files placed, and the effect order was rewritten.": "Instalado, reemplazando {other}. {count} archivos colocados, y se reescribió el orden de efectos.",
+  "in use": "en uso",
+  "Use this": "Usar este",
+  "DLSS 5 needs to know how things are moving, and that comes from one of these. They differ most on flames, glass and fast pans -- if a game looks wrong in motion, try the next one.": "DLSS 5 necesita saber cómo se mueven las cosas, y eso viene de uno de estos. Se diferencian sobre todo en llamas, cristales y barridos rápidos -- si un juego se ve mal en movimiento, prueba el siguiente.",
+  "Install DLSS 5 on this game first -- then you can switch between these in one press.": "Instala DLSS 5 en este juego primero -- después podrás cambiar entre estos con una sola pulsación.",
+  "Switching to {name}…": "Cambiando a {name}…",
+  "Motion vectors now come from {name}. Launch the game and see how it looks.": "Los vectores de movimiento ahora vienen de {name}. Inicia el juego y mira cómo se ve.",
 });

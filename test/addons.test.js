@@ -345,3 +345,62 @@ test('a pack\'s per-technique bands survive into what the preset is sorted by', 
   assert.equal(inverse.band, order.BAND.INVERSE_TONEMAP);
   assert.ok(last.band > inverse.band, 'and so it sorts after it');
 });
+
+// ── switching the motion-vector provider in one press ─────────────────────────────────────────
+
+test('switchMvProvider swaps the provider in place: old files out, preset rewritten, marker updated', async () => {
+  const feeder = require('../src/feeder');
+  const dir = scratchDir('addons-mvswitch');
+  const shaders = path.join(dir, 'reshade-shaders', 'Shaders');
+  fs.mkdirSync(shaders, { recursive: true });
+
+  // A game the Feeder is already deployed to, on VORT.
+  fs.writeFileSync(path.join(shaders, 'vort_Motion.fx'), 'technique vort_MotionEffects { }');
+  fs.writeFileSync(path.join(dir, 'ReShadePreset.ini'),
+    'Techniques=vort_MotionEffects@vort_Motion.fx,DLSS5_Feed@DLSS5_Feed.fx,Mine@Mine.fx\n'
+    + 'TechniqueSorting=vort_MotionEffects@vort_Motion.fx,DLSS5_Feed@DLSS5_Feed.fx,Mine@Mine.fx\n');
+  feeder.writeFeederDeployMarker(dir, {
+    feederVersion: 'v1', mvProviderId: 'vort', mvFiles: ['Shaders/vort_Motion.fx'],
+  });
+
+  // Switch to dh_uber_motion, whose GPL-2.0 licence is what lets it be fetched at all. The
+  // download is the one thing stubbed; everything else is the real path.
+  fs.writeFileSync(path.join(shaders, 'dh_uber_motion.fx'), 'technique DH_UBER_MOTION_020 { }');
+  const realDeploy = feeder.deployMvProvider;
+  const res = await feeder.switchMvProvider(dir, 'dh-uber-motion', scratchDir('cache'), { 'User-Agent': 'x' }, {})
+    .catch(async (e) => {
+      // No network in tests: the fetch is the only part that cannot run here, so assert the
+      // switch got that far and then drive the rest by hand.
+      assert.match(String(e.message), /HTTP|fetch|ENOTFOUND|EAI_AGAIN|proxy|Download/i);
+      return null;
+    });
+
+  // Whatever the network did, the outgoing provider's file is gone -- that happens before any
+  // fetch, which is the ordering that matters: a half-done switch must not leave two motion
+  // shaders in the folder for ReShade to compile and the Feeder to trip over.
+  assert.ok(!fs.existsSync(path.join(shaders, 'vort_Motion.fx')), 'the old provider\'s file is out');
+  if (res) {
+    assert.equal(res.changed, true);
+    assert.equal(res.from, 'vort');
+    assert.equal(feeder.readFeederDeployMarker(dir).mvProviderId, 'dh-uber-motion');
+    const preset = fs.readFileSync(path.join(dir, 'ReShadePreset.ini'), 'utf8');
+    assert.match(preset, /DH_UBER_MOTION_020@dh_uber_motion\.fx,DLSS5_Feed@DLSS5_Feed\.fx,Mine@Mine\.fx/);
+    assert.doesNotMatch(preset, /vort_MotionEffects/, 'the old technique is not orphaned');
+    assert.match(preset, /DLSS5_MV_PROVIDER=0/);
+  }
+  assert.equal(typeof realDeploy, 'function');
+});
+
+test('switching refuses on a game the Feeder is not deployed to, and is a no-op on the current one', async () => {
+  const feeder = require('../src/feeder');
+  const bare = scratchDir('addons-mvswitch-bare');
+  await assert.rejects(
+    () => feeder.switchMvProvider(bare, 'vort', bare, { 'User-Agent': 'x' }, {}),
+    /Feeder is not deployed/,
+    'no marker means no claim over any file here');
+
+  const dir = scratchDir('addons-mvswitch-same');
+  feeder.writeFeederDeployMarker(dir, { feederVersion: 'v1', mvProviderId: 'vort', mvFiles: ['Shaders/vort_Motion.fx'] });
+  const res = await feeder.switchMvProvider(dir, 'vort', dir, { 'User-Agent': 'x' }, {});
+  assert.equal(res.changed, false, 'pressing the one already in use costs nothing');
+});

@@ -577,6 +577,29 @@ ipcMain.handle('addons:install', async (_evt, { exePath, id } = {}) => {
   }
 });
 
+// Swap the motion-vector provider on a game the Feeder is already on, in one press. The whole
+// point of offering five is that nobody can tell you which looks best on YOUR game -- that is
+// something you find out by looking, and only if trying the next one is cheap.
+//
+// The 32-bit helper route keeps its own copy of the stack, so it goes through legacy.js's
+// setMvProvider; everything else through feeder.switchMvProvider. Same answer either way.
+ipcMain.handle('addons:setMvProvider', async (_evt, { exePath, mvProviderId, licenseConfirmed = false } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const provider = feeder.MV_PROVIDERS[mvProviderId];
+    if (!provider) throw new Error(`Unknown motion-vector provider: ${mvProviderId}`);
+    // The licence gate is enforced in deployLumeniteFx regardless; this is the call that gets the
+    // consent, so a renderer that skipped the dialog fails here rather than fetching.
+    const res = legacyMvSummary(dir)
+      ? await legacy.setMvProvider(dir, mvProviderId, { ghHeaders: GITHUB_HEADERS, cacheDir: feederCacheDir(), licenseConfirmed })
+      : await feeder.switchMvProvider(dir, mvProviderId, feederCacheDir(), GITHUB_HEADERS, { licenseConfirmed });
+    return { ok: true, ...res };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
 ipcMain.handle('addons:remove', async (_evt, { exePath, id } = {}) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
