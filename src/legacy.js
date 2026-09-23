@@ -874,7 +874,7 @@ async function deployLegacyShaders(dir, providerId, { cacheDir = null, ghHeaders
   let wrote = [];
   if (provider.bringYourOwn) wrote = [];
   else if (provider.autoFetchable) wrote = (await feeder.deployMvProvider(dir, providerId, cacheDir, ghHeaders)).files || [];
-  else wrote = (await feeder.deployLumeniteFx(dir, ghHeaders, { licenseConfirmed, ...fetchOpt })).files || [];
+  else wrote = (await feeder.deployLumeniteFx(dir, ghHeaders, { licenseConfirmed, providerId, ...fetchOpt })).files || [];
   feeder.configureReShadeIni(dir, {});
   feeder.configurePreset(dir, providerId);
   return {

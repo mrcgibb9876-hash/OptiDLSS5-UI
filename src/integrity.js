@@ -27,6 +27,10 @@ const RESHADE_HEADER_SHA256 = {
 };
 
 const LUMENITEFX_SHA256 = {
+  // Two motion providers live in this repo at the same pinned commit: Kernel (DLSS5_MV_PROVIDER=3)
+  // and QuantMotion (=4). QuantMotion needs no include of its own -- only ReShade.fxh, which every
+  // deploy already places -- so it is one line here and one entry in MV_PROVIDERS.
+  'lumenite_QuantMotion.fx': '4a27b2f3676cd836e460be3bb7a094cbf7ddd74e29b19d88ff7381066fcb94d8',
   'lumenite_Kernel.fx': 'dc44d101c568a8492606884037c86059a31b844fd5e144e733fb70dabc91f25c',
   'include/lumenite_Projections.fxh': '709ec414649b74e573ca0f12a5ef25998d332238f7cab14a3d91053c8d388cab',
   'include/lumenite_Helpers.fxh': '8826d613944be27e14095982b20098fff6d45e91c7d4028473c2f5b784c80028',
@@ -97,12 +101,21 @@ const LILIUM_HDR_SHA256 = {
   'Textures/lilium__font_atlas_mtsdf.png': 'fcfc9e30cd66af73f5e9d51f2bd881bab805e38196aaf4de874b63132ec8f738',
 };
 
+// AlucardDH's dh_uber_motion (DLSS5_MV_PROVIDER=0, the shared texMotionVectors convention).
+// GPL-2.0, so unlike qUINT and iMMERSE it can be fetched rather than brought by the user, and it is
+// a single self-contained file whose only include is ReShade.fxh.
+const DH_SHADERS_COMMIT = '0783b8fde77df48412d79070be7de4bc3743b898'; // AlucardDH/dh-reshade-shaders
+const DH_SHADERS_SHA256 = {
+  'dh_uber_motion.fx': 'abb4fa33c988b8e7bbaf58caa796e633c66b74566207baf1fcbf0e4b7325ed30',
+};
+
 const URLS = {
   reshadeSetup: 'https://reshade.me/downloads/ReShade_Setup_6.8.0_Addon.exe',
   vortZip: `https://codeload.github.com/vortigern11/vort_Shaders/zip/${VORT_COMMIT}`,
   reshadeShadersRaw: `https://raw.githubusercontent.com/crosire/reshade-shaders/${RESHADE_SHADERS_COMMIT}/Shaders/`,
   reshadeShadersMirror: `https://cdn.jsdelivr.net/gh/crosire/reshade-shaders@${RESHADE_SHADERS_COMMIT}/Shaders/`,
   lumeniteRaw: `https://raw.githubusercontent.com/umar-afzaal/LumeniteFX/${LUMENITEFX_COMMIT}/Shaders/`,
+  dhShadersRaw: `https://raw.githubusercontent.com/AlucardDH/dh-reshade-shaders/${DH_SHADERS_COMMIT}/Shaders/`,
   renofxRaw: `https://raw.githubusercontent.com/clshortfuse/renofx/${RENOFX_COMMIT}/`,
   liliumHdrRaw: `https://raw.githubusercontent.com/EndlesslyFlowering/ReShade_HDR_shaders/${LILIUM_HDR_COMMIT}/`,
   dgVoodoo: 'https://github.com/dege-diosg/dgVoodoo2/releases/download/v2.87.4/dgVoodoo2_87_4.zip',
@@ -121,6 +134,7 @@ for (const [name, sha] of Object.entries(RESHADE_HEADER_SHA256)) {
   PINS[URLS.reshadeShadersMirror + name] = sha;
 }
 for (const [rel, sha] of Object.entries(LUMENITEFX_SHA256)) PINS[URLS.lumeniteRaw + rel] = sha;
+for (const [rel, sha] of Object.entries(DH_SHADERS_SHA256)) PINS[URLS.dhShadersRaw + rel] = sha;
 for (const [rel, sha] of Object.entries(RENOFX_SHA256)) PINS[URLS.renofxRaw + rel] = sha;
 for (const [rel, sha] of Object.entries(LILIUM_HDR_SHA256)) PINS[URLS.liliumHdrRaw + rel] = sha;
 
@@ -219,7 +233,7 @@ function checkFinalUrl(requestedUrl, res) {
 module.exports = {
   PINS, UNPINNED, URLS, GITHUB_HOSTS,
   RESHADE_SHADERS_COMMIT, LUMENITEFX_COMMIT, VORT_COMMIT, RENOFX_COMMIT, LILIUM_HDR_COMMIT,
-  RENOFX_SHA256, LILIUM_HDR_SHA256,
+  RENOFX_SHA256, LILIUM_HDR_SHA256, DH_SHADERS_COMMIT, DH_SHADERS_SHA256,
   sha256, pinFor, digestFromAsset, parseReleaseUrl, releaseAssetDigest, expectedSha256,
   verifyBuffer, checkFinalUrl, mismatchError,
   _resetDigestCache: () => digestCache.clear(),

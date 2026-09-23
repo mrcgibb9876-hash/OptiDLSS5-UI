@@ -69,6 +69,10 @@ const CATALOGUE = [
     // saying anything would leave the first person whose colours go strange with no idea why.
     warnWithNeuralRendering: true,
     release: { repo: RENODX_REPO, tag: RENODX_TAG },
+    // See EXCLUSIVE_GROUPS below: RenoDX and AutoHDR are two answers to the same question and
+    // only one can be installed at a time -- but choosing the other one swaps them rather than
+    // greying anything out.
+    exclusiveGroup: 'hdr-source',
   },
   {
     id: 'renofx',
@@ -95,6 +99,14 @@ const CATALOGUE = [
       + 'baseline: the inverse tonemapper is what expands an SDR picture into HDR, and the '
       + 'analysis shaders are how you check the result rather than guess at it.',
     band: BAND.INVERSE_TONEMAP,
+    // The pack's own final tone mapping goes LAST, not with the rest of it. Its job is to clamp
+    // the finished frame to what the display can actually show, so anything running after it
+    // would push the picture back past that ceiling -- which is exactly the overblown-highlights
+    // failure it exists to prevent. The HDR guides put it at the bottom of the chain for this
+    // reason, and that is true whether the HDR came from AutoHDR or from a native-HDR mod.
+    bandFor: (file) => (/tone_mapping\.fx$/i.test(file) && !/inverse/i.test(file)
+      ? BAND.HDR_OUTPUT
+      : BAND.INVERSE_TONEMAP),
     source: { kind: 'raw-files', baseKey: 'liliumHdrRaw', shaKey: 'LILIUM_HDR_SHA256' },
   },
   {
@@ -111,8 +123,45 @@ const CATALOGUE = [
     // rather than "nothing is expanding the range".
     wants: ['lilium-hdr'],
     source: { kind: 'github-release', repo: 'EndlesslyFlowering/AutoHDR-ReShade', assetPattern: /\.addon(64|32)$/i },
+    exclusiveGroup: 'hdr-source',
   },
 ];
+
+// Two add-ons that cannot both be installed, and why it is these two and not "RenoDX vs Lilium".
+//
+// They are two answers to the SAME question -- where does the HDR signal come from -- and both
+// answer it by upgrading the swap chain:
+//
+//   RenoDX   replaces the game's own tone mapping and works on the scene data BEFORE the game
+//            tonemapped it. The game outputs HDR natively; nothing is being converted.
+//   AutoHDR  makes the swap chain HDR so an SDR game can output HDR at all, and then an inverse
+//            tonemapper expands the finished SDR image into that range.
+//
+// Running both means two things upgrading one swap chain and an inverse tonemapper expanding a
+// picture that is already HDR. That is a conflict of substance, not of file names.
+//
+// What is NOT in this group, deliberately: the Lilium HDR SHADER PACK. It is the thing people
+// assume conflicts with RenoDX and it does not -- the HDR guides put its final tone mapping at
+// the very bottom of the chain precisely so a native-HDR game does not blow past the display's
+// peak brightness, and its analysis shaders are how anyone checks a RenoDX result rather than
+// guessing at it. Only the pack's own inverse tonemapper is redundant next to RenoDX, and
+// whether that technique is switched on is a choice inside ReShade, not something installing
+// the pack decides.
+const EXCLUSIVE_GROUPS = { 'hdr-source': ['renodx', 'lilium-autohdr'] };
+
+// What installing `id` here would have to remove first: the other members of its group that are
+// installed. Empty for everything else.
+//
+// A swap, never a lock. The button for the other one stays live and pressing it moves the
+// install across -- being told "you cannot have this" by an app that could simply do the swap
+// is the kind of thing that makes people go and do it by hand, badly.
+function conflictsFor(dir, id) {
+  const spec = byId.get(id);
+  if (!spec || !spec.exclusiveGroup) return [];
+  const group = EXCLUSIVE_GROUPS[spec.exclusiveGroup] || [];
+  const here = new Set(installedIds(dir));
+  return group.filter((other) => other !== id && here.has(other));
+}
 
 const byId = new Map(CATALOGUE.map((a) => [a.id, a]));
 
@@ -293,7 +342,12 @@ function installedTechniqueBands(dir) {
     if (!spec || spec.kind !== 'shaders') continue;
     const band = entry.band === undefined ? spec.band : entry.band;
     if (band === undefined || band === null) continue;
-    for (const technique of entry.techniques || []) out.push({ technique, band });
+    // entry.bands holds the techniques that do NOT take the pack's default band (Lilium's final
+    // tone mapping, which belongs last rather than with the inverse tonemappers it ships beside).
+    for (const technique of entry.techniques || []) {
+      const own = (entry.bands || {})[technique];
+      out.push({ technique, band: own === undefined ? band : own });
+    }
   }
   return out;
 }
@@ -330,11 +384,25 @@ async function installAddon(dir, id, ctx, opts = {}) {
   if (!spec) throw new Error(`Unknown add-on: ${id}`);
   const written = [];
 
+  // Swap rather than refuse. Done before anything is fetched so a failed download cannot leave
+  // the game with neither -- and reported back, so the UI can say what moved instead of the
+  // other row silently flipping to "Install".
+  const swappedOut = [];
+  for (const other of conflictsFor(dir, id)) {
+    await removeAddon(dir, other);
+    swappedOut.push(other);
+  }
+
   if (spec.kind === 'shaders') {
     const files = packFiles(spec);
     const base = integrity.URLS[spec.source.baseKey];
     if (!base) throw new Error(`No pinned base URL ${spec.source.baseKey} for ${id}`);
     const techniques = [];
+    // Per technique, not per pack. Lilium's pack carries both an inverse tonemapper (which
+    // expands SDR into HDR, so it belongs before the effects that assume HDR) and a final tone
+    // mapping shader (which clamps to the display's peak brightness, so it belongs last, after
+    // everything). One band for the whole pack would put one of them in the wrong place.
+    const bands = {};
     for (const rel of files) {
       const relDest = destForPackFile(rel);
       if (!relDest) throw new Error(`${id}: ${rel} is not under Shaders/ or Textures/`);
@@ -345,13 +413,17 @@ async function installAddon(dir, id, ctx, opts = {}) {
       written.push(relDest.split(path.sep).join('/'));
       // Only the .fx files declare techniques; an .fxh is an include and a .png is a texture.
       if (/\.fx$/i.test(rel)) {
+        const file = path.basename(rel);
         for (const name of techniquesIn(buf.toString('utf8'))) {
-          techniques.push(`${name}@${path.basename(rel)}`);
+          const key = `${name}@${file}`;
+          techniques.push(key);
+          const band = spec.bandFor ? spec.bandFor(file) : spec.band;
+          if (band !== spec.band) bands[key] = band;
         }
       }
     }
-    recordInstall(dir, { id, kind: spec.kind, band: spec.band, files: written, techniques });
-    return { id, files: written, techniques };
+    recordInstall(dir, { id, kind: spec.kind, band: spec.band, bands, files: written, techniques });
+    return { id, files: written, techniques, swappedOut };
   }
 
   if (spec.kind === 'addon') {
@@ -365,7 +437,7 @@ async function installAddon(dir, id, ctx, opts = {}) {
       renodxMod: opts.match ? opts.match.modId : undefined,
       renodxTitle: opts.match ? opts.match.title : undefined,
     });
-    return { id, files: written, techniques: [] };
+    return { id, files: written, techniques: [], swappedOut };
   }
 
   throw new Error(`${id}: unknown kind ${spec.kind}`);
@@ -427,4 +499,5 @@ module.exports = {
   readMarker, writeMarker, filesPlaced, installedIds,
   techniquesIn, installedTechniqueBands,
   packFiles, destForPackFile, installAddon, removeAddon,
+  EXCLUSIVE_GROUPS, conflictsFor,
 };

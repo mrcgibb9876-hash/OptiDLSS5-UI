@@ -527,9 +527,25 @@ ipcMain.handle('addons:forGame', async (_evt, { exePath } = {}) => {
       // The neural pass being installed here is what decides whether the RenoDX row shows its
       // "untested together" line, so the renderer is told rather than guessing from the card.
       neuralRendering: !!(detected && detected.optiscaler) || fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll')),
-      catalogue: addons.catalogue().map((a) => ({ ...a, installed: installed.has(a.id) })),
+      catalogue: addons.catalogue().map((a) => ({
+        ...a,
+        installed: installed.has(a.id),
+        // What pressing Install would swap out. The renderer says so up front rather than the
+        // other row silently flipping to "Install" afterwards.
+        replaces: addons.conflictsFor(dir, a.id),
+      })),
       renodx: match,
       indexError,
+      // The motion-vector providers, shown in this same list. They are not add-ons in the
+      // catalogue's sense -- the Feeder picks exactly one and the deploy owns it -- but this is
+      // where someone looks for "what ReShade things can this game have", and having to know to
+      // open Edit instead is the kind of hiding this app has been told off for before.
+      mvProviders: feeder.mvProviderList().filter((p) => p.selectable !== false).map((p) => ({
+        id: p.id, displayName: p.displayName, license: p.license,
+        mvProviderValue: p.mvProviderValue, officialUrl: p.officialUrl || null,
+        bringYourOwn: !!p.bringYourOwn, recommended: !!p.recommended, isDefault: !!p.default,
+      })),
+      mvProviderId: (feeder.readFeederDeployMarker(dir) || {}).mvProviderId || null,
     };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };

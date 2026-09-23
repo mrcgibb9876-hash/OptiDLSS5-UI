@@ -5917,6 +5917,16 @@ async function renderAddons() {
     if (a.wants && a.wants.length && !res.catalogue.find((x) => a.wants.includes(x.id) && x.installed)) {
       bits.push(`<div class="field-hint status-warn">${escapeHtml(t('Needs an inverse tonemapper to do anything -- install the Lilium HDR shaders too.'))}</div>`);
     }
+    // A swap, said before it happens rather than discovered afterwards. The button stays live.
+    if (!a.installed && (a.replaces || []).length) {
+      const other = res.catalogue.find((x) => x.id === a.replaces[0]);
+      bits.push(`<div class="field-hint status-warn">${escapeHtml(t('Installing this replaces {other} -- both are ways of getting an HDR signal and only one can run. You can swap back any time.', { other: other ? other.displayName : a.replaces[0] }))}</div>`);
+    }
+    // The pack everyone assumes conflicts with RenoDX, and does not -- but half of it becomes
+    // redundant, and saying which half is the difference between a useful pack and a wrong picture.
+    if (a.id === 'lilium-hdr' && res.catalogue.find((x) => x.id === 'renodx' && x.installed)) {
+      bits.push(`<div class="field-hint">${escapeHtml(t('RenoDX already gives this game native HDR, so leave this pack\'s inverse tonemapper switched off in ReShade. Its analysis shaders and its final tone mapping are still worth having -- that is what keeps highlights inside what your display can show.'))}</div>`);
+    }
     bits.push(`<div class="field-hint">${escapeHtml(a.licence)} &middot; <a href="#" class="addon-home" data-url="${escapeHtml(a.homepage)}">${escapeHtml(t('project page'))}</a></div>`);
 
     const button = unavailable
@@ -5926,7 +5936,34 @@ async function renderAddons() {
     return `<div class="addon-row"><div class="addon-body">${bits.join('')}</div><div class="addon-action">${button}</div></div>`;
   });
 
-  $('#addons-list').innerHTML = rows.join('');
+  // The motion-vector providers, listed in the same place for the same reason: this is where
+  // someone looks. Read-only here -- the Feeder deploy owns which one is in place, so changing it
+  // is Settings' job -- but at least the list of what exists, and which one this game is on, is
+  // no longer behind a dialog you have to know about.
+  const mv = res.mvProviders || [];
+  const current = mv.find((p) => p.id === res.mvProviderId);
+  const mvRows = mv.map((p) => {
+    const marks = [];
+    if (p.id === res.mvProviderId) marks.push(t('in use here'));
+    else if (p.isDefault) marks.push(t('default'));
+    if (p.recommended) marks.push(t('recommended by the Feeder'));
+    if (p.bringYourOwn) marks.push(t('your own copy -- its licence forbids us fetching it'));
+    return `<li>${escapeHtml(p.displayName)}${marks.length ? ` &mdash; <span class="field-hint">${escapeHtml(marks.join(', '))}</span>` : ''}</li>`;
+  }).join('');
+  const mvBlock = mv.length ? `
+    <div class="addon-row"><div class="addon-body">
+      <div class="addon-name">${escapeHtml(t('Motion vectors'))}</div>
+      <div class="field-hint">${escapeHtml(t('DLSS5_Feed does not estimate motion itself -- it reads whichever of these is enabled, which is why this one always runs first in the effect order. One per game, chosen when the Feeder is deployed.'))}</div>
+      <ul class="addon-mv-list">${mvRows}</ul>
+      ${current ? '' : `<div class="field-hint">${escapeHtml(t('Nothing deployed here yet.'))}</div>`}
+      <button class="btn btn-ghost addon-mv-edit">${escapeHtml(t('Change in Settings…'))}</button>
+    </div></div>` : '';
+
+  $('#addons-list').innerHTML = mvBlock + rows.join('');
+  $('#addons-list').querySelector('.addon-mv-edit')?.addEventListener('click', () => {
+    $('#addons-modal').classList.add('hidden');
+    openGameModal(addonsGame, { focus: 'legacy-mv' });
+  });
 
   for (const el of $('#addons-list').querySelectorAll('.addon-home')) {
     el.addEventListener('click', (e) => { e.preventDefault(); window.api.openExternal(el.dataset.url); });
@@ -5942,9 +5979,15 @@ async function renderAddons() {
         ? await window.api.addonsRemove(addonsGame.exePath, id)
         : await window.api.addonsInstall(addonsGame.exePath, id);
       if (out && out.ok) {
+        const swapped = (out.swappedOut || []).map((sid) => {
+          const s2 = res.catalogue.find((x) => x.id === sid);
+          return s2 ? s2.displayName : sid;
+        });
         $('#addons-status').textContent = removing
           ? t('Removed. {count} files taken back out.', { count: (out.removed || []).length })
-          : t('Installed. {count} files placed, and the effect order was rewritten.', { count: (out.files || []).length });
+          : swapped.length
+            ? t('Installed, replacing {other}. {count} files placed, and the effect order was rewritten.', { other: swapped.join(', '), count: (out.files || []).length })
+            : t('Installed. {count} files placed, and the effect order was rewritten.', { count: (out.files || []).length });
       } else {
         $('#addons-status').className = 'field-hint status-bad';
         $('#addons-status').textContent = (out && out.error) || t('That did not work.');

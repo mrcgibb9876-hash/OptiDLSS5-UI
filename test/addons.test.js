@@ -273,3 +273,75 @@ test('RenoDX is flagged as untested alongside neural rendering, and AutoHDR name
   // broken" rather than "nothing is expanding the range".
   assert.deepEqual(addons.addonById('lilium-autohdr').wants, ['lilium-hdr']);
 });
+
+// ── the HDR source is exclusive, and swapping is how you change it ─────────────────────────────
+
+test('RenoDX and AutoHDR are the exclusive pair, and the Lilium shader pack is deliberately not in it', () => {
+  assert.deepEqual(addons.EXCLUSIVE_GROUPS['hdr-source'], ['renodx', 'lilium-autohdr']);
+  // Both upgrade the swap chain, which is the actual conflict -- RenoDX gives the game native
+  // HDR, AutoHDR makes an SDR game's chain HDR so an inverse tonemapper can expand into it.
+  assert.equal(addons.addonById('renodx').exclusiveGroup, 'hdr-source');
+  assert.equal(addons.addonById('lilium-autohdr').exclusiveGroup, 'hdr-source');
+  // The pack everyone assumes conflicts with RenoDX. It does not: its analysis shaders are how
+  // you check a RenoDX result, and its final tone mapping is what stops a native-HDR game
+  // blowing past the display's peak brightness. Only its inverse tonemapper is redundant, and
+  // that is a technique you switch off in ReShade, not a reason to refuse the pack.
+  assert.equal(addons.addonById('lilium-hdr').exclusiveGroup, undefined);
+  assert.equal(addons.addonById('renofx').exclusiveGroup, undefined);
+});
+
+test('installing the other HDR source swaps it -- no lockout, and nothing is fetched before the old one goes', async () => {
+  const dir = scratchDir('addons-swap');
+  const ctx = fakeCtx({
+    'renodx-cyberpunk2077.addon64': 'MZ renodx',
+    'autohdr.addon64': 'MZ autohdr',
+  });
+  const match = addons.matchRenodx(INDEX, { steamAppid: 1091500, bitness: 64 });
+
+  await addons.installAddon(dir, 'renodx', ctx, { match });
+  assert.deepEqual(addons.installedIds(dir), ['renodx']);
+  // With RenoDX here, AutoHDR reports what it would replace -- so the UI can say so up front
+  // rather than the other row silently flipping afterwards.
+  assert.deepEqual(addons.conflictsFor(dir, 'lilium-autohdr'), ['renodx']);
+
+  const res = await addons.installAddon(dir, 'lilium-autohdr', ctx, { bitness: 64 });
+
+  assert.deepEqual(res.swappedOut, ['renodx'], 'the swap is reported, not silent');
+  assert.deepEqual(addons.installedIds(dir), ['lilium-autohdr']);
+  assert.ok(!fs.existsSync(path.join(dir, 'renodx-cyberpunk2077.addon64')), 'the old one is gone');
+  assert.ok(fs.existsSync(path.join(dir, 'autohdr.addon64')));
+
+  // And back again: this is a swap, not a one-way door.
+  const back = await addons.installAddon(dir, 'renodx', ctx, { match });
+  assert.deepEqual(back.swappedOut, ['lilium-autohdr']);
+  assert.deepEqual(addons.installedIds(dir), ['renodx']);
+
+  // A pack outside the group is untouched by any of it.
+  assert.deepEqual(addons.conflictsFor(dir, 'lilium-hdr'), []);
+  assert.deepEqual(addons.conflictsFor(dir, 'renofx'), []);
+});
+
+test('Lilium\'s final tone mapping runs last, not with the inverse tonemappers it ships beside', () => {
+  const spec = addons.addonById('lilium-hdr');
+  // Its job is to clamp the finished frame to what the display can show, so anything after it
+  // would push the picture back past that ceiling.
+  assert.equal(spec.bandFor('lilium__tone_mapping.fx'), order.BAND.HDR_OUTPUT);
+  // The inverse tonemapper is the opposite end of the same pack and keeps the pack's own band.
+  assert.equal(spec.bandFor('lilium__inverse_tone_mapping.fx'), order.BAND.INVERSE_TONEMAP);
+  assert.equal(spec.bandFor('lilium__hdr_and_sdr_analysis.fx'), order.BAND.INVERSE_TONEMAP);
+});
+
+test('a pack\'s per-technique bands survive into what the preset is sorted by', async () => {
+  const dir = scratchDir('addons-bands');
+  const files = addons.packFiles(addons.addonById('lilium-hdr'));
+  const bodies = {};
+  for (const rel of files) bodies[rel] = /\.fx$/i.test(rel) ? `technique T_${path.basename(rel, '.fx')} { }` : 'x';
+  await addons.installAddon(dir, 'lilium-hdr', fakeCtx(bodies));
+
+  const bands = addons.installedTechniqueBands(dir);
+  const last = bands.find((b) => /tone_mapping\.fx$/i.test(b.technique) && !/inverse/i.test(b.technique));
+  const inverse = bands.find((b) => /inverse_tone_mapping\.fx$/i.test(b.technique));
+  assert.equal(last.band, order.BAND.HDR_OUTPUT);
+  assert.equal(inverse.band, order.BAND.INVERSE_TONEMAP);
+  assert.ok(last.band > inverse.band, 'and so it sorts after it');
+});
