@@ -289,3 +289,39 @@ test('anti-cheat is stated, not enforced -- and a stub to step around changes th
   });
   assert.equal(ran.status, 'ok');
 });
+
+// Watch Dogs Legion, #119 (2026-09-22, a 5090): verdict no-dlss on the plain optiscaler route with
+// route.shipsDlss false, so this row fires -- and its headline read "This game has no DLSS to hook".
+// Legion has shipped DLSS since launch. shipsDlss is false because native-dlss.js deliberately does
+// not count an nvngx_dlss.dll sitting beside the exe (our own Feeder and Luma deploys put one
+// there), and a DLSS 2 era game keeps nothing else to find: no sl.interposer.dll, no sl.dlss.dll,
+// no Unreal plugin tree. So "shipsDlss === false" means "this app cannot tell whose that file is",
+// and the headline turned that into a claim about the game.
+//
+// The body and the steps were always right -- they lead with "turn DLSS on in the game, if it has
+// one" -- so only the sentence that asserts more than the run shows is changed. The evidence is
+// that no DLSS call came; whether the game has one to make is exactly what is unknown here.
+test('the no-native-DLSS row never claims the game has no DLSS, only that no call came', () => {
+  const fs = require('node:fs');
+  const renderer = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'renderer.js'), 'utf8')
+    // The comments above these rows quote the old wording to explain it; a test that matches its
+    // own commentary proves nothing (CLAUDE.md, the "no picker inside the folder" guard).
+    .split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
+
+  const rows = renderer.split('\n').filter((l) => l.includes("'optiscaler-no-native-dlss'"));
+  assert.ok(rows.length >= 3, 'headline, body and steps are all still keyed by this code');
+  for (const row of rows) {
+    assert.doesNotMatch(row, /has no DLSS to hook/, 'the headline must not assert the game ships no DLSS');
+    assert.doesNotMatch(row, /the last run says it does not/, 'nor may the body');
+  }
+  assert.ok(renderer.includes('No DLSS call came from this game'), 'the headline says what the run showed');
+
+  // And the row still fires for the case it is for, with the file named so the steps can use it.
+  const d = diagnose(base({
+    route: { shipsDlss: false },
+    run: { ran: true, verdict: 'no-dlss', nrDispatch: 0, runtimeApi: 'dx12' },
+  }));
+  assert.equal(d.code, 'optiscaler-no-native-dlss');
+  assert.equal(d.status, 'step');
+  assert.equal(d.vars.file, 'nvngx_dlss.dll');
+});
