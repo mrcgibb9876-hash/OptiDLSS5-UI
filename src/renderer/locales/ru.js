@@ -1565,4 +1565,5 @@ window.I18N.register("ru", {
   "Takes effect at once. To change the generator, use Edit -- that applies on the next launch.": "Действует сразу. Сменить генератор можно в разделе «Изменить» -- это вступит в силу при следующем запуске.",
   "HUD fix": "Исправление HUD",
   "Keeps the HUD and subtitles from warping in generated frames. OptiScaler warns it can crash some games -- if this game crashes with it on, leave it off.": "Не даёт HUD и субтитрам искажаться в сгенерированных кадрах. OptiScaler предупреждает, что это может ронять некоторые игры -- если эта игра вылетает с ним, оставьте его выключенным.",
+  "Auto": "Авто",
 });

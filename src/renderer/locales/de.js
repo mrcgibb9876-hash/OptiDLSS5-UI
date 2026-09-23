@@ -1565,4 +1565,5 @@ window.I18N.register("de", {
   "Takes effect at once. To change the generator, use Edit -- that applies on the next launch.": "Wirkt sofort. Den Generator wechselst du unter Bearbeiten -- das gilt ab dem nächsten Start.",
   "HUD fix": "HUD-Korrektur",
   "Keeps the HUD and subtitles from warping in generated frames. OptiScaler warns it can crash some games -- if this game crashes with it on, leave it off.": "Hält HUD und Untertitel in generierten Bildern stabil. OptiScaler warnt, dass es manche Spiele abstürzen lassen kann -- stürzt dieses Spiel damit ab, lass es aus.",
+  "Auto": "Auto",
 });

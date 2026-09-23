@@ -1565,4 +1565,5 @@ window.I18N.register("zh-CN", {
   "Takes effect at once. To change the generator, use Edit -- that applies on the next launch.": "立即生效。要更换生成器请使用“编辑” -- 那会在下次启动时生效。",
   "HUD fix": "HUD 修复",
   "Keeps the HUD and subtitles from warping in generated frames. OptiScaler warns it can crash some games -- if this game crashes with it on, leave it off.": "防止 HUD 和字幕在生成帧中变形。OptiScaler 提醒它可能让某些游戏崩溃 -- 如果开启后这个游戏崩溃，请保持关闭。",
+  "Auto": "自动",
 });

@@ -195,6 +195,9 @@ html, body { margin: 0; height: 100%; }
 .p-row-ctl { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; }
 .p-row-value { flex: 0 0 56px; text-align: right; color: var(--value); font-variant-numeric: tabular-nums; }
 .p-row.is-off { opacity: 0.45; }
+/* Auto brightness / contrast in charge: the slider, its value and Reset dim; the Auto box beside them does not. */
+.p-row.is-auto > .p-row-ctl, .p-row.is-auto > .p-row-value, .p-row.is-auto > .p-small { opacity: 0.45; }
+.p-auto-label { color: var(--label); font-size: 12px; }
 
 /* A label that will not fit its column, or boxed choices too narrow for their own words: the row
    stacks instead of one running into the other -- label on its own line, control the full width

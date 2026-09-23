@@ -473,6 +473,11 @@ test('every setting sits on exactly one page of the panel', () => {
     for (const section of sections) placed.push(...section.keys);
   }
   placed.push(...dlssnr.HEADER_KEYS);
+  // An Auto switch is drawn inside its slider's own row (autoKey), not as a row of its own -- placed
+  // wherever that slider is, and only if the slider is.
+  for (const f of dlssnr.FIELDS) {
+    if (f.autoKey && placed.includes(f.key)) placed.push(f.autoKey);
+  }
 
   const dupes = placed.filter((k, i) => placed.indexOf(k) !== i);
   assert.deepEqual(dupes, [], 'no setting is drawn twice');

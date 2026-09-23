@@ -252,12 +252,22 @@ const FIELDS = [
     help: "Washed out, grey, colour sucked out of the game? This is the control, and the answer is to turn it DOWN.\n\nIt decides whose colour you see. 0 is the game's own, exactly: every pixel its original colour, with only the brightness carrying the model's verdict. 1 is the model's colour INSTEAD of the game's -- and the model's is usually the less saturated of the two, which is exactly what that washed-out look is. 0.5, the default, lets it contribute without overruling the game's art direction.\n\nAbove 1 goes the other way and makes the picture MORE colourful than the game ever was -- the same job a colourfulness shader does, done here instead. Hue is kept and only saturation grows, and it rolls off at the edge of what the display can show rather than clipping into a flat blown patch. Try 1.5 to 2 for punch." },
   // The tone trim, engine v2.2.11 (2026-09-23: "some games come out so dark"). Both on the finished
   // picture, both exactly nothing at 1.0, and both read every frame -- no rebuild while dragging.
+  //
+  // Auto beside each (engine v2.2.13): autoKey names the switch, drawn in the slider's own row rather than
+  // as a row of its own, and autoLive the reading in OptiScaler.live.json's tone block the slider shows
+  // while it is on. The slider is greyed then -- Auto is in charge -- and its own value is kept.
   { key: 'Brightness', type: 'float', default: 1.0, min: 0.5, max: 2, step: 0.01, group: 'Picture',
-    label: 'Brightness',
-    help: "Game too dark? Turn this UP.\n\nIt lifts the shadows and midtones. Black stays black and white stays white -- only what lies between is raised -- so the highlights do not blow out and the colours keep their hue. Below 1 darkens the same way. 1 changes nothing." },
+    label: 'Brightness', autoKey: 'AutoBrightness', autoLive: 'brightness',
+    dependsOn: { key: 'AutoBrightness', is: false },
+    help: "Game too dark? Turn this UP.\n\nIt lifts the shadows and midtones. Black stays black and white stays white -- only what lies between is raised -- so the highlights do not blow out and the colours keep their hue. Below 1 darkens the same way. 1 changes nothing.\n\nAuto measures the picture and lifts it when it is darker than usual, easing over a moment rather than jumping. It only ever brightens, and only part of the way, so a scene meant to be dark stays darker than a lit one. DX12, DX11 and RE Engine games; on a Vulkan game the slider stays in charge." },
+  { key: 'AutoBrightness', type: 'bool', default: false, group: 'Picture', label: 'Auto',
+    help: 'Brightness set from the picture itself, for games that come out too dark. Only ever lifts, and eases over a moment.' },
   { key: 'Contrast', type: 'float', default: 1.0, min: 0.5, max: 2, step: 0.01, group: 'Picture',
-    label: 'Contrast',
-    help: "How far apart the darks and the lights sit. Above 1 is punchier: darks go deeper and lights brighter around the middle grey. Below 1 is flatter and shows more in the shadows. Black and white themselves never move. 1 changes nothing.\n\nFor a picture that is simply too dark, Brightness is the one to reach for first." },
+    label: 'Contrast', autoKey: 'AutoContrast', autoLive: 'contrast',
+    dependsOn: { key: 'AutoContrast', is: false },
+    help: "How far apart the darks and the lights sit. Above 1 is punchier: darks go deeper and lights brighter around the middle grey. Below 1 is flatter and shows more in the shadows. Black and white themselves never move. 1 changes nothing.\n\nFor a picture that is simply too dark, Brightness is the one to reach for first.\n\nAuto adds a little contrast to a flat, washed-out picture and takes a little off one that is already harsh, within 0.85 to 1.25. DX12, DX11 and RE Engine games." },
+  { key: 'AutoContrast', type: 'bool', default: false, group: 'Picture', label: 'Auto',
+    help: 'Contrast set from the picture itself: a little more for a flat picture, a little less for a harsh one.' },
 
   { key: 'ReversibleMode', type: 'enum', default: 0, options: REVERSIBLE, group: 'Brightness & HDR', label: "Tone-mapping mode",
     help: "What the model is shown, and how its answer comes back. Experimental.\n\nOff (soft knee): the default, and byte-identical to before. It rolls highlights off so hard the model cannot resolve detail in them -- fine in soft-lit scenes, weak in bright ones.\n\nNeutwo composed: an unclipped curve, so the model sees highlight detail, then everything above it (strengths, highlight guard, palette). Wins in bright scenes, but the curve compresses midtones too, so soft-lit content can be worse than Off. It also shifts paper white -- re-check that when you switch.\n\nHybrid composed: the one to use. Identity in the midtones -- as good as Off there -- with the unclipped roll only in the highlights, so it recovers the detail Off crushes without giving up the midtones Neutwo does. Barely shifts paper white.\n\nReplace: the raw model straight back through the exact inverse, none of the composition -- no guard, no palette, no strengths. Gorgeous where there are no bright lights, but they FLASH in motion. A reference, not a daily setting.\n\nHybrid replace: Replace's raw model on the hybrid curve, so the flashing is confined to genuine highlights instead of everywhere. Most of Replace's detail, far more stable." },
@@ -507,6 +517,9 @@ function readSettings(iniPath) {
     default: f.default,
     value: parseValue(f, getIniKey(text, SECTION, f.key)),
     keybind: f.keybind || false,
+    // The Auto switch drawn in this slider's row, and the live reading shown while it is on.
+    autoKey: f.autoKey || null,
+    autoLive: f.autoLive || null,
   }));
 }
 
