@@ -501,6 +501,45 @@ test('emulators: set up for the renderer that suits DLSS 5 best, never OpenGL wh
   assert.equal(emulators.profileFor('snes9x-x64.exe').apis[0], 'vulkan', 'Snes9x\'s "Direct3D" is D3D9');
 });
 
+test('emulators: a renderer the emulator does not have is not what it ran on (RPCS3, 2026-09-23)', () => {
+  const dir = scratchDir('emu-rpcs3-dx12');
+  write(dir, 'rpcs3.exe', 'x');
+  const emu = emulators.profileFor('rpcs3.exe');
+  assert.ok(!emu.apis.includes('dx12'), 'RPCS3 has no Direct3D 12 renderer');
+
+  // The Feeder makes its own D3D12 device to run the model on, and OptiScaler's log records it
+  // without being able to say whose device it was. Read literally, a correct Vulkan run reported
+  // as Direct3D 12 and the card asked for the setting the player already had.
+  const det = {
+    api: 'vulkan', apis: emu.apis, bitness: 64, recommend: 'optiscaler',
+    emulator: { key: emu.key, name: emu.name, system: emu.system, hint: emu.hint, apis: emu.apis, renderer: emu.renderer, where: emu.where },
+    runtimeApi: 'dx12', runtimeLogMtime: 1,
+  };
+  assert.equal(emulators.seenApi(det), null, 'RPCS3 cannot have run on D3D12');
+  assert.equal(emulators.rendererAdvice(det, 'vulkan').seen, null, 'no "set Vulkan" on a Vulkan run');
+
+  // Same for a watched launch, which sees the Feeder's d3d12.dll load in the tree.
+  const probed = { ...det, runtimeApi: null, probe: { api: 'dx12', capturedAt: new Date(10).toISOString() } };
+  assert.equal(emulators.seenApi(probed), null);
+
+  // ... and a renderer it DOES have is still reported.
+  assert.equal(emulators.seenApi({ ...det, runtimeApi: 'opengl' }), 'opengl');
+  assert.equal(emulators.rendererAdvice({ ...det, runtimeApi: 'opengl' }, 'vulkan').seen, 'OpenGL');
+
+  // Game Help must not reach the mismatch step, whose only advice is to change a correct setting.
+  const r = route.recommendRoute(dir, path.join(dir, 'rpcs3.exe'), route.withApiOverride(det, null), 'nvidia');
+  assert.equal(r.emulatorRenderer.seen, null);
+  const d = diagnose({
+    detected: det,
+    route: { ...r, complete: true, nextStep: null, optiInstalled: true, feederDeployed: true },
+    run: { ran: true, verdict: 'no-dlss' }, foreign: [], fixesTried: [],
+  });
+  assert.notEqual(d.code, 'emulator-renderer-mismatch');
+
+  // A profile with no API list claims nothing, so the evidence stands.
+  assert.equal(emulators.canRender({ apis: [] }, 'dx12'), true);
+});
+
 test('emulators: DX11 stays DX11 (no DX12 preference), and the route carries the renderer advice', () => {
   const dir = scratchDir('emu-106');
   write(dir, 'Dolphin.exe', 'x');
