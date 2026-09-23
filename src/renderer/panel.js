@@ -751,8 +751,67 @@ function renderMotion(host) {
 
 async function loadFrameGen() {
   fgState = null;
+  optiFgState = null;
   if (!current || !current.exePath) return;
   try { fgState = await window.api.frameGenMultiplier(current.exePath); } catch { fgState = null; }
+  try { optiFgState = await window.api.optiFgLive(current.exePath); } catch { optiFgState = null; }
+}
+
+// OptiScaler's own XeFG / FSR FG, when Edit armed one for this game (main.js optifg:live). The same two
+// live switches the in-game panel has; which generator is a launch-time choice and stays in Edit.
+let optiFgState = null;
+
+async function setOptiFg(values) {
+  if (!current) return;
+  const res = await window.api.optiFgLiveSet(current.exePath, values);
+  if (!res || !res.ok) {
+    setStatus(t('Could not save: {error}', { error: (res && res.error) || t('unknown') }));
+    return;
+  }
+  optiFgState = res;
+  setStatus(current.running ? t('Saved. A running game picks it up within a second.') : t('Saved. Applies the next time the game starts.'), true);
+  renderFields();
+}
+
+function optiFgCheckRow(host, on, text, tip, onClick) {
+  const row = document.createElement('div');
+  row.className = 'p-row is-check';
+  const ctl = document.createElement('span');
+  ctl.className = 'p-row-ctl';
+  const box = document.createElement('button');
+  box.className = `p-check${on ? ' on' : ''}`;
+  box.addEventListener('click', onClick);
+  ctl.appendChild(box);
+  const label = document.createElement('span');
+  label.className = 'p-row-label';
+  label.textContent = text;
+  row.append(ctl, label);
+  if (tip) row.appendChild(helpMarker(tip));
+  host.appendChild(row);
+}
+
+function renderOptiFg(host) {
+  const s = optiFgState;
+  const note = document.createElement('div');
+  note.className = 'p-note';
+  if (!s || !s.ok || !s.armed) {
+    note.textContent = t('This game has no NVIDIA DLSS Frame Generation of its own.');
+    host.appendChild(note);
+    const hint = document.createElement('div');
+    hint.className = 'p-note';
+    hint.textContent = t('OptiScaler can generate frames here instead: pick XeFG or FSR FG for this game in Edit. It applies on the next launch, then switches on and off right here.');
+    host.appendChild(hint);
+    return;
+  }
+  note.classList.add('is-accent');
+  note.textContent = t('OptiScaler Frame Generation: {name}', { name: s.generator === 'xefg' ? 'XeFG' : 'FSR FG' });
+  host.appendChild(note);
+  optiFgCheckRow(host, s.enabled, t('Frame Generation on'),
+    t('Takes effect at once. To change the generator, use Edit -- that applies on the next launch.'),
+    () => setOptiFg({ enabled: !s.enabled }));
+  optiFgCheckRow(host, s.hudfix, t('HUD fix'),
+    t('Keeps the HUD and subtitles from warping in generated frames. OptiScaler warns it can crash some games -- if this game crashes with it on, leave it off.'),
+    () => setOptiFg({ hudfix: !s.hudfix }));
 }
 
 function frameGenChoice() {
@@ -795,10 +854,7 @@ function renderFrameGenStatus() {
 // under it.
 function renderFrameGen(host) {
   if (!fgState || !fgState.hasFrameGen) {
-    const note = document.createElement('div');
-    note.className = 'p-note';
-    note.textContent = t('This game has no NVIDIA DLSS Frame Generation of its own.');
-    host.appendChild(note);
+    renderOptiFg(host);
     return;
   }
 

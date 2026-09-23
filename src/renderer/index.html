@@ -239,12 +239,23 @@
           <span id="game-rtxmfg-status" class="status-line"></span>
         </div>
 
-        <div id="game-optifg-section" class="advanced-only hidden">
-          <label class="field-label">
-            <input type="checkbox" id="game-optifg-toggle" />
-            <span data-i18n>OptiScaler Frame Generation (FSRFG)</span>
+        <!-- OptiScaler's own frame generation, per game (2026-09-23). The generator is built into the
+             swapchain the game creates, so it is a launch-time choice; on/off and HUD fix are live from
+             the DLSS 5 panel and the pop-out. -->
+        <div id="game-optifg-section" class="hidden">
+          <label class="field-label" data-i18n>Frame generation (OptiScaler)</label>
+          <p class="field-hint" data-i18n>For a DX12 game with no frame generation of its own. The generator is set up when the game starts, so a change here applies on the next launch — after that, switch it on and off live from the DLSS 5 panel (Insert) or the pop-out. XeFG gives the better picture and handles HUDs best; FSR FG is lighter.</p>
+          <div class="field-row">
+            <select id="game-optifg-generator">
+              <option value="none" data-i18n>None</option>
+              <option value="xefg" data-i18n>XeFG (recommended)</option>
+              <option value="fsrfg" data-i18n>FSR FG (lighter)</option>
+            </select>
+          </div>
+          <label class="scan-checkbox-row">
+            <input type="checkbox" id="game-optifg-starton" />
+            <span data-i18n>Start with it on</span>
           </label>
-          <p class="field-hint" data-i18n>Only reachable on a D3D12 game with no frame gen of its own -- OptiScaler's own FG needs the game's swapchain to be D3D12, no way around that. AMD's own tech (FSR3), not NVIDIA's -- doesn't need Streamline. Estimated motion vectors, same as Neural Rendering here, so expect more artifacting than a native DLSS-G game.</p>
           <span id="game-optifg-status" class="status-line"></span>
         </div>
 

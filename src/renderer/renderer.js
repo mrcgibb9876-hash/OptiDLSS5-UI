@@ -4294,55 +4294,62 @@ $('#btn-feeder-remove').addEventListener('click', async () => {
   renderGrid();
 });
 
-// Scoped to Feeder games for now -- that's the only case this was actually verified against
-// (Bodycam, 2026-09-09: config read back correctly as FrameGen.FGOutput=FSRFG). A native-DLSS
-// game already gets real DLSS-G from the game itself; nothing here is about that case.
+// OptiScaler's own frame generation for this game (main.js optiFgReadiness). Shown on every game, with
+// the reason when it cannot be had -- a D3D11 game, a Feeder game, one with DLSS-G of its own -- rather
+// than hidden, because "why is there no frame generation option" is itself the question.
 async function loadOptiFgSection(game) {
   const section = $('#game-optifg-section');
-  const checkbox = $('#game-optifg-toggle');
+  const select = $('#game-optifg-generator');
+  const startOn = $('#game-optifg-starton');
   const status = $('#game-optifg-status');
   if (!game || !game.exePath) {
-    section.classList.add('hidden');
-    return;
-  }
-
-  const feederStatus = await window.api.feederReadiness(game.exePath);
-  if (!feederStatus.needed) {
     section.classList.add('hidden');
     return;
   }
   section.classList.remove('hidden');
 
   const readiness = await window.api.optiFgReadiness(game.exePath);
+  status.className = 'status-line';
   if (!readiness.supported) {
-    checkbox.checked = false;
-    checkbox.disabled = true;
-    status.className = 'status-line';
+    select.value = 'none';
+    select.disabled = true;
+    startOn.checked = false;
+    startOn.disabled = true;
     status.textContent = t(readiness.reason, readiness.reasonVars);
     return;
   }
 
-  checkbox.disabled = false;
-  checkbox.checked = !!readiness.enabled;
-  status.className = 'status-line';
-  status.textContent = readiness.enabled
-    ? t('On -- applied to OptiScaler.ini.')
-    : t('Off.');
+  select.disabled = false;
+  for (const opt of select.options) {
+    if (opt.value !== 'none') opt.disabled = !readiness.available[opt.value];
+  }
+  select.value = readiness.generator || 'none';
+  startOn.checked = !!readiness.startOn;
+  startOn.disabled = select.value === 'none';
+  status.textContent = select.value === 'none'
+    ? t('Off -- no frame generator is set up for this game.')
+    : t('Applies on the game\'s next launch. Then switch it on and off from the DLSS 5 panel or the pop-out.');
 }
 
-$('#game-optifg-toggle').addEventListener('change', async (e) => {
+async function saveOptiFg() {
   if (!editingGameId) return;
   const game = games.find((x) => x.id === editingGameId);
+  const generator = $('#game-optifg-generator').value;
   const status = $('#game-optifg-status');
   status.textContent = t('Applying…');
-  const res = await window.api.optiFgSet(game.exePath, e.target.checked);
+  const res = await window.api.optiFgChoose(game.exePath, generator, $('#game-optifg-starton').checked);
   if (res.ok) {
-    toast(e.target.checked ? t('OptiScaler Frame Generation (FSRFG) enabled.') : t('OptiScaler Frame Generation disabled.'));
+    toast(generator === 'none'
+      ? t('Frame generation removed for this game.')
+      : t('Frame generation set to {name}. It applies on the next launch.', { name: generator === 'xefg' ? 'XeFG' : 'FSR FG' }));
   } else {
     toast(t('Could not change Frame Generation: {error}', { error: res.error }));
   }
   loadOptiFgSection(game);
-});
+}
+
+$('#game-optifg-generator').addEventListener('change', saveOptiFg);
+$('#game-optifg-starton').addEventListener('change', saveOptiFg);
 
 // Edits Lossless Scaling's real Settings.xml in place: finds this game's <Profile> (by <Path>,
 // falling back to a normalised <Title> match for a profile the user already created by hand

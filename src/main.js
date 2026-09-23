@@ -751,13 +751,76 @@ ipcMain.handle('optifg:readiness', async (_evt, exePath) => {
 
 // Toggles the per-game marker and immediately re-runs autoConfigureGame so the ini reflects it
 // right away, rather than waiting for the next Install/sync to pick it up.
-ipcMain.handle('optifg:set', async (_evt, { exePath, enabled }) => {
+// { generator: 'xefg' | 'fsrfg' | 'none', startOn } since 2026-09-23; { enabled } still works (the
+// Lossless Scaling hand-off switches it off that way).
+ipcMain.handle('optifg:set', async (_evt, { exePath, enabled, generator, startOn } = {}) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
-    setOptiFgEnabled(dir, !!enabled);
+    if (generator !== undefined) {
+      if (generator && generator !== 'none') {
+        // The renderer only offers what readiness allows; this is the backstop.
+        const ready = optiFgReadiness(dir, await resolveApi(dir, exePath));
+        if (!ready.supported) throw new Error(ready.reason);
+        if (!ready.available[generator]) throw new Error(`${generator === 'xefg' ? 'XeFG' : 'FSR FG'} files are missing from this game's OptiScaler folder`);
+      }
+      setOptiFg(dir, { generator, startOn });
+    } else {
+      setOptiFgEnabled(dir, !!enabled);
+    }
     const result = await autoConfigureGame(dir, exePath);
     return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// The pop-out panel's live frame generation switches, for a game with XeFG or FSR FG armed. On/off is
+// [FrameGen] Enabled and HUD fix is [OptiFG] HUDFix, both read per frame by the engine; its settings
+// reload compares them and raises the same flags OptiScaler's own key and menu do (engine v2.2.12,
+// PollSettingsFromDisk), so this is the same operation as the in-game switch. Which generator is not
+// here: it is a launch-time choice, made in Edit.
+function optiFgIniState(iniPath) {
+  let text = '';
+  try { text = fs.readFileSync(iniPath, 'utf-8'); } catch { return null; }
+  const section = (name) => {
+    const m = new RegExp(`^\\s*\\[${name}\\]\\s*$([\\s\\S]*?)(?=^\\s*\\[|(?![\\s\\S]))`, 'im').exec(text);
+    return m ? m[1] : '';
+  };
+  const key = (body, k) => ((new RegExp(`^\\s*${k}\\s*=\\s*(\\S+)`, 'im').exec(body) || [])[1] || '').toLowerCase();
+  const frameGen = section('FrameGen');
+  const output = key(frameGen, 'FGOutput');
+  return {
+    armed: OPTIFG_GENERATORS.includes(output),
+    generator: OPTIFG_GENERATORS.includes(output) ? output : null,
+    enabled: /^(true|1)$/.test(key(frameGen, 'Enabled')),
+    hudfix: /^(true|1)$/.test(key(section('OptiFG'), 'HUDFix')),
+  };
+}
+
+ipcMain.handle('optifg:live', async (_evt, { exePath } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) return { ok: false, error: 'Game .exe not found' };
+    const state = optiFgIniState(path.join(optiScalerDirFor(gameDir(exePath)), 'OptiScaler.ini'));
+    return state ? { ok: true, ...state } : { ok: false, error: 'OptiScaler.ini not found' };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+ipcMain.handle('optifg:live-set', async (_evt, { exePath, enabled, hudfix } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const iniPath = path.join(optiScalerDirFor(dir), 'OptiScaler.ini');
+    const state = optiFgIniState(iniPath);
+    if (!state) throw new Error('OptiScaler.ini not found');
+    // Nothing to switch without a generator armed at launch -- the panel does not offer it then.
+    if (!state.armed) throw new Error('No frame generator is set up for this game -- pick one in Edit first');
+    if (enabled !== undefined) ensureIniKey(iniPath, 'FrameGen', 'Enabled', enabled ? 'true' : 'false');
+    if (hudfix !== undefined) ensureIniKey(iniPath, 'OptiFG', 'HUDFix', hudfix ? 'true' : 'false');
+    ensureLiveReload(dir);
+    return { ok: true, ...optiFgIniState(iniPath) };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -5919,29 +5982,81 @@ const INSPECT_NEUTRAL = [
 ];
 
 // OptiScaler's own Frame Generation, opted into per game -- see optiFgReadiness() below for
-// why this only ever applies to a D3D12 game. FSRFG specifically (not DLSSG/XeFG): it's plain
-// ini config with no Streamline dependency, which is what makes it reachable through a Feeder
-// game at all (confirmed on a real Feeder deploy, Bodycam, 2026-09-09: OptiScaler.log read back
-// `FrameGen.FGOutput: FSRFG` correctly).
-const OPTIFG_FORCED = [
-  { section: 'FrameGen', key: 'Enabled', value: 'true' },
-  { section: 'FrameGen', key: 'FGInput', value: 'upscaler' },
-  { section: 'FrameGen', key: 'FGOutput', value: 'fsrfg' },
-];
+// why this only ever applies to a D3D12 game. Plain ini config with no Streamline dependency.
+//
+// Two generators, chosen per game (2026-09-23): XeFG -- OptiScaler's own verdict is "heaviest, but
+// best universal FG", and the best with HUDs -- and FSR FG (FSR 3.1, FSR 4 on RDNA4), lighter. Which
+// one is fixed at launch: OptiScaler builds it into the swapchain the game creates, once per session.
+// Whether it STARTS on is a separate choice, because arming a generator is what makes it switchable at
+// all: with FGOutput set and Enabled=false the swapchain is still built with it, and the DLSS 5 panel,
+// the pop-out and OptiScaler's End key turn it on and off live.
+const OPTIFG_GENERATORS = ['xefg', 'fsrfg'];
+const OPTIFG_DEFAULT_GENERATOR = 'xefg';
+
+// Not armed: the generator this app put there comes back out, not only switched off. Enabled=false alone
+// leaves it built into the swapchain every launch -- the always-armed state that is meant to be a
+// per-game choice. Only our own values are cleared; an FGOutput someone set by hand is theirs.
+function optiFgDisarm(iniPath) {
+  let text = '';
+  try { text = fs.readFileSync(iniPath, 'utf-8'); } catch { return []; }
+  const out = (/^\s*FGOutput\s*=\s*(\S+)/im.exec(text) || [])[1];
+  if (!out || !OPTIFG_GENERATORS.includes(out.toLowerCase())) return [];
+  return [
+    { section: 'FrameGen', key: 'FGOutput', value: 'auto' },
+    { section: 'FrameGen', key: 'FGInput', value: 'auto' },
+  ];
+}
+
+function optiFgForced({ generator, startOn }) {
+  return [
+    { section: 'FrameGen', key: 'Enabled', value: startOn ? 'true' : 'false' },
+    { section: 'FrameGen', key: 'FGInput', value: 'upscaler' },
+    { section: 'FrameGen', key: 'FGOutput', value: generator },
+  ];
+}
 
 // Persisted per game-folder, not in games.json -- same reasoning as feederDeployed(): this has
 // to survive being read by any entry point that calls autoConfigureGame (game:install,
 // game:sync-if-stale), not just the one IPC call that set it.
+//
+// JSON { generator, startOn } since 2026-09-23. Before that the file held only a timestamp and meant
+// "FSR FG, on" -- which is how an old one still reads.
 const OPTIFG_MARKER = '.dlss5ui-optifg-enabled';
 
-function isOptiFgEnabled(dir) {
-  return fs.existsSync(path.join(dir, OPTIFG_MARKER));
+function readOptiFg(dir) {
+  let text;
+  try { text = fs.readFileSync(path.join(dir, OPTIFG_MARKER), 'utf-8'); } catch { return null; }
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === 'object') {
+      return {
+        generator: OPTIFG_GENERATORS.includes(parsed.generator) ? parsed.generator : OPTIFG_DEFAULT_GENERATOR,
+        startOn: parsed.startOn !== false,
+      };
+    }
+  } catch {}
+  return { generator: 'fsrfg', startOn: true };
 }
 
-function setOptiFgEnabled(dir, enabled) {
+function isOptiFgEnabled(dir) {
+  return readOptiFg(dir) !== null;
+}
+
+// generator null (or 'none') removes it; otherwise one of OPTIFG_GENERATORS.
+function setOptiFg(dir, { generator, startOn = false } = {}) {
   const marker = path.join(dir, OPTIFG_MARKER);
-  if (enabled) fs.writeFileSync(marker, new Date().toISOString(), 'utf-8');
-  else if (fs.existsSync(marker)) fs.rmSync(marker);
+  if (!generator || generator === 'none') {
+    if (fs.existsSync(marker)) fs.rmSync(marker);
+    return;
+  }
+  if (!OPTIFG_GENERATORS.includes(generator)) throw new Error(`${generator} is not a frame generator this app offers`);
+  fs.writeFileSync(marker, JSON.stringify({ generator, startOn: !!startOn, at: new Date().toISOString() }, null, 2), 'utf-8');
+}
+
+// Kept for the one caller that only ever switches it off (Lossless Scaling taking over).
+function setOptiFgEnabled(dir, enabled) {
+  if (!enabled) setOptiFg(dir, { generator: null });
+  else setOptiFg(dir, { generator: (readOptiFg(dir) || {}).generator || OPTIFG_DEFAULT_GENERATOR, startOn: true });
 }
 
 // OptiScaler's FGHooks::CreateSwapChain requires the game's own swapchain device to answer
@@ -5962,12 +6077,30 @@ function optiFgReadiness(dir, api) {
   if (isFeederGame(dir)) {
     return { supported: false, reason: 'Not available together with the DLSS5 Feeder yet -- this combination crashed on a real test (confirmed via a symbolicated crash dump). Blocked until fixed.' };
   }
-  const ffxLoader = path.join(dir, 'OptiScaler', 'amd_fidelityfx_loader_dx12.dll');
-  const ffxFg = path.join(dir, 'OptiScaler', 'amd_fidelityfx_framegeneration_dx12.dll');
-  if (!fs.existsSync(ffxLoader) || !fs.existsSync(ffxFg)) {
-    return { supported: false, reason: 'Missing amd_fidelityfx_loader_dx12.dll / amd_fidelityfx_framegeneration_dx12.dll -- install OptiScaler for this game first (Install button).' };
+  // A game with DLSS Frame Generation of its own keeps it: it has the game's real motion vectors and
+  // a HUD-less frame, so it is better than either of these -- and OptiScaler's FG next to a game's own
+  // Streamline is what TDR-crashed Cyberpunk 2077 (2026-09-08). Its multiplier is on the DLSS 5 panel.
+  if (framegen.frameGenSwapState(dir).hasFrameGen) {
+    return { supported: false, reason: 'This game has NVIDIA DLSS Frame Generation of its own, which is better than OptiScaler\'s -- turn it on in the game\'s settings. Its multiplier is on the DLSS 5 panel.' };
   }
-  return { supported: true, enabled: isOptiFgEnabled(dir) };
+  // What each generator needs, from OptiScaler's own release payload (copied to OptiScaler\ by Install).
+  const has = (...files) => files.every((f) => fs.existsSync(path.join(dir, 'OptiScaler', f)));
+  const available = {
+    xefg: has('libxess_fg.dll', 'libxell.dll'),
+    fsrfg: has('amd_fidelityfx_loader_dx12.dll', 'amd_fidelityfx_framegeneration_dx12.dll'),
+  };
+  if (!available.xefg && !available.fsrfg) {
+    return { supported: false, reason: 'The frame generation files are missing from this game\'s OptiScaler folder -- install OptiScaler for this game first (Install button).' };
+  }
+  const current = readOptiFg(dir);
+  return {
+    supported: true,
+    enabled: current !== null,
+    generator: current ? current.generator : 'none',
+    startOn: current ? current.startOn : false,
+    available,
+    recommended: available.xefg ? 'xefg' : 'fsrfg',
+  };
 }
 
 async function autoConfigureGame(dir, exePath) {
@@ -5981,7 +6114,10 @@ async function autoConfigureGame(dir, exePath) {
   // apart from Feeder-supplied. Excluded explicitly: Feeder + FSRFG crashed on a real game
   // (confirmed via a symbolicated minidump) -- see optiFgReadiness's own guard above.
   const feederGame = isFeederGame(dir);
-  const optiFgOn = dlss5Only && api === 'dx12' && !feederGame && isOptiFgEnabled(dir);
+  // The same gates as optiFgReadiness, enforced here too, so a marker left behind (the game gained
+  // DLSS-G in an update, or became a Feeder game) never arms a generator that should not be there.
+  const optiFg = readOptiFg(dir);
+  const optiFgOn = !!optiFg && dlss5Only && api === 'dx12' && !feederGame && !framegen.frameGenSwapState(dir).hasFrameGen;
   const edits = [];
 
   if (!dlss5Only) edits.push(...keepGamesOwnDlss(apis));
@@ -6106,7 +6242,7 @@ async function autoConfigureGame(dir, exePath) {
   // -- so the D3D12 key is set whatever API the game itself renders with.
   const upscalerApis = feederGame ? [...new Set([...apis, 'dx12'])] : apis;
   let forced = dlss5Only
-    ? patchIniValues(iniPath, [...(optiFgOn ? OPTIFG_FORCED : DLSS5_ONLY_FORCED), ...keepGamesOwnDlss(upscalerApis)])
+    ? patchIniValues(iniPath, [...(optiFgOn ? optiFgForced(optiFg) : [...DLSS5_ONLY_FORCED, ...optiFgDisarm(iniPath)]), ...keepGamesOwnDlss(upscalerApis)])
     : [];
   if (feederGame && feeder.feederDeployed(dir)) {
     // Only where ReShade is the plain ReShade64.dll beside the exe. As the game's opengl32.dll

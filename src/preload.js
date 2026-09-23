@@ -29,6 +29,9 @@ contextBridge.exposeInMainWorld('api', {
 
   optiFgReadiness: (exePath) => ipcRenderer.invoke('optifg:readiness', exePath),
   optiFgSet: (exePath, enabled) => ipcRenderer.invoke('optifg:set', { exePath, enabled }),
+  optiFgChoose: (exePath, generator, startOn) => ipcRenderer.invoke('optifg:set', { exePath, generator, startOn }),
+  optiFgLive: (exePath) => ipcRenderer.invoke('optifg:live', { exePath }),
+  optiFgLiveSet: (exePath, values) => ipcRenderer.invoke('optifg:live-set', { exePath, ...values }),
 
   feederReadiness: (exePath) => ipcRenderer.invoke('feeder:readiness', exePath),
   feederMvProviders: () => ipcRenderer.invoke('feeder:mvProviders'),
