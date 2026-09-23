@@ -32,6 +32,9 @@ contextBridge.exposeInMainWorld('api', {
 
   feederReadiness: (exePath) => ipcRenderer.invoke('feeder:readiness', exePath),
   feederMvProviders: () => ipcRenderer.invoke('feeder:mvProviders'),
+  addonsForGame: (exePath) => ipcRenderer.invoke('addons:forGame', { exePath }),
+  addonsInstall: (exePath, id) => ipcRenderer.invoke('addons:install', { exePath, id }),
+  addonsRemove: (exePath, id) => ipcRenderer.invoke('addons:remove', { exePath, id }),
   legacyDgVoodoo: (exePath, detected) => ipcRenderer.invoke('legacy:dgvoodoo', { exePath, detected }),
   legacyInstallHost32: (payload) => ipcRenderer.invoke('legacy:installHost32', payload),
   legacyMvProvider: (exePath) => ipcRenderer.invoke('legacy:mvProvider', { exePath }),

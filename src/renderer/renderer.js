@@ -493,6 +493,7 @@ async function renderGrid() {
           <button class="btn btn-ghost btn-swap-layer hidden"></button>
           <button class="btn btn-ghost btn-neural-pass hidden"></button>
           <button class="btn btn-ghost btn-mv-provider hidden"></button>
+          <button class="btn btn-ghost btn-addons">${escapeHtml(t('ReShade add-ons'))}</button>
           <button class="btn btn-ghost btn-open">${escapeHtml(t('Open folder'))}</button>
           <button class="btn btn-ghost btn-danger btn-install">${escapeHtml(backends.optiscaler ? t('Uninstall DLSS 5') : leftoverFiles.length ? t('Remove leftovers') : t('Install DLSS 5'))}</button>
           ${(status.foreign || []).length ? `<button class="btn btn-ghost btn-danger btn-remove-foreign">${escapeHtml(t('Remove the other DLSS 5 toolchain…'))}</button>` : ''}
@@ -698,6 +699,7 @@ async function renderGrid() {
     card.querySelector('.btn-neural-pass').addEventListener('click', (e) => switchNeuralPass(game, e.currentTarget.dataset.to));
     card.querySelector('.btn-edit').addEventListener('click', () => openGameModal(game));
     card.querySelector('.btn-mv-provider').addEventListener('click', () => openGameModal(game, { focus: 'legacy-mv' }));
+    card.querySelector('.btn-addons').addEventListener('click', () => openAddonsModal(game));
     card.querySelector('.btn-remove').addEventListener('click', () => removeGame(game));
     card.querySelector('.btn-flip-cancel').addEventListener('click', () => card.classList.remove('flipped'));
     card.querySelector('.btn-flip-confirm').addEventListener('click', () => {
@@ -5853,3 +5855,106 @@ window.addEventListener('focus', () => {
   // A newer model, once in, is pushed into every installed game by the same sync.
   ensureNrModel().then((fetched) => { if (fetched) autoSyncStaleGames(); }).catch(() => {});
 })();
+
+// ── ReShade add-ons ───────────────────────────────────────────────────────────────────────────
+//
+// One list per game. Every route this app installs already puts ReShade in the folder, so the
+// expensive part is done and this is only choosing what goes beside it.
+//
+// Two kinds of row, and the difference is worth showing rather than hiding: a shader pack lands
+// in reshade-shaders\Shaders and takes a place in the effect order (preset-order.js re-sorts the
+// preset on every install and removal), while an add-on is a DLL ReShade loads and has no
+// technique at all. People conflate the two -- "install the motion-vector shader before the HDR
+// one" is a statement about the first kind, and RenoDX, the thing most people mean by an HDR mod,
+// is the second.
+
+let addonsGame = null;
+
+async function openAddonsModal(game) {
+  addonsGame = game;
+  $('#addons-modal').classList.remove('hidden');
+  $('#addons-list').innerHTML = `<p class="field-hint">${escapeHtml(t('Looking at this game…'))}</p>`;
+  $('#addons-status').textContent = '';
+  await renderAddons();
+}
+
+async function renderAddons() {
+  const res = await window.api.addonsForGame(addonsGame.exePath);
+  if (!res || !res.ok) {
+    $('#addons-list').innerHTML = `<p class="field-hint status-bad">${escapeHtml(res && res.error ? res.error : t('Could not read this game.'))}</p>`;
+    return;
+  }
+
+  const rows = res.catalogue.map((a) => {
+    // RenoDX is the one row that is not always available: it is per-game, and a game with no mod
+    // built for it gets told that plainly rather than offered a button that fails.
+    const perGame = a.id === 'renodx';
+    const match = res.renodx;
+    const unavailable = perGame && !match;
+
+    const bits = [];
+    bits.push(`<div class="addon-name">${escapeHtml(a.displayName)}</div>`);
+    bits.push(`<div class="field-hint">${escapeHtml(a.summary)}</div>`);
+
+    if (perGame && match) {
+      bits.push(`<div class="field-hint">${escapeHtml(t('For this game: {title} ({status}), maintained by {who}.', {
+        title: match.title, status: match.status, who: (match.maintainers || []).join(', ') || t('the RenoDX project'),
+      }))}</div>`);
+      // How the match was made, because the two are not the same claim. An appid came from Steam;
+      // a title match is this app deciding two names are the same game, and it can be wrong.
+      if (match.how === 'title') {
+        bits.push(`<div class="field-hint status-warn">${escapeHtml(t('Matched by name, not by a Steam ID -- check the title above is really this game before installing.'))}</div>`);
+      }
+    }
+    if (unavailable) {
+      bits.push(`<div class="field-hint">${escapeHtml(res.indexError
+        ? t('The RenoDX list could not be fetched: {reason}.', { reason: res.indexError })
+        : t('No RenoDX mod is built for this game yet. RenoFX below is the generic alternative.'))}</div>`);
+    }
+    if (a.warnWithNeuralRendering && res.neuralRendering) {
+      bits.push(`<div class="field-hint status-warn">${escapeHtml(t('This and DLSS 5 both change the final picture, and the two have not been tested together here. Worth trying; if colours look wrong, take this back off first.'))}</div>`);
+    }
+    if (a.wants && a.wants.length && !res.catalogue.find((x) => a.wants.includes(x.id) && x.installed)) {
+      bits.push(`<div class="field-hint status-warn">${escapeHtml(t('Needs an inverse tonemapper to do anything -- install the Lilium HDR shaders too.'))}</div>`);
+    }
+    bits.push(`<div class="field-hint">${escapeHtml(a.licence)} &middot; <a href="#" class="addon-home" data-url="${escapeHtml(a.homepage)}">${escapeHtml(t('project page'))}</a></div>`);
+
+    const button = unavailable
+      ? `<button class="btn btn-ghost" disabled>${escapeHtml(t('Not for this game'))}</button>`
+      : `<button class="btn ${a.installed ? 'btn-ghost btn-danger' : 'btn-primary'} addon-act" data-id="${escapeHtml(a.id)}" data-installed="${a.installed ? '1' : ''}">${escapeHtml(a.installed ? t('Remove') : t('Install'))}</button>`;
+
+    return `<div class="addon-row"><div class="addon-body">${bits.join('')}</div><div class="addon-action">${button}</div></div>`;
+  });
+
+  $('#addons-list').innerHTML = rows.join('');
+
+  for (const el of $('#addons-list').querySelectorAll('.addon-home')) {
+    el.addEventListener('click', (e) => { e.preventDefault(); window.api.openExternal(el.dataset.url); });
+  }
+  for (const el of $('#addons-list').querySelectorAll('.addon-act')) {
+    el.addEventListener('click', async () => {
+      const id = el.dataset.id;
+      const removing = !!el.dataset.installed;
+      el.disabled = true;
+      $('#addons-status').className = 'field-hint';
+      $('#addons-status').textContent = removing ? t('Removing…') : t('Fetching and placing…');
+      const out = removing
+        ? await window.api.addonsRemove(addonsGame.exePath, id)
+        : await window.api.addonsInstall(addonsGame.exePath, id);
+      if (out && out.ok) {
+        $('#addons-status').textContent = removing
+          ? t('Removed. {count} files taken back out.', { count: (out.removed || []).length })
+          : t('Installed. {count} files placed, and the effect order was rewritten.', { count: (out.files || []).length });
+      } else {
+        $('#addons-status').className = 'field-hint status-bad';
+        $('#addons-status').textContent = (out && out.error) || t('That did not work.');
+      }
+      await renderAddons();
+    });
+  }
+}
+
+$('#btn-close-addons')?.addEventListener('click', () => {
+  $('#addons-modal').classList.add('hidden');
+  addonsGame = null;
+});

@@ -44,6 +44,7 @@ const os = require('node:os');
 
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const { setIniKey, getIniKey } = require('./ini-merge');
+const { BAND, applyOrder } = require('./preset-order');
 const nativeDlss = require('./native-dlss');
 const integrity = require('./integrity');
 const { netFetch } = require('./net');
@@ -1101,6 +1102,29 @@ async function deployNvngxDlss(dir, getRhiManifest, compareVersions, cacheDir, g
   return { deployed: true, version: newest.version };
 }
 
+// Which band each technique in this game's preset belongs to. Three sources, and only these
+// three: the motion-vector provider being configured, the Feeder's own technique, and whatever
+// shader packs THIS APP installed here (addons.js reads its own marker, so a pack the user put
+// there themselves is left alone -- it sorts in the EFFECT band with their other effects and
+// keeps its place).
+//
+// Read lazily: addons.js is only needed by a game that has add-ons, and feeder.js is required on
+// every card render.
+function presetRanks({ mvTechnique, feedTechnique, dir }) {
+  const ranks = new Map();
+  if (mvTechnique) ranks.set(mvTechnique.toLowerCase(), BAND.MV_PROVIDER);
+  if (feedTechnique) ranks.set(feedTechnique.toLowerCase(), BAND.FEED);
+  try {
+    for (const { technique, band } of require('./addons').installedTechniqueBands(dir)) {
+      ranks.set(String(technique).toLowerCase(), band);
+    }
+  } catch {
+    // No marker, or an unreadable one: the two above are still ordered, which is what every
+    // install before this feature had.
+  }
+  return ranks;
+}
+
 // ReShadePreset.ini: the motion-vector provider's technique must run before DLSS5_Feed, and
 // DLSS5_Feed.fx's own DLSS5_MV_PROVIDER preprocessor definition must match. Structure-
 // preserving (setIniKey/getIniKey from ini-merge.js) rather than a template overwrite -- this
@@ -1123,7 +1147,6 @@ function configurePreset(dir, providerId) {
   const mvTechnique = provider.techniqueFile && provider.techniqueName
     ? `${provider.techniqueName}@${provider.techniqueFile}`
     : null;
-  const orderedTechniques = [mvTechnique, feedTechnique].filter(Boolean);
 
   // Strip every OTHER provider's technique too, not just the one being set now -- otherwise
   // switching providers leaves the old one's technique orphaned in the list alongside the new
@@ -1132,17 +1155,16 @@ function configurePreset(dir, providerId) {
     .filter((p) => p.techniqueFile && p.techniqueName)
     .map((p) => `${p.techniqueName}@${p.techniqueFile}`.toLowerCase());
 
-  let next = existing;
-  for (const key of ['Techniques', 'TechniqueSorting']) {
-    const cur = getIniKey(next, '', key);
-    let list = cur ? cur.split(',').map((s) => s.trim()).filter(Boolean) : [];
-    list = list.filter((t) => {
-      const lower = t.toLowerCase();
-      return lower !== feedTechnique.toLowerCase() && !anyKnownMvTechnique.includes(lower);
-    });
-    list.push(...orderedTechniques);
-    next = setIniKey(next, '', key, list.join(','));
-  }
+  // The order is a rank table now (preset-order.js), not this pair in an array. Same result for
+  // these two -- motion vectors, then the feed -- but a third technique installed later (an HDR
+  // inverse tonemapper, an output converter) lands in its own band instead of on the end, and the
+  // user's own effects keep the order they were in. presetRanks() is where the bands are assigned.
+  const ranks = presetRanks({ mvTechnique, feedTechnique, dir });
+  let next = applyOrder(existing, {
+    present: [mvTechnique, feedTechnique].filter(Boolean),
+    absent: anyKnownMvTechnique.filter((t) => t !== (mvTechnique || '').toLowerCase()),
+    ranks,
+  });
   // DLSS5_MV_PROVIDER goes in at both levels ReShade reads for this preset: the per-effect
   // [DLSS5_Feed.fx] section and the preset's own root list. Per-effect wins where both exist, so
   // setting it alone is enough for a preset this app wrote -- but a preset the user already had
