@@ -1548,4 +1548,5 @@ window.I18N.register('pt-BR', {
   "this emulator": "este emulador",
   "Insert": "Insert",
   "Insert opens this window while a 32-bit game, or one with no in-game panel, is running. On every other game Insert opens the DLSS 5 panel inside the game -- bind a different key here to have this window on every game.": "Insert abre esta janela enquanto um jogo de 32 bits, ou um sem painel dentro do jogo, está rodando. Em qualquer outro jogo, Insert abre o painel do DLSS 5 dentro do jogo -- defina outra tecla aqui para ter esta janela em todos os jogos.",
+  "No Insert key? On many laptops \"Ins\" is printed on the numpad's 0 key, and it only sends Insert with Num Lock off. Turn Num Lock off, or click the box above and press the key you want — numpad keys work too. The DLSS 5 panel inside the game has its own key, under Edit.": "Sem tecla Insert? Em muitos notebooks o \"Ins\" fica na tecla 0 do teclado numérico, e ela só envia Insert com o Num Lock desligado. Desligue o Num Lock, ou clique na caixa acima e pressione a tecla que quiser — teclas do teclado numérico também funcionam. O painel do DLSS 5 dentro do jogo tem a própria tecla, em Editar.",
 });

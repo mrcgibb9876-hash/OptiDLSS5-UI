@@ -1547,4 +1547,5 @@ window.I18N.register("zh-CN", {
   "this emulator": "此模拟器",
   "Insert": "Insert",
   "Insert opens this window while a 32-bit game, or one with no in-game panel, is running. On every other game Insert opens the DLSS 5 panel inside the game -- bind a different key here to have this window on every game.": "运行 32 位游戏或没有游戏内面板的游戏时，Insert 会打开此窗口。在其他所有游戏中，Insert 会打开游戏内的 DLSS 5 面板 -- 在这里绑定其他按键，即可在所有游戏中使用此窗口。",
+  "No Insert key? On many laptops \"Ins\" is printed on the numpad's 0 key, and it only sends Insert with Num Lock off. Turn Num Lock off, or click the box above and press the key you want — numpad keys work too. The DLSS 5 panel inside the game has its own key, under Edit.": "没有 Insert 键？很多笔记本把\"Ins\"印在数字小键盘的 0 键上，只有关闭 Num Lock 时它才发送 Insert。请关闭 Num Lock，或点击上方的框再按下想用的键 — 小键盘按键也可以。游戏内的 DLSS 5 面板有自己的按键，在\"编辑\"里设置。",
 });

@@ -1547,4 +1547,5 @@ window.I18N.register("ko", {
   "this emulator": "이 에뮬레이터",
   "Insert": "Insert",
   "Insert opens this window while a 32-bit game, or one with no in-game panel, is running. On every other game Insert opens the DLSS 5 panel inside the game -- bind a different key here to have this window on every game.": "32비트 게임이나 게임 내 패널이 없는 게임이 실행 중일 때 Insert 키로 이 창이 열립니다. 그 밖의 게임에서는 Insert 키가 게임 안의 DLSS 5 패널을 엽니다 -- 모든 게임에서 이 창을 쓰려면 여기서 다른 키를 지정하세요.",
+  "No Insert key? On many laptops \"Ins\" is printed on the numpad's 0 key, and it only sends Insert with Num Lock off. Turn Num Lock off, or click the box above and press the key you want — numpad keys work too. The DLSS 5 panel inside the game has its own key, under Edit.": "Insert 키가 없나요? 많은 노트북에서 \"Ins\"는 숫자 키패드의 0 키에 있고, Num Lock이 꺼져 있을 때만 Insert로 동작합니다. Num Lock을 끄거나, 위 칸을 클릭한 뒤 원하는 키를 누르세요 — 숫자 키패드 키도 됩니다. 게임 안의 DLSS 5 패널은 편집에서 따로 키를 정합니다.",
 });

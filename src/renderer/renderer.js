@@ -5183,7 +5183,13 @@ $('#settings-panel-hotkey').addEventListener('keydown', async (e) => {
   // A plain letter, digit or space on its own would be taken from every other program in the system,
   // so those need a modifier. A key nobody types text with -- Insert, the default, or Home, End, the
   // F-keys -- is fine bare.
-  const bareOk = /^(Insert|Home|End|PageUp|PageDown|F([1-9]|1[0-9]|2[0-4]))$/.test(key);
+  //
+  // Numpad keys by their physical position (e.code), not e.key: with Num Lock on, the numpad's
+  // 0/Ins key reports "0", which would bind the top-row 0. Electron names them num0..num9 and numdec.
+  // They are fine bare too -- a laptop with no Insert of its own has it on numpad 0 (2026-09-23).
+  const numpad = /^Numpad(\d)$/.exec(e.code || '');
+  const numpadKey = numpad ? `num${numpad[1]}` : e.code === 'NumpadDecimal' ? 'numdec' : null;
+  const bareOk = !!numpadKey || /^(Insert|Home|End|PageUp|PageDown|F([1-9]|1[0-9]|2[0-4]))$/.test(key);
   if (parts.length === 0 && !bareOk) {
     const el = $('#panel-hotkey-status');
     el.textContent = t('Hold Ctrl, Alt or Shift as well — a key on its own would be taken from every other program.');
@@ -5192,7 +5198,7 @@ $('#settings-panel-hotkey').addEventListener('keydown', async (e) => {
   }
 
   const named = { ' ': 'Space', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Escape: 'Esc' };
-  parts.push(named[key] || (key.length === 1 ? key.toUpperCase() : key));
+  parts.push(numpadKey || named[key] || (key.length === 1 ? key.toUpperCase() : key));
 
   settings.panelHotkey = parts.join('+');
   $('#settings-panel-hotkey').value = settings.panelHotkey;
