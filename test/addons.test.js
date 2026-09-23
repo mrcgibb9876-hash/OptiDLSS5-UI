@@ -69,6 +69,13 @@ test('a technique already present is not added twice', () => {
 
 // ── the catalogue ─────────────────────────────────────────────────────────────────────────────
 
+// catalogue() is what addons:forGame sends to the renderer. A function in it (Lilium's bandFor)
+// made Electron reject the whole reply and the picker sat on "Looking at this game…" forever.
+test('the catalogue survives IPC: structured-cloneable, while addonById keeps bandFor', () => {
+  assert.doesNotThrow(() => structuredClone(addons.catalogue()));
+  assert.equal(typeof addons.addonById('lilium-hdr').bandFor, 'function');
+});
+
 test('every catalogue entry names its licence and a homepage, and every fetchable one is pinned', () => {
   for (const a of addons.catalogue()) {
     assert.ok(a.licence, `${a.id} states its licence`);

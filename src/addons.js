@@ -165,8 +165,12 @@ function conflictsFor(dir, id) {
 
 const byId = new Map(CATALOGUE.map((a) => [a.id, a]));
 
+// The list as the renderer sees it, so data only. An entry can carry a function (Lilium's bandFor),
+// and one function anywhere in an IPC reply makes Electron refuse the whole thing -- "An object
+// could not be cloned" -- which left the picker stuck on "Looking at this game…" for every game.
+// The install path reads functions through addonById, which keeps them.
 function catalogue() {
-  return CATALOGUE.map((a) => ({ ...a }));
+  return CATALOGUE.map((a) => Object.fromEntries(Object.entries(a).filter(([, v]) => typeof v !== 'function')));
 }
 
 function addonById(id) {
