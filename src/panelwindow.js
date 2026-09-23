@@ -123,6 +123,11 @@ function show(options) {
   // The panel is useless without focus -- it is there to be typed into and clicked. A borderless
   // game keeps rendering behind it; an exclusive-fullscreen one will minimise, which is why the
   // window says so rather than pretending otherwise.
+  //
+  // Focus it must take, even over a game that minimises when it loses focus. Tried the other way
+  // (2026-09-23, shown without activating): the game then stays active and keeps the mouse clipped
+  // to its own window, so the panel cannot be reached at all -- which is most games, not just one.
+  // A game that minimises is fixed on the game's side instead (Max Payne 2: AllowTaskSwitching).
   panel.focus();
   // On the very first open this lands before the page exists and is dropped; that open is covered
   // by the renderer reading its targets as it loads. Every later open needs this, because the panel

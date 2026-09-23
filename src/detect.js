@@ -44,7 +44,7 @@ const rtxmfg = require('./rtxmfg');
 // carries the renderer's name and menu path (emulators.js, #106).
 // 17: an ASI loader's plugins are read (asiPlugins). A stored detection carries none, and its
 // absence reads as "no ASI loader here" -- the exact wrong answer that has to be refreshed (#108).
-const DETECT_VERSION = 18;
+const DETECT_VERSION = 19;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
@@ -773,17 +773,27 @@ function oldShaderCompiler(dir) {
 // no DLSS of its own -- was never offered (user report, 2026-09-16). An entry is the game's one fixed
 // renderer, so it wins over the scan; a game with a renderer setting gets its own reader instead
 // (rdr2Renderer below).
+//
+// A legacy API (DX8/DX9/DX10) comes back the way the generic scan reports one -- api null, the API in
+// `old` -- so the legacy step below turns it into the dgVoodoo2 route exactly as it would a scanned one.
+//
+// Max Payne 1 and 2 (MAX-FX): the exe names D3D9 (a version check) but renders through
+// e2driver\e2_d3d8_driver_mfc.dll, which loads d3d8.dll at run time -- a subfolder the sibling scan never
+// looks in. Read as DX9, the route put dgVoodoo's D3D9.dll beside an exe that never loads it, so nothing
+// the route placed ever ran and neither panel could open (2026-09-23).
 const KNOWN_RENDERERS = {
-  'fifa16.exe': { api: 'dx11', name: 'FIFA 16' },
+  'fifa16.exe': { api: 'dx11', name: 'FIFA 16', why: 'its protected executable does not say so itself' },
+  'maxpayne2.exe': { api: 'dx8', name: 'Max Payne 2', why: 'through e2driver\\e2_d3d8_driver_mfc.dll -- its exe only names D3D9 in a version check' },
+  'maxpayne.exe': { api: 'dx8', name: 'Max Payne', why: 'through its MAX-FX Direct3D 8 driver -- its exe does not say so itself' },
 };
+const LEGACY_KNOWN = new Set(['dx8', 'dx9', 'dx10']);
 
 function knownRenderer(exePath) {
   const known = KNOWN_RENDERERS[path.basename(String(exePath || '')).toLowerCase()];
   if (!known) return null;
-  return {
-    api: known.api, apis: [known.api], old: [],
-    reason: `${API_LABEL[known.api]} -- what ${known.name} renders with; its protected executable does not say so itself`,
-  };
+  const reason = `${API_LABEL[known.api]} -- what ${known.name} renders with, ${known.why}`;
+  if (LEGACY_KNOWN.has(known.api)) return { api: null, apis: [], old: [known.api], reason };
+  return { api: known.api, apis: [known.api], old: [], reason };
 }
 
 // RDR2's executable is byte-for-byte the same under DX12 and Vulkan; its own settings file is

@@ -1,4 +1,6 @@
 'use strict';
+// Never the machine's real registry: legacy.js RENDERER_RENAMES would set a game's own setting.
+process.env.OPTIDLSS5_NO_REGISTRY = '1';
 // Experimental routes: emulators (emulators.js), 32-bit games through the Feeder's 64-bit helper and
 // DirectX 8/9 through dgVoodoo2 (legacy.js). Detection on real 32/64-bit Windows executables carrying
 // the API entry-point names; deploys against zips shaped like the real Feeder release (backslash entry
@@ -103,6 +105,93 @@ test('FIFA 16: a protected exe that names no API is still DX11, so the Feeder is
 
   const other = exeWith(scratchDir('no-api'), 'somegame.exe');
   assert.equal((await detect.detectGame(path.dirname(other), other)).api, null, 'only the named game is assumed');
+});
+
+test('Max Payne 2 is Direct3D 8, so dgVoodoo goes in as D3D8.dll, not D3D9.dll', { skip: !onWindows }, async () => {
+  // Its exe names D3D9 in a version check and renders through e2driver\e2_d3d8_driver_mfc.dll, which
+  // the sibling scan cannot see. Read as DX9, the route placed a D3D9.dll the game never loads.
+  const dir = scratchDir('maxpayne2');
+  const exe = exeWith(dir, 'MaxPayne2.exe');
+  const det = await detect.detectGame(dir, exe);
+  assert.deepEqual(det.legacyApis, ['dx8']);
+  assert.notEqual(det.api, 'dx9');
+  // The real exe is 32-bit, which is what makes DX8 reachable; the route that follows places D3D8.dll.
+  const plan = legacy.planFor({ ...det, api: 'dx8', apis: ['dx8'], bitness: 32 });
+  assert.equal(plan.supported, true);
+  assert.equal(plan.dgVoodoo.dll, 'D3D8.dll');
+});
+
+test('Max Payne 2: the renderer is pointed at dgd8.dll, and Remove puts the original back', { skip: !onWindows }, async () => {
+  // Its DxDiag probe loads Windows' own d3d8.dll first, and LoadLibraryA("d3d8.dll") then returns that
+  // one -- so dgVoodoo only runs under a name nothing else has loaded.
+  const base = scratchDir('mp2-rename');
+  const comps = fakeComponents(base);
+  const dgSource = await legacy.importDgVoodooZip(comps.dgZip, path.join(base, 'cache'));
+  const game = path.join(base, 'game');
+  exeWith(game, 'MaxPayne2.exe', { bits: 32 });
+  const original = Buffer.from('MZ renderer\0LoadLibraryA\0d3d8.dll\0Direct3DCreate8\0D3D8.DLL\0end', 'latin1');
+  write(game, 'e2driver/e2_d3d8_driver_mfc.dll', original);
+
+  const plan = legacy.planFor({ api: 'dx8', apis: ['dx8'], bitness: 32 });
+  const res = await legacy.deployDgVoodoo(game, plan, dgSource);
+  assert.equal(res.rendererRename && res.rendererRename.renamed, true);
+
+  const patched = fs.readFileSync(path.join(game, 'e2driver', 'e2_d3d8_driver_mfc.dll'));
+  assert.equal(patched.length, original.length, 'same length -- nothing in the file moves');
+  // Only the name it loads. D3D8.DLL in upper case is its DirectX version check, which has to keep
+  // reading Windows' own file -- renamed too, the game refused to start ("requires a DirectX 9.0
+  // compatible display adapter", 2026-09-23).
+  assert.ok(patched.includes(Buffer.from('dgd8.dll')) && !patched.includes(Buffer.from('d3d8.dll')));
+  assert.ok(patched.includes(Buffer.from('D3D8.DLL')) && !patched.includes(Buffer.from('DGD8.DLL')));
+  assert.deepEqual(fs.readFileSync(path.join(game, 'dgd8.dll')), fs.readFileSync(path.join(game, 'D3D8.dll')),
+    'dgVoodoo under the new name');
+
+  // A second Install patches from the original again, not from the patched copy.
+  await legacy.deployDgVoodoo(game, plan, dgSource);
+  assert.deepEqual(fs.readFileSync(path.join(game, 'e2driver', 'e2_d3d8_driver_mfc.dll')), patched);
+
+  await legacy.removeLegacy(game);
+  assert.deepEqual(fs.readFileSync(path.join(game, 'e2driver', 'e2_d3d8_driver_mfc.dll')), original, 'the renderer is back as it shipped');
+  assert.equal(fs.existsSync(path.join(game, 'dgd8.dll')), false);
+  assert.equal(fs.existsSync(path.join(game, 'e2driver', 'e2_d3d8_driver_mfc.dll.dlss5ui-orig')), false);
+
+  // Any other game's D3D8 route is untouched.
+  const other = path.join(base, 'other');
+  exeWith(other, 'Other.exe', { bits: 32 });
+  const plain = await legacy.deployDgVoodoo(other, plan, dgSource);
+  assert.equal(plain.rendererRename, null);
+});
+
+test('Max Payne 2 on DXVK: dgd8.dll is DXVK\'s d3d8 pointed at dgd9.dll, and Remove undoes all of it', { skip: !onWindows }, async () => {
+  // DXVK's d3d8.dll imports d3d9.dll, and Windows' own D3D9.DLL is already loaded by the DxDiag probe,
+  // so the chain is renamed one level further down. The layer that actually runs DLSS 5 on this game.
+  const base = scratchDir('mp2-dxvk');
+  const dxvk = path.join(base, 'dxvk', 'x32');
+  write(dxvk, 'd3d8.dll', Buffer.from('DXVK d3d8\0imports d3d9.dll\0LoadLibraryA d3d9.dll\0', 'latin1'));
+  write(dxvk, 'd3d9.dll', 'DXVK d3d9');
+  const game = path.join(base, 'game');
+  exeWith(game, 'MaxPayne2.exe', { bits: 32 });
+  const original = Buffer.from('MZ renderer\0LoadLibraryA\0d3d8.dll\0D3D8.DLL\0', 'latin1');
+  write(game, 'e2driver/e2_d3d8_driver_mfc.dll', original);
+
+  const res = await legacy.applyRendererRenameForDxvk(game, dxvk);
+  assert.equal(res.renamed, true);
+  const dgd8 = fs.readFileSync(path.join(game, 'dgd8.dll'));
+  assert.ok(dgd8.includes(Buffer.from('dgd9.dll')) && !dgd8.includes(Buffer.from('d3d9.dll')), 'DXVK d3d8 now asks for dgd9.dll');
+  assert.equal(fs.readFileSync(path.join(game, 'dgd9.dll'), 'utf8'), 'DXVK d3d9');
+  const renderer = fs.readFileSync(path.join(game, 'e2driver', 'e2_d3d8_driver_mfc.dll'));
+  assert.ok(renderer.includes(Buffer.from('dgd8.dll')) && renderer.includes(Buffer.from('D3D8.DLL')));
+
+  // Remove: both renamed copies out, the renderer back as it shipped.
+  await legacy.removeLegacy(game);
+  assert.equal(fs.existsSync(path.join(game, 'dgd8.dll')), false);
+  assert.equal(fs.existsSync(path.join(game, 'dgd9.dll')), false);
+  assert.deepEqual(fs.readFileSync(path.join(game, 'e2driver', 'e2_d3d8_driver_mfc.dll')), original);
+
+  // Any other game: nothing.
+  const other = path.join(base, 'other');
+  exeWith(other, 'Other.exe', { bits: 32 });
+  assert.equal(await legacy.applyRendererRenameForDxvk(other, dxvk), null);
 });
 
 test('detection: emulators, 32-bit and DirectX 8/9 games are offered experimental routes', { skip: !onWindows }, async () => {

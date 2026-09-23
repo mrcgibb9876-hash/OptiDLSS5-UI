@@ -1,7 +1,7 @@
 {
   "_readme": "The known-good catalog (src/catalog.js): per game exe, the setup PROVEN to run DLSS 5 and the setups known to be dead ends, each with its source. Only real evidence goes here -- a confirmed run on a real install, or a run log -- never a guess. After any edit run `node tools/catalog/build.js`: it checks every entry and rewrites sha256, and the app refuses the file while the hash does not match. `node tools/catalog/build.js --digest <issue body> --source \"issue #N\" --write` adds a report from an issue's Run digest.",
   "version": 1,
-  "sha256": "3aa9f8b5ce06286a7624058bd98507a401edb9ba8f5e10f0945e40f322487ed7",
+  "sha256": "4c0421ad26465e033aab9aaa7c1c52a2f9a72d54887bfef4cbb93849a1402e75",
   "entries": [
     {
       "exe": "ai.exe",
@@ -270,6 +270,35 @@
         "live test 2026-09-21: crash reproduced twice at FalloutNV+0x757aa9 (dlss5-feed-crash.dmp, cdb), fixed by AdapterIDType and confirmed by the user",
         "local runs 2026-09-21 (nr-ran x3): feeder32 via dgvoodoo, dx9",
         "src/legacy.js DG_ADAPTER_ID_TYPES, test/dgvoodoo-adapter-id.test.js"
+      ]
+    },
+    {
+      "exe": "maxpayne2.exe",
+      "name": "Max Payne 2: The Fall of Max Payne",
+      "status": "works",
+      "setup": {
+        "route": "feeder32",
+        "via": "dxvk",
+        "api": "dx8"
+      },
+      "reports": {
+        "works": 1,
+        "fails": 0
+      },
+      "dead_ends": [
+        {
+          "route": "feeder32",
+          "via": "dgvoodoo",
+          "api": "dx8",
+          "verdict": null,
+          "why": "dgVoodoo2 creates its Direct3D 11 device past ReShade's hooks, so ReShade never draws and the Feeder has no frames",
+          "source": "live test 2026-09-23/24: ReShade.log hooked d3d11/dxgi, no device or swapchain from dgVoodoo after the game started"
+        }
+      ],
+      "updated": "2026-09-24",
+      "notes": "32-bit Direct3D 8 (MAX-FX, rendering through e2driver\\e2_d3d8_driver_mfc.dll) on DXVK, with ReShade as its 32-bit Vulkan layer. Its startup DxDiag probe loads Windows' own d3d8/d3d9 first, so DXVK only loads under renamed names: the renderer is pointed at dgd8.dll (DXVK's d3d8, itself pointed at dgd9.dll = DXVK's d3d9); the upper-case D3D8.DLL, its DirectX version check, is left alone. It minimises on focus loss, so the DLSS 5 panel is drawn in-game (host_window=3, cast_mode=1) and AllowTaskSwitching is set.",
+      "sources": [
+        "live test 2026-09-24: host64\\OptiScaler.log, 4,500 DLSS 5 frames (0 model failures) at ~62 fps; ReShade Vulkan layer; in-game panel confirmed"
       ]
     },
     {

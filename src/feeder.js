@@ -1680,6 +1680,24 @@ function needsFullscreenHost(dir) {
   });
 }
 
+// Games that must have the DLSS 5 panel drawn INSIDE the game -- the Feeder's cast brought in as a
+// texture by the game's own ReShade (host_window=3, cast_mode=1) -- because any second window on top
+// makes them minimise. The pop-out is such a window: focusing it tells the game it lost focus, and a
+// game that minimises on that is gone the moment the panel opens. ReShade's own menu never has the
+// problem, being drawn into the game's frame; this puts ours in the same place.
+//
+// Max Payne 2, 2026-09-23: the pop-out minimised it every time, over dgVoodoo and over DXVK. A
+// superset of FULLSCREEN_ONLY_EXES (which also needs the cast, for its own reason) without that list's
+// other half: nothing here asks for the minimal dgVoodoo.conf.
+const IN_GAME_CAST_EXES = ['MaxPayne2.exe'];
+
+function needsInGameCast(dir) {
+  if (needsFullscreenHost(dir)) return true;
+  return IN_GAME_CAST_EXES.some((exe) => {
+    try { return fs.existsSync(path.join(dir, exe)); } catch { return false; }
+  });
+}
+
 function configureFeedCfg(dir, { castKey = CAST_KEY_INSERT, castMods = CAST_MODS_NONE } = {}) {
   const cfgPath = path.join(dir, 'dlss5-feed.cfg');
   const existing = fs.existsSync(cfgPath) ? fs.readFileSync(cfgPath, 'utf8') : '';
@@ -1691,7 +1709,7 @@ function configureFeedCfg(dir, { castKey = CAST_KEY_INSERT, castMods = CAST_MODS
   // the user chose themselves -- without them that user simply has no panel. Neither is overwritten
   // if it is already in the file: both are settings someone may have a reason to have changed.
   let extra = false;
-  if (needsFullscreenHost(dir)) {
+  if (needsInGameCast(dir)) {
     if (!lines.some((line) => /^\s*host_window\s*=/i.test(line))) { setLine(lines, 'host_window', 3); extra = true; }
     if (!lines.some((line) => /^\s*cast_mode\s*=/i.test(line))) { setLine(lines, 'cast_mode', 1); extra = true; }
   }
@@ -1991,6 +2009,8 @@ module.exports = {
   configureReShadeIni,
   configureFeedCfg,
   needsFullscreenHost,
+  needsInGameCast,
+  IN_GAME_CAST_EXES,
   FULLSCREEN_ONLY_EXES,
   CAST_KEY_HOME, CAST_KEY_INSERT,
   dxvkWrapperFile,

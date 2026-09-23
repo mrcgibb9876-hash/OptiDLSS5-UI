@@ -577,6 +577,154 @@ function emptyMarker(existing) {
     : { version: 1, files: [], backups: [], dirs: [] };
 }
 
+// Games whose renderer can never pick up a d3d8.dll/d3d9.dll placed beside the exe, because Windows
+// has already loaded its own copy by the time the renderer asks: a module of the same name already
+// loaded is what LoadLibrary returns, whatever folder it came from.
+//
+// Max Payne 1 and 2 run a DxDiag probe at startup (dxdiagn.dll, which loads C:\Windows\system32\
+// d3d8.dll by full path) before e2driver\e2_d3d8_driver_mfc.dll calls LoadLibraryA("d3d8.dll") -- so
+// dgVoodoo's D3D8.dll was never loaded, and nothing on the route ran (2026-09-23, confirmed from the
+// running process's module list). No switch skips the probe (-skipstartup and -nodialog both tried).
+// The renderer is pointed at a name nothing else loads instead: the lowercase name it LOADS is
+// rewritten in place, same length, and dgVoodoo's DLL is placed under that name as well. The original
+// renderer goes through the recorder's backup, so Remove puts it back.
+//
+// Only the lowercase one. The renderer also names D3D8.DLL in upper case, and that is its DirectX
+// version check -- it reads that file's version. Renamed too, it read dgVoodoo's version (2.87), and
+// the game refused to start: "requires a Microsoft DirectX 9.0 compatible display adapter". Left
+// pointing at Windows' own file, the check passes and the rendering still goes through dgVoodoo.
+//
+// registry: a setting of the game's own that has to change for the panel to be usable. Max Payne 2
+// minimises the moment it loses focus -- which the pop-out has to take, or the game keeps the mouse
+// clipped to its window -- unless Advanced Settings\AllowTaskSwitching is 1. What was there before is
+// recorded and put back by Remove.
+const RENDERER_RENAMES = [
+  {
+    exe: /^maxpayne2\.exe$/i,
+    file: 'e2driver/e2_d3d8_driver_mfc.dll',
+    wrapper: 'D3D8.dll',
+    as: 'dgd8.dll',
+    replace: [['d3d8.dll', 'dgd8.dll']],
+    registry: { key: 'HKCU\\Software\\Remedy Entertainment\\Max Payne 2\\Advanced Settings', name: 'AllowTaskSwitching', value: 1 },
+  },
+  {
+    exe: /^maxpayne\.exe$/i,
+    file: 'e2driver/e2_d3d8_driver_mfc.dll',
+    wrapper: 'D3D8.dll',
+    as: 'dgd8.dll',
+    replace: [['d3d8.dll', 'dgd8.dll']],
+  },
+];
+
+// reg.exe rather than a native module: a DWORD read and written once per install. Returns the value
+// that was there (null when there was none) so Remove can put it back. OPTIDLSS5_NO_REGISTRY=1 keeps
+// tests off the machine's real registry.
+function setGameRegistryDword({ key, name, value }) {
+  if (process.platform !== 'win32' || process.env.OPTIDLSS5_NO_REGISTRY === '1') return { skipped: true };
+  const { execFileSync } = require('node:child_process');
+  let before = null;
+  try {
+    const out = execFileSync('reg.exe', ['query', key, '/v', name], { windowsHide: true, encoding: 'utf8' });
+    const m = new RegExp(`${name}\\s+REG_DWORD\\s+0x([0-9a-f]+)`, 'i').exec(out);
+    if (m) before = parseInt(m[1], 16);
+  } catch { /* no such value yet */ }
+  if (before === value) return { before, changed: false };
+  execFileSync('reg.exe', ['add', key, '/v', name, '/t', 'REG_DWORD', '/d', String(value), '/f'], { windowsHide: true });
+  return { before, changed: true };
+}
+
+function restoreGameRegistryDword({ key, name, before }) {
+  if (process.platform !== 'win32' || process.env.OPTIDLSS5_NO_REGISTRY === '1') return;
+  const { execFileSync } = require('node:child_process');
+  try {
+    if (before === null || before === undefined) execFileSync('reg.exe', ['delete', key, '/v', name, '/f'], { windowsHide: true });
+    else execFileSync('reg.exe', ['add', key, '/v', name, '/t', 'REG_DWORD', '/d', String(before), '/f'], { windowsHide: true });
+  } catch { /* the game's key has gone with the game */ }
+}
+
+function rendererRenameFor(dir, dll) {
+  let exes = [];
+  try { exes = fs.readdirSync(dir).filter((f) => /\.exe$/i.test(f)); } catch { return null; }
+  return RENDERER_RENAMES.find((r) => r.wrapper.toLowerCase() === String(dll).toLowerCase()
+    && exes.some((e) => r.exe.test(e))
+    && fs.existsSync(path.join(dir, ...r.file.split('/')))) || null;
+}
+
+// Every occurrence of each ASCII pair swapped in place. Same length both ways, so nothing moves.
+function swapAscii(buf, pairs) {
+  const out = Buffer.from(buf);
+  let count = 0;
+  for (const [from, to] of pairs) {
+    const a = Buffer.from(from, 'latin1');
+    const b = Buffer.from(to, 'latin1');
+    if (a.length !== b.length) throw new Error(`renderer rename ${from} -> ${to} changes the length`);
+    for (let i = out.indexOf(a); i !== -1; i = out.indexOf(a, i + a.length)) {
+      b.copy(out, i);
+      count++;
+    }
+  }
+  return { buf: out, count };
+}
+
+async function applyRendererRename(dir, rule, dllBytes, rec) {
+  const target = path.join(dir, ...rule.file.split('/'));
+  const backup = target + BACKUP_SUFFIX;
+  // Patched from the game's own file: the backup when one is already set aside, so a second Install
+  // never patches a patched copy (and an old hand-made backup counts as the original too).
+  const original = fs.readFileSync(fs.existsSync(backup) ? backup : target);
+  const { buf, count } = swapAscii(original, rule.replace);
+  if (count === 0) {
+    // Already renamed by hand, or a different build of the renderer: nothing to rewrite, and writing
+    // the wrapper under the new name would do no good either.
+    return { renamed: false, reason: `${rule.file} names no ${rule.replace[0][0]}` };
+  }
+  await rec.write(path.join(dir, rule.as), dllBytes, { ours: (p) => translation.identifyWrapper(p) === 'dgvoodoo' });
+  await rec.write(target, buf, { ours: () => false });
+  let registry = null;
+  if (rule.registry) {
+    try {
+      const r = setGameRegistryDword(rule.registry);
+      if (!r.skipped) registry = { key: rule.registry.key, name: rule.registry.name, before: r.before };
+    } catch { /* the game's own setting is a convenience; the route works without it */ }
+  }
+  return { renamed: true, file: rule.file, as: rule.as, occurrences: count, registry };
+}
+
+// The same rename for DXVK in dgVoodoo2's place -- the layer that actually works on Max Payne 2
+// (2026-09-23: DLSS 5 over 4,500 frames, ReShade as its Vulkan layer). dgVoodoo2 cannot: it creates its
+// D3D11 device past ReShade's hooks, so nothing is ever drawn and the Feeder has no frames.
+//
+// DXVK's d3d8.dll imports d3d9.dll, and by then Windows' own D3D9.DLL is loaded too (the same DxDiag
+// probe), so a d3d9.dll beside the exe would lose exactly as d3d8.dll did. One level further down, then:
+// dgd8.dll is DXVK's d3d8 with that import renamed to dgd9.dll, and dgd9.dll is DXVK's d3d9. The
+// renderer is patched as on the dgVoodoo2 route, so switching layers swaps only what dgd8 is.
+// dxvkArchDir: the DXVK release's x32 folder.
+async function applyRendererRenameForDxvk(dir, dxvkArchDir) {
+  const rule = rendererRenameFor(dir, 'D3D8.dll');
+  if (!rule) return null;
+  let d3d8;
+  let d3d9;
+  try {
+    d3d8 = fs.readFileSync(path.join(dxvkArchDir, 'd3d8.dll'));
+    d3d9 = fs.readFileSync(path.join(dxvkArchDir, 'd3d9.dll'));
+  } catch {
+    return { renamed: false, reason: 'this DXVK release has no x32 d3d8.dll/d3d9.dll' };
+  }
+  const { buf: d8, count } = swapAscii(d3d8, [['d3d9.dll', 'dgd9.dll']]);
+  if (count === 0) return { renamed: false, reason: 'DXVK\'s d3d8.dll names no d3d9.dll' };
+
+  const prior = readMarker(dir) || {};
+  const priorRegistry = prior.rendererRegistry || ((prior.dgVoodoo || {}).rendererRename || {}).registry || null;
+  const marker = emptyMarker(prior);
+  const rec = recorder(dir, marker);
+  const renamed = await applyRendererRename(dir, rule, d8, rec);
+  if (!renamed.renamed) return renamed;
+  await rec.write(path.join(dir, 'dgd9.dll'), d3d9, { ours: () => true });
+  marker.rendererRegistry = priorRegistry || renamed.registry || null;
+  writeMarker(dir, marker);
+  return { ...renamed, dxvk: true, alsoAs: 'dgd9.dll' };
+}
+
 // source: a cache folder from ensureDgVoodoo/importDgVoodooZip.
 async function deployDgVoodoo(dir, plan, source, { vendor = null } = {}) {
   if (!plan || !plan.dgVoodoo) throw new Error('this game does not need dgVoodoo2');
@@ -609,13 +757,21 @@ async function deployDgVoodoo(dir, plan, source, { vendor = null } = {}) {
   // resource), so a latin1 search never recognised it (Assassin's Creed II's D3D9.dll, 2026-09-18).
   const isDg = (p) => translation.identifyWrapper(p) === 'dgvoodoo';
   await rec.write(path.join(dir, plan.dgVoodoo.dll), dll, { ours: isDg });
+  // A renderer that could never load that file under its own name gets pointed at another one.
+  const renameRule = rendererRenameFor(dir, plan.dgVoodoo.dll);
+  // The registry value from BEFORE this app first changed it: a second Install reads back the value it
+  // wrote itself, and recording that would leave Remove restoring our setting as the player's.
+  const priorRegistry = (((readMarker(dir) || {}).dgVoodoo || {}).rendererRename || {}).registry || null;
+  const renamed = renameRule ? await applyRendererRename(dir, renameRule, dll, rec) : null;
+  const keptRegistry = (r) => priorRegistry || (r && r.registry) || null;
   await rec.write(path.join(dir, 'dgVoodooCpl.exe'), cpl, { ours: isDg });
   const confPath = path.join(dir, 'dgVoodoo.conf');
   const base = fs.existsSync(confPath) ? fs.readFileSync(confPath, 'utf8') : conf.toString('utf8');
   await rec.write(confPath,
                   Buffer.from(configureDgVoodoo(base, { windowed: !!plan.host32, minimal: needsMinimalDgVoodoo(dir), vendor }), 'utf8'),
                   { ours: () => true });
-  marker.dgVoodoo = { arch: plan.dgVoodoo.arch, dll: plan.dgVoodoo.dll, source: path.basename(source) };
+  marker.dgVoodoo = { arch: plan.dgVoodoo.arch, dll: plan.dgVoodoo.dll, source: path.basename(source),
+    ...(renamed && renamed.renamed ? { rendererRename: { file: renamed.file, as: renamed.as, registry: keptRegistry(renamed) } } : {}) };
   marker.placedAt = new Date().toISOString();
   writeMarker(dir, marker);
   // And the translation manifest, so activeLayer answers from a record for dgVoodoo2 just as it does
@@ -634,7 +790,7 @@ async function deployDgVoodoo(dir, plan, source, { vendor = null } = {}) {
       `${plan.dgVoodoo.dll} (dgVoodoo2) was placed beside the game and then removed or blocked -- that is what antivirus ` +
       'quarantine looks like. Check Windows Security\'s protection history.'), { code: 'dgvoodoo-quarantined' });
   }
-  return { deployed: true, dll: plan.dgVoodoo.dll, arch: plan.dgVoodoo.arch };
+  return { deployed: true, dll: plan.dgVoodoo.dll, arch: plan.dgVoodoo.arch, rendererRename: renamed };
 }
 
 // deps (all required):
@@ -1198,6 +1354,9 @@ async function removeLegacy(dir) {
     const p = path.join(dir, ...rel.split('/'));
     if (fs.existsSync(p)) { await fsp.rm(p, { force: true }); removed.push(rel); }
   }
+  // A game setting a renderer rename changed (Max Payne 2's AllowTaskSwitching) goes back to what it was.
+  const renameRegistry = marker.rendererRegistry || ((marker.dgVoodoo || {}).rendererRename || {}).registry;
+  if (renameRegistry) restoreGameRegistryDword(renameRegistry);
   for (const b of marker.backups || []) {
     const cur = path.join(dir, ...b.rel.split('/'));
     const bak = path.join(dir, ...b.backup.split('/'));
@@ -1227,5 +1386,5 @@ module.exports = {
   MARKER, HOST_DIR, DGVOODOO, PARK_SUFFIX, planFor, dxvkReplacesNative, status, readMarker, ensureDgVoodoo, importDgVoodooZip, cachedDgVoodoo,
   isDgVoodooZip, configureDgVoodoo, DG_COLORSPACE_VALID, ensureDgVoodooWindowed, ensureCastKey, refreshFeeder32, deployDgVoodoo, deployHost32, removalPlan, removeLegacy,
   parkReShadeProxy, unparkReShadeProxy, swapNativeToDxvk, swapDxvkToNative, setUpVulkanLayer32, vulkanLayerRecord, unlistVulkanLayerApp,
-  currentMvProvider, deployLegacyShaders, setMvProvider,
+  currentMvProvider, deployLegacyShaders, setMvProvider, swapAscii, rendererRenameFor, RENDERER_RENAMES, applyRendererRenameForDxvk,
 };
