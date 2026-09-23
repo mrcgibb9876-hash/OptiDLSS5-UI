@@ -1545,4 +1545,7 @@ window.I18N.register("es", {
   "Use {name}": "Usar {name}",
   "{api} is ignored: {name} has no such renderer, so nothing is installed for it. Its own are {apis}.": "{api} se ignora: {name} no tiene ese renderizador, así que no se instala nada para él. Los suyos son {apis}.",
   "this emulator": "este emulador",
+  "Insert": "Insert",
+  "Insert opens this window while a 32-bit game, or one with no in-game panel, is running. On every other game Insert opens the DLSS 5 panel inside the game -- bind a different key here to have this window on every game.": "Insert abre esta ventana mientras se ejecuta un juego de 32 bits, o uno sin panel dentro del juego. En cualquier otro juego, Insert abre el panel de DLSS 5 dentro del juego -- asigna aquí otra tecla para tener esta ventana en todos los juegos.",
+  "No Insert key? On many laptops \"Ins\" is printed on the numpad's 0 key, and it only sends Insert with Num Lock off. Turn Num Lock off, or click the box above and press the key you want — numpad keys work too. The DLSS 5 panel inside the game has its own key, under Edit.": "¿No tienes tecla Insert? En muchos portátiles «Ins» está en la tecla 0 del teclado numérico, y solo envía Insert con Bloq Num desactivado. Desactiva Bloq Num, o haz clic en el cuadro de arriba y pulsa la tecla que quieras — las teclas del teclado numérico también sirven. El panel de DLSS 5 dentro del juego tiene su propia tecla, en Editar.",
 });

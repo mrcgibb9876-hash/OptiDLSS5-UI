@@ -59,6 +59,7 @@ const saferemove = require('./saferemove');
 const dfc = require('./dfc');
 const dfccfg = require('./dfccfg');
 const panelwindow = require('./panelwindow');
+const panelroute = require('./panelroute');
 const { netFetch } = require('./net');
 let electronAutoUpdater = null;
 try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
@@ -2631,6 +2632,10 @@ ipcMain.handle('dlssnr:set', (_evt, { exePath, values } = {}) => {
     const iniPath = path.join(optiScalerDirFor(dir), 'OptiScaler.ini');
     const res = dlssnr.writeSettings(iniPath, values || {});
     if (!res.ok) return res;
+    // A game installed before autoConfigureGame wrote LiveReload everywhere has it off, and the
+    // engine only reads the switch at launch -- so this write cannot reach the game running now, but
+    // it makes every later one (pop-out or Edit) land from the next launch without a reinstall.
+    ensureLiveReload(dir);
     return { ok: true, written: res.written, fields: dlssnr.readSettings(iniPath) };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
@@ -2673,14 +2678,90 @@ function panelOptions() {
   };
 }
 
+// The pop-out's key: Insert unless the player bound another in Settings.
+//
+// On Insert -- the in-game panel's key too -- which panel it opens follows the running game
+// (panelroute.js), and the pop-out only takes the key while a game that needs it runs: a hotkey Windows
+// has registered never reaches the game, so holding Insert all the time would break the in-game panel
+// everywhere else, and Insert in every other program besides. On any other key there is nothing to
+// share, so it is held the whole time the app runs, as the pop-out's hotkey always was.
+//
+// Its own poll rather than the renderer's games:running: that one stops when this window loses focus,
+// which is exactly when a game is in front. One tasklist every few seconds, shared by all games.
+const PANEL_ROUTE_POLL_MS = 3000;
+let panelRouteTimer = null;
+let panelRouteBusy = false;
+
+function panelModeForGame(exePath) {
+  const dir = gameDir(exePath);
+  if (dfc.dfcPresent(dir)) return panelroute.panelModeFor({ chicken: true });
+  const host32 = optiScalerDirFor(dir) !== dir;
+  let overlayOff = false;
+  try { overlayOff = panelroute.overlayMenuOff(fs.readFileSync(path.join(optiScalerDirFor(dir), 'OptiScaler.ini'), 'utf8')); } catch {}
+  const detected = detectGameCached(exePath) || {};
+  return panelroute.panelModeFor({
+    host32,
+    api: effectiveDetection(dir, exePath, detected).api,
+    overlayMenuOff: overlayOff,
+    fullscreenOnly: host32 && feeder.needsFullscreenHost(dir),
+    engineHasPanel: engines.engine((engines.readEngineMarker(dir) || {}).engine).panel !== false,
+  });
+}
+
+// Whether the pop-out's key is the one the in-game panel uses, so the two have to take turns.
+function sharesInGameKey(settings) {
+  return panelwindow.accelerator(settings).toLowerCase() === panelwindow.DEFAULT_ACCELERATOR.toLowerCase();
+}
+
+async function routePanelKey() {
+  if (panelRouteBusy) return;
+  panelRouteBusy = true;
+  try {
+    const settings = readJson(settingsFile(), {});
+    if (!panelEnabled(settings) || !sharesInGameKey(settings)) return;
+    const running = await runningImageSet();
+    let game = null;
+    for (const g of readJson(gamesFile(), [])) {
+      try {
+        if (g && g.exePath && running.has(path.basename(launchTarget(g.exePath)).toLowerCase())) { game = g; break; }
+      } catch {}
+    }
+    const mode = game ? panelModeForGame(game.exePath) : null;
+    if (mode === panelroute.MODES.POPOUT) {
+      const reg = panelwindow.registerHotkey(settings, () => panelwindow.toggle(panelOptions()));
+      panelHotkeyState = { ...reg, smart: true, mode, game: game.name || path.basename(game.exePath) };
+    } else {
+      panelwindow.unregisterHotkey();
+      panelHotkeyState = { ok: true, smart: true, accelerator: panelwindow.accelerator(settings), mode, game: game ? (game.name || path.basename(game.exePath)) : null };
+    }
+  } catch {
+    // A failed process listing leaves the key as it was; the next poll tries again.
+  } finally {
+    panelRouteBusy = false;
+  }
+}
+
 function applyPanelHotkey(settings = readJson(settingsFile(), {})) {
   if (!panelEnabled(settings)) {
+    if (panelRouteTimer) clearInterval(panelRouteTimer);
+    panelRouteTimer = null;
     panelwindow.unregisterHotkey();
     panelwindow.hide();
     panelHotkeyState = { ok: false, accelerator: panelwindow.accelerator(settings), disabled: true };
     return panelHotkeyState;
   }
-  panelHotkeyState = panelwindow.registerHotkey(settings, () => panelwindow.toggle(panelOptions()));
+  if (!sharesInGameKey(settings)) {
+    // A key of the player's own: held all the time, and the router has nothing to do.
+    if (panelRouteTimer) clearInterval(panelRouteTimer);
+    panelRouteTimer = null;
+    panelHotkeyState = panelwindow.registerHotkey(settings, () => panelwindow.toggle(panelOptions()));
+    return panelHotkeyState;
+  }
+  // Insert: let go of whatever key was held before, then the router takes and releases Insert by game.
+  panelwindow.unregisterHotkey();
+  panelHotkeyState = { ok: true, smart: true, accelerator: panelwindow.accelerator(settings), mode: null, game: null };
+  if (!panelRouteTimer) panelRouteTimer = setInterval(() => { routePanelKey(); }, PANEL_ROUTE_POLL_MS);
+  routePanelKey();
   return panelHotkeyState;
 }
 
@@ -4656,6 +4737,9 @@ async function launchGame({ exePath, launcher = 'auto', dryRun = false } = {}) {
 // Only the card's Launch is watched for an early close (launchwatch.js): Analyse and Verify close the
 // game themselves within ~30 s, so watching them would report a false crash and offer Restore.
 ipcMain.handle('game:launch', async (_evt, { exePath, launcher = 'auto', dryRun = false } = {}) => {
+  // The engine reads LiveReload once, at startup -- so this is the moment it has to be right, whatever
+  // happened to the ini since the last sync (a hand edit, a restore, another tool rewriting it).
+  if (!dryRun && exePath) ensureLiveReload(gameDir(exePath));
   const res = await launchGame({ exePath, launcher, dryRun });
   if (res.ok && !res.cancelled && !res.antiCheat && exePath) {
     try {
@@ -5081,6 +5165,17 @@ function patchIniValues(iniPath, edits) {
 // functions silently do nothing. Ensures the key exists, appending a new line (and a new section
 // if needed) rather than requiring one to already be there. Found live: the first version of this
 // used patchIniValues and reported success while writing nothing, for exactly this reason.
+// [DlssNr] LiveReload=true in the ini the engine actually reads (host64\ on the 32-bit route). Without
+// it a DX11/DX12 game never re-reads its ini after launch, and the pop-out panel and Edit change
+// nothing (#123). Never throws: a locked or missing ini must not stop a launch or a save.
+function ensureLiveReload(dir) {
+  try {
+    const iniPath = path.join(optiScalerDirFor(dir), 'OptiScaler.ini');
+    if (fs.existsSync(iniPath)) return ensureIniKey(iniPath, 'DlssNr', 'LiveReload', 'true');
+  } catch {}
+  return false;
+}
+
 function ensureIniKey(iniPath, section, key, value) {
   const original = fs.readFileSync(iniPath, 'utf-8');
   const eol = original.includes('\r\n') ? '\r\n' : '\n';
@@ -5915,9 +6010,20 @@ async function autoConfigureGame(dir, exePath) {
   // panel itself)" in a log with zero menu lines in it. Every edit from the pop-out panel and from
   // Edit here sat on disk unread, which is exactly what it looked like from the outside -- controls
   // that changed nothing.
-  if (api === 'opengl' || api === 'vulkan') {
-    edits.push({ section: 'DlssNr', key: 'LiveReload', value: 'true' });
-  }
+  //
+  // Every game, not only those two (2026-09-23). The pop-out panel is nothing but writes to this
+  // file, and on an ordinary DX11/DX12 game the engine's default is to never read it again after
+  // launch -- so the pop-out changed nothing on any of them. MSFS 2024 (#123): with OverlayMenu=false
+  // the pop-out was the only panel left, and switching DLSS 5 off in it "did nothing, the visuals did
+  // not change". The cost is one file-time check every 250 ms.
+  //
+  // ensureIniKey, not an edit for patchIniDefaults: OptiScaler's template has no LiveReload line, so
+  // it only exists once the engine has saved the ini itself, and patchIniDefaults only rewrites lines
+  // already there. As an edit this silently did nothing on a fresh install -- the OpenGL/Vulkan case
+  // included (Shadow of the Tomb Raider's ini had no such line at all). Runs on every configure, so a
+  // line anyone or anything removes is put back on the next sync or launch.
+  const liveReload = ensureIniKey(iniPath, 'DlssNr', 'LiveReload', 'true')
+    ? [{ section: 'DlssNr', key: 'LiveReload', value: 'true' }] : [];
 
   const reEngine = isReEngineGame(dir);
   let reframework = null;
@@ -5992,7 +6098,7 @@ async function autoConfigureGame(dir, exePath) {
   // The Feeder's installer's own consumer set-up for OptiScaler, as defaults (FEEDER_CONSUMER_DEFAULTS).
   if (feederGame && feeder.feederDeployed(dir)) edits.push(...FEEDER_CONSUMER_DEFAULTS);
 
-  const applied = patchIniDefaults(iniPath, edits);
+  const applied = [...liveReload, ...patchIniDefaults(iniPath, edits)];
   // A DLSS-5-only game keeps its own DLSS whether or not OptiFG is layered on -- see
   // keepGamesOwnDlss for why the upscaler key cannot be left at auto.
   // A Feeder game's DLSS call always arrives on a private D3D12 device -- on D3D11, Vulkan

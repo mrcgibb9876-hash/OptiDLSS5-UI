@@ -23,9 +23,9 @@ const SECTION = 'DlssNr';
 
 // Virtual-key codes and the engine's modifier bits (OptiScaler Config.h). Only the keys the panel
 // hotkey list offers -- this is not meant to become a full VK table.
-const VK = { HOME: 0x24, END: 0x23, INSERT: 0x2D, DELETE: 0x2E, F10: 0x79 };
+const VK = { HOME: 0x24, END: 0x23, INSERT: 0x2D, DELETE: 0x2E, F10: 0x79, NUMPAD0: 0x60, DECIMAL: 0x6E };
 const MOD = { ALT: 0x0100, CTRL: 0x0200, SHIFT: 0x0400 };
-const VK_NAME = { 0x24: 'Home', 0x23: 'End', 0x2D: 'Insert', 0x2E: 'Delete', 0x79: 'F10' };
+const VK_NAME = { 0x24: 'Home', 0x23: 'End', 0x2D: 'Insert', 0x2E: 'Delete', 0x79: 'F10', 0x60: 'Numpad 0', 0x6E: 'Numpad .' };
 
 // A bind the list does not offer -- set in the in-game panel, or by hand -- still has to read back
 // honestly. Without this the dialog would show "Alt+Home (default)" over an ini that says
@@ -225,8 +225,12 @@ const FIELDS = [
       [VK.DELETE | MOD.ALT, 'Alt+Delete'],
       [VK.F10, 'F10'],
       [VK.F10 | MOD.ALT, 'Alt+F10'],
+      // A laptop with no Insert key of its own has "Ins" on numpad 0, which sends Numpad 0 while Num
+      // Lock is on -- so the default key never arrives (the maintainer's own Legion, 2026-09-23).
+      [VK.NUMPAD0, 'Numpad 0'],
+      [VK.DECIMAL, 'Numpad .'],
     ],
-    help: "Opens the DLSS 5 panel inside the game. Insert by default, the same key on every route -- OptiScaler's own menu moved to Alt+O to free it.\n\nChange it when something else on the machine already holds the key -- an overlay, a capture tool, a keyboard macro -- and the panel never appears. Nothing here can tell you which program took it; the symptom is simply that the key does nothing.\n\nRE Engine games keep Alt+Home instead: REFramework's own menu owns Insert there, and it takes the keyboard from OptiScaler a few seconds into the game.\n\nThis is the panel drawn INSIDE the game. It is not this app's own pop-out panel, whose hotkey lives in Settings. On the 32-bit route the panel is drawn by the 64-bit helper and shown over the game, and this key still reaches it." },
+    help: "Opens the DLSS 5 panel inside the game. Insert by default, the same key on every route -- OptiScaler's own menu moved to Alt+O to free it.\n\nNo Insert key? On many laptops \"Ins\" is printed on the numpad's 0 key, and it only sends Insert with Num Lock off. Turn Num Lock off, or pick Numpad 0 here.\n\nChange it when something else on the machine already holds the key -- an overlay, a capture tool, a keyboard macro -- and the panel never appears. Nothing here can tell you which program took it; the symptom is simply that the key does nothing.\n\nRE Engine games keep Alt+Home instead: REFramework's own menu owns Insert there, and it takes the keyboard from OptiScaler a few seconds into the game.\n\nThis is the panel drawn INSIDE the game. It is not this app's own pop-out panel, whose hotkey lives in Settings. On the 32-bit route the panel is drawn by the 64-bit helper and shown over the game, and this key still reaches it." },
 
   { key: 'LocalStructure', type: 'float', default: 1.0, min: 0, max: 1, step: 0.01, group: 'Picture',
     label: "Texture detail", help: "The model's structure-synthesis strength across the whole frame." },

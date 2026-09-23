@@ -1555,4 +1555,7 @@ window.I18N.register("fr", {
   "Use {name}": "Utiliser {name}",
   "{api} is ignored: {name} has no such renderer, so nothing is installed for it. Its own are {apis}.": "{api} est ignoré : {name} n'a pas ce moteur de rendu, donc rien n'est installé pour lui. Les siens sont {apis}.",
   "this emulator": "cet émulateur",
+  "Insert": "Inser",
+  "Insert opens this window while a 32-bit game, or one with no in-game panel, is running. On every other game Insert opens the DLSS 5 panel inside the game -- bind a different key here to have this window on every game.": "Inser ouvre cette fenêtre pendant qu'un jeu 32 bits, ou un jeu sans panneau intégré, est lancé. Dans tous les autres jeux, Inser ouvre le panneau DLSS 5 dans le jeu -- choisissez une autre touche ici pour avoir cette fenêtre dans tous les jeux.",
+  "No Insert key? On many laptops \"Ins\" is printed on the numpad's 0 key, and it only sends Insert with Num Lock off. Turn Num Lock off, or click the box above and press the key you want — numpad keys work too. The DLSS 5 panel inside the game has its own key, under Edit.": "Pas de touche Inser ? Sur beaucoup de portables, « Inser » est sur la touche 0 du pavé numérique, et elle n'envoie Inser que si Verr Num est désactivé. Désactivez Verr Num, ou cliquez dans le champ ci-dessus et appuyez sur la touche voulue — les touches du pavé numérique marchent aussi. Le panneau DLSS 5 dans le jeu a sa propre touche, dans Modifier.",
 });

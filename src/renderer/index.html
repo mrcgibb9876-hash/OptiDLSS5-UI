@@ -528,10 +528,13 @@
         <span data-i18n>Open it with a hotkey</span>
       </label>
       <div class="field-row">
-        <input id="settings-panel-hotkey" type="text" data-i18n-placeholder placeholder="Alt+Shift+Home" autocomplete="off" spellcheck="false" />
+        <input id="settings-panel-hotkey" type="text" data-i18n-placeholder placeholder="Insert" autocomplete="off" spellcheck="false" />
         <button id="btn-panel-open" class="btn btn-ghost" data-i18n>Open it now</button>
       </div>
       <div id="panel-hotkey-status" class="status-line"></div>
+      <!-- 2026-09-23: on the maintainer's own laptop "Ins" is the numpad's 0 key, which sends Numpad 0
+           with Num Lock on -- so Insert, the default for both panels, never arrived. -->
+      <p class="field-hint" data-i18n>No Insert key? On many laptops "Ins" is printed on the numpad's 0 key, and it only sends Insert with Num Lock off. Turn Num Lock off, or click the box above and press the key you want — numpad keys work too. The DLSS 5 panel inside the game has its own key, under Edit.</p>
 
       <!-- Deep Fried Chicken (dfc.js): the user's own copy, added once for every game. Not advanced:
            it is where people look for "where do I put the Chicken files". -->
