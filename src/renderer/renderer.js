@@ -5972,15 +5972,17 @@ async function renderAddons() {
     // place rather than sending anyone back through a deploy.
     const button = here
       ? `<span class="addon-mv-here">${escapeHtml(t('in use'))}</span>`
-      : `<button class="btn btn-ghost addon-mv-pick" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.displayName)}"${res.mvProviderId ? '' : ' disabled'}>${escapeHtml(t('Use this'))}</button>`;
+      : `<button class="btn btn-ghost addon-mv-pick" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.displayName)}">${escapeHtml(t('Use this'))}</button>`;
     return `<li class="addon-mv-item"><div><span class="${here ? 'addon-mv-name-here' : ''}">${escapeHtml(p.displayName)}</span>${marks.length ? ` <span class="field-hint">&mdash; ${escapeHtml(marks.join(', '))}</span>` : ''}</div>${button}</li>`;
   }).join('');
-  const mvBlock = mv.length ? `
+  // Only a Feeder game has a provider to pick. A game on native DLSS (Shadow of the Tomb Raider)
+  // hands DLSS its own vectors, so a row of dead "Use this" buttons there offered a choice that
+  // does not exist -- the section is left out instead.
+  const mvBlock = mv.length && current ? `
     <div class="addon-row"><div class="addon-body">
       <div class="addon-name">${escapeHtml(t('Motion vectors'))}</div>
       <div class="field-hint">${escapeHtml(t('DLSS 5 needs to know how things are moving, and that comes from one of these. They differ most on flames, glass and fast pans -- if a game looks wrong in motion, try the next one.'))}</div>
       <ul class="addon-mv-list">${mvRows}</ul>
-      ${current ? '' : `<div class="field-hint">${escapeHtml(t('Install DLSS 5 on this game first -- then you can switch between these in one press.'))}</div>`}
     </div></div>` : '';
 
   $('#addons-list').innerHTML = mvBlock + rows.join('');
