@@ -1543,4 +1543,6 @@ window.I18N.register("de", {
   "The shader is compiled for provider {defined}, but this game is set to {expected}. No vectors reach DLSS.": "Der Shader ist für Anbieter {defined} kompiliert, dieses Spiel steht aber auf {expected}. Es erreichen keine Vektoren DLSS.",
   "The enabled technique belongs to a different provider than the one the shader is compiled for. No vectors reach DLSS.": "Die aktivierte Technik gehört zu einem anderen Anbieter als dem, für den der Shader kompiliert ist. Es erreichen keine Vektoren DLSS.",
   "Use {name}": "{name} nehmen",
+  "{api} is ignored: {name} has no such renderer, so nothing is installed for it. Its own are {apis}.": "{api} wird ignoriert: {name} hat keinen solchen Renderer, also wird dafür nichts installiert. Die eigenen sind {apis}.",
+  "this emulator": "dieser Emulator",
 });

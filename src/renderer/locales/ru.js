@@ -1543,4 +1543,6 @@ window.I18N.register("ru", {
   "The shader is compiled for provider {defined}, but this game is set to {expected}. No vectors reach DLSS.": "Шейдер собран под источник {defined}, а игра настроена на {expected}. До DLSS не доходит ни одного вектора.",
   "The enabled technique belongs to a different provider than the one the shader is compiled for. No vectors reach DLSS.": "Включённая техника принадлежит не тому источнику, под который собран шейдер. До DLSS не доходит ни одного вектора.",
   "Use {name}": "Взять {name}",
+  "{api} is ignored: {name} has no such renderer, so nothing is installed for it. Its own are {apis}.": "{api} игнорируется: у {name} нет такого рендерера, поэтому для него ничего не устанавливается. Свои — {apis}.",
+  "this emulator": "этот эмулятор",
 });

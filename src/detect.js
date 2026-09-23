@@ -1526,9 +1526,20 @@ async function detectEmulator(dir, exePath, emu) {
   const api = emu.apis[0];
   let reason = `${emu.name} (${emu.system}) is an emulator, so its renderer is one of its own settings: ` +
     `set up for ${emu.renderer || API_LABEL[api]}, the one that suits DLSS 5 best (${emu.hint})`;
-  const runtime = await optiScalerRuntimeApi(dir);
+  // What OptiScaler's log saw in the process last run -- but only where the emulator has that
+  // renderer at all. On the Feeder route the model runs on a D3D12 device the FEEDER makes, and
+  // the log cannot say whose device it recorded (optiScalerRuntimeApi), so a Vulkan-only emulator
+  // read back as "its last run used Direct3D 12" and the card asked for a setting already set
+  // (RPCS3, 2026-09-23 -- emulators.canRender has the whole story).
+  const runtimeRaw = await optiScalerRuntimeApi(dir);
+  const runtime = runtimeRaw && emulators.canRender(emu, runtimeRaw.api) ? runtimeRaw : null;
+  const runtimeIgnored = runtimeRaw && !runtime
+    ? { api: runtimeRaw.api, why: `${emu.name} has no ${API_LABEL[runtimeRaw.api] || runtimeRaw.api} renderer, so ${runtimeRaw.evidence} in the process is the Feeder's own device for the model, not the emulator's` }
+    : null;
   if (runtime && runtime.api !== api) {
     reason += ` -- but its last run used ${API_LABEL[runtime.api] || runtime.api} (${runtime.evidence})`;
+  } else if (runtimeIgnored) {
+    reason += ` -- ${runtimeIgnored.why}`;
   }
   const logStat = optiScalerLogStat(dir);
   const vulkan32 = bitness === 32 && api === 'vulkan';
@@ -1558,6 +1569,7 @@ async function detectEmulator(dir, exePath, emu) {
     protectedLauncher: null,
     oldShaderCompiler: oldShaderCompiler(dir),
     runtimeApi: runtime ? runtime.api : null,
+    runtimeIgnored,
     runtimeLogMtime: logStat ? logStat.mtimeMs : null,
     exeStamp: exeStamp(exePath),
     detectVersion: DETECT_VERSION,

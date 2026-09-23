@@ -157,7 +157,22 @@ function preferDx12(base) {
 // game offers it (the user's call, 2026-09-15).
 function withApiOverride(detected, override, opts = {}) {
   const raw = detected || {};
-  const chosen = override && API_OVERRIDE_VALUES.includes(override) ? override : null;
+  let chosen = override && API_OVERRIDE_VALUES.includes(override) ? override : null;
+
+  // An emulator is the one case where this code DOES know which renderers exist: the profile lists
+  // every backend the emulator has (emulators.js), and there is no other. So a choice naming one it
+  // does not have is not the knowledge an override exists to supply -- it is a statement that cannot
+  // be true, and following it would configure the whole route for a device the emulator can never
+  // create. The Edit dropdown offered DX12, DX10, DX9 and DX8 for RPCS3, which has had no Direct3D
+  // backend since 2017, and every one of them would have installed (2026-09-23).
+  //
+  // Refused, not silently dropped: a choice that vanishes back to Auto with nothing said is the bug
+  // fixed on 2026-09-15 and reintroducing it here would be the same mistake. The reason rides on the
+  // detection as apiOverrideRefused and the Edit panel says it.
+  const refused = chosen && raw.emulator && !emulators.canRender(raw.emulator, chosen)
+    ? { api: chosen, name: raw.emulator.name || '', apis: (emulators.profileOf(raw.emulator) || {}).apis || [] }
+    : null;
+  if (refused) chosen = null;
 
   // Everything below this line is a default, and a default is what the Auto setting picks. A choice
   // made in Edit is the user saying which renderer their game actually runs, which is knowledge this
@@ -172,11 +187,11 @@ function withApiOverride(detected, override, opts = {}) {
   if (!chosen && opts.luma && (raw.apis || []).includes('dx11')) {
     // Luma is a DirectX 11 framework, so for its games the most compatible API wins over DX12.
     const apis = ['dx11', ...(raw.apis || []).filter((a) => a !== 'dx11')];
-    return { ...raw, api: 'dx11', apis, apiOverride: null, detectedApi: raw.api || null };
+    return { ...raw, api: 'dx11', apis, apiOverride: null, apiOverrideRefused: refused, detectedApi: raw.api || null };
   }
 
   const base = preferDx12(raw);
-  if (!chosen) return { ...base, apiOverride: null };
+  if (!chosen) return { ...base, apiOverride: null, apiOverrideRefused: refused };
   if (LEGACY_OVERRIDES.includes(chosen)) {
     // The user says the game renders with an old Direct3D: that is the game's API, and any modern one on
     // record was a wrapper's or a helper's. Shaped like detect.js's own legacy verdict, so the route is the
@@ -192,6 +207,7 @@ function withApiOverride(detected, override, opts = {}) {
       experimental: true,
       recommend: reachable ? 'optiscaler' : 'unsupported',
       apiOverride: chosen,
+      apiOverrideRefused: null,
       detectedApi: base.api || null,
     };
   }
@@ -202,6 +218,7 @@ function withApiOverride(detected, override, opts = {}) {
     apis,
     recommend: base.recommend === 'unsupported' ? 'optiscaler' : base.recommend,
     apiOverride: chosen,
+    apiOverrideRefused: null,
     detectedApi: base.api || null,
   };
 }

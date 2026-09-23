@@ -74,15 +74,47 @@ function profileFor(exePath) {
 
 const API_LABEL = { dx12: 'Direct3D 12', dx11: 'Direct3D 11', vulkan: 'Vulkan', opengl: 'OpenGL' };
 
+// An emulator cannot have run on a renderer it does not have.
+//
+// Both sources of "what it ran on last" watch the PROCESS, not the emulator, and on the Feeder
+// route the process contains a second graphics device that is ours: the Feeder creates its own
+// D3D12 device to run the DLSS model on, because the emulator's Vulkan or OpenGL device cannot
+// run it. OptiScaler's log records `hkD3D12CreateDevice` for that device without being able to
+// say whose it is (detect.js optiScalerRuntimeApi), and a watched launch sees d3d12.dll load in
+// the tree the same way (probe.js apiFromModules).
+//
+// So a correctly configured Vulkan run of RPCS3 read back as "its last run used Direct3D 12" --
+// for an emulator whose only two renderers are Vulkan and OpenGL -- and the card then asked the
+// player to set Vulkan, which was already set (RPCS3, 2026-09-23). A loop with no way out: the
+// thing being complained about could not be fixed, because it was never wrong.
+//
+// The profile's own API list is the check, and it is a fact about the emulator rather than a
+// guess about the log: a renderer the emulator does not offer is not one it can have used. Where
+// the profile lists no APIs at all, nothing is claimed and the evidence stands.
+// The full profile behind an emulator recorded on a detection. A stored detection carries a copy
+// of the profile, which can be older than the table; the table wins where the key still matches.
+function profileOf(emu) {
+  if (!emu) return null;
+  return PROFILES.find((p) => p.key === emu.key) || emu;
+}
+
+function canRender(emu, api) {
+  const apis = (profileOf(emu) || {}).apis || [];
+  return !api || apis.length === 0 || apis.includes(api);
+}
+
 // The renderer the emulator actually used last, newest evidence first: OptiScaler's own log
 // (detect.js runtimeApi) or a watched launch (probe.js, kept on the detection even though it no
-// longer moves the route for an emulator).
+// longer moves the route for an emulator). An API the emulator has no renderer for is dropped
+// rather than reported -- see canRender.
 function seenApi(detected) {
   const d = detected || {};
-  const probeApi = d.probe && d.probe.api ? d.probe.api : null;
+  const real = (api) => (api && canRender(d.emulator, api) ? api : null);
+  const probeApi = real(d.probe && d.probe.api ? d.probe.api : null);
+  const runtimeApi = real(d.runtimeApi || null);
   const probeAt = probeApi ? Date.parse(d.probe.capturedAt || '') || 0 : 0;
-  if (probeApi && (!d.runtimeApi || probeAt > (d.runtimeLogMtime || 0))) return probeApi;
-  return d.runtimeApi || null;
+  if (probeApi && (!runtimeApi || probeAt > (d.runtimeLogMtime || 0))) return probeApi;
+  return runtimeApi || null;
 }
 
 // What the card and Game Help tell the player: which renderer to pick in the emulator and where,
@@ -91,7 +123,7 @@ function seenApi(detected) {
 function rendererAdvice(detected, api) {
   const emu = detected && detected.emulator;
   if (!emu || !api) return null;
-  const profile = PROFILES.find((p) => p.key === emu.key) || emu;
+  const profile = profileOf(emu);
   const best = api === (profile.apis || [])[0];
   const seen = seenApi(detected);
   return {
@@ -106,4 +138,4 @@ function rendererAdvice(detected, api) {
   };
 }
 
-module.exports = { PROFILES, profileFor, rendererAdvice, seenApi };
+module.exports = { PROFILES, profileFor, rendererAdvice, seenApi, canRender, profileOf };
