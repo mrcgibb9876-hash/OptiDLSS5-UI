@@ -345,3 +345,12 @@ html, body { margin: 0; height: 100%; }
   z-index: 1000;
 }
 .p-tip.show { opacity: 1; }
+
+/* The Guide section's read-only Motion row: the provider on top, and when the setup cannot work,
+   why, with the swap underneath. Wider value column than an ordinary row -- a fault is a sentence,
+   not a number. */
+.p-motion { align-items: flex-start; }
+.p-motion-value { flex: 1 1 auto; min-width: 0; }
+.p-motion-fault { font-size: 11px; opacity: 0.85; margin-top: 3px; line-height: 1.4; }
+.p-motion-pick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.p-motion-pick .p-small { font-size: 11px; padding: 3px 8px; }

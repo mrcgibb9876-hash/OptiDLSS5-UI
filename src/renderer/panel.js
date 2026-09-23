@@ -427,6 +427,10 @@ function renderFields() {
       host.appendChild(cap);
     }
 
+    // Before the keys, as in the engine's own Guide section: it is the one thing here that can be
+    // wrong rather than merely set badly.
+    if (section.motion) renderMotion(host);
+
     for (const key of section.keys) {
       const field = fields.find((f) => f.key === key);
       if (field) host.appendChild(fieldRow(field));
@@ -494,6 +498,7 @@ async function loadGame(exePath) {
   pages = res.pages || pages;
   headerKeys = res.headerKeys || headerKeys;
   await loadFrameGen();
+  await loadMotion();
   applyChrome();
   renderPages();
   renderHead();
@@ -666,6 +671,83 @@ function renderLive(l) {
 // the same per-game marker the game card uses -- not straight into [DLSSG], because a sync re-applies
 // that marker and would undo a direct write. Turning FG on and off stays the game's own setting.
 let fgState = null;
+let motionState = null;
+
+async function loadMotion() {
+  motionState = null;
+  if (!current || !current.exePath) return;
+  try { motionState = await window.api.panelMotion(current.exePath); } catch { motionState = null; }
+}
+
+// The Guide row: what is feeding motion to the model, and -- when the answer is "nothing can be" --
+// which of the three checkable faults it is, with the swap right there.
+//
+// The in-game panel shows the truth (did vectors actually arrive this frame); this side cannot see
+// into the process, so it reports the configuration instead and only claims a fault it can prove
+// from the files. That division is deliberate: between them the two rows cover both "it is set up
+// wrong" and "it is set up fine and still nothing arrives", which are different problems.
+function renderMotion(host) {
+  const m = motionState;
+  if (!m || !m.ok || !m.id) return;
+
+  const row = document.createElement('div');
+  row.className = 'p-row p-motion';
+  const label = document.createElement('div');
+  label.className = 'p-row-label';
+  label.textContent = t('Motion');
+  row.appendChild(label);
+
+  const val = document.createElement('div');
+  val.className = 'p-motion-value';
+  const name = document.createElement('div');
+  name.textContent = m.displayName || m.id;
+  val.appendChild(name);
+
+  const fault = {
+    'broken': m.unsupportedReason || t('This provider cannot compile on the ReShade this app installs, so it feeds nothing.'),
+    'shader-missing': t('Its shader is not in reshade-shaders\\Shaders, so nothing writes motion vectors.'),
+    'byo-missing': t('This one is your own copy and it is not in the shader folder yet, so nothing writes motion vectors.'),
+    'value-mismatch': t('The shader is compiled for provider {defined}, but this game is set to {expected}. No vectors reach DLSS.', { defined: m.definedValue, expected: m.expectedValue }),
+    'technique-mismatch': t('The enabled technique belongs to a different provider than the one the shader is compiled for. No vectors reach DLSS.'),
+  }[m.fault];
+
+  if (fault) {
+    const why = document.createElement('div');
+    why.className = 'p-motion-fault';
+    why.textContent = fault;
+    val.appendChild(why);
+
+    // Naming the fault without offering the fix is the thing this app has been told off for. The
+    // swap is one press, and it is the same call the add-on list makes.
+    const pick = document.createElement('div');
+    pick.className = 'p-motion-pick';
+    for (const p of (m.providers || []).filter((x) => x.id !== m.id).slice(0, 3)) {
+      const b = document.createElement('button');
+      b.className = 'p-small';
+      b.textContent = t('Use {name}', { name: p.displayName.replace(/\s*\(.*$/, '') });
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        let licenseConfirmed = false;
+        if (/AGNYA/.test(p.license || '')) {
+          licenseConfirmed = await window.api.feederConfirmProviderLicense(p.id);
+          if (!licenseConfirmed) { b.disabled = false; return; }
+        }
+        setStatus(t('Switching to {name}…', { name: p.displayName }));
+        const out = await window.api.addonsSetMvProvider(current.exePath, p.id, { licenseConfirmed });
+        setStatus(out && out.ok
+          ? t('Motion vectors now come from {name}. Launch the game and see how it looks.', { name: p.displayName })
+          : (out && out.error) || t('That did not work.'));
+        await loadMotion();
+        render();
+      });
+      pick.appendChild(b);
+    }
+    if (pick.children.length) val.appendChild(pick);
+  }
+
+  row.appendChild(val);
+  host.appendChild(row);
+}
 
 async function loadFrameGen() {
   fgState = null;
@@ -693,6 +775,7 @@ async function setFrameGen(next) {
     return;
   }
   await loadFrameGen();
+  await loadMotion();
   setStatus(current.running ? t('Saved. A running game picks it up within a second.') : t('Saved. Applies the next time the game starts.'), true);
   renderFields();
 }

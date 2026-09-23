@@ -1537,4 +1537,11 @@ window.I18N.register('pt-BR', {
   "Install DLSS 5 on this game first -- then you can switch between these in one press.": "Instale o DLSS 5 neste jogo primeiro -- depois você poderá alternar entre estes com um só toque.",
   "Switching to {name}…": "Mudando para {name}…",
   "Motion vectors now come from {name}. Launch the game and see how it looks.": "Os vetores de movimento agora vêm de {name}. Inicie o jogo e veja como ficou.",
+  "Motion": "Movimento",
+  "This provider cannot compile on the ReShade this app installs, so it feeds nothing.": "Este provedor não compila na versão do ReShade que este app instala, então não fornece nada.",
+  "Its shader is not in reshade-shaders\\Shaders, so nothing writes motion vectors.": "O shader dele não está em reshade-shaders\\Shaders, então nada escreve vetores de movimento.",
+  "This one is your own copy and it is not in the shader folder yet, so nothing writes motion vectors.": "Esta é a sua própria cópia e ainda não está na pasta de shaders, então nada escreve vetores de movimento.",
+  "The shader is compiled for provider {defined}, but this game is set to {expected}. No vectors reach DLSS.": "O shader está compilado para o provedor {defined}, mas este jogo está em {expected}. Nenhum vetor chega ao DLSS.",
+  "The enabled technique belongs to a different provider than the one the shader is compiled for. No vectors reach DLSS.": "A técnica ativada pertence a um provedor diferente daquele para o qual o shader foi compilado. Nenhum vetor chega ao DLSS.",
+  "Use {name}": "Usar {name}",
 });

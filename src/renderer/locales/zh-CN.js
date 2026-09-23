@@ -1536,4 +1536,11 @@ window.I18N.register("zh-CN", {
   "Install DLSS 5 on this game first -- then you can switch between these in one press.": "请先为这款游戏安装 DLSS 5 —— 之后在这里一按即可切换。",
   "Switching to {name}…": "正在切换到 {name}…",
   "Motion vectors now come from {name}. Launch the game and see how it looks.": "现在运动矢量来自 {name}。启动游戏看看效果。",
+  "Motion": "运动",
+  "This provider cannot compile on the ReShade this app installs, so it feeds nothing.": "该提供者无法在本应用安装的 ReShade 版本上编译，因此什么也不会提供。",
+  "Its shader is not in reshade-shaders\\Shaders, so nothing writes motion vectors.": "它的着色器不在 reshade-shaders\\Shaders 里，所以没有任何东西写入运动矢量。",
+  "This one is your own copy and it is not in the shader folder yet, so nothing writes motion vectors.": "这是你自己的副本，目前还不在着色器文件夹里，所以没有任何东西写入运动矢量。",
+  "The shader is compiled for provider {defined}, but this game is set to {expected}. No vectors reach DLSS.": "着色器是按提供者 {defined} 编译的，但本游戏设为 {expected}。没有任何矢量到达 DLSS。",
+  "The enabled technique belongs to a different provider than the one the shader is compiled for. No vectors reach DLSS.": "已启用的技术属于另一个提供者，与着色器编译所针对的并不一致。没有任何矢量到达 DLSS。",
+  "Use {name}": "使用 {name}",
 });

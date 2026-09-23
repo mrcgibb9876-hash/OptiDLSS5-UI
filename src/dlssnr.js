@@ -390,7 +390,11 @@ const PAGES = [
     { caption: 'Exposure scan', keys: ['ScanMeter', 'ScanTrim', 'ScanInverted'] },
   ] },
   { page: 'Inspect', sections: [
-    { caption: 'Guide', keys: ['DepthConvention', 'OpticalFlow', 'UICorrection', 'ResetWhenBlind'] },
+    // motion: the read-only "is anything actually feeding the model?" row, first, as in the
+    // engine's own Guide section. Not an ini field -- the in-game panel reads it from the
+    // evaluate path and this one from the deployed files -- so the renderer draws it, the way
+    // Frame Generation on Main already does.
+    { caption: 'Guide', motion: true, keys: ['DepthConvention', 'OpticalFlow', 'UICorrection', 'ResetWhenBlind'] },
     { caption: 'Inspect', keys: ['ApplyModel', 'AutoCapture', 'HoldFrame', 'Compare', 'CompareSwap', 'CompareTags',
                                  'TagScale', 'CompareZoom', 'CompareSplit', 'DebugView'] },
   ] },

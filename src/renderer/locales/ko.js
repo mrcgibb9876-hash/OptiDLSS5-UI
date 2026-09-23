@@ -1536,4 +1536,11 @@ window.I18N.register("ko", {
   "Install DLSS 5 on this game first -- then you can switch between these in one press.": "먼저 이 게임에 DLSS 5를 설치하세요 -- 그러면 여기서 한 번만 눌러 바꿀 수 있습니다.",
   "Switching to {name}…": "{name}(으)로 전환하는 중…",
   "Motion vectors now come from {name}. Launch the game and see how it looks.": "이제 모션 벡터는 {name}에서 옵니다. 게임을 실행해 어떻게 보이는지 확인해 보세요.",
+  "Motion": "모션",
+  "This provider cannot compile on the ReShade this app installs, so it feeds nothing.": "이 제공자는 이 앱이 설치하는 ReShade에서 컴파일되지 않으므로 아무것도 제공하지 않습니다.",
+  "Its shader is not in reshade-shaders\\Shaders, so nothing writes motion vectors.": "셰이더가 reshade-shaders\\Shaders에 없어서 모션 벡터를 쓰는 것이 없습니다.",
+  "This one is your own copy and it is not in the shader folder yet, so nothing writes motion vectors.": "직접 준비한 사본인데 아직 셰이더 폴더에 없어서 모션 벡터를 쓰는 것이 없습니다.",
+  "The shader is compiled for provider {defined}, but this game is set to {expected}. No vectors reach DLSS.": "셰이더는 제공자 {defined}용으로 컴파일되었지만 이 게임은 {expected}(으)로 설정되어 있습니다. DLSS에 벡터가 전혀 전달되지 않습니다.",
+  "The enabled technique belongs to a different provider than the one the shader is compiled for. No vectors reach DLSS.": "활성화된 기법이 셰이더가 컴파일된 제공자와 다른 제공자의 것입니다. DLSS에 벡터가 전혀 전달되지 않습니다.",
+  "Use {name}": "{name} 사용",
 });
