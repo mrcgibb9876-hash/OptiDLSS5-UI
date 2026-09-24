@@ -1570,4 +1570,8 @@ window.I18N.register("ko", {
   "Add {arg} to the launch arguments": "실행 인수에 {arg} 추가",
   "Steam: Properties > Launch Options. A shortcut: after the exe path": "Steam: 속성 > 시작 옵션. 바로 가기: exe 경로 뒤",
   "{exe} blocks Vulkan layers -- add a launch argument": "{exe}이(가) Vulkan 레이어를 차단합니다 -- 실행 인수를 추가하세요",
+  "OptiScaler's own file is missing from the helper folder. This app put it there -- its install record lists host64\\winmm.dll -- and it is not on disk now, so something removed it after the install. That is almost always antivirus: a 64-bit winmm.dll appearing beside a game exe looks exactly like a DLL hijack, and Windows Security quarantines it silently. Everything else is fine, which is why the Feeder's own window opens and the DLSS 5 overlay is not in it. Open Windows Security > Protection history, find the item for winmm.dll and choose Allow, add the game folder to the exclusions, then press Install here again. Pressing Install without doing that just puts the file back for it to be taken again.": "도우미 폴더에 OptiScaler 자체 파일이 없습니다. 이 앱이 그곳에 넣었고(설치 기록에 host64\\winmm.dll이 있습니다) 지금 디스크에는 없으므로, 설치 후에 무언가가 제거한 것입니다. 거의 항상 백신입니다. 게임 exe 옆의 64비트 winmm.dll은 DLL 하이재킹과 똑같아 보이고, Windows 보안은 이를 조용히 격리합니다. 나머지는 모두 정상이며, 그래서 Feeder 창은 열리지만 그 안에 DLSS 5 오버레이가 없습니다. Windows 보안 > 보호 기록에서 winmm.dll 항목을 찾아 허용을 선택하고, 게임 폴더를 제외 항목에 추가한 다음 여기서 설치를 다시 누르세요. 그렇게 하지 않고 설치만 누르면 파일을 다시 가져가도록 되돌려 놓을 뿐입니다.",
+  "Windows Security > Protection history: Allow the winmm.dll item": "Windows 보안 > 보호 기록: winmm.dll 항목 허용",
+  "Add the game folder to the exclusions": "게임 폴더를 제외 항목에 추가",
+  "OptiScaler was removed from host64 -- check antivirus": "host64에서 OptiScaler가 제거됨 -- 백신을 확인하세요",
 });

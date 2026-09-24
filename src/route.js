@@ -474,7 +474,14 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
     const text = ROUTE_TEXT.host32Lead + middle + ROUTE_TEXT.host32Panel;
     const DX_NAMES = { dx8: 'DirectX 8', dx9: 'DirectX 9', dx10: 'Direct3D 10', dx11: 'Direct3D 11' };
     return finish('feeder32', ROUTE_TEXT.labelHost32, text, steps,
-      { dx: DX_NAMES[plan.api] || 'DirectX 9' }, { experimental: true, legacy: plan, wrapperPreference, layerChoice });
+      { dx: DX_NAMES[plan.api] || 'DirectX 9' },
+      {
+        experimental: true, legacy: plan, wrapperPreference, layerChoice,
+        // host64\winmm.dll is on the install marker and not on disk: this app wrote OptiScaler into
+        // the helper and something took it away again. Carried out so Game Help can name that rather
+        // than offer Install, which rewrites a file that is being removed (legacy.js status).
+        hostOptiScalerDllGone: !!legacyStatus.hostOptiScalerDllGone,
+      });
   }
 
   // EXPERIMENTAL -- emulators (emulators.js): the ordinary Feeder route, run inside the emulator, with
