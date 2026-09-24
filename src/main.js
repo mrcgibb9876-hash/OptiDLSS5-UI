@@ -873,11 +873,12 @@ ipcMain.handle('relimiter:set-target', async (_evt, { exePath, fps } = {}) => {
 // on the Feeder's private device and neither rule applies).
 //   reshade-dlss-crash  the engine here predates the NGX device hold (relimiter.engineKeepsNgxDevice):
 //                       ReShade with any add-on crashes at DLSS creation. Updating DLSS 5 fixes it.
-//   optifg-armed        OptiScaler's own frame generation builds the game's swap chain on a queue
-//                       ReShade did not make, so ReShade logs "Skipping swap chain because it was
-//                       created without a proxy Direct3D device" and ReLimiter never sees a frame --
-//                       pacing would install and do nothing. Measured on Shadow of the Tomb Raider with
-//                       XeFG, 2026-09-24; with FGOutput=nofg ReShade attaches and ReLimiter paces.
+//   optifg-armed        FSR FG, or XeFG on an engine from before 9a4ce766: the frame generator builds
+//                       the game's swap chain on a queue ReShade did not make, so ReShade logs
+//                       "Skipping swap chain because it was created without a proxy Direct3D device"
+//                       and ReLimiter never sees a frame -- pacing would install and do nothing.
+//                       Measured on Shadow of the Tomb Raider, 2026-09-24. XeFG on a newer engine is
+//                       built on ReShade's device and paces fine (relimiter.engineGivesXefgToReShade).
 async function pacingBesideUpscalerBlocker(dir) {
   const active = await findActiveOptiScalerFile(dir);
   if (!active || !relimiter.engineKeepsNgxDevice(active.file)) {
@@ -6451,11 +6452,11 @@ async function autoConfigureGame(dir, exePath) {
   let forced = dlss5Only
     ? patchIniValues(iniPath, [...(optiFgOn ? optiFgForced(optiFg) : [...DLSS5_ONLY_FORCED, ...optiFgDisarm(iniPath)]), ...keepGamesOwnDlss(upscalerApis)])
     : [];
-  // ReLimiter is a ReShade add-on and is driven by ReShade's present event, so on a Feeder game it
-  // rides on the Feeder's ReShade. NOT on an ordinary OptiScaler game: ReShade loaded by OptiScaler with
-  // any add-on in it crashes when DLSS starts on the game's own device (Shadow of the Tomb Raider,
-  // 2026-09-24 -- relimiter:install's refusal has the detail). There pacing only runs without OptiScaler,
-  // with ReShade as the game's own proxy. Deliberately NOT tied to dlss5Only above: ReLimiter is a frame pacer, not an upscaler, so adding
+  // ReLimiter is a ReShade add-on and is driven by ReShade's present event, so wherever it is deployed
+  // OptiScaler has to load ReShade (below). On an ordinary OptiScaler game that is only allowed with an
+  // engine that keeps NGX's device alive and a frame generator ReShade can see
+  // (pacingBesideUpscalerBlocker; relimiter:install and dropBlockedPacing enforce it). Deliberately NOT
+  // tied to dlss5Only above: ReLimiter is a frame pacer, not an upscaler, so adding
   // it must never narrow OptiScaler into NR-only mode. A user who turns on frame pacing and silently
   // loses their upscaler has been handed a worse app.
   const relimiterHere = relimiter.deployed(dir);

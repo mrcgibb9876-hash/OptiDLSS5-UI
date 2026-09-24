@@ -21,8 +21,8 @@ window.I18N.register("zh-CN", {
     "正保持 {fps} fps。",
   "Frame pacing":
     "帧率节奏",
-  "ReLimiter paces frames for a G-Sync or VRR display -- it holds the frame rate steady rather than making more of them, which is why it sits here beside Frame Generation and not under Speed vs quality. It is a ReShade add-on by RankFTW, Lazorr and UltraMatt, MIT licensed, and it rides on the same ReShade this app already sets up for the DLSS5 Feeder.":
-    "ReLimiter 为 G-Sync 或 VRR 显示器调整帧的节奏：它让帧率保持稳定，而不是生成更多帧，所以它放在这里、紧邻 Frame Generation，而不是放在画质与速度之下。它是 RankFTW、Lazorr 和 UltraMatt 制作的 ReShade 插件，采用 MIT 许可，并且依托本应用已为 DLSS5 Feeder 设置好的同一个 ReShade。",
+  "ReLimiter paces frames for a G-Sync or VRR display -- it holds the frame rate steady rather than making more of them, which is why it sits here beside Frame Generation and not under Speed vs quality. It is a ReShade add-on by RankFTW, Lazorr and UltraMatt, MIT licensed, and adding it sets up the ReShade it needs. It works beside XeFG; with FSR frame generation it cannot see the frames.":
+    "ReLimiter 为 G-Sync 或 VRR 显示器调整帧的节奏：它让帧率保持稳定，而不是生成更多帧，所以它放在这里、紧邻 Frame Generation，而不是放在画质与速度之下。它是 RankFTW、Lazorr 和 UltraMatt 制作的 ReShade 插件，采用 MIT 许可，添加时会一并设置它所需的 ReShade。它可以与 XeFG 一起使用；配合 FSR 帧生成时它看不到帧。",
   "Add frame pacing":
     "添加帧率节奏",
   "Frame rate to hold":

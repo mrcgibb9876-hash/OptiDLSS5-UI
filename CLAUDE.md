@@ -55,18 +55,30 @@ itself each forbid exactly that, and the MIT notice travels with the binary.
   plain non-proxying `ReShade64.dll`, and `[Plugins] LoadReshade=true` makes OptiScaler load it. That
   condition in `autoConfigureGame` is no longer Feeder-only. It is deliberately **separate** from
   `dlss5Only`: a frame pacer is not an upscaler, and turning on pacing must not cost the user theirs.
-- **ReShade + any add-on + OptiScaler upscaling on the game's own device = crash** (Shadow of the Tomb
-  Raider, 2026-09-24: 0xC0000005 in ReShade64.dll under `DLSSFeatureDx12::InitDLSS`). OptiScaler
-  captures the D3D12 device beneath ReShade, DLSS records raw-device resources into ReShade's wrapped
-  command list, and ReShade's add-on descriptor tracking dies on them. No add-on = no crash; Generic
-  Depth alone crashes too; `CreateD3D12DeviceForLuma` and ReShade's standard build do not help. The
-  Feeder never meets it because its DLSS runs on a private device. So:
+- **ReShade + any add-on + OptiScaler upscaling on the game's own device crashed** before engine
+  v2.2.17 (Shadow of the Tomb Raider, 2026-09-24: 0xC0000005 in ReShade64.dll inside DLSS
+  CreateFeature). Root cause, found under a debugger: SOTTR initialises NGX on a throwaway device while
+  its launcher is up and never shuts it down; the real `_nvngx.dll` keeps that first device, which
+  under ReShade is a wrapper ReShade frees on release. With an add-on loaded, `CreateDescriptorHeap`
+  reads ReShade's freed heap table; without one it is a silent use-after-free that sometimes just
+  closes the game. Engine 02e2dac9 holds a reference on the NGX session device and logs
+  `relimiter.NGX_DEVICE_HOLD_MARK`; the app reads that text from the game's engine DLL
+  (`engineKeepsNgxDevice`).
+- **OptiScaler frame generation hides the swap chain from ReShade** ("Skipping swap chain because it was
+  created without a proxy Direct3D device"), so ReLimiter sees no frames. Engine 9a4ce766 builds XeFG on
+  the game queue's device (ReShade's wrapper) and logs `relimiter.XEFG_RESHADE_MARK`
+  (`engineGivesXefgToReShade`); XeFG + pacing is user-verified on SOTTR. FSR FG was not changed.
 - **Where pacing goes** (`relimiter:install`): a Feeder game (plain `ReShade64.dll` + `LoadReshade=true`);
   a game with no OptiScaler (ReShade becomes the game's own proxy: `dxgi.dll`, `d3d9.dll` on DX9;
-  `promoteToStandalone`, recorded as `reshadeProxy`); a Chicken game. A non-Feeder game WITH OptiScaler
-  is refused (`reshade-dlss-crash`), and `game:install` on a game with pacing removes pacing there
-  (`pacingRemoved`) -- on a Feeder game it demotes the standalone ReShade instead. The Chicken swap
-  calls `demoteStandaloneReShade` first so two proxies never meet;
+  `promoteToStandalone`, recorded as `reshadeProxy`); a Chicken game; and a non-Feeder OptiScaler game
+  unless `pacingBesideUpscalerBlocker` refuses it: `reshade-dlss-crash` (engine without the hold) or
+  `optifg-armed` (FSR FG, or XeFG on an engine without the XeFG fix). `autoConfigureGame` forces
+  `LoadReshade=true` wherever pacing is deployed. `game:install` always hands a standalone ReShade
+  back to `ReShade64.dll`, then `dropBlockedPacing` takes pacing out (add-on, our ReShade64.dll,
+  `LoadReshade`) only where the blocker now refuses it, and reports `pacingRemoved`; the frame
+  generation switch does the same. Install's preflight counts pacing's ReShade as ours
+  (`relimiter.ownsReShade`). The Chicken swap calls `demoteStandaloneReShade` first so two proxies
+  never meet;
   Chicken -> the add-on joins Chicken's ReShade (`dfc.reshadeProxyOf`), which pacing never moves or
   deletes. A `ReShade64.dll` pacing placed is recorded (`reshadePlaced`) so `switchToDfc` takes it over
   like the Feeder's (`reshadeIsOurs`). Proxy files are identified by PE OriginalFilename

@@ -21,8 +21,8 @@ window.I18N.register("es", {
     "Manteniendo {fps} fps.",
   "Frame pacing":
     "Ritmo de fotogramas",
-  "ReLimiter paces frames for a G-Sync or VRR display -- it holds the frame rate steady rather than making more of them, which is why it sits here beside Frame Generation and not under Speed vs quality. It is a ReShade add-on by RankFTW, Lazorr and UltraMatt, MIT licensed, and it rides on the same ReShade this app already sets up for the DLSS5 Feeder.":
-    "ReLimiter marca el ritmo de los fotogramas para una pantalla G-Sync o VRR: mantiene estable la tasa de fotogramas en lugar de generar más, y por eso está aquí junto a Frame Generation y no en Velocidad frente a calidad. Es un complemento de ReShade de RankFTW, Lazorr y UltraMatt, con licencia MIT, y aprovecha el mismo ReShade que esta aplicación ya configura para el Feeder de DLSS5.",
+  "ReLimiter paces frames for a G-Sync or VRR display -- it holds the frame rate steady rather than making more of them, which is why it sits here beside Frame Generation and not under Speed vs quality. It is a ReShade add-on by RankFTW, Lazorr and UltraMatt, MIT licensed, and adding it sets up the ReShade it needs. It works beside XeFG; with FSR frame generation it cannot see the frames.":
+    "ReLimiter marca el ritmo de los fotogramas para una pantalla G-Sync o VRR: mantiene estable la tasa de fotogramas en lugar de generar más, y por eso está aquí junto a Frame Generation y no en Velocidad frente a calidad. Es un complemento de ReShade de RankFTW, Lazorr y UltraMatt, con licencia MIT, y al añadirlo se configura el ReShade que necesita. Funciona junto a XeFG; con la generación de fotogramas FSR no puede ver los fotogramas.",
   "Add frame pacing":
     "Añadir ritmo de fotogramas",
   "Frame rate to hold":

@@ -21,8 +21,8 @@ window.I18N.register("fr", {
     "Maintient {fps} fps.",
   "Frame pacing":
     "Cadence des images",
-  "ReLimiter paces frames for a G-Sync or VRR display -- it holds the frame rate steady rather than making more of them, which is why it sits here beside Frame Generation and not under Speed vs quality. It is a ReShade add-on by RankFTW, Lazorr and UltraMatt, MIT licensed, and it rides on the same ReShade this app already sets up for the DLSS5 Feeder.":
-    "ReLimiter cadence les images pour un écran G-Sync ou VRR : il stabilise la fréquence d'images au lieu d'en produire davantage, et c'est pourquoi il se trouve ici à côté de Frame Generation et non sous Vitesse et qualité. C'est un add-on ReShade de RankFTW, Lazorr et UltraMatt, sous licence MIT, qui s'appuie sur le même ReShade que cette application installe déjà pour le Feeder DLSS5.",
+  "ReLimiter paces frames for a G-Sync or VRR display -- it holds the frame rate steady rather than making more of them, which is why it sits here beside Frame Generation and not under Speed vs quality. It is a ReShade add-on by RankFTW, Lazorr and UltraMatt, MIT licensed, and adding it sets up the ReShade it needs. It works beside XeFG; with FSR frame generation it cannot see the frames.":
+    "ReLimiter cadence les images pour un écran G-Sync ou VRR : il stabilise la fréquence d'images au lieu d'en produire davantage, et c'est pourquoi il se trouve ici à côté de Frame Generation et non sous Vitesse et qualité. C'est un add-on ReShade de RankFTW, Lazorr et UltraMatt, sous licence MIT, et l'ajouter installe le ReShade dont il a besoin. Il fonctionne avec XeFG ; avec la génération d'images FSR, il ne voit pas les images.",
   "Add frame pacing":
     "Ajouter la cadence des images",
   "Frame rate to hold":

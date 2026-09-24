@@ -21,8 +21,8 @@ window.I18N.register('pt-BR', {
     "Mantendo {fps} fps.",
   "Frame pacing":
     "Ritmo de quadros",
-  "ReLimiter paces frames for a G-Sync or VRR display -- it holds the frame rate steady rather than making more of them, which is why it sits here beside Frame Generation and not under Speed vs quality. It is a ReShade add-on by RankFTW, Lazorr and UltraMatt, MIT licensed, and it rides on the same ReShade this app already sets up for the DLSS5 Feeder.":
-    "O ReLimiter acerta o ritmo dos quadros para um monitor G-Sync ou VRR: ele mantém a taxa de quadros estável em vez de gerar mais, e por isso fica aqui ao lado do Frame Generation e não em Velocidade x qualidade. É um add-on do ReShade feito por RankFTW, Lazorr e UltraMatt, com licença MIT, e usa o mesmo ReShade que este app já configura para o Feeder do DLSS5.",
+  "ReLimiter paces frames for a G-Sync or VRR display -- it holds the frame rate steady rather than making more of them, which is why it sits here beside Frame Generation and not under Speed vs quality. It is a ReShade add-on by RankFTW, Lazorr and UltraMatt, MIT licensed, and adding it sets up the ReShade it needs. It works beside XeFG; with FSR frame generation it cannot see the frames.":
+    "O ReLimiter acerta o ritmo dos quadros para um monitor G-Sync ou VRR: ele mantém a taxa de quadros estável em vez de gerar mais, e por isso fica aqui ao lado do Frame Generation e não em Velocidade x qualidade. É um add-on do ReShade feito por RankFTW, Lazorr e UltraMatt, com licença MIT, e, ao adicioná-lo, o app configura o ReShade de que ele precisa. Funciona junto com o XeFG; com a geração de quadros FSR ele não consegue ver os quadros.",
   "Add frame pacing":
     "Adicionar ritmo de quadros",
   "Frame rate to hold":

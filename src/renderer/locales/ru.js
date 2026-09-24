@@ -21,8 +21,8 @@ window.I18N.register("ru", {
     "Держит {fps} fps.",
   "Frame pacing":
     "Выравнивание кадров",
-  "ReLimiter paces frames for a G-Sync or VRR display -- it holds the frame rate steady rather than making more of them, which is why it sits here beside Frame Generation and not under Speed vs quality. It is a ReShade add-on by RankFTW, Lazorr and UltraMatt, MIT licensed, and it rides on the same ReShade this app already sets up for the DLSS5 Feeder.":
-    "ReLimiter выравнивает подачу кадров для дисплея с G-Sync или VRR: он удерживает частоту кадров стабильной, а не создаёт новые кадры, поэтому он здесь рядом с Frame Generation, а не в разделе скорости и качества. Это дополнение для ReShade от RankFTW, Lazorr и UltraMatt под лицензией MIT, и оно работает на том же ReShade, который это приложение уже ставит для DLSS5 Feeder.",
+  "ReLimiter paces frames for a G-Sync or VRR display -- it holds the frame rate steady rather than making more of them, which is why it sits here beside Frame Generation and not under Speed vs quality. It is a ReShade add-on by RankFTW, Lazorr and UltraMatt, MIT licensed, and adding it sets up the ReShade it needs. It works beside XeFG; with FSR frame generation it cannot see the frames.":
+    "ReLimiter выравнивает подачу кадров для дисплея с G-Sync или VRR: он удерживает частоту кадров стабильной, а не создаёт новые кадры, поэтому он здесь рядом с Frame Generation, а не в разделе скорости и качества. Это дополнение для ReShade от RankFTW, Lazorr и UltraMatt под лицензией MIT, и при добавлении приложение само ставит нужный ему ReShade. Оно работает вместе с XeFG; с генерацией кадров FSR оно не видит кадры.",
   "Add frame pacing":
     "Добавить выравнивание кадров",
   "Frame rate to hold":

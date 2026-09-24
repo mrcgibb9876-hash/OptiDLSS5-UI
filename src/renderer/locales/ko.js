@@ -21,8 +21,8 @@ window.I18N.register("ko", {
     "{fps} fps를 유지합니다.",
   "Frame pacing":
     "프레임 페이싱",
-  "ReLimiter paces frames for a G-Sync or VRR display -- it holds the frame rate steady rather than making more of them, which is why it sits here beside Frame Generation and not under Speed vs quality. It is a ReShade add-on by RankFTW, Lazorr and UltraMatt, MIT licensed, and it rides on the same ReShade this app already sets up for the DLSS5 Feeder.":
-    "ReLimiter는 G-Sync 또는 VRR 디스플레이를 위해 프레임 간격을 고르게 맞춥니다. 프레임을 더 만드는 것이 아니라 프레임 레이트를 안정적으로 유지하므로, 화질 대비 속도가 아니라 여기 Frame Generation 옆에 있습니다. RankFTW, Lazorr, UltraMatt가 만든 MIT 라이선스 ReShade 애드온이며, 이 앱이 DLSS5 Feeder용으로 이미 설정하는 같은 ReShade 위에서 동작합니다.",
+  "ReLimiter paces frames for a G-Sync or VRR display -- it holds the frame rate steady rather than making more of them, which is why it sits here beside Frame Generation and not under Speed vs quality. It is a ReShade add-on by RankFTW, Lazorr and UltraMatt, MIT licensed, and adding it sets up the ReShade it needs. It works beside XeFG; with FSR frame generation it cannot see the frames.":
+    "ReLimiter는 G-Sync 또는 VRR 디스플레이를 위해 프레임 간격을 고르게 맞춥니다. 프레임을 더 만드는 것이 아니라 프레임 레이트를 안정적으로 유지하므로, 화질 대비 속도가 아니라 여기 Frame Generation 옆에 있습니다. RankFTW, Lazorr, UltraMatt가 만든 MIT 라이선스 ReShade 애드온이며, 추가하면 필요한 ReShade도 함께 설정됩니다. XeFG와 함께 동작하며, FSR 프레임 생성과 함께 쓰면 프레임을 볼 수 없습니다.",
   "Add frame pacing":
     "프레임 페이싱 추가",
   "Frame rate to hold":
