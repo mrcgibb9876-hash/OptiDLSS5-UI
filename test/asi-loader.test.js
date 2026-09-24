@@ -38,6 +38,37 @@ test('an ASI loader’s plugins are found beside the exe and in plugins/, and th
   assert.equal(asi.reShade, 'plugins/ReShade.asi');
 });
 
+test('OptiScaler.asi mentions ReShade, and must not be mistaken for it (#133, 2026-09-23)', async () => {
+  // The fixture above gives OptiScaler.asi only its own needle, which is not what a real one is
+  // like: OptiScaler looks the ReShade module up BY NAME to talk to it, so the string "ReShade" is
+  // in its binary (Dxgi_Hooks.cpp alone has nine occurrences). Taking the first content hit per
+  // tool in readdir order then let OptiScaler.asi, which sorts first, claim both slots.
+  //
+  // S.T.A.L.K.E.R. Anomaly reported the result verbatim: "OptiScaler in OptiScaler.asi and ReShade
+  // in OptiScaler.asi", with a real ReShade.asi in the same folder, unmentioned.
+  const both = scratchDir('asi-optiscaler-mentions-reshade');
+  plugin(both, 'OptiScaler.asi', 'OptiScalerReShade');   // one file carrying both needles
+  plugin(both, 'ReShade.asi', 'ReShade');
+  const asi = await detect.inspectAsiPlugins(both);
+  assert.equal(asi.optiScaler, 'OptiScaler.asi');
+  assert.equal(asi.reShade, 'ReShade.asi', 'the file named ReShade is the ReShade');
+
+  // The worse half: with no ReShade there at all, the mention alone used to invent one.
+  const alone = scratchDir('asi-optiscaler-only');
+  plugin(alone, 'OptiScaler.asi', 'OptiScalerReShade');
+  const only = await detect.inspectAsiPlugins(alone);
+  assert.equal(only.optiScaler, 'OptiScaler.asi');
+  assert.equal(only.reShade, null, 'a mention of ReShade is not a ReShade');
+
+  // ... while a genuinely renamed add-on is still found by content, which is why the scan exists.
+  const renamed = scratchDir('asi-renamed');
+  plugin(renamed, 'OptiScaler.asi', 'OptiScalerReShade');
+  plugin(renamed, 'zz-visuals.asi', 'ReShade');
+  const ren = await detect.inspectAsiPlugins(renamed);
+  assert.equal(ren.optiScaler, 'OptiScaler.asi');
+  assert.equal(ren.reShade, 'zz-visuals.asi');
+});
+
 test('a folder with no .asi in it reports none at all, rather than an empty finding', async () => {
   const dir = scratchDir('asi-none');
   plugin(dir, 'dxgi.dll', 'OptiScaler');
