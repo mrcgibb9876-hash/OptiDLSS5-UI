@@ -758,6 +758,14 @@ window.I18N.register("fr", {
   "Depth is flat -- wrong buffer": "Profondeur plate -- mauvais buffer",
   "D3D12 refused every device (redist)": "D3D12 a refusé chaque périphérique (redistribuable)",
   "Black screen: every frame dropped": "Écran noir : chaque image abandonnée",
+  "DLSS could not be created ({result}) and OptiScaler upscaled with {backend} instead, and {debugger} is sitting in the game folder ({debuggerFile}). A graphics debugger replaces Direct3D 12 with its own wrapper, and that wrapper carries none of the vendor paths DLSS and XeSS need -- which is why those two fail while FSR keeps working. This app cannot tell whether the game actually loaded it; some games ship one and never use it. Move the file out of the folder and launch again to find out.":
+    "Le DLSS n'a pas pu être créé ({result}) et OptiScaler a mis à l'échelle avec {backend} à la place, et {debugger} se trouve dans le dossier du jeu ({debuggerFile}). Un débogueur graphique remplace Direct3D 12 par son propre wrapper, et ce wrapper ne contient aucun des chemins constructeur dont le DLSS et le XeSS ont besoin : c'est pourquoi ces deux-là échouent alors que le FSR continue de fonctionner. Cette application ne peut pas savoir si le jeu l'a réellement chargé ; certains jeux en livrent un sans jamais s'en servir. Sortez le fichier du dossier et relancez pour le vérifier.",
+  "Move {debuggerFile} out of the game folder":
+    "Sortez {debuggerFile} du dossier du jeu",
+  "Launch again and try DLSS":
+    "Relancez et essayez le DLSS",
+  "Not DLSS -- {debugger} is in the folder":
+    "Pas de DLSS -- {debugger} est dans le dossier",
   "Not DLSS -- fell back to {backend}": "Pas du DLSS -- repli sur {backend}",
   "Deploy the Feeder again": "Redéployer le Feeder",
   "Try the verified Unity depth profile": "Essayer le profil de profondeur Unity vérifié",

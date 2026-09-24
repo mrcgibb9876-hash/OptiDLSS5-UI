@@ -1313,6 +1313,14 @@ window.I18N.register("zh-CN", {
   "Depth is flat -- wrong buffer": "深度是平的 -- 缓冲区不对",
   "D3D12 refused every device (redist)": "D3D12 拒绝了所有设备（redist）",
   "Black screen: every frame dropped": "黑屏：每一帧都被丢弃",
+  "DLSS could not be created ({result}) and OptiScaler upscaled with {backend} instead, and {debugger} is sitting in the game folder ({debuggerFile}). A graphics debugger replaces Direct3D 12 with its own wrapper, and that wrapper carries none of the vendor paths DLSS and XeSS need -- which is why those two fail while FSR keeps working. This app cannot tell whether the game actually loaded it; some games ship one and never use it. Move the file out of the folder and launch again to find out.":
+    "无法创建 DLSS（{result}），OptiScaler 改用 {backend} 进行了放大，而游戏文件夹中存在 {debugger}（{debuggerFile}）。图形调试器会用它自己的包装层替换 Direct3D 12，而那个包装层不包含 DLSS 和 XeSS 所需的任何厂商路径 —— 这正是这两者失败而 FSR 仍然可用的原因。本应用无法判断游戏是否真的加载了它；有些游戏自带却从不使用。把该文件移出文件夹后重新启动即可确认。",
+  "Move {debuggerFile} out of the game folder":
+    "把 {debuggerFile} 移出游戏文件夹",
+  "Launch again and try DLSS":
+    "重新启动并尝试 DLSS",
+  "Not DLSS -- {debugger} is in the folder":
+    "不是 DLSS —— 文件夹中有 {debugger}",
   "Not DLSS -- fell back to {backend}": "不是 DLSS -- 回退到了 {backend}",
   "{exe} is not on ReShade's Vulkan app list": "{exe} 不在 ReShade 的 Vulkan 应用列表中",
   "DLSS 5 is under a name this game never loads ({from})": "DLSS 5 使用了此游戏从不加载的名称（{from}）",

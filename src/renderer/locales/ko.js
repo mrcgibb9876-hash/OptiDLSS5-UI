@@ -1313,6 +1313,14 @@ window.I18N.register("ko", {
   "Depth is flat -- wrong buffer": "깊이가 평평함 -- 잘못된 버퍼",
   "D3D12 refused every device (redist)": "D3D12가 모든 장치를 거부함(redist)",
   "Black screen: every frame dropped": "검은 화면: 모든 프레임이 버려짐",
+  "DLSS could not be created ({result}) and OptiScaler upscaled with {backend} instead, and {debugger} is sitting in the game folder ({debuggerFile}). A graphics debugger replaces Direct3D 12 with its own wrapper, and that wrapper carries none of the vendor paths DLSS and XeSS need -- which is why those two fail while FSR keeps working. This app cannot tell whether the game actually loaded it; some games ship one and never use it. Move the file out of the folder and launch again to find out.":
+    "DLSS를 만들 수 없어({result}) OptiScaler가 대신 {backend}(으)로 업스케일했으며, 게임 폴더에 {debugger}이(가) 있습니다({debuggerFile}). 그래픽 디버거는 Direct3D 12를 자체 래퍼로 대체하는데, 그 래퍼에는 DLSS와 XeSS에 필요한 제조사 경로가 전혀 없습니다. FSR은 계속 작동하는데 이 둘만 실패하는 이유가 바로 그것입니다. 게임이 실제로 그것을 불러왔는지는 이 앱이 알 수 없습니다. 함께 들어 있기만 하고 전혀 쓰지 않는 게임도 있습니다. 파일을 폴더 밖으로 옮기고 다시 실행해 확인해 보세요.",
+  "Move {debuggerFile} out of the game folder":
+    "{debuggerFile}을(를) 게임 폴더 밖으로 옮기기",
+  "Launch again and try DLSS":
+    "다시 실행하고 DLSS 시도",
+  "Not DLSS -- {debugger} is in the folder":
+    "DLSS 아님 -- 폴더에 {debugger} 있음",
   "Not DLSS -- fell back to {backend}": "DLSS 아님 -- {backend}(으)로 대체됨",
   "{exe} is not on ReShade's Vulkan app list": "{exe}이(가) ReShade의 Vulkan 앱 목록에 없습니다",
   "DLSS 5 is under a name this game never loads ({from})": "DLSS 5가 이 게임이 불러오지 않는 이름으로 있습니다({from})",

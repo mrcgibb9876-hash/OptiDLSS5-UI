@@ -646,6 +646,14 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = 
       add('asi plugins', `${asi.files.length} beside the exe (${asi.files.slice(0, 6).join(', ')}${asi.files.length > 6 ? ', ...' : ''})` +
         (named.length ? ` -- ${named.join(' and ')}, loaded by an ASI loader and NOT by this app` : ' -- this app cannot see what they load'));
     }
+    // A graphics debugger in the folder WRAPS Direct3D 12 and carries no vendor path, so DLSS and
+    // XeSS fail through it while FSR 2/3 -- OptiScaler's own compute -- keep working. Reported as a
+    // file that is present, never as a file that ran: Uncharted 4 SHIPS renderdoc.dll, so "it is
+    // there" and "it is in the process" are different claims and only the first one is ours to make.
+    if (detected.graphicsDebuggers && detected.graphicsDebuggers.length) {
+      add('graphics debugger', detected.graphicsDebuggers.map((g) => `${g.tool} (${g.file})`).join(', ')
+        + ' -- in the folder; this app cannot tell whether the game loaded it. These wrap D3D12 and break DLSS and XeSS while FSR keeps working');
+    }
     if (detected.antiCheat) add('anti-cheat', detected.antiCheat);
   }
   // dgVoodoo2 turns DirectX 8/9 into D3D11 inside the game, which is itself a reason a DX9 game can

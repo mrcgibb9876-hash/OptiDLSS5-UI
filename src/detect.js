@@ -42,9 +42,11 @@ const rtxmfg = require('./rtxmfg');
 // carries the old api and detectFromStored would keep it, so this has to force a re-detect.
 // 16: an emulator is set up for its best renderer for this app, not the one its last run used, and
 // carries the renderer's name and menu path (emulators.js, #106).
+// 20: a graphics debugger beside the exe is read (graphicsDebuggers). A stored detection carries
+//     none, so it would keep answering as though the folder had been looked at and found clean.
 // 17: an ASI loader's plugins are read (asiPlugins). A stored detection carries none, and its
 // absence reads as "no ASI loader here" -- the exact wrong answer that has to be refreshed (#108).
-const DETECT_VERSION = 19;
+const DETECT_VERSION = 20;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
@@ -555,6 +557,44 @@ function ourTranslationLayer(dir) {
 // Anomaly and GAMMA are the common case, but nothing here is STALKER-specific: `.asi` is only ever
 // an ASI loader's plugin, so the extension alone is the evidence.
 const ASI_DIRS = ['', 'plugins', 'scripts'];
+
+// A graphics debugger sitting beside the exe. These WRAP Direct3D 12: they replace the device and
+// the command queue with their own, and they do not carry the vendor paths DLSS and XeSS need. FSR 2
+// and 3 are OptiScaler's own compute passes and go straight through, so the signature of one being
+// active is that the two hardware upscalers fail while FSR keeps working -- which is exactly what an
+// Uncharted 4 reporter saw (2026-09-24), with renderdoc.dll in the folder.
+//
+// Two deliberate omissions, both of which would be false alarms:
+//
+//   WinPixEventRuntime.dll only supplies PIX event markers. It hooks nothing and wraps nothing, and
+//   plenty of games ship it -- Uncharted 4 among them. Listing it would flag those games over a file
+//   that cannot affect anything. WinPixGpuCapturer.dll is the one that wraps, and it IS listed.
+//
+//   dxcompiler.dll is Microsoft's shader compiler, shipped by many games, and is not a debugger.
+//
+// PRESENCE IS NOT LOADING. Uncharted 4 SHIPS renderdoc.dll -- its timestamp matches the game's own
+// exe -- and nothing in that reporter's logs put it in the process. So this reports what is in the
+// folder and says the app cannot tell whether the game loaded it, the same honesty asi-loader-blind
+// settled on. A confident verdict about a file that was never loaded is worse than naming the file.
+const GRAPHICS_DEBUGGERS = [
+  { tool: 'RenderDoc', file: 'renderdoc.dll' },
+  { tool: 'PIX GPU capture', file: 'WinPixGpuCapturer.dll' },
+  { tool: 'NVIDIA Nsight Graphics', file: 'Nvda.Graphics.Interception.dll' },
+  { tool: 'GFXReconstruct', file: 'gfxrecon_capture_d3d12.dll' },
+];
+
+function inspectGraphicsDebuggers(dir) {
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch { return null; }
+  const lower = new Map(names.map((n) => [n.toLowerCase(), n]));
+  const found = [];
+  for (const d of GRAPHICS_DEBUGGERS) {
+    const real = lower.get(d.file.toLowerCase());
+    if (real) found.push({ tool: d.tool, file: real });
+  }
+  return found.length ? found : null;
+}
+
 const ASI_MAX = 40;
 
 async function inspectAsiPlugins(dir) {
@@ -1422,6 +1462,7 @@ async function detectGame(dir, exePath) {
 
   // Bitness and the build facts come first now: they veto APIs before anything picks one.
   const [bitness, hooks, build, asiPlugins] = await Promise.all([peBitness(exePath), inspectHookDlls(dir), peBuildFacts(exePath), inspectAsiPlugins(dir)]);
+  const graphicsDebuggers = inspectGraphicsDebuggers(dir);
   const exeImports = exe ? exe.imports : bitness === 32 ? await peImports(exePath) : null;
   const vetoes = apiVetoes(build, { bitness, imports: exeImports });
 
@@ -1552,6 +1593,7 @@ async function detectGame(dir, exePath) {
     // OptiScaler or ReShade loaded as an .asi answers the game while every check here looks at
     // proxy DLL names and finds nothing (#108).
     asiPlugins,
+    graphicsDebuggers,
     antiCheat: antiCheatPresent(dir, exePath),
     // The door out of an anti-cheat stub, if there is one -- see antiCheatStub().
     protectedLauncher: antiCheatStub(dir),
@@ -1589,6 +1631,7 @@ async function detectGame(dir, exePath) {
 // still overrides (route.js).
 async function detectEmulator(dir, exePath, emu) {
   const [bitness, hooks, asiPlugins] = await Promise.all([peBitness(exePath), inspectHookDlls(dir), inspectAsiPlugins(dir)]);
+  const graphicsDebuggers = inspectGraphicsDebuggers(dir);
   const api = emu.apis[0];
   let reason = `${emu.name} (${emu.system}) is an emulator, so its renderer is one of its own settings: ` +
     `set up for ${emu.renderer || API_LABEL[api]}, the one that suits DLSS 5 best (${emu.hint})`;
@@ -1631,6 +1674,7 @@ async function detectEmulator(dir, exePath, emu) {
     // OptiScaler or ReShade loaded as an .asi answers the game while every check here looks at
     // proxy DLL names and finds nothing (#108).
     asiPlugins,
+    graphicsDebuggers,
     antiCheat: null,
     protectedLauncher: null,
     oldShaderCompiler: oldShaderCompiler(dir),
@@ -1682,6 +1726,7 @@ function detectSignature(dir, exePath) {
 // out of the exe and do not change until the game is patched.
 async function folderEvidence(dir, exePath) {
   const [hooks, asiPlugins] = await Promise.all([inspectHookDlls(dir), inspectAsiPlugins(dir)]);
+  const graphicsDebuggers = inspectGraphicsDebuggers(dir);
   const logStat = optiScalerLogStat(dir);
   return {
     vulkanWrapper: hooks.vulkanWrapper,
@@ -1692,6 +1737,7 @@ async function folderEvidence(dir, exePath) {
     // OptiScaler or ReShade loaded as an .asi answers the game while every check here looks at
     // proxy DLL names and finds nothing (#108).
     asiPlugins,
+    graphicsDebuggers,
     antiCheat: antiCheatPresent(dir, exePath),
     protectedLauncher: antiCheatStub(dir),
     oldShaderCompiler: oldShaderCompiler(dir),
@@ -1851,4 +1897,4 @@ async function planForeignRemoval(dir, { ours = false } = {}) {
   return { found, del: [...del].sort(), restore, notes };
 }
 
-module.exports = { DETECT_VERSION, peBuildFacts, apiVetoes, exeStamp, openPeResources, RT_ICON, RT_GROUP_ICON, RT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, inspectAsiPlugins, antiCheatPresent, oldShaderCompiler, apiFromFileName, pickModern, vulkanOverrideApplies, foreignToolchains, planForeignRemoval };
+module.exports = { DETECT_VERSION, peBuildFacts, apiVetoes, exeStamp, openPeResources, RT_ICON, RT_GROUP_ICON, RT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, inspectAsiPlugins, inspectGraphicsDebuggers, antiCheatPresent, oldShaderCompiler, apiFromFileName, pickModern, vulkanOverrideApplies, foreignToolchains, planForeignRemoval };

@@ -1313,6 +1313,14 @@ window.I18N.register("ru", {
   "Depth is flat -- wrong buffer": "Глубина плоская -- не тот буфер",
   "D3D12 refused every device (redist)": "D3D12 отклонил все устройства (redist)",
   "Black screen: every frame dropped": "Чёрный экран: все кадры отброшены",
+  "DLSS could not be created ({result}) and OptiScaler upscaled with {backend} instead, and {debugger} is sitting in the game folder ({debuggerFile}). A graphics debugger replaces Direct3D 12 with its own wrapper, and that wrapper carries none of the vendor paths DLSS and XeSS need -- which is why those two fail while FSR keeps working. This app cannot tell whether the game actually loaded it; some games ship one and never use it. Move the file out of the folder and launch again to find out.":
+    "DLSS не удалось создать ({result}), и OptiScaler масштабировал с помощью {backend}, а в папке игры лежит {debugger} ({debuggerFile}). Графический отладчик подменяет Direct3D 12 собственной обёрткой, и в этой обёртке нет ни одного из путей производителя, которые нужны DLSS и XeSS, -- именно поэтому эти два не работают, а FSR продолжает. Загрузила ли его игра на самом деле, приложение определить не может: некоторые игры поставляют его и никогда не используют. Уберите файл из папки и запустите снова, чтобы проверить.",
+  "Move {debuggerFile} out of the game folder":
+    "Уберите {debuggerFile} из папки игры",
+  "Launch again and try DLSS":
+    "Запустите снова и попробуйте DLSS",
+  "Not DLSS -- {debugger} is in the folder":
+    "Не DLSS -- в папке лежит {debugger}",
   "Not DLSS -- fell back to {backend}": "Не DLSS -- откат на {backend}",
   "{exe} is not on ReShade's Vulkan app list": "{exe} нет в списке приложений Vulkan у ReShade",
   "DLSS 5 is under a name this game never loads ({from})": "DLSS 5 лежит под именем, которое эта игра не загружает ({from})",
