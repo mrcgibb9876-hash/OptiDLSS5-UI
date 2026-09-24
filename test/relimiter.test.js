@@ -192,3 +192,137 @@ test('ours is the setting that gives way, and only that one', () => {
   // comes back meaning what it meant if they turn AutoScale on again after removing ReLimiter.
   assert.ok(!relimiter.NR_CONFLICT_EDITS.some((e) => e.key === 'AutoScaleFps'));
 });
+
+// A real PE whose version resource names it ReShade: notepad.exe with its OriginalFilename
+// rewritten in place (NOTEPAD.EXE and RESHADE.DLL are the same length), padded past ReShade's size
+// floor and carrying the add-on export's name. Windows only, because that is where notepad.exe is.
+const NOTEPAD = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'notepad.exe');
+const canFakePe = process.platform === 'win32' && fs.existsSync(NOTEPAD);
+function realishReShade(dir, name) {
+  const buf = fs.readFileSync(NOTEPAD);
+  const at = buf.indexOf(Buffer.from('NOTEPAD.EXE', 'utf16le'));
+  Buffer.from('RESHADE.DLL', 'utf16le').copy(buf, at);
+  const pad = Buffer.alloc(2 * 1024 * 1024, 0);
+  pad.write('ReShade ReShadeRegisterAddon', 64, 'latin1');
+  fs.writeFileSync(path.join(dir, name), Buffer.concat([buf, pad]));
+}
+
+test('ReShade in a proxy slot is recognised by its version resource, and OptiScaler never is', { skip: !canFakePe }, () => {
+  const dir = scratchDir('rl-proxy-identity');
+  realishReShade(dir, 'dxgi.dll');
+  assert.equal(relimiter.isReShadeProxy(path.join(dir, 'dxgi.dll')), true);
+  // OptiScaler carries the string "ReShade" (LoadReshade) and is megabytes, so the loose check
+  // feeder.isReShadeDll would take it. This one decides what is renamed in a proxy slot.
+  const opti = Buffer.alloc(2 * 1024 * 1024, 5);
+  opti.write('OptiScaler LoadReshade ReShade', 128, 'latin1');
+  fs.writeFileSync(path.join(dir, 'winmm.dll'), opti);
+  assert.equal(relimiter.isReShadeProxy(path.join(dir, 'winmm.dll')), false);
+});
+
+test('a game with no OptiScaler gets ReShade as its proxy, and it moves back when DLSS 5 arrives', { skip: !canFakePe }, () => {
+  const dir = scratchDir('rl-standalone');
+  realishReShade(dir, 'ReShade64.dll');
+  assert.equal(relimiter.standaloneProxyName('dx12'), 'dxgi.dll');
+  assert.equal(relimiter.standaloneProxyName('dx9'), 'd3d9.dll');
+
+  relimiter.promoteToStandalone(dir, 'dx12');
+  assert.equal(fs.existsSync(path.join(dir, 'dxgi.dll')), true);
+  assert.equal(fs.existsSync(path.join(dir, 'ReShade64.dll')), false, 'one ReShade, not two');
+  relimiter.deploy(dir, fakeAddon(scratchDir('rl-standalone-src')), { version: 'v1' });
+  const st = relimiter.status(dir, { api: 'dx12' });
+  assert.equal(st.standalone, true, 'the deploy kept the proxy on record');
+  assert.equal(st.reshadeFile, 'dxgi.dll');
+  assert.equal(st.complete, true);
+
+  // DLSS 5 installing: OptiScaler takes the slot, so ReShade goes back to where OptiScaler loads it.
+  assert.equal(relimiter.demoteStandaloneReShade(dir), 'dxgi.dll');
+  assert.equal(fs.existsSync(path.join(dir, 'dxgi.dll')), false);
+  assert.equal(fs.existsSync(path.join(dir, 'ReShade64.dll')), true);
+  assert.equal(relimiter.status(dir, { api: 'dx12' }).standalone, false);
+  assert.equal(relimiter.status(dir, { api: 'dx12' }).complete, true);
+});
+
+test('a proxy slot holding something else is refused, not overwritten', { skip: !canFakePe }, () => {
+  const dir = scratchDir('rl-standalone-taken');
+  realishReShade(dir, 'ReShade64.dll');
+  fs.writeFileSync(path.join(dir, 'dxgi.dll'), 'somebody else\'s dxgi');
+  assert.throws(() => relimiter.promoteToStandalone(dir, 'dx12'), (e) => e.code === 'proxy-taken');
+  assert.equal(fs.readFileSync(path.join(dir, 'dxgi.dll'), 'utf8'), 'somebody else\'s dxgi');
+});
+
+test('Remove takes back a standalone ReShade it placed, because nothing else loads it', { skip: !canFakePe }, () => {
+  const dir = scratchDir('rl-standalone-remove');
+  realishReShade(dir, 'ReShade64.dll');
+  relimiter.promoteToStandalone(dir, 'dx11');
+  relimiter.deploy(dir, fakeAddon(scratchDir('rl-standalone-remove-src')));
+  const removed = relimiter.remove(dir);
+  assert.ok(removed.includes('dxgi.dll'));
+  assert.deepEqual(fs.readdirSync(dir).sort(), []);
+});
+
+test('the fork is tried first for its host API, and upstream stands in when it has no release', async () => {
+  const calls = [];
+  const release = (tag) => ({ tag_name: tag, assets: [
+    { name: 'relimiter.addon32', browser_download_url: `https://github.com/x/y/releases/download/${tag}/relimiter.addon32` },
+    { name: 'relimiter.addon64', browser_download_url: `https://github.com/x/y/releases/download/${tag}/relimiter.addon64`, digest: `sha256:${'a'.repeat(64)}` },
+  ] });
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    if (url.includes('mrcgibb9876-hash')) return { ok: false, status: 404, json: async () => ({}) };
+    return { ok: true, status: 200, json: async () => release('v3.3.5') };
+  };
+  const got = await relimiter.resolveAddonAsset({}, { fetchImpl });
+  assert.equal(got.repo, 'RankFTW/ReLimiter');
+  assert.equal(got.hostApi, false);
+  assert.equal(got.name, 'relimiter.addon64');
+  assert.equal(got.digest, 'a'.repeat(64));
+  assert.match(calls[0], /mrcgibb9876-hash/, 'the fork is asked first');
+
+  const fork = await relimiter.resolveAddonAsset({}, { fetchImpl: async () => ({ ok: true, status: 200, json: async () => release('v3.4.0') }) });
+  assert.equal(fork.repo, 'mrcgibb9876-hash/ReLimiter');
+  assert.equal(fork.hostApi, true);
+
+  await assert.rejects(relimiter.resolveAddonAsset({}, { fetchImpl: async () => ({ ok: false, status: 500 }) }), /No ReLimiter build/);
+});
+
+test('ReShade.ini is pointed at the add-on and un-disables ReLimiter, keeping the rest', () => {
+  const dir = scratchDir('rl-reshade-ini');
+  fs.writeFileSync(path.join(dir, 'ReShade.ini'), '[ADDON]\nDisabledAddons=ReLimiter,Other\n[GENERAL]\nMine=1\n');
+  relimiter.configureReShadeIni(dir);
+  const ini = fs.readFileSync(path.join(dir, 'ReShade.ini'), 'utf8');
+  assert.match(ini, /DisabledAddons=Other/);
+  assert.match(ini, /AddonPath=\.\\/);
+  assert.match(ini, /Mine=1/);
+});
+
+// Deep Fried Chicken: OptiScaler is out and Chicken's own ReShade is the proxy. ReLimiter is one more
+// add-on on it, and nothing about pacing may ever move or delete that ReShade.
+test('on a Chicken game the add-on rides on Chicken\'s ReShade, and Remove never takes it', () => {
+  const dir = scratchDir('rl-chicken');
+  fakeReShade(dir, { name: 'dxgi.dll' });
+  fs.writeFileSync(path.join(dir, '.dlss5ui-dfc.json'), JSON.stringify({ reshadeProxy: 'dxgi.dll' }));
+  relimiter.deploy(dir, fakeAddon(scratchDir('rl-chicken-src')));
+  const st = relimiter.status(dir, { api: 'dx12' });
+  assert.equal(st.chicken, true);
+  assert.equal(st.reshadeFile, 'dxgi.dll');
+  assert.equal(st.standalone, false, 'Chicken\'s ReShade is never recorded as our standalone one');
+  assert.equal(st.complete, true);
+  // Even a marker that somehow claims that slot does not get it deleted.
+  relimiter.writeMarker(dir, { reshadeProxy: 'dxgi.dll', reshadePlaced: true });
+  relimiter.remove(dir);
+  assert.equal(fs.existsSync(path.join(dir, 'dxgi.dll')), true);
+  assert.equal(fs.existsSync(path.join(dir, 'relimiter.addon64')), false);
+});
+
+test('a ReShade64.dll frame pacing placed is one Chicken\'s swap may take over, and only that one', { skip: !canFakePe }, () => {
+  const dir = scratchDir('rl-placed');
+  realishReShade(dir, 'ReShade64.dll');
+  assert.equal(relimiter.placedReShade(dir), false, 'not recorded: somebody else\'s');
+  relimiter.writeMarker(dir, { reshadePlaced: true });
+  assert.equal(relimiter.placedReShade(dir), true);
+  // While it stands in the proxy slot it is not ReShade64.dll at all.
+  relimiter.promoteToStandalone(dir, 'dx12');
+  assert.equal(relimiter.placedReShade(dir), false);
+  relimiter.demoteStandaloneReShade(dir);
+  assert.equal(relimiter.placedReShade(dir), true);
+});

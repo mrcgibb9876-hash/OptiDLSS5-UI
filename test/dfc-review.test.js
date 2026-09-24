@@ -79,6 +79,26 @@ test('a player\'s own ReShade as dxgi.dll (no Chicken) is refused before OptiSca
   } finally { fs.rmSync(base, { recursive: true, force: true }); }
 });
 
+test('a ReShade64.dll that frame pacing placed is taken over like the Feeder\'s; an unclaimed one is not', async () => {
+  const base = tmp('relimiter-reshade');
+  try {
+    const cache = await cacheWith(base);
+    const game = path.join(base, 'game');
+    write(game, 'Game.exe', 'x');
+    write(game, 'dxgi.dll', 'OptiScaler build');
+    write(game, 'ReShade64.dll', 'ReShade (frame pacing)');
+    write(game, 'relimiter.addon64', 'ReLimiter');
+    write(game, 'nvngx_dlssnr.dll', 'the model');
+    const removeOpti = async (d) => { fs.rmSync(path.join(d, 'dxgi.dll')); return { removed: ['dxgi.dll'], failed: [] }; };
+    // Nobody vouches for it: refused, as before.
+    await assert.rejects(() => dfc.switchToDfc(game, cache, { removeOptiScaler: removeOpti }), /ReShade64\.dll here is not this app's/);
+    // relimiter.placedReShade vouches for it: the swap goes ahead and ReShade becomes the proxy.
+    await dfc.switchToDfc(game, cache, { removeOptiScaler: removeOpti, reshadeIsOurs: () => true });
+    assert.strictEqual(read(game, 'dxgi.dll'), 'ReShade (frame pacing)');
+    assert.strictEqual(has(game, 'relimiter.addon64'), true, 'the add-on stays, riding on Chicken\'s ReShade');
+  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+});
+
 test('the NR model stays through the swap: a re-run needs no Settings path', async () => {
   const base = tmp('nr');
   try {

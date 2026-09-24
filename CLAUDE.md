@@ -55,6 +55,16 @@ itself each forbid exactly that, and the MIT notice travels with the binary.
   plain non-proxying `ReShade64.dll`, and `[Plugins] LoadReshade=true` makes OptiScaler load it. That
   condition in `autoConfigureGame` is no longer Feeder-only. It is deliberately **separate** from
   `dlss5Only`: a frame pacer is not an upscaler, and turning on pacing must not cost the user theirs.
+- **Any 64-bit game, Feeder or not, DLSS 5 installed or not** (`relimiter:install`). Three shapes:
+  OptiScaler here -> plain `ReShade64.dll` + `LoadReshade=true`; no OptiScaler -> ReShade becomes the
+  game's own proxy (`dxgi.dll`, `d3d9.dll` on DX9; `promoteToStandalone`, recorded as `reshadeProxy`),
+  and `game:install` / the Chicken swap call `demoteStandaloneReShade` first so two proxies never meet;
+  Chicken -> the add-on joins Chicken's ReShade (`dfc.reshadeProxyOf`), which pacing never moves or
+  deletes. A `ReShade64.dll` pacing placed is recorded (`reshadePlaced`) so `switchToDfc` takes it over
+  like the Feeder's (`reshadeIsOurs`). Proxy files are identified by PE OriginalFilename
+  (`isReShadeProxy`), never `feeder.isReShadeDll` -- OptiScaler.dll contains the string "ReShade" too.
+- **The binary comes from the fork's latest release first** (only its build exports `ReLimiterGetApi`,
+  without which the engine's Pacing page stays hidden), then upstream RankFTW/ReLimiter.
 - **`[DlssNr] AutoScale` with `AutoScaleMode=2` and ReLimiter together destroy the image.** Mode 2
   ("Aim at -> Frame rate") is a closed loop that moves the NR model's working resolution to reach an
   FPS target; ReLimiter holds FPS by sleeping, so the target never reads as met and the model sheds
