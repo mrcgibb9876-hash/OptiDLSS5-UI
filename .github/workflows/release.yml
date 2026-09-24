@@ -258,6 +258,27 @@ jobs:
           dist/latest.yml
           dist/OptiScaler_DLSSNR-*.zip
 
+    # TRANSITION ONLY. Copies installed before the move still read THIS repo's latest.yml, so they
+    # would never hear of a release that exists only in the releases repo. The same build goes here
+    # too; installing it moves them over, because it reads the releases repo from then on. Once this
+    # repo is private these copies are invisible and harmless, and this step can be deleted when
+    # nobody is left on a version from before the move.
+    - name: Publish here too (hand-over for older installs)
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ inputs.tag }}
+        name: ${{ steps.title.outputs.title }}
+        prerelease: ${{ inputs.prerelease }}
+        body: |
+          This build moves the app's downloads to [OptiDLSS5-UI-releases](https://github.com/mrcgibb9876-hash/OptiDLSS5-UI-releases/releases/latest). Updates keep arriving on their own; for a fresh download, go there.
+        files: |
+          dist/*.exe
+          dist/*.blockmap
+          dist/latest.yml
+          dist/OptiScaler_DLSSNR-*.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     # A card in the Discord server's #announcements once the release is live. The webhook URL lives
     # in the DISCORD_RELEASE_WEBHOOK secret; without it (a fork) this step does nothing.
     #
