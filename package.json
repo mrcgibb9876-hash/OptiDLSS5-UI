@@ -1,7 +1,7 @@
 {
   "name": "optidlss5-ui",
   "productName": "OptiDLSS5-UI",
-  "version": "2.13.6",
+  "version": "2.13.7",
   "engineVersion": "v2.2.15",
   "description": "Per-game OptiScaler / DLSS Ray Reconstruction install manager",
   "main": "src/main.js",
