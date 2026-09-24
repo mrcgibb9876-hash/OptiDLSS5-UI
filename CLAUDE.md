@@ -41,6 +41,39 @@ fixed URL loses its pin. Tests that serve or cache a stand-in for a pinned URL u
 `needs-info` issue once our last question has gone 14 days unanswered. It never closes
 `fixed-in-next-release`. The logic is in `tools/triage/triage.js`, tested in `test/triage.test.js`.
 
+## Frame pacing (ReLimiter) is one or the other with our FPS targeting
+
+`src/relimiter.js` places ReLimiter, a frame-pacing ReShade add-on for VRR displays
+(RankFTW/ReLimiter; Mat, Laz, Rank). It is **MIT**, which is the only reason this app may carry and
+place a third-party binary at all -- Deep Fried Chicken, LumeniteFX, the AMD installer and ReShade
+itself each forbid exactly that, and the MIT notice travels with the binary.
+
+- **ReShade is not optional and must not be forked out.** ReLimiter is *driven* by ReShade's events
+  (`init_device`, `init_swapchain`, `set_fullscreen_state`, and `present`, which is the limiter's
+  heartbeat); its `DoInit` returns false outright with no ReShade module in the process. The
+  arrangement is `feeder.js`'s, unchanged: OptiScaler keeps the proxy slot, ReShade goes down as a
+  plain non-proxying `ReShade64.dll`, and `[Plugins] LoadReshade=true` makes OptiScaler load it. That
+  condition in `autoConfigureGame` is no longer Feeder-only. It is deliberately **separate** from
+  `dlss5Only`: a frame pacer is not an upscaler, and turning on pacing must not cost the user theirs.
+- **`[DlssNr] AutoScale` with `AutoScaleMode=2` and ReLimiter together destroy the image.** Mode 2
+  ("Aim at -> Frame rate") is a closed loop that moves the NR model's working resolution to reach an
+  FPS target; ReLimiter holds FPS by sleeping, so the target never reads as met and the model sheds
+  resolution forever. Neither feature looks broken. `relimiter.nrConflict` detects that exact pair
+  and `autoConfigureGame` turns `AutoScale` off as a forced setting. Modes 0 and 1 are **cost**
+  budgets, not FPS chasing, and are left alone. The engine's Pacing page carries the same note.
+- **Vulkan is refused, not guessed.** ReShade runs there only as a machine-wide implicit layer that
+  its own installer registers under HKLM, attaching only to exes in `ReShadeApps.ini`, and this app
+  can write neither -- so `missing()` returns `vulkan-layer-registration` however many files are in
+  the folder.
+- The add-on is identified by **content** (a PE header, over a size floor, carrying both `ReLimiter`
+  and `AddonInit`), never by file name, the same rule `isAddonReShadeDll` follows. "Complete" needs
+  the **Add-on** build of ReShade: the plain build carries the same version and product name and
+  simply never loads an add-on. Remove takes back the add-on and our marker and leaves ReShade alone.
+- The engine reads the add-on through the host API on the fork
+  (`mrcgibb9876-hash/ReLimiter`, `ReLimiterGetApi`, vendored as `dlssnr/ReLimiter_Api.h`), and the
+  Pacing page draws itself from `describe_setting` rather than a table -- so a new add-on setting
+  appears in the overlay with no engine change. That API has **not** been offered upstream yet.
+
 ## Keep the library fast
 
 `test/perf-library.test.js` syncs a 50-game fake library three times and fails if a pass exceeds its
