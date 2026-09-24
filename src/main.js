@@ -12,6 +12,7 @@ const { scanForGames } = discover;
 const framegen = require('./framegen');
 const injector = require('./injector');
 const feeder = require('./feeder');
+const relimiter = require('./relimiter');
 const addons = require('./addons');
 const lossless = require('./lossless');
 const reengine = require('./reengine');
@@ -6276,11 +6277,20 @@ async function autoConfigureGame(dir, exePath) {
   let forced = dlss5Only
     ? patchIniValues(iniPath, [...(optiFgOn ? optiFgForced(optiFg) : [...DLSS5_ONLY_FORCED, ...optiFgDisarm(iniPath)]), ...keepGamesOwnDlss(upscalerApis)])
     : [];
-  if (feederGame && feeder.feederDeployed(dir)) {
+  // ReLimiter is a ReShade add-on and is driven by ReShade's present event, so it needs the same
+  // arrangement the Feeder does -- and on an ordinary DX12 game there is no Feeder to trigger it.
+  // Hence this condition is "anything here needs ReShade loaded", not "the Feeder is deployed".
+  // Deliberately NOT tied to dlss5Only above: ReLimiter is a frame pacer, not an upscaler, so adding
+  // it must never narrow OptiScaler into NR-only mode. A user who turns on frame pacing and silently
+  // loses their upscaler has been handed a worse app.
+  const relimiterHere = relimiter.deployed(dir);
+  if ((feederGame && feeder.feederDeployed(dir)) || relimiterHere) {
     // Only where ReShade is the plain ReShade64.dll beside the exe. As the game's opengl32.dll
     // or as the Vulkan layer it is already in the process, and a second copy loaded by
     // OptiScaler would be two ReShades.
-    const local = feeder.feederReShadeMode(dir) === 'local';
+    const local = feeder.feederDeployed(dir)
+      ? feeder.feederReShadeMode(dir) === 'local'
+      : relimiter.reshadeModeFor(api || 'dx12') === 'local';
     forced = [...forced, ...patchIniValues(iniPath, local ? LOAD_RESHADE_FORCED : [{ section: 'Plugins', key: 'LoadReshade', value: 'false' }])];
     // Neural Rendering before Super Resolution: off, on a Feeder game specifically.
     //
