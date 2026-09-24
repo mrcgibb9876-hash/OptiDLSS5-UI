@@ -175,6 +175,12 @@ function diagnose(ctx) {
     if (gone.length) return fix('feeder-incomplete', 'install', { missing: gone.join(', '), count: gone.length });
   }
   // The experimental legacy routes: dgVoodoo2 or the 32-bit helper still to place. Install does both.
+  // OptiScaler's own DLL is missing from the helper, and this app's marker says it put it there. So
+  // the install did not go wrong -- something removed the file afterwards, and antivirus is what does
+  // that to a 64-bit winmm.dll sitting beside a game exe. Named rather than offered as Install:
+  // rewriting a file that is being taken away is a loop, not a fix (Max Payne 2, 2026-09-24 -- the
+  // Feeder's own window opened and the DLSS 5 overlay was never in it).
+  if (route.route === 'feeder32' && route.hostOptiScalerDllGone) return out('step', 'host32-opti-dll-gone');
   if (route.route === 'feeder32' && !route.complete) return fix('not-installed', 'install');
   // DXVK in dgVoodoo2's place counts as the wrapper being there: offering Install here would put
   // dgVoodoo2 back over the swap the player just chose.

@@ -608,6 +608,47 @@ test('emulators: set up for the renderer that suits DLSS 5 best, never OpenGL wh
   assert.equal(emulators.profileFor('snes9x-x64.exe').apis[0], 'vulkan', 'Snes9x\'s "Direct3D" is D3D9');
 });
 
+test('the helper is not set up when OptiScaler\'s own DLL is gone from it (Max Payne 2, 2026-09-24)', () => {
+  // hostOptiScaler used to ask for OptiScaler.ini and nvngx_dlssnr.dll. Those are exactly the two
+  // that survive when the one that matters does not: the reporter's host64 held the ini, the model,
+  // the forwarder, OptiScaler_OpticalFlow.dll and the Licenses folder -- everything except
+  // winmm.dll, which is the OptiScaler DLL the helper imports. So the route reported complete, the
+  // Feeder's window opened, and the DLSS 5 overlay was never in it.
+  const dir = scratchDir('host64-no-winmm');
+  const host = path.join(dir, 'host64');
+  write(dir, 'dlss5-feed.addon32', 'x');
+  write(host, 'dlss5-feed-host64.exe', 'x');
+  write(host, 'OptiScaler.ini', 'x');
+  write(host, 'nvngx_dlssnr.dll', 'x');
+  write(dir, legacy.MARKER, JSON.stringify({
+    version: 1, dirs: ['host64'], backups: [],
+    files: ['host64/winmm.dll', 'host64/OptiScaler.ini', 'host64/nvngx_dlssnr.dll'],
+    host32: { api: 'dx9', reshadeName: 'd3d9.dll' },
+  }));
+
+  const gone = legacy.status(dir);
+  assert.equal(gone.hostOptiScaler, false, 'the ini and the model alone are not a set-up helper');
+  assert.equal(gone.hostOptiScalerDll, false);
+  assert.equal(gone.hostOptiScalerDllGone, true, 'our marker lists it, so it was removed rather than never placed');
+
+  // Put it back and the helper is set up again, and nothing reports it as removed.
+  write(host, 'winmm.dll', 'x');
+  const ok = legacy.status(dir);
+  assert.equal(ok.hostOptiScaler, true);
+  assert.equal(ok.hostOptiScalerDll, true);
+  assert.equal(ok.hostOptiScalerDllGone, false);
+
+  // A folder this app never deployed to is missing the file too, and that is NOT the same thing:
+  // there is nothing to allow in Windows Security, it simply was never installed.
+  const fresh = scratchDir('host64-never');
+  write(path.join(fresh, 'host64'), 'OptiScaler.ini', 'x');
+  write(path.join(fresh, 'host64'), 'nvngx_dlssnr.dll', 'x');
+  write(fresh, legacy.MARKER, JSON.stringify({ version: 1, dirs: ['host64'], backups: [], files: [], host32: { api: 'dx9' } }));
+  const never = legacy.status(fresh);
+  assert.equal(never.hostOptiScaler, false);
+  assert.equal(never.hostOptiScalerDllGone, false, 'never placed is not removed');
+});
+
 test('emulators: a renderer the emulator does not have is not what it ran on (RPCS3, 2026-09-23)', () => {
   const dir = scratchDir('emu-rpcs3-dx12');
   write(dir, 'rpcs3.exe', 'x');

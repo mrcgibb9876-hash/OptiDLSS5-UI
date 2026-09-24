@@ -1291,6 +1291,7 @@ function helpWords(diag) {
     case 'init-no-feature': return t('DLSS initialised but no feature was ever created. This is not a known case. Save the bundle to share, or ask the AI.');
     case 'vulkan-layer-missing': return t('On Vulkan, the DLSS5 Feeder runs inside ReShade, and ReShade only reaches a Vulkan game as a layer installed for the whole PC. None is installed, so the Feeder never loaded and nothing called DLSS. Run ReShade\'s own installer (the version with add-on support), pick this exe, choose Vulkan, then Install here again. Or switch the emulator to Direct3D 11, if it has it, and pick DX11 in Edit: that needs no layer. Not OpenGL: DLSS 5 cannot draw its panel there.');
     case 'vulkan-layer-no-addon': return t('ReShade is installed as a Vulkan layer on this PC, but a build without add-on support, so the DLSS5 Feeder (an add-on) cannot load and nothing called DLSS. Reinstall ReShade with add-on support (its installer: "Enable loading of add-ons"), then Install here again.');
+    case 'host32-opti-dll-gone': return t('OptiScaler\'s own file is missing from the helper folder. This app put it there -- its install record lists host64\\winmm.dll -- and it is not on disk now, so something removed it after the install. That is almost always antivirus: a 64-bit winmm.dll appearing beside a game exe looks exactly like a DLL hijack, and Windows Security quarantines it silently. Everything else is fine, which is why the Feeder\'s own window opens and the DLSS 5 overlay is not in it. Open Windows Security > Protection history, find the item for winmm.dll and choose Allow, add the game folder to the exclusions, then press Install here again. Pressing Install without doing that just puts the file back for it to be taken again.');
     case 'vulkan-layer-blacklisted': return t('{exe} refuses Vulkan layers. Its engine keeps a blacklist and ReShade is on it, so the layer is installed correctly, this exe is on its list, and it still never attaches -- nothing here is broken. Add {arg} to the game\'s launch arguments: in Steam, right-click the game > Properties > Launch Options; in a desktop shortcut, after the closing quote of the exe path. Then launch again.', { ...v, arg: '+r_allowBlackListedLayers 1' });
     case 'vulkan-layer-not-loaded': return t('ReShade\'s Vulkan layer with add-on support is installed, but it did not load in this program: the DLSS5 Feeder wrote no log at all. Run ReShade\'s installer once more for this exact exe and choose Vulkan (the layer only runs for programs it was set up for), check NVIDIA Smooth Motion is off for it, then launch again.');
     case 'vulkan-layer-app-not-listed': return t('ReShade\'s Vulkan layer with add-on support is installed, but {exe} is not on its app list (ReShadeApps.ini next to the layer), so the layer stays inert in this game: no overlay, no DLSS5 Feeder, no log. ReShade\'s own installer adds it -- run it, pick this exact exe, choose Vulkan and keep "Enable loading of add-ons" ticked -- then launch again.', v);
@@ -1434,6 +1435,7 @@ function helpSteps(diag) {
     case 'vulkan-layer-not-loaded': return [t('Run ReShade\'s installer for this exe, choosing Vulkan'), t('Turn NVIDIA Smooth Motion off for it'), t('Launch again')];
     case 'vulkan-layer-app-not-listed': return [t('Run ReShade\'s installer for this exe, choosing Vulkan'), t('Keep "Enable loading of add-ons" ticked'), launch];
     case 'vulkan-layer-blacklisted': return [t('Add {arg} to the launch arguments', { arg: '+r_allowBlackListedLayers 1' }), t('Steam: Properties > Launch Options. A shortcut: after the exe path'), launch];
+    case 'host32-opti-dll-gone': return [t('Windows Security > Protection history: Allow the winmm.dll item'), t('Add the game folder to the exclusions'), t('Press Install here again')];
     case 'opti-proxy-name': return fixIt(t('Press Fix it (moves OptiScaler to {to})', v));
     case 'opti-not-routed': return fixIt(t('Press Fix it (restores the NGX redirect keys)'));
     case 'dxvk-blocked-game': return [t('Press Fix it -- dgVoodoo2 goes back in where DXVK was'), launch];
@@ -1545,6 +1547,7 @@ function helpShort(diag) {
     case 'feed-vulkan-interop': return t('Vulkan interop extensions missing -- the Feeder stopped');
     case 'fix-failed': return t('Fix did not help -- no known fix');
     case 'vulkan-layer-blacklisted': return t('{exe} blocks Vulkan layers -- add a launch argument', v);
+    case 'host32-opti-dll-gone': return t('OptiScaler was removed from host64 -- check antivirus');
     case 'dlss-no-nr': case 'init-no-feature': case 'no-hook': default: return t('Not working -- no known fix');
   }
 }

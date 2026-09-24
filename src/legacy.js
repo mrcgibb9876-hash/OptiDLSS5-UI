@@ -135,14 +135,32 @@ function writeMarker(dir, marker) {
   fs.writeFileSync(path.join(dir, MARKER), JSON.stringify(marker, null, 2), 'utf8');
 }
 
+// The OptiScaler DLL inside the helper, under the name the helper imports (deployHost32 renames
+// OptiScaler.dll to this). Nothing else in host64\ makes OptiScaler load: the ini configures it, the
+// model is what it runs, the forwarder is what it calls -- this is the module itself.
+const HOST_OPTISCALER_DLL = 'winmm.dll';
+
 function status(dir) {
   const marker = readMarker(dir);
   const host = path.join(dir, HOST_DIR);
+  // hostOptiScaler used to ask for OptiScaler.ini and nvngx_dlssnr.dll and stop there, which are the
+  // two files that are still present when the one that matters is gone. Max Payne 2, 2026-09-24: the
+  // helper's window opened, the Feeder cast worked, and the DLSS 5 overlay was never in it -- because
+  // host64\winmm.dll was not on disk. The install marker listed it, so this app had written it; the
+  // game lives under Downloads in a repack folder, and a 64-bit winmm.dll appearing beside an exe
+  // there is the exact shape antivirus quarantines. Everything reported complete and nothing said why.
+  const optiDll = fs.existsSync(path.join(host, HOST_OPTISCALER_DLL));
+  // Placed by us and now absent is not the same as never installed: re-running Install rewrites a file
+  // that something is removing, which is a loop rather than a fix. Named separately so Game Help can
+  // say so (gamehelp 'host32-opti-dll-gone').
+  const claimed = !!(marker && (marker.files || []).some((f) => String(f).toLowerCase() === `${HOST_DIR}/${HOST_OPTISCALER_DLL}`.toLowerCase()));
   return {
     deployed: !!marker,
     host32: !!(marker && marker.host32),
     dgVoodoo: !!(marker && marker.dgVoodoo),
-    hostOptiScaler: fs.existsSync(path.join(host, 'OptiScaler.ini')) && fs.existsSync(path.join(host, 'nvngx_dlssnr.dll')),
+    hostOptiScaler: optiDll && fs.existsSync(path.join(host, 'OptiScaler.ini')) && fs.existsSync(path.join(host, 'nvngx_dlssnr.dll')),
+    hostOptiScalerDll: optiDll,
+    hostOptiScalerDllGone: claimed && !optiDll,
     feeder32: fs.existsSync(path.join(dir, 'dlss5-feed.addon32')) && fs.existsSync(path.join(host, 'dlss5-feed-host64.exe')),
     marker,
   };
@@ -1383,6 +1401,7 @@ async function removeLegacy(dir) {
 }
 
 module.exports = {
+  HOST_OPTISCALER_DLL,
   MARKER, HOST_DIR, DGVOODOO, PARK_SUFFIX, planFor, dxvkReplacesNative, status, readMarker, ensureDgVoodoo, importDgVoodooZip, cachedDgVoodoo,
   isDgVoodooZip, configureDgVoodoo, DG_COLORSPACE_VALID, ensureDgVoodooWindowed, ensureCastKey, refreshFeeder32, deployDgVoodoo, deployHost32, removalPlan, removeLegacy,
   parkReShadeProxy, unparkReShadeProxy, swapNativeToDxvk, swapDxvkToNative, setUpVulkanLayer32, vulkanLayerRecord, unlistVulkanLayerApp,
