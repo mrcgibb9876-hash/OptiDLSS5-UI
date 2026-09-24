@@ -291,8 +291,14 @@ function diagnose(ctx) {
     // DLSS could not be created and OptiScaler substituted another upscaler without saying so.
     // The neural pass still runs on top, which is why this used to read as a clean run.
     case 'sr-backend-fallback':
+      // The decoded NGX result goes with the code. The two things this used to tell people to check
+      // -- nvngx_dlss.dll beside the exe, and the game's own setting asking for DLSS -- were both
+      // already right for the Uncharted reporter (2026-09-24), because their result was
+      // UnableToInitializeFeature: NGX had the DLL and refused anyway. A code with no name sends
+      // people to re-check what they have already done.
       return out('step', 'sr-backend-fallback', {
         backend: run.detail || '', result: run.srCreateResult || '',
+        why: run.srCreateResultName || '',
       });
     case 'nr-ran':
       // The 32-bit route's one surprise, and it only bites once everything works: OptiScaler is

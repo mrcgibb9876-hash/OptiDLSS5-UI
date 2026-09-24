@@ -98,6 +98,39 @@ async function readTail(file, max = TAIL_READ) {
 // GPU is not always a number: the engine says "n/a (timer unreliable)", "not read yet" or
 // "n/a (no queue)" when it cannot trust the timestamp query, and those are passed through as a
 // reason rather than turned into a fake 0.00 ms.
+// NVSDK_NGX_Result, transcribed from nvsdk_ngx_defs.h in the engine's DLSS SDK: 0xBAD00000 is the
+// failure base and the low nibble is the reason. The text is NVIDIA's own comment for each value,
+// not a gloss of ours -- if it reads wrong it is wrong upstream, and a reader can check it against
+// the header. Anything unrecognised comes back null rather than guessed at: a wrong name is worse
+// than the hex, which at least searches.
+const NGX_RESULTS = {
+  0x1: 'Success',
+  0xBAD00001: 'FeatureNotSupported -- feature is not supported on current hardware',
+  0xBAD00002: 'PlatformError -- check the d3d12 debug layer log for more information',
+  0xBAD00003: 'FeatureAlreadyExists -- feature with given parameters already exists',
+  0xBAD00004: 'FeatureNotFound -- feature with provided handle does not exist',
+  0xBAD00005: 'InvalidParameter -- invalid parameter was provided',
+  0xBAD00006: 'ScratchBufferTooSmall -- provided buffer is too small',
+  0xBAD00007: 'NotInitialized -- SDK was not initialized properly',
+  0xBAD00008: 'UnsupportedInputFormat -- unsupported format used for input/output buffers',
+  0xBAD00009: 'RWFlagMissing -- feature input/output needs RW access (UAV)',
+  0xBAD0000A: 'MissingInput -- feature was created with specific input but none is provided',
+  0xBAD0000B: 'UnableToInitializeFeature -- feature is not available on the system',
+  0xBAD0000C: 'OutOfDate -- NGX system libraries are old and need an update',
+  0xBAD0000D: 'OutOfGPUMemory -- feature requires more GPU memory than is available',
+  0xBAD0000E: 'UnsupportedFormat -- format used in input buffer(s) is not supported by feature',
+  0xBAD0000F: 'UnableToWriteToAppDataPath -- InApplicationDataPath cannot be written to',
+  0xBAD00010: 'UnsupportedParameter -- unsupported parameter (e.g. an unsupported scaling factor)',
+  0xBAD00011: 'Denied -- the feature or application was denied',
+  0xBAD00012: 'NotImplemented -- the feature or functionality is not implemented',
+};
+
+function ngxResultName(hex) {
+  if (!hex) return null;
+  const n = Number.parseInt(String(hex), 16);
+  return Number.isNaN(n) ? null : NGX_RESULTS[n] || null;
+}
+
 async function nrTiming(optiDir) {
   const file = path.join(optiDir, 'OptiScaler.log');
   let stat = null;
@@ -278,9 +311,14 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   // crashed -- none of which was visible anywhere in this app.
   const srFallback = /TryCreateOptiFeature Feature '([^']+)' initialization failed falling back to ([^\r\n]+)/.exec(opti);
   const srBackendFallback = srFallback ? { from: srFallback[1], to: srFallback[2].trim() } : null;
-  // The NGX result behind it, kept verbatim: BAD0000B is FAIL_UnableToInitializeFeature, and the
-  // code is the one thing a bug report upstream needs.
+  // The NGX result behind it, kept verbatim, because the code is the one thing a bug report upstream
+  // needs -- and decoded, because a bare BAD0000B is worth nothing to the person reading the report.
+  // Uncharted (2026-09-24) is why: the answer was BAD0000B, the advice was "check nvngx_dlss.dll is
+  // beside the exe and that the game asks for DLSS", and both were already true. The code says
+  // FAIL_UnableToInitializeFeature, which NVIDIA's own header comments "Feature is not available on
+  // the system" -- a different question entirely from the two we sent them to check.
   const srCreateResult = (/_CreateFeature result: ([0-9A-Fa-f]{8})/.exec(opti) || [])[1] || null;
+  const srCreateResultName = ngxResultName(srCreateResult);
   // Every frame handed to the upscaler was dropped on the floor. OptiScaler refuses to dispatch
   // when it cannot put the root signature back (D3D12_Hooks.cpp CanRestoreRootSignature), which on
   // the pd-upscaler route is always: the DLSS call arrives on PureDark's own command list, which
@@ -495,6 +533,7 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     dlssRuntimeStub,
     srBackendFallback,
     srCreateResult,
+    srCreateResultName,
     upscaleSkipped,
     feedInvalidRedist,
     feedMvProblem,
@@ -618,7 +657,10 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = 
     // The fault stack rides in run.detail on this verdict, printed beside it above.
     if (run.feedEvaluateCrash) add('neural model', 'crashed in its evaluate, and the feed stopped');
     if (run.feedInvalidRedist) add('d3d12', 'every device create refused with INVALID_REDIST');
-    if (run.srBackendFallback) add('upscaler', `DLSS could not be created${run.srCreateResult ? ` (${run.srCreateResult})` : ''}, fell back to ${run.srBackendFallback.to}`);
+    if (run.srBackendFallback) {
+      const why = [run.srCreateResult, run.srCreateResultName].filter(Boolean).join(': ');
+      add('upscaler', `DLSS could not be created${why ? ` (${why})` : ''}, fell back to ${run.srBackendFallback.to}`);
+    }
     if (run.upscaleSkipped) add('upscaler', `${run.upscaleSkipped} dispatches skipped (root signature)`);
     if (run.dlssRuntimeMissing) add('nvngx_dlss.dll', 'not beside the exe -- OptiScaler disabled DLSS');
     if (run.dlssRuntimeStub) add('nvngx_dlss.dll', run.dlssRuntimeStub + ' bytes -- too small to be a DLL, so nothing can load it');
@@ -701,7 +743,12 @@ function withDigest(body, digest) {
   return `${text.trimEnd()}\n\n${digest}`;
 }
 
-const BUNDLE_FILES = ['OptiScaler.log', 'OptiScaler.ini', 'ReShade.log', 'ReShade.ini', 'ReShadePreset.ini', 'dlss5-feed.log', 'dlss5-feed.cfg', '.optiscaler-manager-install.json', '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.dlss5ui-api.json', '.dlss5ui-lossless.json', '.dlss5ui-legacy.json', '.dlss5ui-translation.json', '.dlss5ui-engine.json', '.dlss5ui-framegen.json'];
+// nvngx.log is NGX's OWN log, written beside the exe because OptiScaler passes "." as
+// InApplicationDataPath. When NGX refuses to create DLSS it is the only file that says why -- the
+// engine log carries the result code and nothing behind it. Uncharted (2026-09-24) had a 42 KB
+// nvngx.log sitting in the folder while the bundle collected everything except it, so the report
+// could say BAD0000B and not one word about the cause.
+const BUNDLE_FILES = ['OptiScaler.log', 'OptiScaler.ini', 'nvngx.log', 'ReShade.log', 'ReShade.ini', 'ReShadePreset.ini', 'dlss5-feed.log', 'dlss5-feed.cfg', '.optiscaler-manager-install.json', '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.dlss5ui-api.json', '.dlss5ui-lossless.json', '.dlss5ui-legacy.json', '.dlss5ui-translation.json', '.dlss5ui-engine.json', '.dlss5ui-framegen.json'];
 
 function folderListing(dir) {
   try {
@@ -781,4 +828,4 @@ async function collectSupportBundle(dir, { zipPath, extra = {}, execFileAsync, o
   return { zipPath, files: copied, run };
 }
 
-module.exports = { analyzeRun, collectSupportBundle, gatherSupportFiles, reportDigest, withDigest, DIGEST_MARKER, unrealCrashNear, nrTiming, dlssRuntimeStubBytes, DLSS_RUNTIME_MIN_BYTES };
+module.exports = { analyzeRun, ngxResultName, collectSupportBundle, gatherSupportFiles, reportDigest, withDigest, DIGEST_MARKER, unrealCrashNear, nrTiming, dlssRuntimeStubBytes, DLSS_RUNTIME_MIN_BYTES };
