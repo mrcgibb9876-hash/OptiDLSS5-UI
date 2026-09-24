@@ -1739,7 +1739,20 @@ function configureFeedCfg(dir, { castKey = CAST_KEY_INSERT, castMods = CAST_MODS
     while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
     lines.push(`cast_key=${castKey}`);
   }
-  if (!hasMods) setLine(lines, 'cast_mods', castMods);
+  // Whenever the key is OURS, the modifiers are ours too -- written every time, not only when the
+  // line is absent.
+  //
+  // `if (!hasMods)` was right while our key was Alt+Home and the modifier we wanted was the one
+  // already there. It stopped being right when the key moved to bare Insert (v2.5.4): since Feeder
+  // 1.16.0-beta.6 the match is exact in BOTH directions, so a cfg still carrying cast_mods=1 from an
+  // older install of ours gets cast_key=Insert written over it and then needs ALT+Insert to show the
+  // cast -- while the engine's panel, every route text and the docs all say plain Insert. The player
+  // presses Insert, nothing happens, and nothing anywhere says why.
+  //
+  // The two paths above are exactly the ones where the key is not the player's: a cast_key of 0
+  // ("none", what the Feeder ships) and no cast_key line at all. A key the player chose returns
+  // above with kept: true and never reaches here, so their modifiers are still safe.
+  setLine(lines, 'cast_mods', castMods);
 
   fs.writeFileSync(cfgPath, `${lines.join('\n')}\n`, 'utf8');
   return { configured: true, castKey, castMods, kept: false };

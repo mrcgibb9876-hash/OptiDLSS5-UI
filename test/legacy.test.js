@@ -549,6 +549,24 @@ test('the 32-bit in-game panel gets Insert, and a key the player chose is left a
     assert.equal(legacy.ensureCastKey(game), false, 'and only once');
   }
 
+  // A stale cast_mods from an older install of ours, on a key that is NOT ours to keep. The key was
+  // reset to 0 ("none", what the Feeder ships) but the Alt we used to write stayed behind. Writing
+  // cast_key=Insert over it and leaving cast_mods=1 asks for ALT+Insert, and since beta.6 matches
+  // exactly -- so bare Insert, which is what the engine's panel and every route text promise, does
+  // nothing at all. Reported 2026-09-24: "our panel is not opening" on the 32-bit route.
+  write(game, 'dlss5-feed.cfg', 'enabled=1\ncast_key=0\ncast_mods=1\n');
+  assert.equal(legacy.ensureCastKey(game), true);
+  const stale = fs.readFileSync(path.join(game, 'dlss5-feed.cfg'), 'utf8');
+  assert.match(stale, /^cast_key=45$/m);
+  assert.match(stale, /^cast_mods=0$/m, 'our key takes our modifiers, not the ones left lying there');
+
+  // Same with no cast_key line at all but a cast_mods left behind.
+  write(game, 'dlss5-feed.cfg', 'enabled=1\ncast_mods=1\n');
+  assert.equal(legacy.ensureCastKey(game), true);
+  const orphan = fs.readFileSync(path.join(game, 'dlss5-feed.cfg'), 'utf8');
+  assert.match(orphan, /^cast_key=45$/m);
+  assert.match(orphan, /^cast_mods=0$/m);
+
   // Modifiers the player chose in the Feeder's own panel are theirs, even on our old key.
   write(game, 'dlss5-feed.cfg', 'enabled=1\ncast_key=36\ncast_mods=6\n');
   assert.equal(legacy.ensureCastKey(game), false);
