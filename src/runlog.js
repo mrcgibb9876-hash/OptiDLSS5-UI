@@ -131,6 +131,48 @@ function ngxResultName(hex) {
   return Number.isNaN(n) ? null : NGX_RESULTS[n] || null;
 }
 
+// nvngx.log is NGX's own log. Two things in it are worth reading, and one trap is worth avoiding.
+//
+// The trap first: NGX writes it into the process's WORKING directory, and only when its logging hooks
+// initialise, so the copy beside the exe can be from an entirely different launch. The Uncharted
+// bundle (2026-09-24) carried one that ended 25 hours before the failing run -- NGX wrote nothing at
+// all during the failure. Read as evidence about that run it is worse than having no log, so the age
+// is reported next to it, every time, rather than left for a reader to notice.
+//
+// The finding: NGX can be told to OVERRIDE a feature, and then it loads a snippet out of
+// C:\ProgramData\NVIDIA\NGX\models instead of the DLL beside the exe. That is the NVIDIA App's
+// "DLSS Override" and it applies to dlss, dlssg and dlssd -- the three this app installs and lets
+// people pick a version of. When it is on, the version the app placed is not the version the game
+// runs, and until now nothing said so.
+async function ngxLog(dir) {
+  const file = path.join(dir, 'nvngx.log');
+  try { fs.statSync(file); } catch { return null; }
+
+  const text = (await readTail(file)) || '';
+  // The log's OWN last timestamp, not the file's mtime: copying a bundle, zipping it or restoring it
+  // all rewrite mtime, and a stale log that claims to be current is the whole hazard here. NGX writes
+  // "[YYYY-MM-DD HH:MM:SS]" in LOCAL time with no zone, which is why the comparison below is coarse.
+  const stamps = [...text.matchAll(/^\[(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})\]/gm)];
+  const last = stamps.length ? stamps[stamps.length - 1] : null;
+  const lastAt = last ? `${last[1]} ${last[2]}` : null;
+
+  // "Feature <name> override enabled" -- NGXSecureLoadFeature.
+  const overrides = [...new Set([...text.matchAll(/Feature (\w+) override enabled/g)].map((m) => m[1]))];
+  // "app <id> feature <name> snippet: <path> version: <v>" is NGX stating what it actually loaded,
+  // per feature, and is the only line that settles which DLL is in play. Keyed by feature rather than
+  // taking the last match: the log lists dlss, then dlssg, then dlssd, so "the last one" answered a
+  // question about frame generation when the question was about the upscaler.
+  const snippets = {};
+  for (const m of text.matchAll(/app \w+ feature (\w+) snippet: (.+?) version: ([\d.]+)/g)) {
+    snippets[m[1]] = { path: m[2].trim(), version: m[3] };
+  }
+  const here = path.resolve(dir).toLowerCase();
+  for (const [name, snip] of Object.entries(snippets)) {
+    snip.fromGameFolder = snip.path.toLowerCase().startsWith(here);
+  }
+  return { lastAt, overrides, snippets };
+}
+
 async function nrTiming(optiDir) {
   const file = path.join(optiDir, 'OptiScaler.log');
   let stat = null;
@@ -273,6 +315,7 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     stat = feedStat;
   }
   const opti = (await readHead(optiPath)) || '';
+  const ngx = await ngxLog(dir);
 
   const runtime = await optiScalerRuntimeApi(optiDir);
   const nrDispatch = count(opti, /DlssNr_(?:Dx12|Vk)::Dispatch DLSS-NR (?:running|composition)/g);
@@ -506,6 +549,7 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   return {
     ran: true,
     at: stat.mtime.toISOString(),
+    ngx,
     runtimeApi: runtime ? runtime.api : null,
     nrDispatch,
     nrFrames,
@@ -679,6 +723,31 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = 
         // Not a guess about this run: only the broken build writes that line at all.
         v.handleGuard ? 'engine v2.2.14 skipped a feature by handle -- update the engine' : null,
       ].filter(Boolean).join('; '));
+    }
+    if (run.ngx) {
+      const n = run.ngx;
+      // Staleness first, and never omitted: a reader who takes a day-old NGX log for this run's own
+      // account of itself gets a confident wrong answer, which is how this nearly went (Uncharted,
+      // 2026-09-24 -- the log ended 25 hours before the failing run and NGX wrote nothing during it).
+      //
+      // NGX stamps local time with no zone while the run's own time is UTC, so a gap is only claimed
+      // when it is larger than any timezone offset could explain. 14 hours is the widest there is.
+      const runMs = Date.parse(run.at);
+      const logMs = n.lastAt ? Date.parse(n.lastAt.replace(' ', 'T') + 'Z') : NaN;
+      const hours = Number.isFinite(runMs) && Number.isFinite(logMs) ? (runMs - logMs) / 3600000 : null;
+      add('nvngx.log', n.lastAt
+        ? hours === null || Math.abs(hours) <= 14
+          ? `its last line is ${n.lastAt} (NGX's own clock) -- around this run`
+          : `its last line is ${n.lastAt}, about ${Math.round(Math.abs(hours))} h ${hours > 0 ? 'BEFORE' : 'after'} this run: it describes a DIFFERENT launch`
+        : 'present, but carries no timestamp to date it by');
+      if (n.overrides.length) {
+        add('ngx override', `${n.overrides.join(', ')} -- the driver loads its own copy, so the version this app placed is not the one the game runs`);
+      }
+      // The upscaler is the one that answers an upscaling question; the others follow if they differ.
+      for (const name of ['dlss', 'dlssd', 'dlssg']) {
+        const snip = n.snippets[name];
+        if (snip && !snip.fromGameFolder) add(`ngx ${name}`, `${snip.version} loaded from ${snip.path}`);
+      }
     }
     if (run.optiLogMissing) add('OptiScaler.log', 'absent -- the Feeder log is the whole run');
     if (!run.cleanExit) add('exit', 'no DLL_PROCESS_DETACH -- the process did not unload cleanly');
