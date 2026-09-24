@@ -98,6 +98,81 @@ async function readTail(file, max = TAIL_READ) {
 // GPU is not always a number: the engine says "n/a (timer unreliable)", "not read yet" or
 // "n/a (no queue)" when it cannot trust the timestamp query, and those are passed through as a
 // reason rather than turned into a fake 0.00 ms.
+// NVSDK_NGX_Result, transcribed from nvsdk_ngx_defs.h in the engine's DLSS SDK: 0xBAD00000 is the
+// failure base and the low nibble is the reason. The text is NVIDIA's own comment for each value,
+// not a gloss of ours -- if it reads wrong it is wrong upstream, and a reader can check it against
+// the header. Anything unrecognised comes back null rather than guessed at: a wrong name is worse
+// than the hex, which at least searches.
+const NGX_RESULTS = {
+  0x1: 'Success',
+  0xBAD00001: 'FeatureNotSupported -- feature is not supported on current hardware',
+  0xBAD00002: 'PlatformError -- check the d3d12 debug layer log for more information',
+  0xBAD00003: 'FeatureAlreadyExists -- feature with given parameters already exists',
+  0xBAD00004: 'FeatureNotFound -- feature with provided handle does not exist',
+  0xBAD00005: 'InvalidParameter -- invalid parameter was provided',
+  0xBAD00006: 'ScratchBufferTooSmall -- provided buffer is too small',
+  0xBAD00007: 'NotInitialized -- SDK was not initialized properly',
+  0xBAD00008: 'UnsupportedInputFormat -- unsupported format used for input/output buffers',
+  0xBAD00009: 'RWFlagMissing -- feature input/output needs RW access (UAV)',
+  0xBAD0000A: 'MissingInput -- feature was created with specific input but none is provided',
+  0xBAD0000B: 'UnableToInitializeFeature -- feature is not available on the system',
+  0xBAD0000C: 'OutOfDate -- NGX system libraries are old and need an update',
+  0xBAD0000D: 'OutOfGPUMemory -- feature requires more GPU memory than is available',
+  0xBAD0000E: 'UnsupportedFormat -- format used in input buffer(s) is not supported by feature',
+  0xBAD0000F: 'UnableToWriteToAppDataPath -- InApplicationDataPath cannot be written to',
+  0xBAD00010: 'UnsupportedParameter -- unsupported parameter (e.g. an unsupported scaling factor)',
+  0xBAD00011: 'Denied -- the feature or application was denied',
+  0xBAD00012: 'NotImplemented -- the feature or functionality is not implemented',
+};
+
+function ngxResultName(hex) {
+  if (!hex) return null;
+  const n = Number.parseInt(String(hex), 16);
+  return Number.isNaN(n) ? null : NGX_RESULTS[n] || null;
+}
+
+// nvngx.log is NGX's own log. Two things in it are worth reading, and one trap is worth avoiding.
+//
+// The trap first: NGX writes it into the process's WORKING directory, and only when its logging hooks
+// initialise, so the copy beside the exe can be from an entirely different launch. The Uncharted
+// bundle (2026-09-24) carried one that ended 25 hours before the failing run -- NGX wrote nothing at
+// all during the failure. Read as evidence about that run it is worse than having no log, so the age
+// is reported next to it, every time, rather than left for a reader to notice.
+//
+// The finding: NGX can be told to OVERRIDE a feature, and then it loads a snippet out of
+// C:\ProgramData\NVIDIA\NGX\models instead of the DLL beside the exe. That is the NVIDIA App's
+// "DLSS Override" and it applies to dlss, dlssg and dlssd -- the three this app installs and lets
+// people pick a version of. When it is on, the version the app placed is not the version the game
+// runs, and until now nothing said so.
+async function ngxLog(dir) {
+  const file = path.join(dir, 'nvngx.log');
+  try { fs.statSync(file); } catch { return null; }
+
+  const text = (await readTail(file)) || '';
+  // The log's OWN last timestamp, not the file's mtime: copying a bundle, zipping it or restoring it
+  // all rewrite mtime, and a stale log that claims to be current is the whole hazard here. NGX writes
+  // "[YYYY-MM-DD HH:MM:SS]" in LOCAL time with no zone, which is why the comparison below is coarse.
+  const stamps = [...text.matchAll(/^\[(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})\]/gm)];
+  const last = stamps.length ? stamps[stamps.length - 1] : null;
+  const lastAt = last ? `${last[1]} ${last[2]}` : null;
+
+  // "Feature <name> override enabled" -- NGXSecureLoadFeature.
+  const overrides = [...new Set([...text.matchAll(/Feature (\w+) override enabled/g)].map((m) => m[1]))];
+  // "app <id> feature <name> snippet: <path> version: <v>" is NGX stating what it actually loaded,
+  // per feature, and is the only line that settles which DLL is in play. Keyed by feature rather than
+  // taking the last match: the log lists dlss, then dlssg, then dlssd, so "the last one" answered a
+  // question about frame generation when the question was about the upscaler.
+  const snippets = {};
+  for (const m of text.matchAll(/app \w+ feature (\w+) snippet: (.+?) version: ([\d.]+)/g)) {
+    snippets[m[1]] = { path: m[2].trim(), version: m[3] };
+  }
+  const here = path.resolve(dir).toLowerCase();
+  for (const [name, snip] of Object.entries(snippets)) {
+    snip.fromGameFolder = snip.path.toLowerCase().startsWith(here);
+  }
+  return { lastAt, overrides, snippets };
+}
+
 async function nrTiming(optiDir) {
   const file = path.join(optiDir, 'OptiScaler.log');
   let stat = null;
@@ -240,6 +315,7 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     stat = feedStat;
   }
   const opti = (await readHead(optiPath)) || '';
+  const ngx = await ngxLog(dir);
 
   const runtime = await optiScalerRuntimeApi(optiDir);
   const nrDispatch = count(opti, /DlssNr_(?:Dx12|Vk)::Dispatch DLSS-NR (?:running|composition)/g);
@@ -278,9 +354,14 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   // crashed -- none of which was visible anywhere in this app.
   const srFallback = /TryCreateOptiFeature Feature '([^']+)' initialization failed falling back to ([^\r\n]+)/.exec(opti);
   const srBackendFallback = srFallback ? { from: srFallback[1], to: srFallback[2].trim() } : null;
-  // The NGX result behind it, kept verbatim: BAD0000B is FAIL_UnableToInitializeFeature, and the
-  // code is the one thing a bug report upstream needs.
+  // The NGX result behind it, kept verbatim, because the code is the one thing a bug report upstream
+  // needs -- and decoded, because a bare BAD0000B is worth nothing to the person reading the report.
+  // Uncharted (2026-09-24) is why: the answer was BAD0000B, the advice was "check nvngx_dlss.dll is
+  // beside the exe and that the game asks for DLSS", and both were already true. The code says
+  // FAIL_UnableToInitializeFeature, which NVIDIA's own header comments "Feature is not available on
+  // the system" -- a different question entirely from the two we sent them to check.
   const srCreateResult = (/_CreateFeature result: ([0-9A-Fa-f]{8})/.exec(opti) || [])[1] || null;
+  const srCreateResultName = ngxResultName(srCreateResult);
   // Every frame handed to the upscaler was dropped on the floor. OptiScaler refuses to dispatch
   // when it cannot put the root signature back (D3D12_Hooks.cpp CanRestoreRootSignature), which on
   // the pd-upscaler route is always: the DLSS call arrives on PureDark's own command list, which
@@ -468,6 +549,7 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   return {
     ran: true,
     at: stat.mtime.toISOString(),
+    ngx,
     runtimeApi: runtime ? runtime.api : null,
     nrDispatch,
     nrFrames,
@@ -495,6 +577,7 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     dlssRuntimeStub,
     srBackendFallback,
     srCreateResult,
+    srCreateResultName,
     upscaleSkipped,
     feedInvalidRedist,
     feedMvProblem,
@@ -618,7 +701,10 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = 
     // The fault stack rides in run.detail on this verdict, printed beside it above.
     if (run.feedEvaluateCrash) add('neural model', 'crashed in its evaluate, and the feed stopped');
     if (run.feedInvalidRedist) add('d3d12', 'every device create refused with INVALID_REDIST');
-    if (run.srBackendFallback) add('upscaler', `DLSS could not be created${run.srCreateResult ? ` (${run.srCreateResult})` : ''}, fell back to ${run.srBackendFallback.to}`);
+    if (run.srBackendFallback) {
+      const why = [run.srCreateResult, run.srCreateResultName].filter(Boolean).join(': ');
+      add('upscaler', `DLSS could not be created${why ? ` (${why})` : ''}, fell back to ${run.srBackendFallback.to}`);
+    }
     if (run.upscaleSkipped) add('upscaler', `${run.upscaleSkipped} dispatches skipped (root signature)`);
     if (run.dlssRuntimeMissing) add('nvngx_dlss.dll', 'not beside the exe -- OptiScaler disabled DLSS');
     if (run.dlssRuntimeStub) add('nvngx_dlss.dll', run.dlssRuntimeStub + ' bytes -- too small to be a DLL, so nothing can load it');
@@ -637,6 +723,31 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = 
         // Not a guess about this run: only the broken build writes that line at all.
         v.handleGuard ? 'engine v2.2.14 skipped a feature by handle -- update the engine' : null,
       ].filter(Boolean).join('; '));
+    }
+    if (run.ngx) {
+      const n = run.ngx;
+      // Staleness first, and never omitted: a reader who takes a day-old NGX log for this run's own
+      // account of itself gets a confident wrong answer, which is how this nearly went (Uncharted,
+      // 2026-09-24 -- the log ended 25 hours before the failing run and NGX wrote nothing during it).
+      //
+      // NGX stamps local time with no zone while the run's own time is UTC, so a gap is only claimed
+      // when it is larger than any timezone offset could explain. 14 hours is the widest there is.
+      const runMs = Date.parse(run.at);
+      const logMs = n.lastAt ? Date.parse(n.lastAt.replace(' ', 'T') + 'Z') : NaN;
+      const hours = Number.isFinite(runMs) && Number.isFinite(logMs) ? (runMs - logMs) / 3600000 : null;
+      add('nvngx.log', n.lastAt
+        ? hours === null || Math.abs(hours) <= 14
+          ? `its last line is ${n.lastAt} (NGX's own clock) -- around this run`
+          : `its last line is ${n.lastAt}, about ${Math.round(Math.abs(hours))} h ${hours > 0 ? 'BEFORE' : 'after'} this run: it describes a DIFFERENT launch`
+        : 'present, but carries no timestamp to date it by');
+      if (n.overrides.length) {
+        add('ngx override', `${n.overrides.join(', ')} -- the driver loads its own copy, so the version this app placed is not the one the game runs`);
+      }
+      // The upscaler is the one that answers an upscaling question; the others follow if they differ.
+      for (const name of ['dlss', 'dlssd', 'dlssg']) {
+        const snip = n.snippets[name];
+        if (snip && !snip.fromGameFolder) add(`ngx ${name}`, `${snip.version} loaded from ${snip.path}`);
+      }
     }
     if (run.optiLogMissing) add('OptiScaler.log', 'absent -- the Feeder log is the whole run');
     if (!run.cleanExit) add('exit', 'no DLL_PROCESS_DETACH -- the process did not unload cleanly');
@@ -701,7 +812,12 @@ function withDigest(body, digest) {
   return `${text.trimEnd()}\n\n${digest}`;
 }
 
-const BUNDLE_FILES = ['OptiScaler.log', 'OptiScaler.ini', 'ReShade.log', 'ReShade.ini', 'ReShadePreset.ini', 'dlss5-feed.log', 'dlss5-feed.cfg', '.optiscaler-manager-install.json', '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.dlss5ui-api.json', '.dlss5ui-lossless.json', '.dlss5ui-legacy.json', '.dlss5ui-translation.json', '.dlss5ui-engine.json', '.dlss5ui-framegen.json'];
+// nvngx.log is NGX's OWN log, written beside the exe because OptiScaler passes "." as
+// InApplicationDataPath. When NGX refuses to create DLSS it is the only file that says why -- the
+// engine log carries the result code and nothing behind it. Uncharted (2026-09-24) had a 42 KB
+// nvngx.log sitting in the folder while the bundle collected everything except it, so the report
+// could say BAD0000B and not one word about the cause.
+const BUNDLE_FILES = ['OptiScaler.log', 'OptiScaler.ini', 'nvngx.log', 'ReShade.log', 'ReShade.ini', 'ReShadePreset.ini', 'dlss5-feed.log', 'dlss5-feed.cfg', '.optiscaler-manager-install.json', '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.dlss5ui-api.json', '.dlss5ui-lossless.json', '.dlss5ui-legacy.json', '.dlss5ui-translation.json', '.dlss5ui-engine.json', '.dlss5ui-framegen.json'];
 
 function folderListing(dir) {
   try {
@@ -781,4 +897,4 @@ async function collectSupportBundle(dir, { zipPath, extra = {}, execFileAsync, o
   return { zipPath, files: copied, run };
 }
 
-module.exports = { analyzeRun, collectSupportBundle, gatherSupportFiles, reportDigest, withDigest, DIGEST_MARKER, unrealCrashNear, nrTiming, dlssRuntimeStubBytes, DLSS_RUNTIME_MIN_BYTES };
+module.exports = { analyzeRun, ngxResultName, collectSupportBundle, gatherSupportFiles, reportDigest, withDigest, DIGEST_MARKER, unrealCrashNear, nrTiming, dlssRuntimeStubBytes, DLSS_RUNTIME_MIN_BYTES };
