@@ -137,3 +137,32 @@ test('a game with its own launcher starts through it, unless Edit says to run th
   const other = fakeExe(plain, 'Game.exe');
   assert.equal((await invoke('game:launch', { exePath: other, dryRun: true })).via, 'exe');
 });
+
+// Whatever Game Help tells the user to add to the launch arguments, Launch adds too. Indiana Jones
+// needs +r_allowBlackListedLayers 1 or idTech refuses ReShade's Vulkan layer; the app advised it and
+// then launched without it, so the reporter kept their own shortcut to work around our own button.
+test('Launch passes the layer-blacklist cvar for the exe that needs it, on the exe and Steam paths', async () => {
+  const dir = scratchDir('launch-blacklist');
+  const exe = fakeExe(dir, 'TheGreatCircle.exe');
+  const { invoke } = loadMain();
+
+  const direct = await invoke('game:launch', { exePath: exe, dryRun: true });
+  assert.equal(direct.via, 'exe');
+  assert.deepEqual(direct.args, ['+r_allowBlackListedLayers', '1']);
+
+  // Any other game is launched exactly as before, with no args key at all.
+  const other = await invoke('game:launch', { exePath: fakeExe(dir, 'Other.exe'), dryRun: true });
+  assert.equal(other.args, undefined);
+});
+
+test('a Steam game that needs an argument goes through run/<id>//args/, since rungameid takes none', async () => {
+  const lib = scratchDir('launch-blacklist-steam');
+  write(path.join(lib, 'steamapps'), 'appmanifest_2677660.acf', '"AppState"\n{\n\t"appid"\t\t"2677660"\n\t"installdir"\t\t"Indiana Jones and the Great Circle"\n}\n');
+  const root = path.join(lib, 'steamapps', 'common', 'Indiana Jones and the Great Circle');
+  const exe = fakeExe(root, 'TheGreatCircle.exe');
+  const { invoke } = loadMain();
+  const res = await invoke('game:launch', { exePath: exe, dryRun: true });
+  assert.equal(res.via, 'steam');
+  assert.equal(res.steamAppId, '2677660');
+  assert.deepEqual(res.args, ['+r_allowBlackListedLayers', '1'], 'the argument survives the Steam route');
+});

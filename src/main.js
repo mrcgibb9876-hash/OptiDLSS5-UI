@@ -4736,6 +4736,11 @@ async function launchGame({ exePath, launcher = 'auto', dryRun = false } = {}) {
     const target = launchTarget(exePath);
     const dir = path.dirname(target);
     const steamAppId = library.steamAppIdFor(target);
+    // Arguments this app must add for the game to work at all (feeder.launchArgs): idTech's
+    // +r_allowBlackListedLayers 1, without which ReShade's Vulkan layer never attaches. Game Help
+    // already tells the user to add these; the card's Launch has to add them as well, or the one
+    // launch this app controls is the one that still fails.
+    const extraArgs = feeder.launchArgs(target);
     // An anti-cheat stub (detect.js's antiCheatStub) is a dead end for everything this app
     // installs: Steam runs the stub, the stub starts the anti-cheat, and the game then refuses to
     // start at all -- no log, nothing to diagnose (Armored Core VI, 2026-09-13). The game's own
@@ -4790,23 +4795,36 @@ async function launchGame({ exePath, launcher = 'auto', dryRun = false } = {}) {
     // options all expect that, and some games refuse to start any other way. Steam then runs the
     // same exe (through the game's own stub where it has one). Everything else runs directly.
     if (steamAppId) {
-      if (!dryRun) await shell.openExternal(`steam://rungameid/${steamAppId}`);
-      return { ok: true, target, via: 'steam', steamAppId };
+      // rungameid takes no arguments at all, so a game that needs one goes through run/<id>//args/
+      // -- the form the anti-cheat switch below already uses. Steam appends it to whatever the user
+      // has in Launch Options rather than replacing it, and a Steam that ignores the URL's arguments
+      // leaves Game Help's advice as the fallback; that advice stays, for exactly that reason.
+      const url = extraArgs.length
+        ? `steam://run/${steamAppId}//${encodeURIComponent(extraArgs.join(' '))}/`
+        : `steam://rungameid/${steamAppId}`;
+      if (!dryRun) await shell.openExternal(url);
+      return { ok: true, target, via: 'steam', steamAppId, args: extraArgs.length ? extraArgs : undefined };
     }
     // A game with a launcher of its own starts through it (see findGameLauncher).
     const gameLauncher = resolveGameLauncher(target, launcher);
     if (gameLauncher) {
       let launcherElevated = false;
+      // A launcher starts the game itself, so an argument handed to the launcher never reaches the
+      // exe. Reported back as argsUnreachable so the caller can keep telling the user to set it in
+      // the launcher, instead of the app claiming it did something it cannot do.
       if (!dryRun) ({ elevated: launcherElevated } = await startDetached(gameLauncher, [], { cwd: path.dirname(gameLauncher) }));
-      return { ok: true, target, launcher: gameLauncher, via: 'launcher', elevated: launcherElevated };
+      return {
+        ok: true, target, launcher: gameLauncher, via: 'launcher', elevated: launcherElevated,
+        argsUnreachable: extraArgs.length ? extraArgs : undefined,
+      };
     }
     let elevated = false;
     if (!dryRun) {
       // Detached, own folder as cwd (Unreal and Unity both resolve their data relative to it),
       // nothing inherited from this app: the game outlives the manager if it is closed.
-      ({ elevated } = await startDetached(target, [], { cwd: path.dirname(target) }));
+      ({ elevated } = await startDetached(target, extraArgs, { cwd: path.dirname(target) }));
     }
-    return { ok: true, target, via: 'exe', elevated };
+    return { ok: true, target, via: 'exe', elevated, args: extraArgs.length ? extraArgs : undefined };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
