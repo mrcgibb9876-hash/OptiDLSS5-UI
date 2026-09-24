@@ -11,7 +11,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { scratchDir } = require(path.join(__dirname, 'helpers'));
+const { scratchDir, fakeExe, fakeReleaseFolder, fakeNrModel, loadMain } = require(path.join(__dirname, 'helpers'));
 const relimiter = require(path.join(__dirname, '..', 'src', 'relimiter'));
 
 // A stand-in that satisfies the content check: a PE header, over the size floor, with both needles.
@@ -325,4 +325,48 @@ test('a ReShade64.dll frame pacing placed is one Chicken\'s swap may take over, 
   assert.equal(relimiter.placedReShade(dir), false);
   relimiter.demoteStandaloneReShade(dir);
   assert.equal(relimiter.placedReShade(dir), true);
+});
+
+// Shadow of the Tomb Raider, 2026-09-24: ReShade loaded by OptiScaler with any add-on in it crashes the
+// moment DLSS starts on the game's own device. So pacing never goes in beside OptiScaler's upscaler,
+// and installing DLSS 5 on a game that already has pacing takes pacing out rather than crash it.
+test('frame pacing is refused beside DLSS 5 on a non-Feeder game, before anything is placed', { skip: !canFakePe }, async () => {
+  const base = scratchDir('rl-refuse');
+  const game = path.join(base, 'game');
+  const exe = fakeExe(game, 'Game.exe');
+  fs.writeFileSync(path.join(game, 'nvngx_dlss.dll'), 'the game own DLSS, as SOTTR ships it');
+  const release = fakeReleaseFolder(path.join(base, 'release'));
+  fakeNrModel(path.join(base, 'model'));
+  const { invoke } = loadMain({});
+  const inst = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: path.join(base, 'model', 'nvngx_dlssnr.dll') });
+  assert.equal(inst.ok, true, inst.error);
+  // Install tidies a stand-in nvngx_dlss.dll away, so the game's own DLSS is put back after it.
+  fs.writeFileSync(path.join(game, 'nvngx_dlss.dll'), 'the game own DLSS, as SOTTR ships it');
+  const before = fs.readdirSync(game).sort();
+  const r = await invoke('relimiter:install', exe);
+  assert.equal(r.ok, false);
+  assert.equal(r.code, 'reshade-dlss-crash');
+  assert.deepEqual(fs.readdirSync(game).sort(), before, 'nothing placed');
+});
+
+test('installing DLSS 5 on a game with standalone pacing takes pacing out, and says so', { skip: !canFakePe }, async () => {
+  const base = scratchDir('rl-then-dlss5');
+  const game = path.join(base, 'game');
+  const exe = fakeExe(game, 'Game.exe');
+  fs.writeFileSync(path.join(game, 'nvngx_dlss.dll'), 'the game own DLSS, as SOTTR ships it');
+  realishReShade(game, 'ReShade64.dll');
+  relimiter.writeMarker(game, { reshadePlaced: true });
+  relimiter.promoteToStandalone(game, 'dx12');
+  relimiter.deploy(game, fakeAddon(scratchDir('rl-then-dlss5-src')));
+  const release = fakeReleaseFolder(path.join(base, 'release'));
+  fakeNrModel(path.join(base, 'model'));
+  const { invoke } = loadMain({});
+  const inst = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: path.join(base, 'model', 'nvngx_dlssnr.dll') });
+  assert.equal(inst.ok, true, inst.error);
+  assert.ok(inst.pacingRemoved && inst.pacingRemoved.includes('relimiter.addon64'), 'reported');
+  assert.equal(fs.existsSync(path.join(game, 'relimiter.addon64')), false);
+  assert.equal(fs.existsSync(path.join(game, 'ReShade64.dll')), false, 'our standalone ReShade went with it');
+  assert.equal(inst.proxy && inst.proxy.proxy, 'dxgi.dll', 'OptiScaler has the slot');
+  const ini = fs.readFileSync(path.join(game, 'OptiScaler.ini'), 'utf8');
+  assert.doesNotMatch(ini, /^LoadReshade\s*=\s*true/m);
 });

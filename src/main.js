@@ -881,6 +881,16 @@ ipcMain.handle('relimiter:install', async (_evt, exePath) => {
     const api = (await resolveApi(dir, exePath)) || 'dx12';
     if (!relimiter.isAutomatic(api)) throw Object.assign(new Error('Vulkan needs ReShade’s own setup first'), { code: 'vulkan-layer' });
     const optiHere = fs.existsSync(path.join(dir, 'OptiScaler.ini')) && !!(await findActiveOptiScalerFile(dir));
+    // Refused where OptiScaler upscales on the GAME's own device (anything but a Feeder game). Measured
+    // on Shadow of the Tomb Raider, 2026-09-24: OptiScaler captures the D3D12 device beneath ReShade, so
+    // DLSS builds its resources on the raw device and records them into ReShade's wrapped command list;
+    // with ANY add-on loaded ReShade tracks those descriptors and dies (0xC0000005 in ReShade64.dll,
+    // under DLSSFeatureDx12::InitDLSS). With no add-on it survives, which is why the Feeder never met
+    // it -- there DLSS runs on the Feeder's private device. Generic Depth alone does the same, and
+    // neither CreateD3D12DeviceForLuma nor ReShade's standard build helps.
+    if (optiHere && !isFeederGame(dir)) {
+      throw Object.assign(new Error('Frame pacing cannot run beside DLSS 5 on this game yet: ReShade crashes when DLSS starts on the game’s own device'), { code: 'reshade-dlss-crash' });
+    }
     // Chicken: its ReShade is already the proxy, so the add-on simply joins it (relimiter.chickenReShade).
     const standalone = !optiHere && !relimiter.chickenReShade(dir) && relimiter.reshadeModeFor(api) === 'local';
 
@@ -3359,9 +3369,17 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
     let proxy = null;
     let proxyError = null;
     // Frame pacing added before DLSS 5 put ReShade in the proxy slot itself (relimiter.js,
-    // promoteToStandalone). It goes back to ReShade64.dll first, where OptiScaler loads it -- two
-    // proxies is exactly the Arkham Knight failure above.
-    try { relimiter.demoteStandaloneReShade(dir); } catch {}
+    // promoteToStandalone). Two proxies is exactly the Arkham Knight failure above, so it cannot stay.
+    // On a Feeder game it goes back to ReShade64.dll, where OptiScaler loads it. On any other game it
+    // comes out altogether: ReShade with an add-on beside OptiScaler's upscaler crashes the game
+    // (relimiter:install's refusal says why), and a crash is worse than no pacing. Reported, not silent.
+    let pacingRemoved = null;
+    try {
+      if (relimiter.status(dir).standalone || relimiter.deployed(dir)) {
+        if (feederGame) relimiter.demoteStandaloneReShade(dir);
+        else pacingRemoved = relimiter.remove(dir);
+      }
+    } catch {}
     try {
       proxy = await installProxy(dir, proxyName || (await proxyNameForGame(dir, exePath, feederGame)));
     } catch (err) {
@@ -3386,7 +3404,7 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
     const { api, applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix, profile } = await autoConfigureGame(dir, exePath);
 
     const gpuPreference = await preferDiscreteGpu(dir, exePath);
-    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, proxyRefreshError, foreignProxy, proxy, proxyError, feederGame, api, autoConfigured: applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix, profile, nvngxDlss, gpuPreference };
+    return { ok: true, dir, nrDllBytes: destStat.size, proxyUpdated, proxyRefreshError, foreignProxy, proxy, proxyError, feederGame, api, autoConfigured: applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix, profile, nvngxDlss, gpuPreference, pacingRemoved };
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -6385,10 +6403,11 @@ async function autoConfigureGame(dir, exePath) {
   let forced = dlss5Only
     ? patchIniValues(iniPath, [...(optiFgOn ? optiFgForced(optiFg) : [...DLSS5_ONLY_FORCED, ...optiFgDisarm(iniPath)]), ...keepGamesOwnDlss(upscalerApis)])
     : [];
-  // ReLimiter is a ReShade add-on and is driven by ReShade's present event, so it needs the same
-  // arrangement the Feeder does -- and on an ordinary DX12 game there is no Feeder to trigger it.
-  // Hence this condition is "anything here needs ReShade loaded", not "the Feeder is deployed".
-  // Deliberately NOT tied to dlss5Only above: ReLimiter is a frame pacer, not an upscaler, so adding
+  // ReLimiter is a ReShade add-on and is driven by ReShade's present event, so on a Feeder game it
+  // rides on the Feeder's ReShade. NOT on an ordinary OptiScaler game: ReShade loaded by OptiScaler with
+  // any add-on in it crashes when DLSS starts on the game's own device (Shadow of the Tomb Raider,
+  // 2026-09-24 -- relimiter:install's refusal has the detail). There pacing only runs without OptiScaler,
+  // with ReShade as the game's own proxy. Deliberately NOT tied to dlss5Only above: ReLimiter is a frame pacer, not an upscaler, so adding
   // it must never narrow OptiScaler into NR-only mode. A user who turns on frame pacing and silently
   // loses their upscaler has been handed a worse app.
   const relimiterHere = relimiter.deployed(dir);
@@ -6404,7 +6423,7 @@ async function autoConfigureGame(dir, exePath) {
     });
     if (conflict) forced = [...forced, ...patchIniValues(iniPath, relimiter.NR_CONFLICT_EDITS)];
   }
-  if ((feederGame && feeder.feederDeployed(dir)) || relimiterHere) {
+  if ((feederGame && feeder.feederDeployed(dir)) || (relimiterHere && feederGame)) {
     // Only where ReShade is the plain ReShade64.dll beside the exe. As the game's opengl32.dll
     // or as the Vulkan layer it is already in the process, and a second copy loaded by
     // OptiScaler would be two ReShades.

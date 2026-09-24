@@ -55,10 +55,18 @@ itself each forbid exactly that, and the MIT notice travels with the binary.
   plain non-proxying `ReShade64.dll`, and `[Plugins] LoadReshade=true` makes OptiScaler load it. That
   condition in `autoConfigureGame` is no longer Feeder-only. It is deliberately **separate** from
   `dlss5Only`: a frame pacer is not an upscaler, and turning on pacing must not cost the user theirs.
-- **Any 64-bit game, Feeder or not, DLSS 5 installed or not** (`relimiter:install`). Three shapes:
-  OptiScaler here -> plain `ReShade64.dll` + `LoadReshade=true`; no OptiScaler -> ReShade becomes the
-  game's own proxy (`dxgi.dll`, `d3d9.dll` on DX9; `promoteToStandalone`, recorded as `reshadeProxy`),
-  and `game:install` / the Chicken swap call `demoteStandaloneReShade` first so two proxies never meet;
+- **ReShade + any add-on + OptiScaler upscaling on the game's own device = crash** (Shadow of the Tomb
+  Raider, 2026-09-24: 0xC0000005 in ReShade64.dll under `DLSSFeatureDx12::InitDLSS`). OptiScaler
+  captures the D3D12 device beneath ReShade, DLSS records raw-device resources into ReShade's wrapped
+  command list, and ReShade's add-on descriptor tracking dies on them. No add-on = no crash; Generic
+  Depth alone crashes too; `CreateD3D12DeviceForLuma` and ReShade's standard build do not help. The
+  Feeder never meets it because its DLSS runs on a private device. So:
+- **Where pacing goes** (`relimiter:install`): a Feeder game (plain `ReShade64.dll` + `LoadReshade=true`);
+  a game with no OptiScaler (ReShade becomes the game's own proxy: `dxgi.dll`, `d3d9.dll` on DX9;
+  `promoteToStandalone`, recorded as `reshadeProxy`); a Chicken game. A non-Feeder game WITH OptiScaler
+  is refused (`reshade-dlss-crash`), and `game:install` on a game with pacing removes pacing there
+  (`pacingRemoved`) -- on a Feeder game it demotes the standalone ReShade instead. The Chicken swap
+  calls `demoteStandaloneReShade` first so two proxies never meet;
   Chicken -> the add-on joins Chicken's ReShade (`dfc.reshadeProxyOf`), which pacing never moves or
   deletes. A `ReShade64.dll` pacing placed is recorded (`reshadePlaced`) so `switchToDfc` takes it over
   like the Feeder's (`reshadeIsOurs`). Proxy files are identified by PE OriginalFilename
