@@ -191,6 +191,9 @@ function diagnose(ctx) {
   // rewriting a file that is being taken away is a loop, not a fix (Max Payne 2, 2026-09-24 -- the
   // Feeder's own window opened and the DLSS 5 overlay was never in it).
   if (route.route === 'feeder32' && route.hostOptiScalerDllGone) return out('step', 'host32-opti-dll-gone');
+  // The helper exe, not just OptiScaler inside it. Ahead of not-installed deliberately: `complete`
+  // is false without the exe, so the plain Install offer below would be that same loop.
+  if (route.route === 'feeder32' && route.hostExeGone) return out('step', 'host32-exe-gone');
   if (route.route === 'feeder32' && !route.complete) return fix('not-installed', 'install');
   // DXVK in dgVoodoo2's place counts as the wrapper being there: offering Install here would put
   // dgVoodoo2 back over the swap the player just chose.
@@ -474,6 +477,24 @@ function diagnose(ctx) {
       const vars = { smoothMotion: run.feedSmoothMotion ? 1 : 0, stack: run.detail || '' };
       if (d.emulator && run.feedSameDevice) return out('step', 'nr-model-crash-emulator', { ...vars, name: d.emulator.name || '' });
       return out('step', 'nr-model-crash', vars);
+    }
+    // The 32-bit route's 64-bit helper died and took the feed with it. What to do next is decided by
+    // the Feeder's own reason line, because the two shapes have nothing in common:
+    //
+    //   "exited during startup" / "rejected its own command line" -- the add-on and the helper are
+    //   not the same Feeder build, or host64\ is missing a file. Both are what Install rebuilds,
+    //   from one download, so it is the answer here -- unlike the antivirus case above, where the
+    //   file is being taken away and rewriting it is a loop.
+    //
+    //   anything else -- it crashed while running. This app cannot see inside another process, and
+    //   the helper writes its own account, so the honest step is to name that file rather than
+    //   guess. Same discipline as asi-loader-blind.
+    //
+    // The reason is quoted verbatim either way: it is the one line a report to the Feeder needs.
+    case 'feed-host-gone': {
+      const why = run.detail || '';
+      if (/startup|command line/i.test(why)) return fix('feed-host-startup', 'install', { why });
+      return out('step', 'feed-host-gone', { why });
     }
     case 'feed-stopped':
       return fix('feed-stopped', 'reconfigure');

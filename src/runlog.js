@@ -11,6 +11,8 @@
 //                      the minimum version (DOOM 3 BFG on 610.88, needs 616.56)
 //   nr-model-crash     the neural model crashed inside the Feeder's evaluate, which then stopped
 //                      (Dolphin on DX12, same device; Armored Core VI before it)
+//   feed-host-gone     the 32-bit route's 64-bit helper died, so the feed stopped; the Feeder's
+//                      own `host lost:` line names how, and host64\dlss5-feed-host.log why
 //   feed-stopped       the Feeder gave up ("The feed stops here") -- its own diagnosis follows
 //   nr-ran             the Neural Rendering pass dispatched; count and fps if the Feeder timed it
 //   dlss-no-nr         a DLSS feature was created but NR never dispatched (a D3D11 feature on
@@ -306,7 +308,7 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     // A Feeder that stopped itself before the first frame (its `stopped:` line), or that found no
     // OptiScaler to route to, has still judged the run: with OptiScaler out of the loop there is no
     // OptiScaler.log to wait for, and waiting is how SWTOR's 18,000 DLAA frames read as "no run".
-    const feedRan = !!wrapperCrash || /first frame fed|\bstopped: |OptiScaler: not present|is an OptiScaler build, but this game never loaded|DRIVER answered the NGX probe|is not the DLSS-NR fork/.test(feed);
+    const feedRan = !!wrapperCrash || /first frame fed|\bstopped: |\[feed32\] host lost: |OptiScaler: not present|is an OptiScaler build, but this game never loaded|DRIVER answered the NGX probe|is not the DLSS-NR fork/.test(feed);
     if (!feedStat || !feedRan) return { ran: false, verdict: 'no-log' };
     stat = feedStat;
   } else if (feedStat && feedStat.mtimeMs > stat.mtimeMs) {
@@ -409,6 +411,25 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   const feedCreateFault = /CreateFeature raised 0xC0000005/.test(feed);
   const feedTwoCopies = /two copies of the DLSS NGX module are loaded/.test(feed);
   const feedStopped = /The feed stops here/.test(feed);
+
+  // The 32-bit route's helper process died. Only this route has one: the game is 32-bit, so the
+  // DLSS work runs in the Feeder's 64-bit helper (host64\dlss5-feed-host64.exe, legacy.js) and the
+  // frames cross a process boundary. When it goes, the game carries on rendering perfectly and the
+  // feed simply stops -- which is why it reads, to the player, as "DLSS 5 does nothing".
+  //
+  //   [feed32] host lost: exited during startup with code 1 (it rejected its own command line ...)
+  //   [feed32] host lost: frame message failed (exit code 3765269347)
+  //   stopped: the 64-bit host went away -- its own dlss5-feed-host.log (in host64\) names the reason
+  //
+  // The reason line is kept verbatim: "rejected its own command line" (the add-on and the helper
+  // are different Feeder builds) and "frame message failed" (the helper crashed mid-run) are
+  // different faults with different answers, and paraphrasing them loses exactly that.
+  //
+  // Note the two-line shape. Without this, such a run matched neither feedStopped ("The feed stops
+  // here" is not what the Feeder writes here) nor anything else, and fell all the way through to
+  // no-dlss -- "no known fix" for a fault the Feeder had already named in full.
+  const feedHostLost = (/\[feed32\] host lost: ([^\r\n]+)/.exec(feed) || [])[1] || null;
+  const feedHostGone = !!feedHostLost || /the 64-bit host went away/.test(feed);
   const feedTechniqueMissing = /effects: .*technique MISSING/.test(feed) && !/technique found/.test(feed);
   const fpsMatch = [...feed.matchAll(/frame interval [\d.]+ ms \(([\d.]+) fps\)/g)].pop();
   const fps = fpsMatch ? Math.round(parseFloat(fpsMatch[1])) : null;
@@ -534,6 +555,10 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   else if (feedDepthFlatMoving) verdict = 'feed-depth-flat';
   // Before feed-stopped: the Feeder gave up because the model crashed, and saying which is the point.
   else if (feedEvaluateCrash) { verdict = 'nr-model-crash'; detail = feedFaultStack; }
+  // Before feed-stopped, and after nr-model-crash: on this route the evaluate runs INSIDE the
+  // helper, so a model crash takes the helper with it and both are true at once. The model is
+  // the cause and the dead helper is its symptom, so the model keeps the verdict.
+  else if (feedHostGone) { verdict = 'feed-host-gone'; detail = feedHostLost; }
   else if (feedStopped) verdict = 'feed-stopped';
   // Both of these outrank nr-ran deliberately. The neural pass dispatching says the plumbing is
   // intact; it does not say the frame reached the screen, or that DLSS did the upscaling. A run
@@ -559,6 +584,8 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     fps,
     feedFrames,
     feedEvaluateCrash,
+    feedHostGone,
+    feedHostLost,
     feedSameDevice,
     feedSmoothMotion,
     feedDriverOutdated,
@@ -708,6 +735,11 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = 
 
     // The fault stack rides in run.detail on this verdict, printed beside it above.
     if (run.feedEvaluateCrash) add('neural model', 'crashed in its evaluate, and the feed stopped');
+    // Verbatim, and pointing at the one file that says why. The Feeder's own panel sends the user
+    // to host64\dlss5-feed-host.log, so a digest that did not name it was sending them somewhere else.
+    if (run.feedHostGone) {
+      add('64-bit helper', `${run.feedHostLost || 'went away'} -- host64\\dlss5-feed-host.log says why`);
+    }
     if (run.feedInvalidRedist) add('d3d12', 'every device create refused with INVALID_REDIST');
     if (run.srBackendFallback) {
       const why = [run.srCreateResult, run.srCreateResultName].filter(Boolean).join(': ');
@@ -825,7 +857,7 @@ function withDigest(body, digest) {
 // engine log carries the result code and nothing behind it. Uncharted (2026-09-24) had a 42 KB
 // nvngx.log sitting in the folder while the bundle collected everything except it, so the report
 // could say BAD0000B and not one word about the cause.
-const BUNDLE_FILES = ['OptiScaler.log', 'OptiScaler.ini', 'nvngx.log', 'ReShade.log', 'ReShade.ini', 'ReShadePreset.ini', 'dlss5-feed.log', 'dlss5-feed.cfg', '.optiscaler-manager-install.json', '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.dlss5ui-api.json', '.dlss5ui-lossless.json', '.dlss5ui-legacy.json', '.dlss5ui-translation.json', '.dlss5ui-engine.json', '.dlss5ui-framegen.json'];
+const BUNDLE_FILES = ['OptiScaler.log', 'OptiScaler.ini', 'nvngx.log', 'ReShade.log', 'ReShade.ini', 'ReShadePreset.ini', 'dlss5-feed.log', 'dlss5-feed.cfg', 'dlss5-feed-host.log', '.optiscaler-manager-install.json', '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.dlss5ui-api.json', '.dlss5ui-lossless.json', '.dlss5ui-legacy.json', '.dlss5ui-translation.json', '.dlss5ui-engine.json', '.dlss5ui-framegen.json'];
 
 function folderListing(dir) {
   try {
