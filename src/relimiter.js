@@ -39,6 +39,26 @@ function addonName(bitness) {
   return bitness === 32 ? ADDON_32 : ADDON_64;
 }
 
+// Whether this OptiScaler build keeps NGX's device alive under ReShade, read from its bytes.
+//
+// Shadow of the Tomb Raider (and any game like it) initialises NGX on a throwaway device while its
+// launcher is up, releases it, and initialises again on the device it renders with; the real
+// _nvngx.dll keeps the first. Under ReShade that device is a wrapper ReShade frees on release, so DLSS
+// went on calling into freed memory: with ANY add-on loaded CreateFeature faulted in ReShade64.dll,
+// and without one the game sometimes just closed at DLSS creation. Measured under a debugger,
+// 2026-09-24. Engine commit 02e2dac9 holds a reference on that device, and e93d1f53 logs this exact
+// text when it does -- so the text in the DLL is the proof that the engine in THIS folder has the fix,
+// whatever the pin says (a game can be on an older engine until it is updated).
+const NGX_DEVICE_HOLD_MARK = 'Holding the NGX session device';
+
+function engineKeepsNgxDevice(file) {
+  try {
+    return fs.readFileSync(file).includes(Buffer.from(NGX_DEVICE_HOLD_MARK, 'latin1'));
+  } catch {
+    return false;
+  }
+}
+
 // Identified by CONTENT, never by file name. The same rule as isAddonReShadeDll: a name is what
 // someone typed, and a folder can hold a renamed or half-downloaded file. ReLimiter's own strings and
 // the add-on entry point it must export are the honest tell.
@@ -293,9 +313,15 @@ function configureReShadeIni(dir) {
 // Take out only the add-on and our marker. ReShade is deliberately left alone: the Feeder route needs
 // it, and a user may have installed it themselves for shaders. Removing a dependency someone else is
 // using is how a clean-up turns into a bug report.
-function remove(dir) {
+// withPlacedReShade: also the plain ReShade64.dll this app placed for pacing (placedReShade), for a game
+// where OptiScaler would otherwise go on loading it beside its upscaler with nothing to show for it.
+function remove(dir, { withPlacedReShade = false } = {}) {
   const m = marker(dir);
   const removed = [];
+  if (withPlacedReShade && placedReShade(dir)) {
+    fs.rmSync(path.join(dir, 'ReShade64.dll'), { force: true });
+    removed.push('ReShade64.dll');
+  }
   for (const name of (m && m.files) || [ADDON_64, ADDON_32]) {
     const p = path.join(dir, name);
     if (fs.existsSync(p)) { fs.rmSync(p, { force: true }); removed.push(name); }
@@ -383,6 +409,7 @@ const NR_CONFLICT_EDITS = [{ section: 'DlssNr', key: 'AutoScale', value: 'false'
 module.exports = {
   ADDON_64, ADDON_32, MARKER,
   addonName, isReLimiterAddon, reshadeModeFor, isAutomatic,
+  NGX_DEVICE_HOLD_MARK, engineKeepsNgxDevice,
   marker, deployed, status, missing, deploy, remove,
   isReShadeProxy, chickenReShade, placedReShade, writeMarker, standaloneProxyName, reshadeFileIn, promoteToStandalone, demoteStandaloneReShade,
   RELEASE_SOURCES, addonAssetFromRelease, resolveAddonAsset, configureReShadeIni,

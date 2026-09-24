@@ -769,8 +769,12 @@ ipcMain.handle('optifg:set', async (_evt, { exePath, enabled, generator, startOn
     } else {
       setOptiFgEnabled(dir, !!enabled);
     }
+    // Arming a generator takes the swap chain away from ReShade, and pacing would go on installed and
+    // doing nothing (pacingBesideUpscalerBlocker, optifg-armed). Out it comes, reported.
+    let pacingRemoved = null;
+    try { pacingRemoved = await dropBlockedPacing(dir); } catch {}
     const result = await autoConfigureGame(dir, exePath);
-    return { ok: true, ...result };
+    return { ok: true, ...result, pacingRemoved };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -864,6 +868,42 @@ ipcMain.handle('relimiter:set-target', async (_evt, { exePath, fps } = {}) => {
   }
 });
 
+// Why frame pacing cannot sit beside OptiScaler's upscaler on this game right now, or null when it can.
+// Only asked for a game OptiScaler upscales on the game's own device (not a Feeder game: there DLSS runs
+// on the Feeder's private device and neither rule applies).
+//   reshade-dlss-crash  the engine here predates the NGX device hold (relimiter.engineKeepsNgxDevice):
+//                       ReShade with any add-on crashes at DLSS creation. Updating DLSS 5 fixes it.
+//   optifg-armed        OptiScaler's own frame generation builds the game's swap chain on a queue
+//                       ReShade did not make, so ReShade logs "Skipping swap chain because it was
+//                       created without a proxy Direct3D device" and ReLimiter never sees a frame --
+//                       pacing would install and do nothing. Measured on Shadow of the Tomb Raider with
+//                       XeFG, 2026-09-24; with FGOutput=nofg ReShade attaches and ReLimiter paces.
+async function pacingBesideUpscalerBlocker(dir) {
+  const active = await findActiveOptiScalerFile(dir);
+  if (!active || !relimiter.engineKeepsNgxDevice(active.file)) {
+    return { code: 'reshade-dlss-crash', message: 'Frame pacing needs a newer DLSS 5 engine on this game: update DLSS 5 here first' };
+  }
+  // The app's own choice (its marker, which autoConfigureGame turns into FGOutput) or one set by hand.
+  const fg = optiFgIniState(path.join(optiScalerDirFor(dir), 'OptiScaler.ini'));
+  if (isOptiFgEnabled(dir) || (fg && fg.armed)) {
+    return { code: 'optifg-armed', message: 'Frame pacing can’t see frames while OptiScaler frame generation is set up for this game: turn frame generation off in Edit first' };
+  }
+  return null;
+}
+
+// Takes frame pacing out of a non-Feeder game where pacingBesideUpscalerBlocker now refuses it: the
+// add-on, the ReShade64.dll this app placed for it, and OptiScaler's LoadReshade (unless Luma UE still
+// needs ReShade). Run BEFORE autoConfigureGame, which forces LoadReshade=true wherever pacing is
+// deployed. Returns what was removed, or null.
+async function dropBlockedPacing(dir, feederGame = isFeederGame(dir)) {
+  if (feederGame || !relimiter.deployed(dir) || !(await pacingBesideUpscalerBlocker(dir))) return null;
+  const removed = relimiter.remove(dir, { withPlacedReShade: true });
+  if (!lumaue.lumaUeDeployed(dir)) {
+    try { patchIniValues(path.join(optiScalerDirFor(dir), 'OptiScaler.ini'), [{ section: 'Plugins', key: 'LoadReshade', value: 'auto' }]); } catch {}
+  }
+  return removed;
+}
+
 // Add frame pacing to ANY game -- Feeder or not, DLSS 5 installed or not: ReShade (the add-on build)
 // where it is missing or plain, then the add-on itself.
 //   OptiScaler here   ReShade is the plain ReShade64.dll and OptiScaler loads it; the reconfigure
@@ -881,15 +921,12 @@ ipcMain.handle('relimiter:install', async (_evt, exePath) => {
     const api = (await resolveApi(dir, exePath)) || 'dx12';
     if (!relimiter.isAutomatic(api)) throw Object.assign(new Error('Vulkan needs ReShade’s own setup first'), { code: 'vulkan-layer' });
     const optiHere = fs.existsSync(path.join(dir, 'OptiScaler.ini')) && !!(await findActiveOptiScalerFile(dir));
-    // Refused where OptiScaler upscales on the GAME's own device (anything but a Feeder game). Measured
-    // on Shadow of the Tomb Raider, 2026-09-24: OptiScaler captures the D3D12 device beneath ReShade, so
-    // DLSS builds its resources on the raw device and records them into ReShade's wrapped command list;
-    // with ANY add-on loaded ReShade tracks those descriptors and dies (0xC0000005 in ReShade64.dll,
-    // under DLSSFeatureDx12::InitDLSS). With no add-on it survives, which is why the Feeder never met
-    // it -- there DLSS runs on the Feeder's private device. Generic Depth alone does the same, and
-    // neither CreateD3D12DeviceForLuma nor ReShade's standard build helps.
+    // Where OptiScaler upscales on the GAME's own device (anything but a Feeder game), only with an
+    // engine that keeps NGX's device alive and with OptiScaler's frame generation not armed --
+    // pacingBesideUpscalerBlocker says why each one matters.
     if (optiHere && !isFeederGame(dir)) {
-      throw Object.assign(new Error('Frame pacing cannot run beside DLSS 5 on this game yet: ReShade crashes when DLSS starts on the game’s own device'), { code: 'reshade-dlss-crash' });
+      const blocker = await pacingBesideUpscalerBlocker(dir);
+      if (blocker) throw Object.assign(new Error(blocker.message), { code: blocker.code });
     }
     // Chicken: its ReShade is already the proxy, so the add-on simply joins it (relimiter.chickenReShade).
     const standalone = !optiHere && !relimiter.chickenReShade(dir) && relimiter.reshadeModeFor(api) === 'local';
@@ -3370,15 +3407,12 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
     let proxyError = null;
     // Frame pacing added before DLSS 5 put ReShade in the proxy slot itself (relimiter.js,
     // promoteToStandalone). Two proxies is exactly the Arkham Knight failure above, so it cannot stay.
-    // On a Feeder game it goes back to ReShade64.dll, where OptiScaler loads it. On any other game it
-    // comes out altogether: ReShade with an add-on beside OptiScaler's upscaler crashes the game
-    // (relimiter:install's refusal says why), and a crash is worse than no pacing. Reported, not silent.
+    // It goes back to ReShade64.dll, where OptiScaler loads it. Whether it may STAY beside OptiScaler's
+    // upscaler is only known once this install is done (the engine it leaves, the frame generation it
+    // configures), so that is decided below, after autoConfigureGame.
     let pacingRemoved = null;
     try {
-      if (relimiter.status(dir).standalone || relimiter.deployed(dir)) {
-        if (feederGame) relimiter.demoteStandaloneReShade(dir);
-        else pacingRemoved = relimiter.remove(dir);
-      }
+      if (relimiter.status(dir).standalone) relimiter.demoteStandaloneReShade(dir);
     } catch {}
     try {
       proxy = await installProxy(dir, proxyName || (await proxyNameForGame(dir, exePath, feederGame)));
@@ -3399,6 +3433,10 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
     } catch (err) {
       nvngxDlss = { placed: false, error: String(err && err.message ? err.message : err) };
     }
+
+    // Pacing kept beside the upscaler only where pacingBesideUpscalerBlocker allows it: a crash, or
+    // pacing that silently sees no frames, is worse than none. Reported, not silent.
+    try { pacingRemoved = await dropBlockedPacing(dir, feederGame); } catch {}
 
     invalidateDetection(dir);
     const { api, applied, streamline, reEngine, reframework, reframeworkConfig, reEngineHotfix, profile } = await autoConfigureGame(dir, exePath);
@@ -6423,7 +6461,10 @@ async function autoConfigureGame(dir, exePath) {
     });
     if (conflict) forced = [...forced, ...patchIniValues(iniPath, relimiter.NR_CONFLICT_EDITS)];
   }
-  if ((feederGame && feeder.feederDeployed(dir)) || (relimiterHere && feederGame)) {
+  // Frame pacing on a non-Feeder game needs the same: OptiScaler leaves LoadReshade off by default, so
+  // without this the ReShade64.dll placed for ReLimiter would never load. relimiter:install and
+  // dropBlockedPacing keep pacing off the games where it would crash or see no frames.
+  if ((feederGame && feeder.feederDeployed(dir)) || relimiterHere) {
     // Only where ReShade is the plain ReShade64.dll beside the exe. As the game's opengl32.dll
     // or as the Vulkan layer it is already in the process, and a second copy loaded by
     // OptiScaler would be two ReShades.

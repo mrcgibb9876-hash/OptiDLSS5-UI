@@ -328,8 +328,68 @@ test('a ReShade64.dll frame pacing placed is one Chicken\'s swap may take over, 
 });
 
 // Shadow of the Tomb Raider, 2026-09-24: ReShade loaded by OptiScaler with any add-on in it crashes the
-// moment DLSS starts on the game's own device. So pacing never goes in beside OptiScaler's upscaler,
-// and installing DLSS 5 on a game that already has pacing takes pacing out rather than crash it.
+// moment DLSS starts on the game's own device -- unless the engine holds NGX's device (engine 02e2dac9,
+// which logs relimiter.NGX_DEVICE_HOLD_MARK). The fake release's OptiScaler.dll has no such text, so it
+// stands for an engine from before the fix: pacing is refused beside it, and installing DLSS 5 on a game
+// that already has pacing takes pacing out rather than crash it.
+function markEngineFixed(release) {
+  fs.writeFileSync(path.join(release, 'OptiScaler.dll'), `fake optiscaler dll OptiScaler ${relimiter.NGX_DEVICE_HOLD_MARK} {:X}`);
+}
+
+test('the NGX device hold is read from the engine\'s bytes', () => {
+  const dir = scratchDir('rl-hold-mark');
+  const old = path.join(dir, 'old.dll');
+  const fixed = path.join(dir, 'fixed.dll');
+  fs.writeFileSync(old, 'OptiScaler v2.1.0-final');
+  fs.writeFileSync(fixed, `OptiScaler v2.1.0-final ${relimiter.NGX_DEVICE_HOLD_MARK} {:X} for as long as`);
+  assert.equal(relimiter.engineKeepsNgxDevice(old), false);
+  assert.equal(relimiter.engineKeepsNgxDevice(fixed), true);
+  assert.equal(relimiter.engineKeepsNgxDevice(path.join(dir, 'missing.dll')), false);
+});
+
+test('with the fixed engine, frame pacing is still refused while OptiScaler frame generation is armed', { skip: !canFakePe }, async () => {
+  const base = scratchDir('rl-refuse-fg');
+  const game = path.join(base, 'game');
+  const exe = fakeExe(game, 'Game.exe');
+  const release = fakeReleaseFolder(path.join(base, 'release'));
+  markEngineFixed(release);
+  fakeNrModel(path.join(base, 'model'));
+  const { invoke } = loadMain({});
+  const inst = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: path.join(base, 'model', 'nvngx_dlssnr.dll') });
+  assert.equal(inst.ok, true, inst.error);
+  // The game's own DLSS makes it a non-Feeder game (install tidies a stand-in away, so it goes in after).
+  fs.writeFileSync(path.join(game, 'nvngx_dlss.dll'), 'the game own DLSS, as SOTTR ships it');
+  // XeFG armed the way the app arms it: [FrameGen] FGOutput. ReShade then never gets the swap chain.
+  const iniPath = path.join(game, 'OptiScaler.ini');
+  fs.writeFileSync(iniPath, fs.readFileSync(iniPath, 'utf8').replace(/^\[FrameGen\]\s*$/m, '[FrameGen]\nFGOutput = xefg'));
+  const before = fs.readdirSync(game).sort();
+  const r = await invoke('relimiter:install', exe);
+  assert.equal(r.ok, false);
+  assert.equal(r.code, 'optifg-armed');
+  assert.deepEqual(fs.readdirSync(game).sort(), before, 'nothing placed');
+});
+
+test('with the fixed engine, installing DLSS 5 keeps standalone pacing and hands ReShade to OptiScaler', { skip: !canFakePe }, async () => {
+  const base = scratchDir('rl-keep');
+  const game = path.join(base, 'game');
+  const exe = fakeExe(game, 'Game.exe');
+  fs.writeFileSync(path.join(game, 'nvngx_dlss.dll'), 'the game own DLSS, as SOTTR ships it');
+  realishReShade(game, 'ReShade64.dll');
+  relimiter.writeMarker(game, { reshadePlaced: true });
+  relimiter.promoteToStandalone(game, 'dx12');
+  relimiter.deploy(game, fakeAddon(scratchDir('rl-keep-src')));
+  const release = fakeReleaseFolder(path.join(base, 'release'));
+  markEngineFixed(release);
+  fakeNrModel(path.join(base, 'model'));
+  const { invoke } = loadMain({});
+  const inst = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: path.join(base, 'model', 'nvngx_dlssnr.dll') });
+  assert.equal(inst.ok, true, inst.error);
+  assert.equal(inst.pacingRemoved, null);
+  assert.equal(fs.existsSync(path.join(game, 'relimiter.addon64')), true, 'pacing stays');
+  assert.equal(fs.existsSync(path.join(game, 'ReShade64.dll')), true, 'ReShade back where OptiScaler loads it');
+  assert.equal(inst.proxy && inst.proxy.proxy, 'dxgi.dll', 'OptiScaler has the slot');
+});
+
 test('frame pacing is refused beside DLSS 5 on a non-Feeder game, before anything is placed', { skip: !canFakePe }, async () => {
   const base = scratchDir('rl-refuse');
   const game = path.join(base, 'game');
