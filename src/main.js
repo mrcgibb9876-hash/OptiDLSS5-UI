@@ -6284,6 +6284,18 @@ async function autoConfigureGame(dir, exePath) {
   // it must never narrow OptiScaler into NR-only mode. A user who turns on frame pacing and silently
   // loses their upscaler has been handed a worse app.
   const relimiterHere = relimiter.deployed(dir);
+  // ReLimiter and [DlssNr] AutoScale in frame-rate mode both aim at a frame rate, and together the
+  // model sheds resolution chasing a gap the limiter will never let close (see relimiter.js). Ours is
+  // the one that gives way: the user deployed a frame pacer to pace frames. Applied through
+  // patchIniValues so it lands in `forced` and the app SAYS it changed a setting -- one that turns
+  // itself off in silence is a bug report waiting to happen.
+  if (relimiterHere) {
+    const conflict = relimiter.nrConflict({
+      autoScale: readIniKey(iniPath, 'DlssNr', 'AutoScale'),
+      autoScaleMode: readIniKey(iniPath, 'DlssNr', 'AutoScaleMode'),
+    });
+    if (conflict) forced = [...forced, ...patchIniValues(iniPath, relimiter.NR_CONFLICT_EDITS)];
+  }
   if ((feederGame && feeder.feederDeployed(dir)) || relimiterHere) {
     // Only where ReShade is the plain ReShade64.dll beside the exe. As the game's opengl32.dll
     // or as the Vulkan layer it is already in the process, and a second copy loaded by
