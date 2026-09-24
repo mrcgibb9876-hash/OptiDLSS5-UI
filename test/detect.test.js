@@ -78,6 +78,46 @@ test('foreignToolchains recognises other DLSS 5 stacks by their marker files onl
   assert.deepEqual(detect.foreignToolchains(own), []);
 });
 
+test('foreignToolchains sees the DLSS 5 Bridge, the transport under a neural add-on', async () => {
+  // The Bridge (NIGos/dlss5-bridge) mirrors a game's own D3D11/Vulkan DLSS into a private D3D12
+  // session for a neural add-on. Its consumer is usually renodx-dlss5, which was already caught --
+  // so the folder got a verdict naming the add-on and nothing about the transport under it.
+  const both = scratchDir('bridge-with-renodx');
+  write(both, 'dlss5-bridge.addon64');
+  write(both, 'renodx-dlss5.addon64');
+  const tools = detect.foreignToolchains(both).map((f) => f.tool);
+  assert.ok(tools.includes('DLSS 5 Bridge'));
+  assert.ok(tools.includes('a RenoDX DLSS 5 add-on'));
+  // NOTE, not an endorsement: 'DLSS5-Swapper' also reports here, because its marker list carries
+  // the bare renodx-dlss5.addon64 -- a filename it shares with every other stack that ships that
+  // add-on, including this one. That is the same shape as the DOOM 3 BFG mis-attribution the
+  // FOREIGN_TOOLCHAINS comment describes, and its real marker (_DLSS5_Backup/manifest.json) is
+  // sitting right there in the same entry. Left alone here rather than widened into this change.
+  assert.ok(tools.includes('DLSS5-Swapper'), 'documents today\'s behaviour, see the note above');
+
+  // The case that reported nothing at all before: a Bridge with no RenoDX beside it (its own
+  // add-on removed, or a different consumer such as NapXDD's Linux one).
+  const alone = scratchDir('bridge-alone');
+  write(alone, 'dlss5-bridge.addon64');
+  assert.deepEqual(detect.foreignToolchains(alone).map((f) => f.tool), ['DLSS 5 Bridge']);
+
+  // ... and a folder it has only ever RUN in: the add-on is gone, its own two files remain.
+  const ran = scratchDir('bridge-ran');
+  write(ran, 'dlss5-bridge.cfg', 'vk_mirror=1\n');
+  write(ran, 'dlss5-bridge.log', '[bridge] ...\n');
+  assert.deepEqual(detect.foreignToolchains(ran).map((f) => f.tool), ['DLSS 5 Bridge']);
+
+  // Remove offers its three files and nothing of the game's -- it patches and backs up nothing.
+  const plan = await detect.planForeignRemoval(alone);
+  assert.deepEqual(plan.del, ['dlss5-bridge.addon64']);
+  assert.deepEqual(plan.restore, []);
+
+  // A name that merely starts the same way is not it: markers here are exact.
+  const near = scratchDir('bridge-near');
+  write(near, 'dlss5-bridge-notes.txt');
+  assert.deepEqual(detect.foreignToolchains(near), []);
+});
+
 test('planForeignRemoval restores a game-ownable backup, deletes a tool-only one, and never touches our payload', async () => {
   const dir = scratchDir('plan');
   write(dir, 'INSTALL-DLSSNR.md');

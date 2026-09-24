@@ -1268,6 +1268,31 @@ const FOREIGN_TOOLCHAINS = [
   // failure #89 reported: "dxgi.dll is loaded but the DRIVER answered the NGX probe". Named for
   // what it is rather than for a tool, because several distributions drop it and this app has
   // never placed a file by that name.
+  // DLSS 5 Bridge (NIGos/dlss5-bridge, MIT). Not a rival installer and not a neural consumer
+  // either -- it is a TRANSPORT, the same role as the Feeder: it mirrors a game's own D3D11 or
+  // Vulkan DLSS into a private D3D12 session so a neural add-on can run there, and copies the
+  // result back. Someone may well be running it on purpose, so this is the Deep Fried Chicken
+  // shape (reported, never removed behind their back) rather than the DLSS5oneclick shape.
+  //
+  // It is here because the clash with this app is silent and runs BOTH ways:
+  //
+  //   - Its own README says to use one neural consumer at a time. OptiScaler's NR pass is one.
+  //   - It resolves the real NGX D3D12 entry points itself and prefers the driver's _nvngx.dll.
+  //     A module that exports those and is not the driver's loader it records as a proxy standing
+  //     in for NGX -- and it names OptiScaler as exactly that case, in its own source
+  //     (dlss5-bridge.cpp, "OptiScaler installed as winmm.dll is one"). So our proxy and its
+  //     transport are two answers to the same call, and which one wins is not something either
+  //     side declares.
+  //
+  // Its consumer is usually renodx-dlss5.addon64, which the rule above already catches -- but that
+  // rule names the ADD-ON, not the transport under it, so the folder got a verdict that described
+  // half the stack. A Bridge with NapXDD's Linux add-on, or one deployed before its consumer, trips
+  // nothing at all today.
+  //
+  // All three markers carry the project's own name, so none can collide with a file this app, a
+  // game, or another tool places. The .log and .cfg are written by the add-on on first run, so a
+  // folder that ran it once is still its folder after the .addon64 is taken out again.
+  { tool: 'DLSS 5 Bridge', files: ['dlss5-bridge.addon64', 'dlss5-bridge.cfg', 'dlss5-bridge.log'] },
   { tool: 'another NGX runtime (nvngxruntime.dll)', files: ['nvngxruntime.dll'] },
 ];
 
@@ -1302,6 +1327,10 @@ const FOREIGN_REMOVALS = {
       'LICENSE-Deep-Fried-Chicken.md'],
     patterns: [/^ReShade\.ini\.deep-fried-chicken-backup-.*\.bak$/i],
   },
+  // The add-on and the two files it writes itself. It patches nothing of the game's and backs up
+  // nothing, so there is nothing to restore. Offered rather than done, as with Chicken: someone may
+  // be running the Bridge on purpose and want ours gone instead, which Remove does.
+  'DLSS 5 Bridge': { files: ['dlss5-bridge.addon64', 'dlss5-bridge.cfg', 'dlss5-bridge.log'] },
   'another NGX runtime (nvngxruntime.dll)': { files: ['nvngxruntime.dll'] },
 };
 // A backed-up name a game could legitimately own comes back from the backup; anything else that
