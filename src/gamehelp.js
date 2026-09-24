@@ -41,6 +41,16 @@ function diagnose(ctx) {
     ? { count: asiFiles.length, files: asiFiles.slice(0, 6).join(', '), reShade: (asi && asi.reShade) || '' }
     : null;
   const noHook = () => (asiBlind ? out('unknown', 'asi-loader-blind', asiBlind) : out('unknown', 'no-hook'));
+  // A graphics debugger beside the exe (detect.js inspectGraphicsDebuggers). It wraps Direct3D 12
+  // and carries no vendor path, so DLSS and XeSS fail through it while FSR 2/3 -- OptiScaler's own
+  // compute -- keep working. That asymmetry is the whole tell, and it is what an Uncharted 4
+  // reporter described (2026-09-24). Named only where the verdict is one it could explain, and
+  // always as a file that is PRESENT: the game ships renderdoc.dll itself, so whether it loaded is
+  // not something this app can see.
+  const debuggers = d.graphicsDebuggers || [];
+  const debuggerNote = debuggers.length
+    ? { debugger: debuggers.map((g) => g.tool).join(', '), debuggerFile: debuggers.map((g) => g.file).join(', ') }
+    : {};
 
   const out = (status, code, vars = {}) => ({ status, code, vars, fix: null });
   const fix = (code, id, vars = {}) => {
@@ -296,6 +306,9 @@ function diagnose(ctx) {
       // already right for the Uncharted reporter (2026-09-24), because their result was
       // UnableToInitializeFeature: NGX had the DLL and refused anyway. A code with no name sends
       // people to re-check what they have already done.
+      // A debugger in the folder outranks the override advice: it explains DLSS and XeSS both
+      // failing while FSR works, which the override does not.
+      if (debuggers.length) return out('step', 'sr-backend-debugger', { backend: run.detail || '', result: run.srCreateResult || '', ...debuggerNote });
       return out('step', 'sr-backend-fallback', {
         backend: run.detail || '', result: run.srCreateResult || '',
         why: run.srCreateResultName || '',

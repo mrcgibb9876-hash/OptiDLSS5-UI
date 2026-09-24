@@ -12,6 +12,7 @@ const { scanForGames } = discover;
 const framegen = require('./framegen');
 const injector = require('./injector');
 const feeder = require('./feeder');
+const relimiter = require('./relimiter');
 const addons = require('./addons');
 const lossless = require('./lossless');
 const reengine = require('./reengine');
@@ -831,6 +832,44 @@ ipcMain.handle('optifg:live-set', async (_evt, { exePath, enabled, hudfix } = {}
 // why this sidesteps that whole crash class (it never touches the game's own Present/swapchain).
 ipcMain.handle('lossless:openStorePage', () => {
   shell.openExternal('https://store.steampowered.com/app/993090/Lossless_Scaling/');
+});
+
+// ── Frame pacing (ReLimiter) ──
+//
+// A ReShade add-on, so it needs the same arrangement the Feeder uses: OptiScaler keeps the proxy slot
+// and [Plugins] LoadReshade=true has it load the plain ReShade64.dll beside the exe. autoConfigureGame
+// sets that key whenever ReLimiter is deployed, so nothing here has to.
+ipcMain.handle('relimiter:status', async (_evt, exePath) => {
+  try {
+    const dir = gameDir(exePath);
+    const { api } = effectiveDetection(dir, exePath, await detectFor(dir, exePath));
+    const st = relimiter.status(dir, { api: api || 'dx12' });
+    // The number in ReLimiter's own ini, not one this app remembers: the in-game panel and ReLimiter's
+    // own overlay can both change it, and a remembered copy would go stale the first time they did.
+    const raw = readIniKey(relimiter.iniPath(dir), relimiter.INI_SECTION, 'target_fps');
+    const targetFps = Number.isFinite(Number(raw)) ? Number(raw) : 0;
+    return { ok: true, ...st, targetFps, min: relimiter.TARGET_FPS_MIN, max: relimiter.TARGET_FPS_MAX };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+});
+
+ipcMain.handle('relimiter:set-target', async (_evt, { exePath, fps } = {}) => {
+  try {
+    const dir = gameDir(exePath);
+    const applied = patchIniValues(relimiter.iniPath(dir), relimiter.targetFpsEdits(fps));
+    return { ok: true, applied };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+});
+
+ipcMain.handle('relimiter:remove', async (_evt, exePath) => {
+  try {
+    return { ok: true, removed: relimiter.remove(gameDir(exePath)) };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
 });
 
 ipcMain.handle('lossless:detect', () => {
@@ -6276,11 +6315,32 @@ async function autoConfigureGame(dir, exePath) {
   let forced = dlss5Only
     ? patchIniValues(iniPath, [...(optiFgOn ? optiFgForced(optiFg) : [...DLSS5_ONLY_FORCED, ...optiFgDisarm(iniPath)]), ...keepGamesOwnDlss(upscalerApis)])
     : [];
-  if (feederGame && feeder.feederDeployed(dir)) {
+  // ReLimiter is a ReShade add-on and is driven by ReShade's present event, so it needs the same
+  // arrangement the Feeder does -- and on an ordinary DX12 game there is no Feeder to trigger it.
+  // Hence this condition is "anything here needs ReShade loaded", not "the Feeder is deployed".
+  // Deliberately NOT tied to dlss5Only above: ReLimiter is a frame pacer, not an upscaler, so adding
+  // it must never narrow OptiScaler into NR-only mode. A user who turns on frame pacing and silently
+  // loses their upscaler has been handed a worse app.
+  const relimiterHere = relimiter.deployed(dir);
+  // ReLimiter and [DlssNr] AutoScale in frame-rate mode both aim at a frame rate, and together the
+  // model sheds resolution chasing a gap the limiter will never let close (see relimiter.js). Ours is
+  // the one that gives way: the user deployed a frame pacer to pace frames. Applied through
+  // patchIniValues so it lands in `forced` and the app SAYS it changed a setting -- one that turns
+  // itself off in silence is a bug report waiting to happen.
+  if (relimiterHere) {
+    const conflict = relimiter.nrConflict({
+      autoScale: readIniKey(iniPath, 'DlssNr', 'AutoScale'),
+      autoScaleMode: readIniKey(iniPath, 'DlssNr', 'AutoScaleMode'),
+    });
+    if (conflict) forced = [...forced, ...patchIniValues(iniPath, relimiter.NR_CONFLICT_EDITS)];
+  }
+  if ((feederGame && feeder.feederDeployed(dir)) || relimiterHere) {
     // Only where ReShade is the plain ReShade64.dll beside the exe. As the game's opengl32.dll
     // or as the Vulkan layer it is already in the process, and a second copy loaded by
     // OptiScaler would be two ReShades.
-    const local = feeder.feederReShadeMode(dir) === 'local';
+    const local = feeder.feederDeployed(dir)
+      ? feeder.feederReShadeMode(dir) === 'local'
+      : relimiter.reshadeModeFor(api || 'dx12') === 'local';
     forced = [...forced, ...patchIniValues(iniPath, local ? LOAD_RESHADE_FORCED : [{ section: 'Plugins', key: 'LoadReshade', value: 'false' }])];
     // Neural Rendering before Super Resolution: off, on a Feeder game specifically.
     //

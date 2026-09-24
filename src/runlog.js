@@ -646,6 +646,14 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = 
       add('asi plugins', `${asi.files.length} beside the exe (${asi.files.slice(0, 6).join(', ')}${asi.files.length > 6 ? ', ...' : ''})` +
         (named.length ? ` -- ${named.join(' and ')}, loaded by an ASI loader and NOT by this app` : ' -- this app cannot see what they load'));
     }
+    // A graphics debugger in the folder WRAPS Direct3D 12 and carries no vendor path, so DLSS and
+    // XeSS fail through it while FSR 2/3 -- OptiScaler's own compute -- keep working. Reported as a
+    // file that is present, never as a file that ran: Uncharted 4 SHIPS renderdoc.dll, so "it is
+    // there" and "it is in the process" are different claims and only the first one is ours to make.
+    if (detected.graphicsDebuggers && detected.graphicsDebuggers.length) {
+      add('graphics debugger', detected.graphicsDebuggers.map((g) => `${g.tool} (${g.file})`).join(', ')
+        + ' -- in the folder; this app cannot tell whether the game loaded it. These wrap D3D12 and break DLSS and XeSS while FSR keeps working');
+    }
     if (detected.antiCheat) add('anti-cheat', detected.antiCheat);
   }
   // dgVoodoo2 turns DirectX 8/9 into D3D11 inside the game, which is itself a reason a DX9 game can
@@ -846,6 +854,32 @@ function folderListing(dir) {
 // The bundle's contents without writing anything: [{ name, source }] for files on disk and
 // [{ name, text }] for what the app composes (folder listing, its own view). Shared by the zip below and
 // by "Send game failure" (ghreport.js), which posts the same files as text.
+// The WRAPPER's own log, on a route where a wrapper is doing the rendering. On a dgVoodoo2 or DXVK
+// game the layer that faults is the layer the bundle never carried: OptiScaler.log describes what
+// OptiScaler saw, and says nothing about the D3D9-to-D3D11 or D3D-to-Vulkan translation underneath
+// it. SWTOR (#50) was settled only because the reporter's crash dump named `d3d9!00065af0` and the
+// adapter string said "(dgVoodoo DX API Layer)" -- the wrapper log itself was never in the bundle.
+//
+// Two shapes, which is why a flat name list could not do it and this went unadded for so long.
+// dgVoodoo writes one fixed name. DXVK writes `<exe basename>_<api>.log` beside the exe, so the name
+// depends on the game and can only be matched by pattern.
+//
+// Capped at 8 files. A pattern over a game folder is exactly where a bundle could otherwise swallow
+// something enormous, and eight is more wrapper logs than any real route produces.
+const WRAPPER_LOG_NAMES = ['dgVoodoo.log', 'dxvk.log', 'd3d9.log', 'd3d8.log'];
+const WRAPPER_LOG_PATTERN = /_(?:d3d8|d3d9|d3d10|d3d11|d3d12|dxgi)\.log$/i;
+const MAX_WRAPPER_LOGS = 8;
+
+function wrapperLogs(dir) {
+  let names = [];
+  try { names = fs.readdirSync(dir); } catch { return []; }
+  const wanted = new Set(WRAPPER_LOG_NAMES.map((n) => n.toLowerCase()));
+  return names
+    .filter((n) => wanted.has(n.toLowerCase()) || WRAPPER_LOG_PATTERN.test(n))
+    .sort()
+    .slice(0, MAX_WRAPPER_LOGS);
+}
+
 async function gatherSupportFiles(dir, { extra = {}, optiDir = dir } = {}) {
   const files = [];
   for (const name of BUNDLE_FILES) {
@@ -860,6 +894,11 @@ async function gatherSupportFiles(dir, { extra = {}, optiDir = dir } = {}) {
       const src = path.join(optiDir, name);
       if (fs.existsSync(src)) files.push({ name: `${hostPrefix}-${name}`, source: src });
     }
+  }
+  // Whatever wrapper is under the game, its own log goes in beside ours. Prefixed so nobody has to
+  // guess which layer wrote it when four logs in the zip all end in .log.
+  for (const name of wrapperLogs(dir)) {
+    files.push({ name: `wrapper-${name}`, source: path.join(dir, name) });
   }
   const run = await analyzeRun(dir, { optiDir });
   if (run.crash && run.crash.path) {
@@ -897,4 +936,4 @@ async function collectSupportBundle(dir, { zipPath, extra = {}, execFileAsync, o
   return { zipPath, files: copied, run };
 }
 
-module.exports = { analyzeRun, ngxResultName, collectSupportBundle, gatherSupportFiles, reportDigest, withDigest, DIGEST_MARKER, unrealCrashNear, nrTiming, dlssRuntimeStubBytes, DLSS_RUNTIME_MIN_BYTES };
+module.exports = { analyzeRun, ngxResultName, wrapperLogs, collectSupportBundle, gatherSupportFiles, reportDigest, withDigest, DIGEST_MARKER, unrealCrashNear, nrTiming, dlssRuntimeStubBytes, DLSS_RUNTIME_MIN_BYTES };

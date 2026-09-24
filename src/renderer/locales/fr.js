@@ -1,6 +1,39 @@
 // Français. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("fr", {
+  "This game runs on Vulkan, where ReShade only loads as a machine-wide layer that its own installer registers -- this app cannot do that for you. Run ReShade's setup once for this exe, choosing Vulkan and \"Enable loading of add-ons\", and frame pacing can be set up here afterwards.":
+    "Ce jeu tourne sous Vulkan, où ReShade ne se charge que comme une couche à l'échelle du système enregistrée par son propre installateur -- cette application ne peut pas le faire à votre place. Lancez le programme d'installation de ReShade une fois pour cet exe, en choisissant Vulkan et \"Enable loading of add-ons\", et la cadence des images pourra ensuite être configurée ici.",
+  "Frame pacing was installed here and its file is gone from the folder, so something removed it after the fact -- almost always antivirus. Add an exclusion for this game folder first, then add it again.":
+    "La cadence des images a été installée ici et son fichier a disparu du dossier : quelque chose l'a retiré après coup -- presque toujours un antivirus. Ajoutez d'abord une exclusion pour le dossier de ce jeu, puis ajoutez-la de nouveau.",
+  "Frame pacing is set up{version}.":
+    "La cadence des images est configurée{version}.",
+  "Needs ReShade beside the exe. Adding frame pacing sets that up too.":
+    "Nécessite ReShade à côté de l'exe. L'ajout de la cadence des images le met en place aussi.",
+  "The ReShade in this folder is the plain build, which never loads add-ons. Adding frame pacing replaces it with the Add-on build.":
+    "Le ReShade de ce dossier est la version simple, qui ne charge jamais d'add-on. L'ajout de la cadence des images le remplace par la version Add-on.",
+  "Ready to add.":
+    "Prêt à être ajouté.",
+  "Could not write the frame rate.":
+    "Impossible d'écrire la fréquence d'images.",
+  "Set to stay below the VRR ceiling.":
+    "Reste sous le plafond VRR.",
+  "Holding {fps} fps.":
+    "Maintient {fps} fps.",
+  "Frame pacing":
+    "Cadence des images",
+  "ReLimiter paces frames for a G-Sync or VRR display -- it holds the frame rate steady rather than making more of them, which is why it sits here beside Frame Generation and not under Speed vs quality. It is a ReShade add-on by RankFTW, Lazorr and UltraMatt, MIT licensed, and it rides on the same ReShade this app already sets up for the DLSS5 Feeder.":
+    "ReLimiter cadence les images pour un écran G-Sync ou VRR : il stabilise la fréquence d'images au lieu d'en produire davantage, et c'est pourquoi il se trouve ici à côté de Frame Generation et non sous Vitesse et qualité. C'est un add-on ReShade de RankFTW, Lazorr et UltraMatt, sous licence MIT, qui s'appuie sur le même ReShade que cette application installe déjà pour le Feeder DLSS5.",
+  "Add frame pacing":
+    "Ajouter la cadence des images",
+  "Frame rate to hold":
+    "Fréquence d'images à maintenir",
+  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. The slider covers the range people actually use; the box beside it goes up to 1000 for a display that needs it.":
+    "Auto reste juste sous le plafond VRR de l'écran, ce que veulent la plupart des gens ; un nombre fixe sert à retrouver une valeur déjà choisie ailleurs. Le curseur couvre la plage réellement utilisée ; la case à côté monte à 1000 pour un écran qui en a besoin.",
+  "Auto (stay below the VRR ceiling)":
+    "Auto (rester sous le plafond VRR)",
+  "fps":
+    "fps",
+
   "Deep Fried Chicken settings": "R\u00e9glages de Deep Fried Chicken",
   "This deep-fried-chicken.cfg was written by a newer Chicken ({schema}) than this app knows ({known}), so it is shown but not changed here. Use Chicken's own overlay.": "Ce deep-fried-chicken.cfg a \u00e9t\u00e9 \u00e9crit par un Chicken plus r\u00e9cent ({schema}) que celui que conna\u00eet cette app ({known}) : il est affich\u00e9 mais pas modifi\u00e9 ici. Utilise l'overlay de Chicken.",
   "{offered} of this file's {total} settings are offered here -- the ones whose meaning is unambiguous. Everything else stays exactly as Chicken wrote it, and its own in-game overlay still has the full set.": "{offered} des {total} r\u00e9glages de ce fichier sont propos\u00e9s ici -- ceux dont le sens est sans ambigu\u00eft\u00e9. Tout le reste reste exactement comme Chicken l'a \u00e9crit, et son propre overlay en jeu conserve l'ensemble complet.",
@@ -758,6 +791,14 @@ window.I18N.register("fr", {
   "Depth is flat -- wrong buffer": "Profondeur plate -- mauvais buffer",
   "D3D12 refused every device (redist)": "D3D12 a refusé chaque périphérique (redistribuable)",
   "Black screen: every frame dropped": "Écran noir : chaque image abandonnée",
+  "DLSS could not be created ({result}) and OptiScaler upscaled with {backend} instead, and {debugger} is sitting in the game folder ({debuggerFile}). A graphics debugger replaces Direct3D 12 with its own wrapper, and that wrapper carries none of the vendor paths DLSS and XeSS need -- which is why those two fail while FSR keeps working. This app cannot tell whether the game actually loaded it; some games ship one and never use it. Move the file out of the folder and launch again to find out.":
+    "Le DLSS n'a pas pu être créé ({result}) et OptiScaler a mis à l'échelle avec {backend} à la place, et {debugger} se trouve dans le dossier du jeu ({debuggerFile}). Un débogueur graphique remplace Direct3D 12 par son propre wrapper, et ce wrapper ne contient aucun des chemins constructeur dont le DLSS et le XeSS ont besoin : c'est pourquoi ces deux-là échouent alors que le FSR continue de fonctionner. Cette application ne peut pas savoir si le jeu l'a réellement chargé ; certains jeux en livrent un sans jamais s'en servir. Sortez le fichier du dossier et relancez pour le vérifier.",
+  "Move {debuggerFile} out of the game folder":
+    "Sortez {debuggerFile} du dossier du jeu",
+  "Launch again and try DLSS":
+    "Relancez et essayez le DLSS",
+  "Not DLSS -- {debugger} is in the folder":
+    "Pas de DLSS -- {debugger} est dans le dossier",
   "Not DLSS -- fell back to {backend}": "Pas du DLSS -- repli sur {backend}",
   "Deploy the Feeder again": "Redéployer le Feeder",
   "Try the verified Unity depth profile": "Essayer le profil de profondeur Unity vérifié",

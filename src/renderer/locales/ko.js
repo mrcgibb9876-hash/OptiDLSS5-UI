@@ -1,6 +1,39 @@
 // 한국어. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("ko", {
+  "This game runs on Vulkan, where ReShade only loads as a machine-wide layer that its own installer registers -- this app cannot do that for you. Run ReShade's setup once for this exe, choosing Vulkan and \"Enable loading of add-ons\", and frame pacing can be set up here afterwards.":
+    "이 게임은 Vulkan으로 실행되며, 여기서 ReShade는 자체 설치 프로그램이 등록하는 시스템 전역 계층으로만 로드됩니다. 이 앱은 그 작업을 대신할 수 없습니다. 이 exe에 대해 ReShade 설치 프로그램을 한 번 실행하고 Vulkan과 \"Enable loading of add-ons\"를 선택하면, 그 후에 프레임 페이싱을 여기서 설정할 수 있습니다.",
+  "Frame pacing was installed here and its file is gone from the folder, so something removed it after the fact -- almost always antivirus. Add an exclusion for this game folder first, then add it again.":
+    "프레임 페이싱이 여기 설치되어 있었지만 파일이 폴더에서 사라졌습니다. 설치 후 무언가가 제거한 것으로, 거의 항상 백신입니다. 먼저 이 게임 폴더에 예외를 추가한 다음 다시 추가하세요.",
+  "Frame pacing is set up{version}.":
+    "프레임 페이싱이 설정되었습니다{version}.",
+  "Needs ReShade beside the exe. Adding frame pacing sets that up too.":
+    "exe 옆에 ReShade가 필요합니다. 프레임 페이싱을 추가하면 그것도 함께 설정됩니다.",
+  "The ReShade in this folder is the plain build, which never loads add-ons. Adding frame pacing replaces it with the Add-on build.":
+    "이 폴더의 ReShade는 애드온을 전혀 불러오지 않는 일반 빌드입니다. 프레임 페이싱을 추가하면 애드온 빌드로 교체됩니다.",
+  "Ready to add.":
+    "추가할 준비가 되었습니다.",
+  "Could not write the frame rate.":
+    "프레임 레이트를 기록할 수 없습니다.",
+  "Set to stay below the VRR ceiling.":
+    "VRR 상한 아래로 유지하도록 설정했습니다.",
+  "Holding {fps} fps.":
+    "{fps} fps를 유지합니다.",
+  "Frame pacing":
+    "프레임 페이싱",
+  "ReLimiter paces frames for a G-Sync or VRR display -- it holds the frame rate steady rather than making more of them, which is why it sits here beside Frame Generation and not under Speed vs quality. It is a ReShade add-on by RankFTW, Lazorr and UltraMatt, MIT licensed, and it rides on the same ReShade this app already sets up for the DLSS5 Feeder.":
+    "ReLimiter는 G-Sync 또는 VRR 디스플레이를 위해 프레임 간격을 고르게 맞춥니다. 프레임을 더 만드는 것이 아니라 프레임 레이트를 안정적으로 유지하므로, 화질 대비 속도가 아니라 여기 Frame Generation 옆에 있습니다. RankFTW, Lazorr, UltraMatt가 만든 MIT 라이선스 ReShade 애드온이며, 이 앱이 DLSS5 Feeder용으로 이미 설정하는 같은 ReShade 위에서 동작합니다.",
+  "Add frame pacing":
+    "프레임 페이싱 추가",
+  "Frame rate to hold":
+    "유지할 프레임 레이트",
+  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. The slider covers the range people actually use; the box beside it goes up to 1000 for a display that needs it.":
+    "자동은 디스플레이의 VRR 상한 바로 아래를 유지하며 대부분의 경우 이것이 적합합니다. 고정 값은 다른 곳에서 이미 정한 수치에 맞출 때 쓰세요. 슬라이더는 실제로 많이 쓰는 범위를 다루고, 옆의 입력란은 필요한 디스플레이를 위해 1000까지 올라갑니다.",
+  "Auto (stay below the VRR ceiling)":
+    "자동 (VRR 상한 아래로 유지)",
+  "fps":
+    "fps",
+
   "Deep Fried Chicken settings": "Deep Fried Chicken \uc124\uc815",
   "This deep-fried-chicken.cfg was written by a newer Chicken ({schema}) than this app knows ({known}), so it is shown but not changed here. Use Chicken's own overlay.": "\uc774 deep-fried-chicken.cfg\ub294 \uc774 \uc571\uc774 \uc544\ub294 \ubc84\uc804({known})\ubcf4\ub2e4 \uc0c8\ub85c\uc6b4 Chicken({schema})\uc774 \uc791\uc131\ud588\uc2b5\ub2c8\ub2e4. \ub530\ub77c\uc11c \uc5ec\uae30\uc11c\ub294 \ubcf4\uc5ec\uc8fc\uae30\ub9cc \ud558\uace0 \ubcc0\uacbd\ud558\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4. Chicken\uc758 \uc790\uccb4 \uc624\ubc84\ub808\uc774\ub97c \uc0ac\uc6a9\ud558\uc138\uc694.",
   "{offered} of this file's {total} settings are offered here -- the ones whose meaning is unambiguous. Everything else stays exactly as Chicken wrote it, and its own in-game overlay still has the full set.": "\uc774 \ud30c\uc77c\uc758 \uc124\uc815 {total}\uac1c \uc911 \uc758\ubbf8\uac00 \uba85\ud655\ud55c {offered}\uac1c\ub9cc \uc5ec\uae30\uc5d0 \uc81c\uacf5\ud569\ub2c8\ub2e4. \ub098\uba38\uc9c0\ub294 Chicken\uc774 \uae30\ub85d\ud55c \uadf8\ub300\ub85c \uc720\uc9c0\ub418\uba70, \uc804\uccb4 \uc124\uc815\uc740 \uac8c\uc784 \ub0b4 \uc624\ubc84\ub808\uc774\uc5d0 \uadf8\ub300\ub85c \uc788\uc2b5\ub2c8\ub2e4.",
@@ -1313,6 +1346,14 @@ window.I18N.register("ko", {
   "Depth is flat -- wrong buffer": "깊이가 평평함 -- 잘못된 버퍼",
   "D3D12 refused every device (redist)": "D3D12가 모든 장치를 거부함(redist)",
   "Black screen: every frame dropped": "검은 화면: 모든 프레임이 버려짐",
+  "DLSS could not be created ({result}) and OptiScaler upscaled with {backend} instead, and {debugger} is sitting in the game folder ({debuggerFile}). A graphics debugger replaces Direct3D 12 with its own wrapper, and that wrapper carries none of the vendor paths DLSS and XeSS need -- which is why those two fail while FSR keeps working. This app cannot tell whether the game actually loaded it; some games ship one and never use it. Move the file out of the folder and launch again to find out.":
+    "DLSS를 만들 수 없어({result}) OptiScaler가 대신 {backend}(으)로 업스케일했으며, 게임 폴더에 {debugger}이(가) 있습니다({debuggerFile}). 그래픽 디버거는 Direct3D 12를 자체 래퍼로 대체하는데, 그 래퍼에는 DLSS와 XeSS에 필요한 제조사 경로가 전혀 없습니다. FSR은 계속 작동하는데 이 둘만 실패하는 이유가 바로 그것입니다. 게임이 실제로 그것을 불러왔는지는 이 앱이 알 수 없습니다. 함께 들어 있기만 하고 전혀 쓰지 않는 게임도 있습니다. 파일을 폴더 밖으로 옮기고 다시 실행해 확인해 보세요.",
+  "Move {debuggerFile} out of the game folder":
+    "{debuggerFile}을(를) 게임 폴더 밖으로 옮기기",
+  "Launch again and try DLSS":
+    "다시 실행하고 DLSS 시도",
+  "Not DLSS -- {debugger} is in the folder":
+    "DLSS 아님 -- 폴더에 {debugger} 있음",
   "Not DLSS -- fell back to {backend}": "DLSS 아님 -- {backend}(으)로 대체됨",
   "{exe} is not on ReShade's Vulkan app list": "{exe}이(가) ReShade의 Vulkan 앱 목록에 없습니다",
   "DLSS 5 is under a name this game never loads ({from})": "DLSS 5가 이 게임이 불러오지 않는 이름으로 있습니다({from})",

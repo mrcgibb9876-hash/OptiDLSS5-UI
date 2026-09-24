@@ -281,6 +281,33 @@
         </div>
       </details>
 
+      <details id="edit-group-pacing" class="edit-group">
+        <summary data-i18n>Frame pacing</summary>
+        <div id="game-relimiter-section" class="hidden">
+          <p class="field-hint" data-i18n>ReLimiter paces frames for a G-Sync or VRR display -- it holds the frame rate steady rather than making more of them, which is why it sits here beside Frame Generation and not under Speed vs quality. It is a ReShade add-on by RankFTW, Lazorr and UltraMatt, MIT licensed, and it rides on the same ReShade this app already sets up for the DLSS5 Feeder.</p>
+          <div class="field-row">
+            <button id="btn-relimiter-install" class="btn btn-ghost" data-i18n>Add frame pacing</button>
+            <button id="btn-relimiter-remove" class="btn btn-ghost hidden" data-i18n>Remove</button>
+          </div>
+          <span id="game-relimiter-status" class="status-line"></span>
+
+          <div id="game-relimiter-target-block" class="field-subblock hidden">
+            <label class="field-label" data-i18n>Frame rate to hold</label>
+            <p class="field-hint" data-i18n>Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. The slider covers the range people actually use; the box beside it goes up to 1000 for a display that needs it.</p>
+            <label class="scan-checkbox-row">
+              <input type="checkbox" id="game-relimiter-auto" checked />
+              <span data-i18n>Auto (stay below the VRR ceiling)</span>
+            </label>
+            <div id="game-relimiter-fixed-row" class="field-row hidden">
+              <input id="game-relimiter-fps-slider" type="range" min="30" max="360" step="1" value="120" style="flex: 1 1 220px;" />
+              <input id="game-relimiter-fps" type="number" min="30" max="1000" step="1" value="120" style="width: 90px;" />
+              <span class="field-hint" data-i18n>fps</span>
+            </div>
+            <span id="game-relimiter-target-status" class="status-line"></span>
+          </div>
+        </div>
+      </details>
+
       <details id="edit-group-advanced" class="edit-group">
         <summary data-i18n>Advanced</summary>
         <div id="game-api-section" class="hidden">
