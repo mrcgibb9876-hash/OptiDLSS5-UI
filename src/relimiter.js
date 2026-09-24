@@ -26,6 +26,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const feeder = require('./feeder');
+const integrity = require('./integrity');
+const dfc = require('./dfc');
+const { peOriginalFilename } = require('./detect');
+const { setIniKey, getIniKey } = require('./ini-merge');
 
 const ADDON_64 = 'relimiter.addon64';
 const ADDON_32 = 'relimiter.addon32';
@@ -75,6 +79,91 @@ function marker(dir) {
   }
 }
 
+// ── A game with no OptiScaler ──
+//
+// Frame pacing is for ANY game, not only ones this app has put DLSS 5 on. Where OptiScaler is in the
+// folder it loads the plain ReShade64.dll ([Plugins] LoadReshade). Where it is not, nothing would load
+// that file, so ReShade goes down as the game's own proxy instead: dxgi.dll for DX10/11/12 (all of
+// them reach the swapchain through DXGI), d3d9.dll for a 64-bit DX9 game. OpenGL is already a proxy
+// in every case (opengl32.dll, feeder.js). Recorded in our marker as reshadeProxy so that installing
+// DLSS 5 afterwards can move it back to ReShade64.dll before OptiScaler takes the slot
+// (demoteStandaloneReShade), and Remove can take back a ReShade it placed for nothing else.
+// Strict on purpose. feeder.isReShadeDll is a string match, and OptiScaler.dll carries the string
+// "ReShade" too (its LoadReshade), so it would pass -- and this check decides what gets renamed or
+// deleted in a proxy slot OptiScaler may be sitting in. ReShade's own version resource names it.
+function isReShadeProxy(file) {
+  try {
+    return /^reshade(32|64)?\.dll$/i.test(peOriginalFilename(file) || '');
+  } catch {
+    return false;
+  }
+}
+
+// Did frame pacing put the ReShade64.dll here? Recorded at install (reshadePlaced) and checked against
+// the file itself, so a ReShade someone else dropped in later is not claimed. Chicken's swap asks this
+// before taking ReShade64.dll over (dfc.js switchToDfc, reshadeIsOurs).
+function placedReShade(dir) {
+  const m = marker(dir);
+  return !!(m && m.reshadePlaced && !m.reshadeProxy && isReShadeProxy(path.join(dir, 'ReShade64.dll')));
+}
+
+function standaloneProxyName(api) {
+  return api === 'dx9' ? 'd3d9.dll' : 'dxgi.dll';
+}
+
+// A game switched to Deep Fried Chicken already has ReShade in the proxy slot -- Chicken's own
+// (dfc.js reshadeProxyOf), with OptiScaler out of the folder. ReLimiter is then one more add-on on
+// that ReShade: nothing is promoted, moved or recorded as ours, so removing pacing can never take
+// Chicken's ReShade with it.
+function chickenReShade(dir) {
+  return dfc.reshadeProxyOf(dir);
+}
+
+function reshadeFileIn(dir, api) {
+  const chicken = chickenReShade(dir);
+  if (chicken) return chicken;
+  const m = marker(dir);
+  if (m && m.reshadeProxy && isReShadeProxy(path.join(dir, m.reshadeProxy))) return m.reshadeProxy;
+  return reshadeModeFor(api) === 'opengl32' ? 'opengl32.dll' : 'ReShade64.dll';
+}
+
+function writeMarker(dir, patch) {
+  const next = { ...(marker(dir) || { tool: 'ReLimiter' }), ...patch };
+  fs.writeFileSync(path.join(dir, MARKER), JSON.stringify(next, null, 2));
+  return next;
+}
+
+// ReShade64.dll (just placed by deployReShade) becomes the game's proxy. Refused when the slot holds
+// something that is not ReShade -- another tool's dxgi.dll is not ours to overwrite.
+function promoteToStandalone(dir, api) {
+  const proxy = standaloneProxyName(api);
+  const dest = path.join(dir, proxy);
+  const src = path.join(dir, 'ReShade64.dll');
+  if (fs.existsSync(dest) && !isReShadeProxy(dest)) {
+    throw Object.assign(new Error(`${proxy} in this folder belongs to something else, so ReShade cannot go there`), { code: 'proxy-taken' });
+  }
+  if (!fs.existsSync(dest)) fs.renameSync(src, dest);
+  else if (fs.existsSync(src)) fs.rmSync(src, { force: true });
+  writeMarker(dir, { reshadeProxy: proxy, reshadePlaced: true });
+  return proxy;
+}
+
+// Before OptiScaler takes the proxy slot: our standalone ReShade goes back to ReShade64.dll, where
+// OptiScaler loads it. Two proxies in one folder is the Batman: Arkham Knight failure feeder.js
+// records, so this is not optional.
+function demoteStandaloneReShade(dir) {
+  const m = marker(dir);
+  if (!m || !m.reshadeProxy) return null;
+  const from = path.join(dir, m.reshadeProxy);
+  const to = path.join(dir, 'ReShade64.dll');
+  if (isReShadeProxy(from)) {
+    if (!fs.existsSync(to)) fs.renameSync(from, to);
+    else fs.rmSync(from, { force: true });
+  }
+  writeMarker(dir, { reshadeProxy: null });
+  return m.reshadeProxy;
+}
+
 function deployed(dir, bitness = 64) {
   return fs.existsSync(path.join(dir, addonName(bitness)));
 }
@@ -86,14 +175,13 @@ function status(dir, { api = 'dx12', bitness = 64 } = {}) {
   const name = addonName(bitness);
   const addon = fs.existsSync(path.join(dir, name));
   const mode = reshadeModeFor(api);
+  const reshadeFile = reshadeFileIn(dir, api);
   const reshade = mode === 'opengl32'
-    ? feeder.isReShadeDll(path.join(dir, 'opengl32.dll'))
-    : fs.existsSync(path.join(dir, 'ReShade64.dll'));
+    ? feeder.isReShadeDll(path.join(dir, reshadeFile))
+    : fs.existsSync(path.join(dir, reshadeFile));
   // The add-on build specifically: the plain build has the same version and product name and simply
   // never loads an add-on (feeder.js's issue-#53 note), so ReLimiter would sit there doing nothing.
-  const addonBuild = mode === 'opengl32'
-    ? feeder.isAddonReShadeDll(path.join(dir, 'opengl32.dll'))
-    : feeder.isAddonReShadeDll(path.join(dir, 'ReShade64.dll'));
+  const addonBuild = feeder.isAddonReShadeDll(path.join(dir, reshadeFile));
   const m = marker(dir);
   return {
     supported: true,
@@ -109,6 +197,9 @@ function status(dir, { api = 'dx12', bitness = 64 } = {}) {
     reshadeIsAddonBuild: reshade ? addonBuild : null,
     ours: !!m,
     version: m ? m.version || null : null,
+    reshadeFile,
+    standalone: !!(m && m.reshadeProxy),
+    chicken: !!chickenReShade(dir),
     complete: addon && reshade && addonBuild,
   };
 }
@@ -132,16 +223,71 @@ function deploy(dir, sourceFile, { bitness = 64, version = null } = {}) {
   }
   const name = addonName(bitness);
   fs.copyFileSync(sourceFile, path.join(dir, name));
-  const record = {
-    tool: 'ReLimiter',
+  // Merged, not replaced: a standalone ReShade recorded before this call stays recorded.
+  return writeMarker(dir, {
     file: name,
     version,
     // Recorded so Remove takes back only what this app put there.
     files: [name],
     at: new Date().toISOString(),
-  };
-  fs.writeFileSync(path.join(dir, MARKER), JSON.stringify(record, null, 2));
-  return record;
+  });
+}
+
+// ── Where the add-on comes from ──
+//
+// The fork first, because only its build exports ReLimiterGetApi, and without that export the
+// engine's in-game Pacing page stays hidden (DlssNr_ReLimiter.cpp: no API, no page). Upstream second,
+// so pacing itself still works when the fork has not published a build: ReLimiter's own overlay
+// drives it and this app's slider writes its ini either way. Both are GitHub releases whose assets are
+// named exactly relimiter.addon64 / relimiter.addon32, and whatever arrives is still checked by
+// content in deploy() -- a release is not trusted for being on the list.
+const RELEASE_SOURCES = [
+  { repo: 'mrcgibb9876-hash/ReLimiter', hostApi: true },
+  { repo: 'RankFTW/ReLimiter', hostApi: false },
+];
+
+function addonAssetFromRelease(release, bitness = 64) {
+  const want = addonName(bitness).toLowerCase();
+  const asset = ((release && release.assets) || []).find((a) => String(a.name).toLowerCase() === want);
+  if (!asset) return null;
+  return { url: asset.browser_download_url, name: asset.name, digest: integrity.digestFromAsset(asset), tag: release.tag_name || null };
+}
+
+// The first source with a usable build. A source that has no release yet (the fork, until it
+// publishes one) answers 404, which is an ordinary "try the next one", not a failure.
+async function resolveAddonAsset(ghHeaders, { bitness = 64, fetchImpl, sources = RELEASE_SOURCES } = {}) {
+  const tried = [];
+  for (const src of sources) {
+    try {
+      const res = await fetchImpl(`https://api.github.com/repos/${src.repo}/releases/latest`, { headers: ghHeaders });
+      if (!res.ok) { tried.push(`${src.repo}: HTTP ${res.status}`); continue; }
+      const found = addonAssetFromRelease(await res.json(), bitness);
+      if (!found) { tried.push(`${src.repo}: no ${addonName(bitness)} in its latest release`); continue; }
+      return { ...found, repo: src.repo, hostApi: src.hostApi };
+    } catch (e) {
+      tried.push(`${src.repo}: ${(e && e.message) || e}`);
+    }
+  }
+  throw new Error(`No ReLimiter build could be found (${tried.join('; ')})`);
+}
+
+// ReShade loads add-ons from AddonPath, which beside the exe is where this one goes. A ReShade.ini the
+// user already has keeps everything else; only the add-on path, a DisabledAddons entry naming
+// ReLimiter (ReShade honours that on every launch, so the add-on would sit there unloaded), and the
+// first-run tutorial banner are touched.
+function configureReShadeIni(dir) {
+  const iniFile = path.join(dir, 'ReShade.ini');
+  const existing = fs.existsSync(iniFile) ? fs.readFileSync(iniFile, 'utf8') : '';
+  let next = existing;
+  if (!getIniKey(next, 'ADDON', 'AddonPath')) next = setIniKey(next, 'ADDON', 'AddonPath', '.\\');
+  const disabled = getIniKey(next, 'ADDON', 'DisabledAddons');
+  if (disabled && /relimiter/i.test(disabled)) {
+    const kept = disabled.split(',').map((s) => s.trim()).filter((s) => s && !/relimiter/i.test(s));
+    next = setIniKey(next, 'ADDON', 'DisabledAddons', kept.join(','));
+  }
+  if (!getIniKey(next, 'OVERLAY', 'TutorialProgress')) next = setIniKey(next, 'OVERLAY', 'TutorialProgress', '4');
+  if (next !== existing) fs.writeFileSync(iniFile, next, 'utf8');
+  return next !== existing;
 }
 
 // Take out only the add-on and our marker. ReShade is deliberately left alone: the Feeder route needs
@@ -153,6 +299,14 @@ function remove(dir) {
   for (const name of (m && m.files) || [ADDON_64, ADDON_32]) {
     const p = path.join(dir, name);
     if (fs.existsSync(p)) { fs.rmSync(p, { force: true }); removed.push(name); }
+  }
+  // The one exception to leaving ReShade alone: a proxy this app placed for frame pacing on a game
+  // with no OptiScaler. Nothing else there loads it, so left behind it would be ReShade hooking the
+  // game for no reason.
+  const chicken = (chickenReShade(dir) || '').toLowerCase();
+  if (m && m.reshadeProxy && m.reshadePlaced && m.reshadeProxy.toLowerCase() !== chicken) {
+    const p = path.join(dir, m.reshadeProxy);
+    if (isReShadeProxy(p)) { fs.rmSync(p, { force: true }); removed.push(m.reshadeProxy); }
   }
   const mp = path.join(dir, MARKER);
   if (fs.existsSync(mp)) { fs.rmSync(mp, { force: true }); removed.push(MARKER); }
@@ -230,6 +384,8 @@ module.exports = {
   ADDON_64, ADDON_32, MARKER,
   addonName, isReLimiterAddon, reshadeModeFor, isAutomatic,
   marker, deployed, status, missing, deploy, remove,
+  isReShadeProxy, chickenReShade, placedReShade, writeMarker, standaloneProxyName, reshadeFileIn, promoteToStandalone, demoteStandaloneReShade,
+  RELEASE_SOURCES, addonAssetFromRelease, resolveAddonAsset, configureReShadeIni,
   NR_FPS_TARGET_MODE, nrConflict, NR_CONFLICT_EDITS,
   INI_NAME, INI_SECTION, iniPath, targetFpsEdits, TARGET_FPS_MIN, TARGET_FPS_MAX,
 };

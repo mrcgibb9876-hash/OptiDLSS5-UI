@@ -63,7 +63,8 @@ contextBridge.exposeInMainWorld('api', {
 
   relimiterStatus: (exePath) => ipcRenderer.invoke('relimiter:status', exePath),
   relimiterSetTarget: (exePath, fps) => ipcRenderer.invoke('relimiter:set-target', { exePath, fps }),
-  relimiterRemove: (exePath) => ipcRenderer.invoke('relimiter:remove', exePath),
+  relimiterInstall: (exePath) => ipcRenderer.invoke('relimiter:install', exePath),
+  relimiterRemove:(exePath) => ipcRenderer.invoke('relimiter:remove', exePath),
   losslessDetect: () => ipcRenderer.invoke('lossless:detect'),
   losslessEligibility: (exePath) => ipcRenderer.invoke('lossless:eligibility', exePath),
   losslessReadSettings: () => ipcRenderer.invoke('lossless:readSettings'),

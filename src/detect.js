@@ -1229,13 +1229,18 @@ async function optiScalerRuntimeApi(dir) {
     await fh.close();
   }
   if (/Vulkan is creating swapchain/.test(text)) return { api: 'vulkan', evidence: 'a Vulkan swapchain' };
-  if (/creating Dx11 swapchain!|hkD3D11CreateDeviceAndSwapChain Device captured|Created Dx11wDx12SC/.test(text)) return { api: 'dx11', evidence: 'a D3D11 swapchain' };
+  if (/creating Dx11 swapchain!|Created Dx11wDx12SC/.test(text)) return { api: 'dx11', evidence: 'a D3D11 swapchain' };
   // No swapchain line either way: then the devices decide. A D3D12 device wins over a D3D11 one, because
   // every real D3D11 game logs its swapchain above (a Feeder or interop game's own D3D12 device included
   // -- Yakuza 0 and The Hong Kong Massacre both do), so a D3D11 device with D3D12 ones beside it and no
   // D3D11 swapchain is a D3D12 game making a throwaway D3D11 device -- Shadow of the Tomb Raider does it
   // at startup, and read as DX11 it was refused OptiScaler's frame generation (2026-09-23).
-  const d3d11Device = /hkD3D11CreateDevice Device captured/.test(text);
+  //
+  // hkD3D11CreateDeviceAndSwapChain is a DEVICE line too, not a swapchain one: ReShade loaded beside
+  // OptiScaler redirects a plain D3D11CreateDevice into D3D11CreateDeviceAndSwapChain with no swapchain
+  // description, so SOTTR's throwaway device logged it the moment frame pacing added ReShade
+  // (2026-09-24) -- read as DX11, the game lost XeFG again. A real D3D11 game logs its swapchain above.
+  const d3d11Device = /hkD3D11CreateDevice(?:AndSwapChain)? Device captured/.test(text);
   if (/hkD3D12CreateDevice/.test(text)) {
     return { api: 'dx12', evidence: d3d11Device ? 'a D3D12 device (its D3D11 device made no swapchain)' : 'a D3D12 device' };
   }

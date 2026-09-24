@@ -4721,6 +4721,28 @@ $('#game-relimiter-fps').addEventListener('change', () => {
   slider.value = String(Math.min(Number(slider.max), Math.max(Number(slider.min), Number(box.value) || 0)));
   saveRelimiterTarget();
 });
+$('#btn-relimiter-install').addEventListener('click', async () => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  if (!game || !game.exePath) return;
+  const btn = $('#btn-relimiter-install');
+  const status = $('#game-relimiter-status');
+  btn.disabled = true;
+  status.textContent = t('Adding frame pacing...');
+  const res = await window.api.relimiterInstall(game.exePath).catch((e) => ({ ok: false, error: String(e) }));
+  btn.disabled = false;
+  if (!res || !res.ok) {
+    await loadRelimiterSection(game);
+    status.textContent = t('Could not add frame pacing: {error}', { error: (res && res.error) || '?' });
+    return;
+  }
+  await loadRelimiterSection(game);
+  // Only the fork's build exports the API the in-game panel uses, so say which one landed: with
+  // upstream's, pacing works through ReLimiter's own overlay but the panel has no Pacing page.
+  if (!res.hostApi) {
+    status.textContent += ' ' + t("This is upstream ReLimiter, which the in-game panel cannot drive -- use ReLimiter's own overlay in the game, or the target below.");
+  }
+});
 $('#btn-relimiter-remove').addEventListener('click', async () => {
   if (!editingGameId) return;
   const game = games.find((x) => x.id === editingGameId);

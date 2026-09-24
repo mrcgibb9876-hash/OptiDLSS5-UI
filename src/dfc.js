@@ -588,7 +588,7 @@ function supportedFor(detected) {
 //   nrDllPath         the NR model in Settings, for a folder that has none after OptiScaler left
 //   fetchReShade      places a plain ReShade64.dll (feeder.js deployReShade), for a game that has
 //                     none of its own -- one on the plain OptiScaler route, no Feeder
-async function switchToDfc(dir, cacheDir, { nrDllPath = null, removeOptiScaler, fetchReShade = null } = {}) {
+async function switchToDfc(dir, cacheDir, { nrDllPath = null, removeOptiScaler, fetchReShade = null, reshadeIsOurs = null } = {}) {
   if (!cachedDfc(cacheDir)) throw new Error('no Deep Fried Chicken copy has been added yet -- add yours in Settings first');
   const adopting = handPlaced(dir);
 
@@ -596,8 +596,10 @@ async function switchToDfc(dir, cacheDir, { nrDllPath = null, removeOptiScaler, 
   const proxy = path.join(dir, RESHADE_PROXY);
   const already = reshadeProxyOf(dir);
   // A ReShade64.dll is ours to move only when the Feeder put it there; anything else by that name
-  // (Luma's, the player's) is not touched.
-  const feederReShade = fs.existsSync(plain) && fs.existsSync(path.join(dir, 'dlss5-feed.addon64'));
+  // (Luma's, the player's) is not touched. Frame pacing (relimiter.js) also places one, on a game with
+  // no Feeder; the caller says so through reshadeIsOurs, and it is taken over the same way.
+  const feederReShade = fs.existsSync(plain)
+    && (fs.existsSync(path.join(dir, 'dlss5-feed.addon64')) || !!(reshadeIsOurs && reshadeIsOurs(dir)));
   // The hand-made Chicken setup: the player's ReShade already in the proxy slot, no Feeder. That
   // ReShade is used where it is, and stays theirs: the way back leaves it in place.
   const adoptProxy = adopting && !already && !feederReShade && fs.existsSync(proxy) && isReShade(proxy);
