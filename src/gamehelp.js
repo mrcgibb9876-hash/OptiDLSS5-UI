@@ -347,6 +347,12 @@ function diagnose(ctx) {
         // The layer attaches only to exes on its own app list (feeder.js reshadeAppsListing); one that
         // was never run through ReShade's installer is the usual reason "the layer did not load".
         if (ctx.vulkanFeeder.appListed === false) return out('step', 'vulkan-layer-app-not-listed', { exe: ctx.vulkanFeeder.exe || '' });
+        // Everything on the ReShade side is right and the layer still did not attach, because the
+        // GAME refuses it: idTech blacklists Vulkan layers and ReShade is on that list
+        // (feeder.LAYER_BLACKLIST_EXES). A launch argument turns the blacklist off. Checked last,
+        // after the three faults that are ours to fix, so a genuinely broken ReShade setup on one
+        // of these games is still named as itself.
+        if (ctx.vulkanFeeder.layerBlacklisted) return out('step', 'vulkan-layer-blacklisted', { exe: ctx.vulkanFeeder.exe || '' });
         return out('step', 'vulkan-layer-not-loaded');
       }
       // dgVoodoo2 is ours, the game ran, and nothing called DLSS. On a legacy route the wrapper is

@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { diagnose, FIX_IDS } = require(path.join(__dirname, '..', 'src', 'gamehelp'));
 const aihelp = require(path.join(__dirname, '..', 'src', 'aihelp'));
+const feeder = require(path.join(__dirname, '..', 'src', 'feeder'));
 
 const base = (over = {}) => ({
   detected: { api: 'dx12', bitness: 64, antiCheat: null, ...(over.detected || {}) },
@@ -44,6 +45,35 @@ test('a Vulkan Feeder game whose Feeder never loaded names the ReShade layer fau
   assert.equal(skipped.code, 'vulkan-layer-app-not-listed');
   assert.deepEqual(skipped.vars, { exe: 'swtor.exe' });
   assert.equal(diagnose(vk({ layerRegistered: true, layerAddon: true, appListed: true, feederLogPresent: false })).code, 'vulkan-layer-not-loaded');
+
+  // Indiana Jones and the Great Circle (a user, 2026-09-24): idTech blacklists Vulkan layers and
+  // ReShade is on that list. Every check above comes back clean -- registered, add-on capable, exe
+  // listed -- and the layer still never attaches, because the GAME refuses it. Saying
+  // "run ReShade's installer again" there is a dead end: the setup was already right.
+  const blocked = diagnose(vk({
+    layerRegistered: true, layerAddon: true, appListed: true, feederLogPresent: false,
+    layerBlacklisted: true, exe: 'TheGreatCircle.exe',
+  }));
+  assert.equal(blocked.code, 'vulkan-layer-blacklisted');
+  assert.deepEqual(blocked.vars, { exe: 'TheGreatCircle.exe' });
+
+  // Checked LAST, after the three faults that are ours: a genuinely broken ReShade setup on one of
+  // these games is still named as itself rather than blamed on the engine.
+  assert.equal(diagnose(vk({ layerRegistered: false, layerBlacklisted: true, feederLogPresent: false })).code, 'vulkan-layer-missing');
+  assert.equal(diagnose(vk({ layerRegistered: true, layerAddon: false, layerBlacklisted: true, feederLogPresent: false })).code, 'vulkan-layer-no-addon');
+  assert.equal(diagnose(vk({ layerRegistered: true, layerAddon: true, appListed: false, exe: 'TheGreatCircle.exe', layerBlacklisted: true, feederLogPresent: false })).code, 'vulkan-layer-app-not-listed');
+
+  // And the Feeder having logged means it loaded after all, blacklist or not.
+  assert.equal(diagnose(vk({ layerRegistered: true, layerAddon: true, layerBlacklisted: true, feederLogPresent: true })).code, 'no-hook');
+});
+
+test('the exes whose engine refuses Vulkan layers are matched by name, wherever the game lives', () => {
+  // The path the reporter gave, verbatim.
+  assert.equal(feeder.refusesVulkanLayers('F:\\Games\\Indiana Jones and the Great Circle The Order of Giants\\TheGreatCircle.exe'), true);
+  assert.equal(feeder.refusesVulkanLayers('f:/games/x/thegreatcircle.exe'), true, 'Windows paths are not case-sensitive');
+  assert.equal(feeder.refusesVulkanLayers('C:\\Games\\NMS.exe'), false);
+  assert.equal(feeder.refusesVulkanLayers(''), false);
+  assert.equal(feeder.refusesVulkanLayers(null), false);
 });
 
 const rows = [

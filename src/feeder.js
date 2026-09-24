@@ -1680,6 +1680,31 @@ function needsFullscreenHost(dir) {
   });
 }
 
+// Games whose ENGINE refuses Vulkan layers, ReShade's included, unless a launch argument says
+// otherwise.
+//
+// idTech keeps a blacklist of Vulkan layers it will not load, and ReShade is on it. The layer can be
+// registered, built with add-on support, and have the exe on its Apps= list, and it still never
+// attaches -- so the Feeder never loads, nothing calls DLSS, and every check this app makes on the
+// ReShade side comes back clean. Without this the answer was `vulkan-layer-not-loaded`, which sends
+// the player round ReShade's installer a second time for a setup that was already correct.
+//
+// `+r_allowBlackListedLayers 1` on the command line turns the blacklist off. It goes in Steam's
+// Launch Options, or after the exe path in a desktop shortcut:
+//
+//   "...\TheGreatCircle.exe" +r_allowBlackListedLayers 1
+//
+// Indiana Jones and the Great Circle, confirmed by a user 2026-09-24. Doom Eternal and Doom: The
+// Dark Ages are the same engine and take the same cvar, but nobody has reported either of them
+// here, so they are not on this list: an exe added on the strength of "same family" would be a
+// guess, and the wrong answer is worse than the generic one.
+const LAYER_BLACKLIST_EXES = ['TheGreatCircle.exe'];
+
+function refusesVulkanLayers(exePath) {
+  const leaf = String(exePath || '').split(/[\\/]/).pop().toLowerCase();
+  return LAYER_BLACKLIST_EXES.some((exe) => exe.toLowerCase() === leaf);
+}
+
 // Games that must have the DLSS 5 panel drawn INSIDE the game -- the Feeder's cast brought in as a
 // texture by the game's own ReShade (host_window=3, cast_mode=1) -- because any second window on top
 // makes them minimise. The pop-out is such a window: focusing it tells the game it lost focus, and a
@@ -2021,6 +2046,8 @@ module.exports = {
   switchMvProvider,
   configureReShadeIni,
   configureFeedCfg,
+  refusesVulkanLayers,
+  LAYER_BLACKLIST_EXES,
   needsFullscreenHost,
   needsInGameCast,
   IN_GAME_CAST_EXES,

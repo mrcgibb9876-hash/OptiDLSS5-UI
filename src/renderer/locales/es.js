@@ -1566,4 +1566,8 @@ window.I18N.register("es", {
   "HUD fix": "Arreglo del HUD",
   "Keeps the HUD and subtitles from warping in generated frames. OptiScaler warns it can crash some games -- if this game crashes with it on, leave it off.": "Evita que el HUD y los subtítulos se deformen en los fotogramas generados. OptiScaler advierte que puede cerrar algunos juegos -- si este juego se cierra con esto activado, déjalo desactivado.",
   "Auto": "Auto",
+  "{exe} refuses Vulkan layers. Its engine keeps a blacklist and ReShade is on it, so the layer is installed correctly, this exe is on its list, and it still never attaches -- nothing here is broken. Add {arg} to the game's launch arguments: in Steam, right-click the game > Properties > Launch Options; in a desktop shortcut, after the closing quote of the exe path. Then launch again.": "{exe} rechaza las capas de Vulkan. Su motor mantiene una lista negra en la que está ReShade, así que la capa está bien instalada, este exe está en su lista y aun así nunca se engancha -- aquí no hay nada roto. Añade {arg} a los parámetros de inicio del juego: en Steam, clic derecho en el juego > Propiedades > Opciones de inicio; en un acceso directo, después de la comilla final de la ruta del exe. Luego inicia otra vez.",
+  "Add {arg} to the launch arguments": "Añadir {arg} a los parámetros de inicio",
+  "Steam: Properties > Launch Options. A shortcut: after the exe path": "Steam: Propiedades > Opciones de inicio. Acceso directo: tras la ruta del exe",
+  "{exe} blocks Vulkan layers -- add a launch argument": "{exe} bloquea las capas de Vulkan -- añade un parámetro de inicio",
 });

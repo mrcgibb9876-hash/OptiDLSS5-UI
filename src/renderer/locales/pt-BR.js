@@ -1567,4 +1567,8 @@ window.I18N.register('pt-BR', {
   "HUD fix": "Correção do HUD",
   "Keeps the HUD and subtitles from warping in generated frames. OptiScaler warns it can crash some games -- if this game crashes with it on, leave it off.": "Evita que o HUD e as legendas se deformem nos quadros gerados. O OptiScaler avisa que pode travar alguns jogos -- se este jogo travar com isto ligado, deixe desligado.",
   "Auto": "Auto",
+  "{exe} refuses Vulkan layers. Its engine keeps a blacklist and ReShade is on it, so the layer is installed correctly, this exe is on its list, and it still never attaches -- nothing here is broken. Add {arg} to the game's launch arguments: in Steam, right-click the game > Properties > Launch Options; in a desktop shortcut, after the closing quote of the exe path. Then launch again.": "{exe} recusa camadas Vulkan. Seu motor mantém uma lista de bloqueio e o ReShade está nela, então a camada está instalada corretamente, este exe está na lista dela e mesmo assim nunca se conecta -- nada aqui está quebrado. Adicione {arg} aos argumentos de inicialização do jogo: na Steam, clique com o botão direito no jogo > Propriedades > Opções de inicialização; em um atalho, depois das aspas finais do caminho do exe. Depois inicie de novo.",
+  "Add {arg} to the launch arguments": "Adicionar {arg} aos argumentos de inicialização",
+  "Steam: Properties > Launch Options. A shortcut: after the exe path": "Steam: Propriedades > Opções de inicialização. Atalho: após o caminho do exe",
+  "{exe} blocks Vulkan layers -- add a launch argument": "{exe} bloqueia camadas Vulkan -- adicione um argumento de inicialização",
 });

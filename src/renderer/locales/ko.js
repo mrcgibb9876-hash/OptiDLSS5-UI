@@ -1566,4 +1566,8 @@ window.I18N.register("ko", {
   "HUD fix": "HUD 수정",
   "Keeps the HUD and subtitles from warping in generated frames. OptiScaler warns it can crash some games -- if this game crashes with it on, leave it off.": "생성된 프레임에서 HUD와 자막이 일그러지지 않게 합니다. OptiScaler는 일부 게임에서 충돌이 날 수 있다고 경고합니다 -- 이 게임이 켜둔 상태에서 종료되면 꺼 두세요.",
   "Auto": "자동",
+  "{exe} refuses Vulkan layers. Its engine keeps a blacklist and ReShade is on it, so the layer is installed correctly, this exe is on its list, and it still never attaches -- nothing here is broken. Add {arg} to the game's launch arguments: in Steam, right-click the game > Properties > Launch Options; in a desktop shortcut, after the closing quote of the exe path. Then launch again.": "{exe}은(는) Vulkan 레이어를 거부합니다. 이 엔진은 차단 목록을 유지하며 ReShade가 거기에 있습니다. 즉 레이어는 올바르게 설치되었고 이 exe도 목록에 있지만 결코 연결되지 않습니다 -- 잘못된 것은 없습니다. 게임의 실행 인수에 {arg}을(를) 추가하세요. Steam에서는 게임 우클릭 > 속성 > 시작 옵션, 바로 가기에서는 exe 경로의 닫는 따옴표 뒤에 넣습니다. 그런 다음 다시 실행하세요.",
+  "Add {arg} to the launch arguments": "실행 인수에 {arg} 추가",
+  "Steam: Properties > Launch Options. A shortcut: after the exe path": "Steam: 속성 > 시작 옵션. 바로 가기: exe 경로 뒤",
+  "{exe} blocks Vulkan layers -- add a launch argument": "{exe}이(가) Vulkan 레이어를 차단합니다 -- 실행 인수를 추가하세요",
 });

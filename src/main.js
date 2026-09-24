@@ -4031,6 +4031,10 @@ async function helpContext(exePath, detected, fixesTried = []) {
       vulkanFeeder = {
         layerRegistered: !!layer.registered, layerAddon: !!layer.addon, appListed: layer.appListed, exe: path.basename(exePath),
         feederLogPresent: fs.existsSync(path.join(dir, 'dlss5-feed.log')),
+        // The engine blacklists Vulkan layers, so a correct ReShade setup still never attaches
+        // (feeder.LAYER_BLACKLIST_EXES). Carried here so Game Help can say that rather than send
+        // the player back through ReShade's installer.
+        layerBlacklisted: feeder.refusesVulkanLayers(exePath),
       };
     } catch {}
   }
