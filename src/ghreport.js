@@ -31,7 +31,8 @@ const { netFetch } = require('./net');
 // │ The Client ID is public by design (device flow); there is NO client secret to add anywhere.   │
 // └──────────────────────────────────────────────────────────────────────────────────────────────┘
 const CLIENT_ID = 'Iv23liqJAyFQx13XQWET';
-const REPO = 'mrcgibb9876-hash/OptiDLSS5-UI';
+// The public releases repo, where issues live; the source repo is private.
+const REPO = 'mrcgibb9876-hash/OptiDLSS5-UI-releases';
 const API = 'https://api.github.com';
 const MAX_FILE_BYTES = 900 * 1024; // GitHub truncates gist files over 1 MB
 const MAX_TOTAL_BYTES = 6 * 1024 * 1024;

@@ -206,9 +206,27 @@ jobs:
         Copy-Item engine\OptiScaler_DLSSNR.zip "dist\OptiScaler_DLSSNR-$tag.zip"
         Write-Output "dist\OptiScaler_DLSSNR-$tag.zip"
 
+    # Published to the PUBLIC releases repo, not this one. This repo is private, and a private repo's
+    # releases are private too: the app's updater (package.json publish) and Check for Updates
+    # (main.js MANAGER_REPO) read that repo. The job's own GITHUB_TOKEN cannot write to another repo,
+    # so RELEASES_REPO_TOKEN is a fine-grained token with Contents: read and write on
+    # mrcgibb9876-hash/OptiDLSS5-UI-releases only. Without it this fails, loudly, rather than publish
+    # somewhere nobody's app looks.
+    - name: Check the releases repo token is set
+      shell: pwsh
+      env:
+        RELEASES_REPO_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+      run: |
+        if (-not $env:RELEASES_REPO_TOKEN) {
+          Write-Error "RELEASES_REPO_TOKEN is not set. Create a fine-grained token with Contents: read and write on mrcgibb9876-hash/OptiDLSS5-UI-releases, then: gh secret set RELEASES_REPO_TOKEN"
+          exit 1
+        }
+
     - name: Publish
       uses: softprops/action-gh-release@v2
       with:
+        repository: mrcgibb9876-hash/OptiDLSS5-UI-releases
+        token: ${{ secrets.RELEASES_REPO_TOKEN }}
         tag_name: ${{ inputs.tag }}
         name: ${{ steps.title.outputs.title }}
         prerelease: ${{ inputs.prerelease }}
@@ -239,8 +257,6 @@ jobs:
           dist/*.blockmap
           dist/latest.yml
           dist/OptiScaler_DLSSNR-*.zip
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     # A card in the Discord server's #announcements once the release is live. The webhook URL lives
     # in the DISCORD_RELEASE_WEBHOOK secret; without it (a fork) this step does nothing.
@@ -275,7 +291,8 @@ jobs:
           Write-Output "::warning title=Discord announcement skipped::No DISCORD_RELEASE_WEBHOOK secret is set, so this release was not announced."
           exit 0
         }
-        $repo = "${{ github.repository }}"
+        # The public releases repo: this one is private, so its pages and raw files are not reachable.
+        $repo = "mrcgibb9876-hash/OptiDLSS5-UI-releases"
         $page = "https://github.com/$repo/releases/tag/$env:TAG"
         $engine = if (Test-Path engine\VERSION) { (Get-Content engine\VERSION -Raw).Trim() } else { $null }
         # PowerShell gets "true"/"false" as a string here, not a boolean.
@@ -309,7 +326,7 @@ jobs:
             # Amber, the same warning colour the app's own UI uses, so the card reads as a warning
             # at a glance in a channel of green ones.
             color = $(if ($pre) { 0xD9A441 } else { 0x76B900 })
-            thumbnail = @{ url = "https://raw.githubusercontent.com/$repo/master/build/icon.png" }
+            thumbnail = @{ url = "https://raw.githubusercontent.com/$repo/main/icon.png" }
             timestamp = (Get-Date).ToUniversalTime().ToString("o")
           })
         } | ConvertTo-Json -Depth 6

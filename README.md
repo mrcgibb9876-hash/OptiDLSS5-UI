@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mrcgibb9876-hash/OptiDLSS5-UI/releases/latest"><img src="https://img.shields.io/github/v/release/mrcgibb9876-hash/OptiDLSS5-UI?style=for-the-badge&label=Download&color=76B900&logo=github" alt="Download"></a>
+  <a href="https://github.com/mrcgibb9876-hash/OptiDLSS5-UI-releases/releases/latest"><img src="https://img.shields.io/github/v/release/mrcgibb9876-hash/OptiDLSS5-UI-releases?style=for-the-badge&label=Download&color=76B900&logo=github" alt="Download"></a>
   <a href="https://discord.gg/HFZTDdSNmJ"><img src="https://img.shields.io/discord/1549486108859957308?style=for-the-badge&label=Online&logo=discord&logoColor=white&color=5865F2" alt="Discord members online"></a>
   <a href="https://buymeacoffee.com/ripplingsnake"><img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy Me a Coffee"></a>
 </p>

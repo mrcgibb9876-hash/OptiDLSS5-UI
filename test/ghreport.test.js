@@ -61,7 +61,7 @@ test('a send posts the redacted logs as a secret gist, then the issue linking th
   assert.equal(calls[0].body.public, false);
   assert.deepEqual(Object.keys(calls[0].body.files).sort(), ['OptiScaler.log', 'dlss5ui-api.json'], 'empty files are skipped, dot names fixed');
   assert.doesNotMatch(JSON.stringify(calls), /Yathin/, 'no user name anywhere');
-  assert.equal(calls[1].url, 'https://api.github.com/repos/mrcgibb9876-hash/OptiDLSS5-UI/issues');
+  assert.equal(calls[1].url, 'https://api.github.com/repos/mrcgibb9876-hash/OptiDLSS5-UI-releases/issues');
   assert.match(calls[1].body.body, /\*\*Logs:\*\* https:\/\/gist\.github\.com\/abc/);
   assert.equal(calls[1].auth, 'Bearer ghu_x');
   assert.equal(out.issueNumber, 142);

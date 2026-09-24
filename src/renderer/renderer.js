@@ -1933,7 +1933,7 @@ async function buildGameReport(game, diag, { manual = false } = {}) {
 $('#help-report').addEventListener('click', async () => {
   if (!helpGame || !helpDiag) return;
   const { title, body } = await buildGameReport(helpGame, helpDiag, { manual: true });
-  window.api.openExternal(`https://github.com/mrcgibb9876-hash/OptiDLSS5-UI/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`);
+  window.api.openExternal(`https://github.com/mrcgibb9876-hash/OptiDLSS5-UI-releases/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`);
 });
 
 // ── Send game failure ─────────────────────────────────────────────────────────
@@ -2006,7 +2006,7 @@ $('#help-send').addEventListener('click', async () => {
       const copied = await window.api.copyZipToClipboard(saved.zipPath);
       window.api.openPath(saved.zipPath);
       const { title, body } = await buildGameReport(game, diag, { manual: true });
-      window.api.openExternal(`https://github.com/mrcgibb9876-hash/OptiDLSS5-UI/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`);
+      window.api.openExternal(`https://github.com/mrcgibb9876-hash/OptiDLSS5-UI-releases/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`);
       setSendStatus(escapeHtml(copied && copied.ok
         ? t('GitHub opened with the report filled in, and the log zip is copied. Click at the end of the report on GitHub, press Ctrl+V to attach the zip, then press Submit.')
         : t('GitHub opened with the report filled in. Drag the zip from the folder that opened onto it, then press Submit.')));

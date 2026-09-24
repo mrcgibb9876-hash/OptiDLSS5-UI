@@ -7242,7 +7242,9 @@ ipcMain.handle('engine:list', () => Object.values(engines.ENGINES).map((e) => ({
   ...e, managedFolder: managedReleaseFolder(e.id), releasePage: engines.releasePageUrl(e.id),
 })));
 
-const MANAGER_REPO = 'mrcgibb9876-hash/OptiDLSS5-UI';
+// Releases and issues live in a public repo of their own: the source repo is private, and a private
+// repo's releases are private too, which would cut every installed copy off from its updates.
+const MANAGER_REPO = 'mrcgibb9876-hash/OptiDLSS5-UI-releases';
 
 // What engine version THIS running Manager build actually shipped with -- parsed off the
 // bundled zip asset name on the Manager's own GitHub release for its own current tag

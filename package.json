@@ -57,7 +57,7 @@
     "publish": {
       "provider": "github",
       "owner": "mrcgibb9876-hash",
-      "repo": "OptiDLSS5-UI"
+      "repo": "OptiDLSS5-UI-releases"
     },
     "win": {
       "target": [
