@@ -159,6 +159,33 @@ function remove(dir) {
   return removed;
 }
 
+// ── Its own config ──
+//
+// LoadConfig takes the DLL's own path and swaps the extension, so relimiter.addon64 reads
+// relimiter.ini beside the exe -- the same file RHI ships a copy of. The section is [FrameLimiter].
+// Written with the app's ordinary ini writer; the values below are all this app ever sets, and every
+// other key in that file is ReLimiter's own business.
+const INI_NAME = 'relimiter.ini';
+const INI_SECTION = 'FrameLimiter';
+
+function iniPath(dir) {
+  return path.join(dir, INI_NAME);
+}
+
+// target_fps: 0 is not "no limit", it is "stay below the VRR ceiling", and ValidateConfig clamps
+// anything else to 30..1000. A value outside that is discarded on the next load, so it is clamped
+// here rather than written and silently lost -- and 0 is passed through untouched, because clamping it
+// up to 30 would turn "automatic" into a hard 30 fps cap.
+const TARGET_FPS_MIN = 30;
+const TARGET_FPS_MAX = 1000;
+
+function targetFpsEdits(fps) {
+  const n = Number(fps);
+  if (!Number.isFinite(n) || n <= 0) return [{ section: INI_SECTION, key: 'target_fps', value: '0' }];
+  const clamped = Math.round(Math.min(TARGET_FPS_MAX, Math.max(TARGET_FPS_MIN, n)));
+  return [{ section: INI_SECTION, key: 'target_fps', value: String(clamped) }];
+}
+
 // ── The one thing that must not run alongside it ──
 //
 // [DlssNr] AutoScale with AutoScaleMode = 2 ("Aim at: Frame rate") is a closed loop that moves the NR
@@ -204,4 +231,5 @@ module.exports = {
   addonName, isReLimiterAddon, reshadeModeFor, isAutomatic,
   marker, deployed, status, missing, deploy, remove,
   NR_FPS_TARGET_MODE, nrConflict, NR_CONFLICT_EDITS,
+  INI_NAME, INI_SECTION, iniPath, targetFpsEdits, TARGET_FPS_MIN, TARGET_FPS_MAX,
 };

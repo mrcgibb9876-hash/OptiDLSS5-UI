@@ -1,6 +1,39 @@
 // Português (Brasil). English text is the key -- see i18n.js. Anything missing here shows in
 // English. Placeholders in braces must be kept exactly as in the key.
 window.I18N.register('pt-BR', {
+  "This game runs on Vulkan, where ReShade only loads as a machine-wide layer that its own installer registers -- this app cannot do that for you. Run ReShade's setup once for this exe, choosing Vulkan and \"Enable loading of add-ons\", and frame pacing can be set up here afterwards.":
+    "Este jogo roda em Vulkan, onde o ReShade só carrega como uma camada de todo o sistema registrada pelo instalador dele -- este app não pode fazer isso por você. Rode o instalador do ReShade uma vez para este exe, escolhendo Vulkan e \"Enable loading of add-ons\", e depois o ritmo de quadros poderá ser configurado aqui.",
+  "Frame pacing was installed here and its file is gone from the folder, so something removed it after the fact -- almost always antivirus. Add an exclusion for this game folder first, then add it again.":
+    "O ritmo de quadros foi instalado aqui e o arquivo dele sumiu da pasta, então algo o removeu depois -- quase sempre antivírus. Adicione primeiro uma exclusão para a pasta deste jogo e depois adicione de novo.",
+  "Frame pacing is set up{version}.":
+    "O ritmo de quadros está configurado{version}.",
+  "Needs ReShade beside the exe. Adding frame pacing sets that up too.":
+    "Precisa do ReShade ao lado do exe. Adicionar o ritmo de quadros configura isso também.",
+  "The ReShade in this folder is the plain build, which never loads add-ons. Adding frame pacing replaces it with the Add-on build.":
+    "O ReShade nesta pasta é a versão simples, que nunca carrega add-ons. Adicionar o ritmo de quadros o substitui pela versão com add-ons.",
+  "Ready to add.":
+    "Pronto para adicionar.",
+  "Could not write the frame rate.":
+    "Não foi possível gravar a taxa de quadros.",
+  "Set to stay below the VRR ceiling.":
+    "Configurado para ficar abaixo do teto de VRR.",
+  "Holding {fps} fps.":
+    "Mantendo {fps} fps.",
+  "Frame pacing":
+    "Ritmo de quadros",
+  "ReLimiter paces frames for a G-Sync or VRR display -- it holds the frame rate steady rather than making more of them, which is why it sits here beside Frame Generation and not under Speed vs quality. It is a ReShade add-on by RankFTW, Lazorr and UltraMatt, MIT licensed, and it rides on the same ReShade this app already sets up for the DLSS5 Feeder.":
+    "O ReLimiter acerta o ritmo dos quadros para um monitor G-Sync ou VRR: ele mantém a taxa de quadros estável em vez de gerar mais, e por isso fica aqui ao lado do Frame Generation e não em Velocidade x qualidade. É um add-on do ReShade feito por RankFTW, Lazorr e UltraMatt, com licença MIT, e usa o mesmo ReShade que este app já configura para o Feeder do DLSS5.",
+  "Add frame pacing":
+    "Adicionar ritmo de quadros",
+  "Frame rate to hold":
+    "Taxa de quadros a manter",
+  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. The slider covers the range people actually use; the box beside it goes up to 1000 for a display that needs it.":
+    "O automático fica logo abaixo do teto de VRR do monitor, que é o que a maioria quer -- um número fixo serve para bater com um valor que você já escolheu em outro lugar. O controle deslizante cobre a faixa que as pessoas realmente usam; a caixa ao lado vai até 1000 para um monitor que precise.",
+  "Auto (stay below the VRR ceiling)":
+    "Automático (ficar abaixo do teto de VRR)",
+  "fps":
+    "fps",
+
   "Deep Fried Chicken settings": "Configura\u00e7\u00f5es do Deep Fried Chicken",
   "This deep-fried-chicken.cfg was written by a newer Chicken ({schema}) than this app knows ({known}), so it is shown but not changed here. Use Chicken's own overlay.": "Este deep-fried-chicken.cfg foi escrito por um Chicken mais novo ({schema}) do que este app conhece ({known}), ent\u00e3o ele \u00e9 exibido mas n\u00e3o alterado aqui. Use o overlay do pr\u00f3prio Chicken.",
   "{offered} of this file's {total} settings are offered here -- the ones whose meaning is unambiguous. Everything else stays exactly as Chicken wrote it, and its own in-game overlay still has the full set.": "{offered} das {total} configura\u00e7\u00f5es deste arquivo s\u00e3o oferecidas aqui -- aquelas cujo significado \u00e9 inequ\u00edvoco. Todo o resto fica exatamente como o Chicken escreveu, e o overlay dele no jogo continua com o conjunto completo.",

@@ -834,6 +834,44 @@ ipcMain.handle('lossless:openStorePage', () => {
   shell.openExternal('https://store.steampowered.com/app/993090/Lossless_Scaling/');
 });
 
+// ── Frame pacing (ReLimiter) ──
+//
+// A ReShade add-on, so it needs the same arrangement the Feeder uses: OptiScaler keeps the proxy slot
+// and [Plugins] LoadReshade=true has it load the plain ReShade64.dll beside the exe. autoConfigureGame
+// sets that key whenever ReLimiter is deployed, so nothing here has to.
+ipcMain.handle('relimiter:status', async (_evt, exePath) => {
+  try {
+    const dir = gameDir(exePath);
+    const { api } = effectiveDetection(dir, exePath, await detectFor(dir, exePath));
+    const st = relimiter.status(dir, { api: api || 'dx12' });
+    // The number in ReLimiter's own ini, not one this app remembers: the in-game panel and ReLimiter's
+    // own overlay can both change it, and a remembered copy would go stale the first time they did.
+    const raw = readIniKey(relimiter.iniPath(dir), relimiter.INI_SECTION, 'target_fps');
+    const targetFps = Number.isFinite(Number(raw)) ? Number(raw) : 0;
+    return { ok: true, ...st, targetFps, min: relimiter.TARGET_FPS_MIN, max: relimiter.TARGET_FPS_MAX };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+});
+
+ipcMain.handle('relimiter:set-target', async (_evt, { exePath, fps } = {}) => {
+  try {
+    const dir = gameDir(exePath);
+    const applied = patchIniValues(relimiter.iniPath(dir), relimiter.targetFpsEdits(fps));
+    return { ok: true, applied };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+});
+
+ipcMain.handle('relimiter:remove', async (_evt, exePath) => {
+  try {
+    return { ok: true, removed: relimiter.remove(gameDir(exePath)) };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+});
+
 ipcMain.handle('lossless:detect', () => {
   try { return lossless.detect(); } catch (error) { return { installed: false, error: String(error && error.message ? error.message : error) }; }
 });

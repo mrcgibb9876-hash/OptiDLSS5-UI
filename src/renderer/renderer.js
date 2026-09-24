@@ -2803,6 +2803,7 @@ async function openGameModal(game, opts = {}) {
   await loadOptiFgSection(game);
   await loadDlssNrSection(game);
   await loadLosslessSection(game);
+  await loadRelimiterSection(game);
   await loadAmdNrSection(game);
   await loadLumaUeSection(game);
   refreshEditGroups();
@@ -3425,6 +3426,7 @@ $('#game-api-select').addEventListener('change', async (e) => {
   await loadOptiFgSection(game);
   await loadDlssNrSection(game);
   await loadLosslessSection(game);
+  await loadRelimiterSection(game);
   await loadAmdNrSection(game);
   renderGrid();
 });
@@ -4302,6 +4304,7 @@ $('#btn-feeder-remove').addEventListener('click', async () => {
   await loadOptiFgSection(game);
   await loadDlssNrSection(game);
   await loadLosslessSection(game);
+  await loadRelimiterSection(game);
   renderGrid();
 });
 
@@ -4529,6 +4532,63 @@ function wpfKeyToVk(name) {
   return 0x53;
 }
 
+// Frame pacing (ReLimiter). Placed beside Frame Generation in the UI because it is a delivery
+// setting -- it changes WHEN frames arrive, not how they look -- and grouping it under Speed vs
+// quality would put it next to the model-resolution controls it is mutually exclusive with, which is
+// the most confusing place it could possibly go.
+async function loadRelimiterSection(game) {
+  const section = $('#game-relimiter-section');
+  const status = $('#game-relimiter-status');
+  const installBtn = $('#btn-relimiter-install');
+  const removeBtn = $('#btn-relimiter-remove');
+  const targetBlock = $('#game-relimiter-target-block');
+  if (!game || !game.exePath) { section.classList.add('hidden'); return; }
+
+  const st = await window.api.relimiterStatus(game.exePath).catch(() => null);
+  if (!st || !st.ok) { section.classList.add('hidden'); return; }
+  section.classList.remove('hidden');
+
+  // Vulkan cannot be set up from here at all: ReShade only runs there as a machine-wide implicit
+  // layer, registered under HKLM by its own installer and attached only to exes in ReShadeApps.ini.
+  // Said plainly rather than offering a button that cannot work.
+  if (!st.automatic) {
+    installBtn.classList.add('hidden');
+    removeBtn.classList.toggle('hidden', !st.addon);
+    targetBlock.classList.toggle('hidden', !st.addon);
+    status.textContent = t("This game runs on Vulkan, where ReShade only loads as a machine-wide layer that its own installer registers -- this app cannot do that for you. Run ReShade's setup once for this exe, choosing Vulkan and \"Enable loading of add-ons\", and frame pacing can be set up here afterwards.");
+    return;
+  }
+
+  installBtn.classList.toggle('hidden', st.complete);
+  removeBtn.classList.toggle('hidden', !st.addon);
+  targetBlock.classList.toggle('hidden', !st.addon);
+
+  if (st.addonGone) {
+    // Our marker lists it and the file is not there: the antivirus shape that cost Max Payne 2 a
+    // whole diagnosis, so it is named rather than read as "not installed".
+    status.textContent = t('Frame pacing was installed here and its file is gone from the folder, so something removed it after the fact -- almost always antivirus. Add an exclusion for this game folder first, then add it again.');
+  } else if (st.complete) {
+    status.textContent = t('Frame pacing is set up{version}.', { version: st.version ? ` (${st.version})` : '' });
+  } else if (!st.reshade) {
+    status.textContent = t('Needs ReShade beside the exe. Adding frame pacing sets that up too.');
+  } else if (st.reshadeIsAddonBuild === false) {
+    // Same version, same product name, and it never loads an add-on -- so the file being present is
+    // not the same as it being usable.
+    status.textContent = t('The ReShade in this folder is the plain build, which never loads add-ons. Adding frame pacing replaces it with the Add-on build.');
+  } else {
+    status.textContent = t('Ready to add.');
+  }
+
+  // Auto is target_fps = 0, which means "stay below the VRR ceiling" -- not "no limit" and not 0 fps.
+  const auto = $('#game-relimiter-auto');
+  const slider = $('#game-relimiter-fps-slider');
+  const box = $('#game-relimiter-fps');
+  const fixedRow = $('#game-relimiter-fixed-row');
+  auto.checked = !(st.targetFps > 0);
+  if (st.targetFps > 0) { slider.value = String(Math.min(360, st.targetFps)); box.value = String(st.targetFps); }
+  fixedRow.classList.toggle('hidden', auto.checked);
+}
+
 async function loadLosslessSection(game) {
   const section = $('#game-lossless-section');
   const status = $('#game-lossless-status');
@@ -4622,6 +4682,52 @@ function syncLosslessModeInputs() {
   $('#game-lossless-target').classList.toggle('hidden', !adaptive);
 }
 $('#game-lossless-mode').addEventListener('change', syncLosslessModeInputs);
+
+// The slider and the box are two views of one number, so each writes the other. The slider stops at
+// 360 because that is the range people actually use and a slider across 30..1000 cannot hit 72; the
+// box goes to ReLimiter's real maximum for a display that needs it.
+function relimiterTargetInputs() {
+  return { auto: $('#game-relimiter-auto'), slider: $('#game-relimiter-fps-slider'), box: $('#game-relimiter-fps') };
+}
+
+async function saveRelimiterTarget() {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  if (!game || !game.exePath) return;
+  const { auto, box } = relimiterTargetInputs();
+  const fps = auto.checked ? 0 : Number(box.value);
+  const res = await window.api.relimiterSetTarget(game.exePath, fps).catch(() => null);
+  const status = $('#game-relimiter-target-status');
+  if (!res || !res.ok) { status.textContent = t('Could not write the frame rate.'); return; }
+  status.textContent = auto.checked
+    ? t('Set to stay below the VRR ceiling.')
+    : t('Holding {fps} fps.', { fps: String(Math.min(1000, Math.max(30, Math.round(fps) || 30))) });
+}
+
+$('#game-relimiter-auto').addEventListener('change', () => {
+  const { auto } = relimiterTargetInputs();
+  $('#game-relimiter-fixed-row').classList.toggle('hidden', auto.checked);
+  saveRelimiterTarget();
+});
+$('#game-relimiter-fps-slider').addEventListener('input', () => {
+  const { slider, box } = relimiterTargetInputs();
+  box.value = slider.value;
+});
+$('#game-relimiter-fps-slider').addEventListener('change', saveRelimiterTarget);
+$('#game-relimiter-fps').addEventListener('change', () => {
+  const { slider, box } = relimiterTargetInputs();
+  // The box may exceed the slider's range, so the slider pins at its own maximum rather than
+  // dragging the number down to it.
+  slider.value = String(Math.min(Number(slider.max), Math.max(Number(slider.min), Number(box.value) || 0)));
+  saveRelimiterTarget();
+});
+$('#btn-relimiter-remove').addEventListener('click', async () => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  if (!game || !game.exePath) return;
+  await window.api.relimiterRemove(game.exePath).catch(() => null);
+  await loadRelimiterSection(game);
+});
 
 $('#btn-lossless-configure').addEventListener('click', async () => {
   if (!editingGameId) return;
@@ -4770,6 +4876,7 @@ $('#btn-lumaue-remove').addEventListener('click', async () => {
   await loadFeederSection(game);
   await loadLumaUeSection(game);
   await loadLosslessSection(game);
+  await loadRelimiterSection(game);
   renderGrid();
 });
 
@@ -4803,6 +4910,7 @@ $('#btn-lumaue-deploy').addEventListener('click', async () => {
   await loadFeederSection(game);
   await loadLumaUeSection(game);
   await loadLosslessSection(game);
+  await loadRelimiterSection(game);
   renderGrid();
 });
 

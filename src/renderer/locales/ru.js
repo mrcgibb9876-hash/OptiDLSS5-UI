@@ -1,6 +1,39 @@
 // Русский. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("ru", {
+  "This game runs on Vulkan, where ReShade only loads as a machine-wide layer that its own installer registers -- this app cannot do that for you. Run ReShade's setup once for this exe, choosing Vulkan and \"Enable loading of add-ons\", and frame pacing can be set up here afterwards.":
+    "Эта игра работает на Vulkan, где ReShade загружается только как системный слой, который регистрирует его собственный установщик -- это приложение не может сделать это за вас. Запустите установщик ReShade один раз для этого exe, выбрав Vulkan и \"Enable loading of add-ons\", и после этого выравнивание кадров можно будет настроить здесь.",
+  "Frame pacing was installed here and its file is gone from the folder, so something removed it after the fact -- almost always antivirus. Add an exclusion for this game folder first, then add it again.":
+    "Выравнивание кадров было установлено здесь, а его файл исчез из папки -- значит, что-то удалило его потом, почти всегда антивирус. Сначала добавьте исключение для папки игры, затем добавьте его снова.",
+  "Frame pacing is set up{version}.":
+    "Выравнивание кадров настроено{version}.",
+  "Needs ReShade beside the exe. Adding frame pacing sets that up too.":
+    "Нужен ReShade рядом с exe. При добавлении выравнивания кадров он тоже будет установлен.",
+  "The ReShade in this folder is the plain build, which never loads add-ons. Adding frame pacing replaces it with the Add-on build.":
+    "ReShade в этой папке -- обычная сборка, которая никогда не загружает дополнения. При добавлении выравнивания кадров она будет заменена сборкой с поддержкой дополнений.",
+  "Ready to add.":
+    "Готово к добавлению.",
+  "Could not write the frame rate.":
+    "Не удалось записать частоту кадров.",
+  "Set to stay below the VRR ceiling.":
+    "Настроено держаться ниже предела VRR.",
+  "Holding {fps} fps.":
+    "Держит {fps} fps.",
+  "Frame pacing":
+    "Выравнивание кадров",
+  "ReLimiter paces frames for a G-Sync or VRR display -- it holds the frame rate steady rather than making more of them, which is why it sits here beside Frame Generation and not under Speed vs quality. It is a ReShade add-on by RankFTW, Lazorr and UltraMatt, MIT licensed, and it rides on the same ReShade this app already sets up for the DLSS5 Feeder.":
+    "ReLimiter выравнивает подачу кадров для дисплея с G-Sync или VRR: он удерживает частоту кадров стабильной, а не создаёт новые кадры, поэтому он здесь рядом с Frame Generation, а не в разделе скорости и качества. Это дополнение для ReShade от RankFTW, Lazorr и UltraMatt под лицензией MIT, и оно работает на том же ReShade, который это приложение уже ставит для DLSS5 Feeder.",
+  "Add frame pacing":
+    "Добавить выравнивание кадров",
+  "Frame rate to hold":
+    "Какую частоту кадров держать",
+  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. The slider covers the range people actually use; the box beside it goes up to 1000 for a display that needs it.":
+    "Авто держится чуть ниже предела VRR дисплея -- это то, что нужно большинству; фиксированное число нужно, чтобы совпасть со значением, выбранным в другом месте. Ползунок покрывает диапазон, которым реально пользуются; поле рядом доходит до 1000 для дисплея, которому это нужно.",
+  "Auto (stay below the VRR ceiling)":
+    "Авто (держаться ниже предела VRR)",
+  "fps":
+    "fps",
+
   "Deep Fried Chicken settings": "\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438 Deep Fried Chicken",
   "This deep-fried-chicken.cfg was written by a newer Chicken ({schema}) than this app knows ({known}), so it is shown but not changed here. Use Chicken's own overlay.": "\u042d\u0442\u043e\u0442 deep-fried-chicken.cfg \u0437\u0430\u043f\u0438\u0441\u0430\u043d \u0431\u043e\u043b\u0435\u0435 \u043d\u043e\u0432\u044b\u043c Chicken ({schema}), \u0447\u0435\u043c \u0438\u0437\u0432\u0435\u0441\u0442\u0435\u043d \u044d\u0442\u043e\u043c\u0443 \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u0438\u044e ({known}), \u043f\u043e\u044d\u0442\u043e\u043c\u0443 \u043e\u043d \u043f\u043e\u043a\u0430\u0437\u0430\u043d, \u043d\u043e \u043d\u0435 \u0438\u0437\u043c\u0435\u043d\u044f\u0435\u0442\u0441\u044f \u0437\u0434\u0435\u0441\u044c. \u0418\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0439\u0442\u0435 \u0441\u043e\u0431\u0441\u0442\u0432\u0435\u043d\u043d\u044b\u0439 \u043e\u0432\u0435\u0440\u043b\u0435\u0439 Chicken.",
   "{offered} of this file's {total} settings are offered here -- the ones whose meaning is unambiguous. Everything else stays exactly as Chicken wrote it, and its own in-game overlay still has the full set.": "\u0417\u0434\u0435\u0441\u044c \u043f\u0440\u0435\u0434\u043b\u0430\u0433\u0430\u0435\u0442\u0441\u044f {offered} \u0438\u0437 {total} \u043d\u0430\u0441\u0442\u0440\u043e\u0435\u043a \u044d\u0442\u043e\u0433\u043e \u0444\u0430\u0439\u043b\u0430 \u2014 \u0442\u0435, \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435 \u043a\u043e\u0442\u043e\u0440\u044b\u0445 \u043e\u0434\u043d\u043e\u0437\u043d\u0430\u0447\u043d\u043e. \u0412\u0441\u0451 \u043e\u0441\u0442\u0430\u043b\u044c\u043d\u043e\u0435 \u043e\u0441\u0442\u0430\u0451\u0442\u0441\u044f \u0440\u043e\u0432\u043d\u043e \u0442\u0430\u043a\u0438\u043c, \u043a\u0430\u043a\u0438\u043c \u0435\u0433\u043e \u0437\u0430\u043f\u0438\u0441\u0430\u043b Chicken, \u0430 \u043f\u043e\u043b\u043d\u044b\u0439 \u043d\u0430\u0431\u043e\u0440 \u043f\u043e-\u043f\u0440\u0435\u0436\u043d\u0435\u043c\u0443 \u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d \u0432 \u0435\u0433\u043e \u0438\u0433\u0440\u043e\u0432\u043e\u043c \u043e\u0432\u0435\u0440\u043b\u0435\u0435.",

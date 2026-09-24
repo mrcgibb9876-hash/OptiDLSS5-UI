@@ -1,6 +1,39 @@
 // 简体中文. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("zh-CN", {
+  "This game runs on Vulkan, where ReShade only loads as a machine-wide layer that its own installer registers -- this app cannot do that for you. Run ReShade's setup once for this exe, choosing Vulkan and \"Enable loading of add-ons\", and frame pacing can be set up here afterwards.":
+    "这个游戏运行在 Vulkan 上，ReShade 在那里只能作为由它自己的安装程序注册的全系统层加载 —— 本应用无法替你完成这一步。请为这个 exe 运行一次 ReShade 的安装程序，选择 Vulkan 和 \"Enable loading of add-ons\"，之后就可以在这里设置帧率节奏了。",
+  "Frame pacing was installed here and its file is gone from the folder, so something removed it after the fact -- almost always antivirus. Add an exclusion for this game folder first, then add it again.":
+    "帧率节奏曾在这里安装过，而它的文件已从文件夹中消失，说明有东西在安装之后把它移除了 —— 几乎总是杀毒软件。请先为这个游戏文件夹添加排除项，然后重新添加。",
+  "Frame pacing is set up{version}.":
+    "帧率节奏已设置{version}。",
+  "Needs ReShade beside the exe. Adding frame pacing sets that up too.":
+    "需要 exe 旁边有 ReShade。添加帧率节奏时会一并设置好。",
+  "The ReShade in this folder is the plain build, which never loads add-ons. Adding frame pacing replaces it with the Add-on build.":
+    "这个文件夹里的 ReShade 是普通版，永远不会加载插件。添加帧率节奏会把它替换为 Add-on 版。",
+  "Ready to add.":
+    "可以添加了。",
+  "Could not write the frame rate.":
+    "无法写入帧率。",
+  "Set to stay below the VRR ceiling.":
+    "已设置为保持在 VRR 上限之下。",
+  "Holding {fps} fps.":
+    "正保持 {fps} fps。",
+  "Frame pacing":
+    "帧率节奏",
+  "ReLimiter paces frames for a G-Sync or VRR display -- it holds the frame rate steady rather than making more of them, which is why it sits here beside Frame Generation and not under Speed vs quality. It is a ReShade add-on by RankFTW, Lazorr and UltraMatt, MIT licensed, and it rides on the same ReShade this app already sets up for the DLSS5 Feeder.":
+    "ReLimiter 为 G-Sync 或 VRR 显示器调整帧的节奏：它让帧率保持稳定，而不是生成更多帧，所以它放在这里、紧邻 Frame Generation，而不是放在画质与速度之下。它是 RankFTW、Lazorr 和 UltraMatt 制作的 ReShade 插件，采用 MIT 许可，并且依托本应用已为 DLSS5 Feeder 设置好的同一个 ReShade。",
+  "Add frame pacing":
+    "添加帧率节奏",
+  "Frame rate to hold":
+    "要保持的帧率",
+  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. The slider covers the range people actually use; the box beside it goes up to 1000 for a display that needs it.":
+    "自动会保持在略低于显示器 VRR 上限的位置，这是多数人想要的；固定数值适合用来对上你在别处已经选定的数字。滑块覆盖大家实际会用的范围；旁边的输入框最高可到 1000，供需要的显示器使用。",
+  "Auto (stay below the VRR ceiling)":
+    "自动（保持在 VRR 上限之下）",
+  "fps":
+    "fps",
+
   "Deep Fried Chicken settings": "Deep Fried Chicken \u8bbe\u7f6e",
   "This deep-fried-chicken.cfg was written by a newer Chicken ({schema}) than this app knows ({known}), so it is shown but not changed here. Use Chicken's own overlay.": "\u8fd9\u4e2a deep-fried-chicken.cfg \u7531\u6bd4\u672c\u5e94\u7528\u6240\u77e5\u7248\u672c\uff08{known}\uff09\u66f4\u65b0\u7684 Chicken\uff08{schema}\uff09\u5199\u5165\uff0c\u56e0\u6b64\u8fd9\u91cc\u53ea\u663e\u793a\u800c\u4e0d\u4fee\u6539\u3002\u8bf7\u4f7f\u7528 Chicken \u81ea\u5e26\u7684\u53e0\u52a0\u5c42\u3002",
   "{offered} of this file's {total} settings are offered here -- the ones whose meaning is unambiguous. Everything else stays exactly as Chicken wrote it, and its own in-game overlay still has the full set.": "\u6b64\u6587\u4ef6\u7684 {total} \u9879\u8bbe\u7f6e\u4e2d\uff0c\u8fd9\u91cc\u63d0\u4f9b\u4e86\u542b\u4e49\u660e\u786e\u7684 {offered} \u9879\u3002\u5176\u4f59\u90e8\u5206\u5b8c\u5168\u4fdd\u6301 Chicken \u5199\u5165\u7684\u72b6\u6001\uff0c\u5b83\u81ea\u5df1\u7684\u6e38\u620f\u5185\u53e0\u52a0\u5c42\u4ecd\u5305\u542b\u5168\u90e8\u8bbe\u7f6e\u3002",
