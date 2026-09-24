@@ -1566,4 +1566,8 @@ window.I18N.register("zh-CN", {
   "HUD fix": "HUD 修复",
   "Keeps the HUD and subtitles from warping in generated frames. OptiScaler warns it can crash some games -- if this game crashes with it on, leave it off.": "防止 HUD 和字幕在生成帧中变形。OptiScaler 提醒它可能让某些游戏崩溃 -- 如果开启后这个游戏崩溃，请保持关闭。",
   "Auto": "自动",
+  "{exe} refuses Vulkan layers. Its engine keeps a blacklist and ReShade is on it, so the layer is installed correctly, this exe is on its list, and it still never attaches -- nothing here is broken. Add {arg} to the game's launch arguments: in Steam, right-click the game > Properties > Launch Options; in a desktop shortcut, after the closing quote of the exe path. Then launch again.": "{exe} 拒绝 Vulkan 层。它的引擎维护一份黑名单，ReShade 就在其中，所以该层安装正确、这个 exe 也在它的列表里，却始终不会附加——这里没有任何东西出错。请把 {arg} 加到游戏的启动参数里：在 Steam 中右键游戏 > 属性 > 启动选项；在快捷方式中，放在 exe 路径的结尾引号之后。然后重新启动。",
+  "Add {arg} to the launch arguments": "把 {arg} 加到启动参数",
+  "Steam: Properties > Launch Options. A shortcut: after the exe path": "Steam：属性 > 启动选项。快捷方式：exe 路径之后",
+  "{exe} blocks Vulkan layers -- add a launch argument": "{exe} 阻止 Vulkan 层——请添加启动参数",
 });
