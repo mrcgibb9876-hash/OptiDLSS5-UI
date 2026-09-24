@@ -884,9 +884,19 @@ async function pacingBesideUpscalerBlocker(dir) {
     return { code: 'reshade-dlss-crash', message: 'Frame pacing needs a newer DLSS 5 engine on this game: update DLSS 5 here first' };
   }
   // The app's own choice (its marker, which autoConfigureGame turns into FGOutput) or one set by hand.
+  // XeFG is fine with an engine that builds it on ReShade's device (relimiter.engineGivesXefgToReShade);
+  // FSR FG was never changed or measured, so it stays refused.
   const fg = optiFgIniState(path.join(optiScalerDirFor(dir), 'OptiScaler.ini'));
-  if (isOptiFgEnabled(dir) || (fg && fg.armed)) {
-    return { code: 'optifg-armed', message: 'Frame pacing can’t see frames while OptiScaler frame generation is set up for this game: turn frame generation off in Edit first' };
+  const chosen = readOptiFg(dir);
+  const generators = [chosen && chosen.generator, fg && fg.armed && fg.generator].filter(Boolean);
+  if (generators.length > 0) {
+    const xefgOnly = generators.every((g) => g === 'xefg');
+    if (!xefgOnly) {
+      return { code: 'optifg-armed', message: 'Frame pacing can’t see frames with FSR frame generation on this game: switch frame generation to XeFG or off in Edit first' };
+    }
+    if (!relimiter.engineGivesXefgToReShade(active.file)) {
+      return { code: 'optifg-armed', message: 'Frame pacing with XeFG needs a newer DLSS 5 engine on this game: update DLSS 5 here first, or turn frame generation off in Edit' };
+    }
   }
   return null;
 }

@@ -52,8 +52,23 @@ function addonName(bitness) {
 const NGX_DEVICE_HOLD_MARK = 'Holding the NGX session device';
 
 function engineKeepsNgxDevice(file) {
+  return engineHas(file, NGX_DEVICE_HOLD_MARK);
+}
+
+// Whether this OptiScaler build lets ReShade see an XeFG swap chain, read from its bytes the same way.
+// Before engine commit 9a4ce766 XeFG made its present queue on the raw device OptiScaler captures
+// beneath ReShade, ReShade skipped the swap chain ("created without a proxy Direct3D device") and
+// ReLimiter never saw a frame. That build builds XeFG on the game queue's device and logs this text.
+// Verified on Shadow of the Tomb Raider, 2026-09-24. FSR FG was not changed and stays refused.
+const XEFG_RESHADE_MARK = "XeFG context on the game queue's device";
+
+function engineGivesXefgToReShade(file) {
+  return engineHas(file, XEFG_RESHADE_MARK);
+}
+
+function engineHas(file, mark) {
   try {
-    return fs.readFileSync(file).includes(Buffer.from(NGX_DEVICE_HOLD_MARK, 'latin1'));
+    return fs.readFileSync(file).includes(Buffer.from(mark, 'latin1'));
   } catch {
     return false;
   }
@@ -409,7 +424,7 @@ const NR_CONFLICT_EDITS = [{ section: 'DlssNr', key: 'AutoScale', value: 'false'
 module.exports = {
   ADDON_64, ADDON_32, MARKER,
   addonName, isReLimiterAddon, reshadeModeFor, isAutomatic,
-  NGX_DEVICE_HOLD_MARK, engineKeepsNgxDevice,
+  NGX_DEVICE_HOLD_MARK, engineKeepsNgxDevice, XEFG_RESHADE_MARK, engineGivesXefgToReShade,
   marker, deployed, status, missing, deploy, remove,
   isReShadeProxy, chickenReShade, placedReShade, writeMarker, standaloneProxyName, reshadeFileIn, promoteToStandalone, demoteStandaloneReShade,
   RELEASE_SOURCES, addonAssetFromRelease, resolveAddonAsset, configureReShadeIni,

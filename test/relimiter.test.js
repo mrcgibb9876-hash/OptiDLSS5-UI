@@ -332,9 +332,43 @@ test('a ReShade64.dll frame pacing placed is one Chicken\'s swap may take over, 
 // which logs relimiter.NGX_DEVICE_HOLD_MARK). The fake release's OptiScaler.dll has no such text, so it
 // stands for an engine from before the fix: pacing is refused beside it, and installing DLSS 5 on a game
 // that already has pacing takes pacing out rather than crash it.
-function markEngineFixed(release) {
-  fs.writeFileSync(path.join(release, 'OptiScaler.dll'), `fake optiscaler dll OptiScaler ${relimiter.NGX_DEVICE_HOLD_MARK} {:X}`);
+function markEngineFixed(release, { xefg = false } = {}) {
+  const marks = [relimiter.NGX_DEVICE_HOLD_MARK, xefg ? relimiter.XEFG_RESHADE_MARK : ''].join(' {:X} ');
+  fs.writeFileSync(path.join(release, 'OptiScaler.dll'), `fake optiscaler dll OptiScaler ${marks}`);
 }
+
+// XeFG gives ReShade its swap chain once the engine builds XeFG on the game queue's device (engine
+// 9a4ce766, SOTTR 2026-09-24), so pacing stays beside it; FSR FG was never fixed and takes pacing out.
+async function installOverPacingWithFg(tag, generator, { xefgEngine }) {
+  const base = scratchDir(tag);
+  const game = path.join(base, 'game');
+  const exe = fakeExe(game, 'Game.exe');
+  fs.writeFileSync(path.join(game, 'nvngx_dlss.dll'), 'the game own DLSS, as SOTTR ships it');
+  fs.writeFileSync(path.join(game, '.dlss5ui-optifg-enabled'), JSON.stringify({ generator, startOn: true }));
+  realishReShade(game, 'ReShade64.dll');
+  relimiter.writeMarker(game, { reshadePlaced: true });
+  relimiter.deploy(game, fakeAddon(scratchDir(`${tag}-src`)));
+  const release = fakeReleaseFolder(path.join(base, 'release'));
+  markEngineFixed(release, { xefg: xefgEngine });
+  fakeNrModel(path.join(base, 'model'));
+  const { invoke } = loadMain({});
+  const inst = await invoke('game:install', { exePath: exe, releaseFolder: release, nrDllPath: path.join(base, 'model', 'nvngx_dlssnr.dll') });
+  assert.equal(inst.ok, true, inst.error);
+  return { inst, game };
+}
+
+test('with the XeFG-fixed engine, pacing stays beside XeFG', { skip: !canFakePe }, async () => {
+  const { inst, game } = await installOverPacingWithFg('rl-xefg-keep', 'xefg', { xefgEngine: true });
+  assert.equal(inst.pacingRemoved, null);
+  assert.equal(fs.existsSync(path.join(game, 'relimiter.addon64')), true);
+});
+
+test('pacing comes out beside XeFG on an engine without the XeFG fix, and beside FSR FG on any', { skip: !canFakePe }, async () => {
+  const old = await installOverPacingWithFg('rl-xefg-old', 'xefg', { xefgEngine: false });
+  assert.ok(old.inst.pacingRemoved && old.inst.pacingRemoved.includes('relimiter.addon64'));
+  const fsr = await installOverPacingWithFg('rl-fsrfg', 'fsrfg', { xefgEngine: true });
+  assert.ok(fsr.inst.pacingRemoved && fsr.inst.pacingRemoved.includes('relimiter.addon64'));
+});
 
 test('the NGX device hold is read from the engine\'s bytes', () => {
   const dir = scratchDir('rl-hold-mark');
