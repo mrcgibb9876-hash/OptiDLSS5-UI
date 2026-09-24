@@ -142,6 +142,16 @@ function placedReShade(dir) {
   return !!(m && m.reshadePlaced && !m.reshadeProxy && isReShadeProxy(path.join(dir, 'ReShade64.dll')));
 }
 
+// Whether the ReShade in this folder is the one frame pacing put here, in either place: as the game's
+// own proxy (a game with no OptiScaler, promoteToStandalone) or as ReShade64.dll. Install's preflight
+// asks this, so it does not tell the player to remove the ReShade the app itself placed -- installing
+// DLSS 5 hands a standalone one back to ReShade64.dll anyway (game:install, demoteStandaloneReShade).
+function ownsReShade(dir) {
+  const m = marker(dir);
+  if (m && m.reshadePlaced && m.reshadeProxy && isReShadeProxy(path.join(dir, m.reshadeProxy))) return true;
+  return placedReShade(dir);
+}
+
 function standaloneProxyName(api) {
   return api === 'dx9' ? 'd3d9.dll' : 'dxgi.dll';
 }
@@ -426,7 +436,7 @@ module.exports = {
   addonName, isReLimiterAddon, reshadeModeFor, isAutomatic,
   NGX_DEVICE_HOLD_MARK, engineKeepsNgxDevice, XEFG_RESHADE_MARK, engineGivesXefgToReShade,
   marker, deployed, status, missing, deploy, remove,
-  isReShadeProxy, chickenReShade, placedReShade, writeMarker, standaloneProxyName, reshadeFileIn, promoteToStandalone, demoteStandaloneReShade,
+  isReShadeProxy, chickenReShade, placedReShade, ownsReShade, writeMarker, standaloneProxyName, reshadeFileIn, promoteToStandalone, demoteStandaloneReShade,
   RELEASE_SOURCES, addonAssetFromRelease, resolveAddonAsset, configureReShadeIni,
   NR_FPS_TARGET_MODE, nrConflict, NR_CONFLICT_EDITS,
   INI_NAME, INI_SECTION, iniPath, targetFpsEdits, TARGET_FPS_MIN, TARGET_FPS_MAX,

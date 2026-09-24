@@ -464,3 +464,19 @@ test('installing DLSS 5 on a game with standalone pacing takes pacing out, and s
   const ini = fs.readFileSync(path.join(game, 'OptiScaler.ini'), 'utf8');
   assert.doesNotMatch(ini, /^LoadReshade\s*=\s*true/m);
 });
+
+// Install's preflight warned "Another ReShade is installed in this folder ... Remove the other one
+// first" about the ReShade frame pacing itself placed as the proxy on a game with no OptiScaler yet
+// (Uncharted, a tester, 2026-09-24). Ours in either place; somebody else's in neither.
+test('the ReShade frame pacing placed is ours, as the proxy and as ReShade64.dll', { skip: !canFakePe }, () => {
+  const dir = scratchDir('rl-owns');
+  realishReShade(dir, 'ReShade64.dll');
+  assert.equal(relimiter.ownsReShade(dir), false, 'not recorded: somebody else\'s');
+  relimiter.writeMarker(dir, { reshadePlaced: true });
+  assert.equal(relimiter.ownsReShade(dir), true);
+  relimiter.promoteToStandalone(dir, 'dx12');
+  assert.equal(fs.existsSync(path.join(dir, 'dxgi.dll')), true);
+  assert.equal(relimiter.ownsReShade(dir), true, 'still ours as the proxy');
+  relimiter.demoteStandaloneReShade(dir);
+  assert.equal(relimiter.ownsReShade(dir), true);
+});

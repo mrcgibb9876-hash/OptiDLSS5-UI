@@ -5075,7 +5075,7 @@ async function preflightFor(exePath, detected) {
   try { run = await runlog.analyzeRun(dir, { optiDir: optiScalerDirFor(dir) }); } catch {}
   const gathered = await preflight.gather({
     exePath, dir, exes, gpuInfo, detected: effective, route, run,
-    ourReShade: feeder.feederDeployed(dir) || lumaue.lumaUeDeployed(dir) || dfc.dfcPresent(dir),
+    ourReShade: feeder.feederDeployed(dir) || lumaue.lumaUeDeployed(dir) || dfc.dfcPresent(dir) || relimiter.ownsReShade(dir),
     probe: probe.summary(facts),
   }, { execFileAsync, detect: { antiCheatPresent, antiCheatStub } });
   return { checks: preflight.evaluate(gathered), gpuPrefs: gathered.gpuPrefs };
