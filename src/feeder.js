@@ -1705,6 +1705,20 @@ function refusesVulkanLayers(exePath) {
   return LAYER_BLACKLIST_EXES.some((exe) => exe.toLowerCase() === leaf);
 }
 
+// The launch arguments this app adds for a game, or [] for the ordinary case.
+//
+// Telling the user to add the cvar was only half an answer. Game Help said it, and the card's Launch
+// button then started the game WITHOUT it, so the one launch this app controls was the one launch
+// that still refused the layer -- the reporter kept a desktop shortcut of their own to work around
+// our own button (2026-09-24). Whatever the app tells someone to add, the app adds too.
+//
+// Safe to pass on any route: the cvar only PERMITS layers, so on a route that needs no ReShade layer
+// it does nothing. That is deliberate -- gating it on the route would mean the argument came and went
+// with the deploy state, and a launch argument that is sometimes there is worse than one that always is.
+function launchArgs(exePath) {
+  return refusesVulkanLayers(exePath) ? ['+r_allowBlackListedLayers', '1'] : [];
+}
+
 // Games that must have the DLSS 5 panel drawn INSIDE the game -- the Feeder's cast brought in as a
 // texture by the game's own ReShade (host_window=3, cast_mode=1) -- because any second window on top
 // makes them minimise. The pop-out is such a window: focusing it tells the game it lost focus, and a
@@ -2047,6 +2061,7 @@ module.exports = {
   configureReShadeIni,
   configureFeedCfg,
   refusesVulkanLayers,
+  launchArgs,
   LAYER_BLACKLIST_EXES,
   needsFullscreenHost,
   needsInGameCast,
