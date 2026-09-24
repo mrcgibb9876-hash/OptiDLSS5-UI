@@ -575,12 +575,32 @@ async function inspectAsiPlugins(dir) {
   // Which of them, if any, are the two this app also installs. Named separately from the rest
   // because they are the ones that make the app's own verdicts wrong rather than merely incomplete:
   // an OptiScaler running here is the thing that answers the game's NGX calls, and it is not ours.
-  const out = { files, optiScaler: null, reShade: null };
+  // Attribution is by NAME first, and only then by content -- because OptiScaler's binary carries
+  // the string "ReShade" (it looks the module up by name to talk to it: Dxgi_Hooks.cpp alone has
+  // nine occurrences). Taking the first content hit per tool, in readdir order, meant OptiScaler.asi
+  // sorted ahead of ReShade.asi, matched both needles, and claimed both slots. S.T.A.L.K.E.R.
+  // Anomaly (#133, 2026-09-23) reported exactly that: "OptiScaler in OptiScaler.asi and ReShade in
+  // OptiScaler.asi", with a real ReShade.asi sitting beside it, unmentioned.
+  //
+  // Worse than a cosmetic mix-up: a folder holding ONLY an OptiScaler.asi was told it had a ReShade
+  // too, which is a ReShade this app would then reason about and the user would go looking for.
+  //
+  // So a file named after the tool wins the tool's slot, and the content fallback -- which is what
+  // finds a RENAMED add-on, the case the scan exists for -- may not hand a tool the file another
+  // tool has already claimed under its own name.
+  const hitsFor = new Map();
   for (const rel of files) {
-    const hits = await scanFile(path.join(dir, ...rel.split('/')), HOOK_NEEDLES, { maxBytes: SIBLING_SCAN_MAX_BYTES });
-    if (!out.optiScaler && hits.has('OptiScaler')) out.optiScaler = rel;
-    if (!out.reShade && hits.has('ReShade')) out.reShade = rel;
+    hitsFor.set(rel, await scanFile(path.join(dir, ...rel.split('/')), HOOK_NEEDLES, { maxBytes: SIBLING_SCAN_MAX_BYTES }));
   }
+  const leaf = (rel) => rel.split('/').pop();
+  const claim = (stem, needle, taken) => {
+    const has = (rel) => hitsFor.get(rel).has(needle);
+    const named = files.find((rel) => leaf(rel).toLowerCase().startsWith(stem) && has(rel));
+    return named || files.find((rel) => has(rel) && !taken.has(rel)) || null;
+  };
+  const out = { files, optiScaler: null, reShade: null };
+  out.optiScaler = claim('optiscaler', 'OptiScaler', new Set());
+  out.reShade = claim('reshade', 'ReShade', new Set([out.optiScaler]));
   return out;
 }
 
