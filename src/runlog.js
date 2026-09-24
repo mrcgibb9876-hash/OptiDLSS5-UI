@@ -294,6 +294,36 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   // "10 passes" (2026-09-15). The highest milestone is the real figure.
   const maxNumber = (text, re) => [...text.matchAll(re)].reduce((m, x) => Math.max(m, Number(x[1]) || 0), 0);
   const nrFrames = maxNumber(opti, /DLSS-NR heartbeat: (\d+) frames run/g);
+
+  // The Vulkan neural pass serves ONE viewport, and which one it picked is the whole story of a run
+  // where settings change and the picture does not. The engine's guard adopts the largest output size
+  // being drawn and skips anything smaller (the settings-menu preview is the usual second one), so a
+  // log can show a served size and a pile of skipped ones and still be perfectly healthy.
+  //
+  // It is here because the version of that guard shipped in engine v2.2.14 keyed on the NGX feature
+  // HANDLE instead, and idTech makes a new feature per DLSS setting change -- so The Great Circle
+  // latched to a dead handle and skipped every evaluate after it. No crash, no picture, and nothing
+  // in the report said so: it took the reporter attaching a bundle. A digest that names the served
+  // size and the skipped ones answers that from the issue body.
+  // Three shapes say "we serve this size now": the first adopt, a larger one taking over, and the
+  // hand-back when the served size stops arriving. Whichever appears LAST in the log is the answer,
+  // so they are gathered with their positions rather than tried in order.
+  const vkAdopts = [
+    /DLSS-NR Vulkan: serving the (\d+)x(\d+) viewport/g,
+    /DLSS-NR Vulkan: (\d+)x(\d+) \(feature \d+\) is larger than/g,
+    /has not been drawn for \d+ evaluates; serving (\d+)x(\d+)/g,
+  ].flatMap((re) => [...opti.matchAll(re)].map((m) => ({ at: m.index, size: `${m[1]}x${m[2]}` })));
+  const vkServing = vkAdopts.length ? vkAdopts.reduce((a, b) => (b.at > a.at ? b : a)).size : null;
+  const vkSkipped = [...new Set([...opti.matchAll(/DLSS-NR Vulkan: (\d+x\d+)(?: \(feature \d+\))? is a second viewport/g)].map((m) => m[1]))];
+
+  // Engine v2.2.14 wrote the same guard keyed on the feature HANDLE ("serving upscaler feature N",
+  // "feature N is a second viewport"). That build is the bug, so its own wording is the tell: a log
+  // with a skipped HANDLE is an install that needs updating, and saying so beats going quiet because
+  // the regexes above found no WxH. Reports from it will keep arriving after the fix ships.
+  const vkHandleGuard = /DLSS-NR Vulkan: feature \d+ is a second viewport/.test(opti);
+  const vkViewport = vkServing || vkSkipped.length || vkHandleGuard
+    ? { serving: vkServing, skipped: vkSkipped, handleGuard: vkHandleGuard }
+    : null;
   const feedFrames = maxNumber(feed, /frame (\d+) delivered/g);
   const feedCreateFault = /CreateFeature raised 0xC0000005/.test(feed);
   const feedTwoCopies = /two copies of the DLSS NGX module are loaded/.test(feed);
@@ -441,6 +471,7 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
     runtimeApi: runtime ? runtime.api : null,
     nrDispatch,
     nrFrames,
+    vkViewport,
     nrComposition,
     dlssCreated,
     fps,
@@ -598,6 +629,15 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = 
     if (run.feedSmoothMotion) add('smooth motion', 'active in this process');
     if (run.wrapperCrash) add('wrapper crash', `${run.wrapperCrash}, as the game started`);
     if (run.crash && run.crash.message) add('unreal crash', String(run.crash.message).slice(0, 200));
+    if (run.vkViewport) {
+      const v = run.vkViewport;
+      add('vulkan viewport', [
+        v.serving ? `serving ${v.serving}` : 'nothing served',
+        v.skipped.length ? `skipped ${v.skipped.join(', ')}` : null,
+        // Not a guess about this run: only the broken build writes that line at all.
+        v.handleGuard ? 'engine v2.2.14 skipped a feature by handle -- update the engine' : null,
+      ].filter(Boolean).join('; '));
+    }
     if (run.optiLogMissing) add('OptiScaler.log', 'absent -- the Feeder log is the whole run');
     if (!run.cleanExit) add('exit', 'no DLL_PROCESS_DETACH -- the process did not unload cleanly');
   }
