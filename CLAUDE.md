@@ -240,6 +240,43 @@ the 249 mods; and the API for `clshortfuse/renodx` is blocked by the egress prox
 while the release *download* URL works, so read the index with `curl` on
 `releases/download/snapshot/games-index.json` rather than through the GitHub API.
 
+### The panel's HDR page, and the one thing it waits on
+
+Engine PR #25 (`claude/renodx-panel-page`) puts RenoDX's own settings on a page of the DLSS 5 panel,
+drawn from `describe_setting` the way the Pacing page draws ReLimiter's. It is hidden unless RenoDX is
+in the process **and** drivable -- which today means hidden for everyone, because **no shipped RenoDX
+build exports `RenoDxGetHostApi`**. Upstream's `settings.hpp` exports only `NAME`. The API is ours, on
+`mrcgibb9876-hash/renodx` branch `feat/host-api` (`7bcbbec`), and the patch is also saved as
+`renodx-host-api.patch`.
+
+- **The add-on's filename is not fixed, unlike ReLimiter's.** RenoDX ships one per game, so there is no
+  `GetModuleHandleW` name to ask for: `DlssNr_RenoDx.cpp` enumerates loaded modules and takes the one
+  exporting the entry point, which also finds a copy the user installed himself. `K32EnumProcessModules`
+  is resolved from kernel32 by name so `Psapi.lib` never joins the vcxproj's four dependency lines.
+- **`RenoDx_Api.h` is a hand-written ABI mirror, not a verbatim vendored copy** like `ReLimiter_Api.h`,
+  because RenoDX declares the API inside `settings.hpp`, which drags in imgui and `reshade.hpp`. Layout
+  is therefore the whole contract -- it was checked field for field against the original by script
+  (14/14, 11/11), and `struct_size`/`api_version` are verified at runtime before anything is read.
+- **The page honours `is_visible` and `is_enabled`.** RenoDX's first setting is Settings Mode
+  (Simple/Intermediate/Advanced) and most of the rest appear only above Simple, so honouring it mirrors
+  RenoDX's own progressive disclosure with no list kept here. `group` is read and ignored: RenoDX uses
+  it to pack controls onto one line, and this panel is one per row for a controller's sake.
+- **`set_number` applies live** -- it goes through `UpdateSetting`, which runs `Write()` and the
+  on_change callbacks -- so there is no `apply` to call, unlike ReLimiter's API. `save()` persists.
+- **Writing ReShade.ini is not a substitute.** RenoDX persists to the `[renodx]` section via
+  `set_config_value`, but only re-reads it in `LoadSettings` at init or on its own preset keypress, so
+  an ini write lands next launch and gives keys with no labels, ranges or tooltips.
+
+**A fork of `clshortfuse/renodx` cannot be created from a session.** Confirmed 2026-09-25, all routes:
+`fork_repository` is refused as out of session scope; `create_repository` answers `403 Resource not
+accessible by integration`; `list_repos` shows no renodx to attach; and the local clone is **shallow
+(depth 2) with all 7 submodules uninitialised**, with no MSVC anyway. So the user has to press Fork on
+github.com. It must be a real fork, not a hand-made mirror: GitHub only allows cross-repo PRs inside a
+fork network, so a mirror could never carry the upstream PR that would make our own build unnecessary.
+Once it exists, the rest is ours -- push the patch, add a workflow building
+`renodx-unrealengine.addon64`, and give `addons.js` the two-source arrangement `relimiter.js` already
+has (our fork's release first, upstream's `snapshot` second).
+
 - **The add-ons picker reuses that same list.** `addons.RESHADE_NAMES` is `HOOK_DLLS` plus
   `ReShade64.dll` / `ReShade32.dll` (the two names a non-proxying ReShade uses), because the picker
   has to find a ReShade wherever it sits -- a test fails if a `HOOK_DLLS` name is not searched. It
