@@ -943,7 +943,21 @@ ipcMain.handle('relimiter:status', async (_evt, exePath) => {
 ipcMain.handle('relimiter:set-target', async (_evt, { exePath, fps } = {}) => {
   try {
     const dir = gameDir(exePath);
-    const applied = patchIniValues(relimiter.iniPath(dir), relimiter.targetFpsEdits(fps));
+    const edits = relimiter.targetFpsEdits(fps);
+    // While the game runs, relimiter.ini is the wrong door: ReLimiter read it at start, will not read
+    // it again, and writes its own copy back on exit -- so an edit here was shown as saved and then
+    // silently undone. With the engine's hosted channel up, the change goes into the running add-on
+    // instead (set, apply, save), and ReLimiter's own save is what lands in the ini.
+    const hostedDir = optiScalerDirFor(dir);
+    const live = await wakeHosted(hostedDir);
+    if (live.ok && live.hosted.pacing.settings.some((s) => s.key === 'target_fps')) {
+      const sent = sendHosted(hostedDir, { pacing: { target_fps: Number(edits[0].value) } });
+      if (sent.ok) {
+        const acked = await hostedAcked(hostedDir, sent.seq);
+        return { ok: true, applied: acked ? edits : [], live: true, acked: !!acked };
+      }
+    }
+    const applied = patchIniValues(relimiter.iniPath(dir), edits);
     return { ok: true, applied };
   } catch (e) {
     return { ok: false, error: String((e && e.message) || e) };
@@ -3327,22 +3341,28 @@ function liveDirFor(exePath) {
   return optiScalerDirFor(gameDir(exePath));
 }
 
+// Keeps OptiScaler.live.request fresh for the engine. Both live files -- the readings and the hosted
+// pages -- hang off this one request, so whichever of them is asked for first keeps both coming.
+function touchLiveRequest(dir, now) {
+  const last = liveTouched.get(dir) || 0;
+  if (now - last < LIVE_TOUCH_MS) return true;
+  try {
+    const req = path.join(dir, LIVE_REQUEST);
+    if (fs.existsSync(req)) fs.utimesSync(req, new Date(now), new Date(now));
+    else fs.writeFileSync(req, 'OptiDLSS5-UI pop-out panel\n');
+    liveTouched.set(dir, now);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 ipcMain.handle('panel:live', async (_evt, exePath) => {
   if (!exePath || !fs.existsSync(exePath)) return { ok: false, reason: 'no-game' };
   const dir = liveDirFor(exePath);
   if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: false, reason: 'not-installed' };
   const now = Date.now();
-  const last = liveTouched.get(dir) || 0;
-  if (now - last >= LIVE_TOUCH_MS) {
-    try {
-      const req = path.join(dir, LIVE_REQUEST);
-      if (fs.existsSync(req)) fs.utimesSync(req, new Date(now), new Date(now));
-      else fs.writeFileSync(req, 'OptiDLSS5-UI pop-out panel\n');
-      liveTouched.set(dir, now);
-    } catch {
-      return { ok: false, reason: 'request-failed' };
-    }
-  }
+  if (!touchLiveRequest(dir, now)) return { ok: false, reason: 'request-failed' };
   let live;
   try { live = JSON.parse(fs.readFileSync(path.join(dir, LIVE_FILE), 'utf8')); } catch { return { ok: false, reason: 'no-answer' }; }
   if (!live || live.v !== 1 || typeof live.at !== 'number') return { ok: false, reason: 'unknown-format' };
@@ -3356,6 +3376,97 @@ function stopLive(dir) {
   liveTouched.delete(dir);
   try { fs.rmSync(path.join(dir, LIVE_REQUEST), { force: true }); } catch {}
 }
+
+// ── Pacing and HDR, through the running game (dlssnr.js "hosted pages") ──
+//
+// ReLimiter and RenoDX settings can only change live from inside the game, through each add-on's own
+// host API; the engine calls it for us. This reads what the engine publishes and writes what the user
+// changed, both beside OptiScaler.ini, both only meaningful while the live request above is fresh.
+function readHosted(dir, now) {
+  let raw;
+  try { raw = JSON.parse(fs.readFileSync(path.join(dir, dlssnr.HOSTED_FILE), 'utf8')); } catch { return { ok: false, reason: 'no-answer' }; }
+  return dlssnr.checkHosted(raw, now);
+}
+
+// Per OptiScaler folder: the last command sent and what it still carries (dlssnr.nextHostedCommand).
+const hostedCommands = new Map();
+
+// Written beside the target and renamed over it, like writeJson: the engine polls this file, and a
+// half-written one would be read as garbage (then ignored) rather than as the change. The engine opens
+// it with delete sharing, so the rename lands even mid-read -- the retry is for a scanner holding it.
+function writeFileAtomic(file, text) {
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, text, 'utf8');
+  for (let i = 0; ; i++) {
+    try { fs.renameSync(tmp, file); return; } catch (e) {
+      if (i >= 4 || !e || !['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    }
+  }
+}
+
+function sendHosted(dir, changes, now = Date.now()) {
+  const read = readHosted(dir, now);
+  if (!read.ok) return read;
+  const { state, command } = dlssnr.nextHostedCommand(hostedCommands.get(dir), read.hosted, changes);
+  try {
+    writeFileAtomic(path.join(dir, dlssnr.HOSTED_SET_FILE), JSON.stringify(command));
+  } catch (e) {
+    return { ok: false, reason: 'write-failed', error: String((e && e.message) || e) };
+  }
+  hostedCommands.set(dir, state);
+  return { ok: true, seq: command.seq, pid: command.pid };
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// For a caller that is not the pop-out (the game card's frame-rate target): the pop-out may be shut, so
+// nobody is keeping the request fresh and the engine is not publishing. When the last answer names a
+// process that is still alive, ask again and give the engine a moment to answer -- it checks the
+// request once a second and writes within one more.
+async function wakeHosted(dir, timeoutMs = 2500) {
+  let raw;
+  try { raw = JSON.parse(fs.readFileSync(path.join(dir, dlssnr.HOSTED_FILE), 'utf8')); } catch { return { ok: false, reason: 'no-answer' }; }
+  const fresh = dlssnr.checkHosted(raw, Date.now());
+  if (fresh.ok) return fresh;
+  // No live process behind the file: the game has exited and there is nobody to wake.
+  // (EPERM means it exists and belongs to someone else -- still alive.)
+  try { process.kill(raw.pid, 0); } catch (e) { if (!e || e.code !== 'EPERM') return fresh; }
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    touchLiveRequest(dir, Date.now());
+    await sleep(250);
+    const read = readHosted(dir, Date.now());
+    if (read.ok) return read;
+  }
+  return { ok: false, reason: 'stale' };
+}
+
+// Waits for the engine to acknowledge `seq`, so the caller reads back the add-on's own value rather
+// than the one before the change. Short: the engine checks every 250 ms.
+async function hostedAcked(dir, seq, timeoutMs = 1500) {
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    const read = readHosted(dir, Date.now());
+    if (read.ok && read.hosted.ack >= seq) return read;
+    await sleep(100);
+  }
+  return null;
+}
+
+ipcMain.handle('panel:hosted', async (_evt, exePath) => {
+  if (!exePath || !fs.existsSync(exePath)) return { ok: false, reason: 'no-game' };
+  const dir = liveDirFor(exePath);
+  if (!fs.existsSync(path.join(dir, 'OptiScaler.ini'))) return { ok: false, reason: 'not-installed' };
+  const now = Date.now();
+  if (!touchLiveRequest(dir, now)) return { ok: false, reason: 'request-failed' };
+  return readHosted(dir, now);
+});
+
+ipcMain.handle('panel:hosted-set', async (_evt, { exePath, pacing, hdr } = {}) => {
+  if (!exePath || !fs.existsSync(exePath)) return { ok: false, reason: 'no-game' };
+  return sendHosted(liveDirFor(exePath), { pacing, hdr });
+});
 
 ipcMain.handle('panel:live-stop', async (_evt, exePath) => {
   if (exePath && fs.existsSync(exePath)) stopLive(liveDirFor(exePath));

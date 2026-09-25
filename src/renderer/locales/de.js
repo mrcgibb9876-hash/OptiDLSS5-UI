@@ -1708,4 +1708,36 @@ window.I18N.register("de", {
     "{name} braucht ein 64-Bit-Spiel. Dieses ist 32-Bit.",
   "{name} on a Vulkan game needs ReShade’s own setup run for this game first.":
     "{name} braucht auf einem Vulkan-Spiel zuerst einen Durchlauf von ReShades eigenem Setup für dieses Spiel.",
+  "Pacing":
+    "Takt",
+  "HDR":
+    "HDR",
+  "HDR and tone mapping":
+    "HDR und Tone-Mapping",
+  "ReLimiter holds the frame rate steady for a G-Sync or VRR display rather than making more frames. These are its own settings, changed live in the running game.":
+    "ReLimiter hält die Bildrate für ein G-Sync- oder VRR-Display gleichmäßig, statt mehr Bilder zu erzeugen. Das sind seine eigenen Einstellungen, live im laufenden Spiel geändert.",
+  "RenoDX replaces this game's tone mapping to give it real HDR. What appears here is whatever this game's mod offers, changed live in the running game.":
+    "RenoDX ersetzt das Tone-Mapping dieses Spiels und gibt ihm echtes HDR. Was hier erscheint, ist das, was die Mod für dieses Spiel anbietet, live im laufenden Spiel geändert.",
+  "The game did not answer, so nothing was changed. Is it still running?":
+    "Das Spiel hat nicht geantwortet, daher wurde nichts geändert. Läuft es noch?",
+  "Sent to the running game.":
+    "An das laufende Spiel gesendet.",
+  "This game's DLSS 5 engine is too old to show these settings here. Update DLSS 5 from the app.":
+    "Die DLSS-5-Engine dieses Spiels ist zu alt, um diese Einstellungen hier anzuzeigen. Aktualisiere DLSS 5 in der App.",
+  "The game is not running. These settings can be changed here while it runs.":
+    "Das Spiel läuft nicht. Diese Einstellungen lassen sich hier ändern, während es läuft.",
+  "ReLimiter is running, but this build of it cannot be driven from this panel -- its own overlay still works. Adding frame pacing again from the app installs one that can.":
+    "ReLimiter läuft, aber dieser Build lässt sich von diesem Panel aus nicht steuern -- sein eigenes Overlay funktioniert weiterhin. Wenn du Frame-Pacing in der App erneut hinzufügst, wird einer installiert, der das kann.",
+  "RenoDX is running, but this build of it cannot be driven from this panel -- its own overlay still works.":
+    "RenoDX läuft, aber dieser Build lässt sich von diesem Panel aus nicht steuern -- sein eigenes Overlay funktioniert weiterhin.",
+  "ReLimiter is running, but it speaks a different version of the panel's interface than this DLSS 5 engine. Update DLSS 5 or frame pacing from the app.":
+    "ReLimiter läuft, spricht aber eine andere Version der Panel-Schnittstelle als diese DLSS-5-Engine. Aktualisiere DLSS 5 oder Frame-Pacing in der App.",
+  "RenoDX is running, but it speaks a different version of the panel's interface than this DLSS 5 engine. Update DLSS 5 or RenoDX from the app.":
+    "RenoDX läuft, spricht aber eine andere Version der Panel-Schnittstelle als diese DLSS-5-Engine. Aktualisiere DLSS 5 oder RenoDX in der App.",
+  "The add-on is running but offers no settings this panel can show.":
+    "Das Add-on läuft, bietet aber keine Einstellungen, die dieses Panel anzeigen kann.",
+  "Frame pacing is not installed on this game -- turn it on from the app's card or the pop-out; it takes effect the next time the game starts.":
+    "Frame-Pacing ist für dieses Spiel nicht installiert -- schalte es auf der Karte in der App oder im Pop-out-Panel ein; es wirkt ab dem nächsten Spielstart.",
+  "HDR (RenoDX) is not installed on this game -- turn it on from the app's card or the pop-out; it takes effect the next time the game starts.":
+    "HDR (RenoDX) ist für dieses Spiel nicht installiert -- schalte es auf der Karte in der App oder im Pop-out-Panel ein; es wirkt ab dem nächsten Spielstart.",
 });

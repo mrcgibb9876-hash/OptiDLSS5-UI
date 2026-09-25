@@ -67,6 +67,7 @@ function showTip(target) {
     document.body.appendChild(tipEl);
   }
   tipEl.textContent = text;
+  tipEl.classList.toggle('is-lines', target.dataset.tipLines === '1');
   tipEl.classList.remove('show');
   const r = target.getBoundingClientRect();
   const margin = 8;
@@ -147,23 +148,32 @@ function row(field, cls) {
   return el;
 }
 
-function helpMarker(text) {
+// `lines`: keep the text's own line breaks. An add-on's tooltip is written for its own overlay, where
+// "\n" is a line break (ReLimiter's run to several paragraphs); this app's tips are single sentences.
+function helpMarker(text, lines) {
   const el = document.createElement('span');
   el.className = 'p-help';
   el.textContent = '(?)';
   el.setAttribute('data-tip', text);
+  if (lines) el.dataset.tipLines = '1';
   return el;
 }
 
 // One row, drawn the way the in-game panel draws that kind of row.
-function fieldRow(field) {
+//
+// `set` is where a change goes: the ini (apply) for DLSS 5's own rows, the running game for a hosted
+// page's (hostedField). A hosted row is the add-on's own text, not ours -- it is shown as written, not
+// looked up as a translation key (which would also fold its line breaks), it has no "default" of ours
+// to go back to, and the add-on may say it is greyed right now (`disabled`).
+function fieldRow(field, set = apply) {
+    const tx = field.raw ? (s) => s : t;
     const held = forced[field.key] || null;
-    const met = dependencyMet(field) && !held;
+    const met = dependencyMet(field) && !held && !field.disabled;
     const shown = field.value === null ? field.default : field.value;
 
     const label = document.createElement('span');
     label.className = 'p-row-label';
-    label.textContent = t(field.label);
+    label.textContent = tx(field.label);
 
     const ctl = document.createElement('span');
     ctl.className = 'p-row-ctl';
@@ -178,7 +188,7 @@ function fieldRow(field) {
       const box = document.createElement('button');
       box.className = `p-check${shown ? ' on' : ''}`;
       box.disabled = !met;
-      box.addEventListener('click', () => apply(field.key, !shown));
+      box.addEventListener('click', () => set(field.key, !shown));
       ctl.appendChild(box);
       value.textContent = held ? t('held off') : field.value === null ? t('default') : '';
       el.append(ctl, label, value);
@@ -196,12 +206,12 @@ function fieldRow(field) {
       const choices = field.default === null ? [[null, t('Default')], ...(field.options || [])] : (field.options || []);
       for (const [v, text] of choices) {
         const b = document.createElement('button');
-        b.textContent = t(text);
+        b.textContent = tx(text);
         b.disabled = !met;
-        b.setAttribute('data-tip', t(field.help));
+        b.setAttribute('data-tip', tx(field.help));
         const on = v === null ? field.value === null : String(shown) === String(v);
         if (on) b.classList.add('on');
-        b.addEventListener('click', () => apply(field.key, v));
+        b.addEventListener('click', () => set(field.key, v));
         seg.appendChild(b);
       }
       ctl.appendChild(seg);
@@ -211,21 +221,23 @@ function fieldRow(field) {
       const sel = document.createElement('select');
       sel.className = 'p-select';
       sel.disabled = !met;
-      const def = document.createElement('option');
-      def.value = 'auto';
-      const defOption = (field.options || []).find(([v]) => v === field.default);
-      def.textContent = field.default === null
-        ? t(field.type === 'code' ? 'Default (follow Windows)' : 'Default (follow pass 1)')
-        : t('Default ({state})', { state: defOption ? t(defOption[1]) : String(field.default) });
-      sel.appendChild(def);
+      if (!field.hosted) {
+        const def = document.createElement('option');
+        def.value = 'auto';
+        const defOption = (field.options || []).find(([v]) => v === field.default);
+        def.textContent = field.default === null
+          ? t(field.type === 'code' ? 'Default (follow Windows)' : 'Default (follow pass 1)')
+          : t('Default ({state})', { state: defOption ? t(defOption[1]) : String(field.default) });
+        sel.appendChild(def);
+      }
       for (const [v, text] of field.options || []) {
         const o = document.createElement('option');
         o.value = String(v);
-        o.textContent = t(text);
+        o.textContent = tx(text);
         sel.appendChild(o);
       }
       sel.value = field.value === null ? 'auto' : String(field.value);
-      sel.addEventListener('change', () => apply(field.key, sel.value === 'auto' ? null : sel.value));
+      sel.addEventListener('change', () => set(field.key, sel.value === 'auto' ? null : sel.value));
       ctl.appendChild(sel);
       el.append(label, ctl, value);
     } else {
@@ -273,13 +285,13 @@ function fieldRow(field) {
         live();
         value.textContent = formatNumber(field, next);
         clearTimeout(pending);
-        pending = setTimeout(() => apply(field.key, next), 180);
+        pending = setTimeout(() => set(field.key, next), 180);
       });
       // Applied when the handle is let go, not while it is moving -- the engine does the same,
       // because every move would otherwise rewrite the ini and rebuild the feature.
       slider.addEventListener('change', () => {
         const v = fromSlider(field, Number(slider.value) / 1000);
-        apply(field.key, field.type === 'int' ? Math.round(v) : Number(v.toFixed(4)));
+        set(field.key, field.type === 'int' ? Math.round(v) : Number(v.toFixed(4)));
       });
       ctl.appendChild(slider);
 
@@ -287,9 +299,11 @@ function fieldRow(field) {
       reset.className = 'p-small';
       reset.textContent = t('Reset');
       reset.disabled = !met || field.value === null;
-      reset.addEventListener('click', () => apply(field.key, null));
+      reset.addEventListener('click', () => set(field.key, null));
 
-      el.append(label, ctl, value, reset);
+      // A hosted row has no default of ours to reset to -- the add-on's own is not published.
+      if (field.hosted) el.append(label, ctl, value);
+      else el.append(label, ctl, value, reset);
 
       // Auto, right beside Reset, as in the in-game panel. Never greyed by the slider's own condition --
       // it is the thing that turns that condition off again.
@@ -297,7 +311,7 @@ function fieldRow(field) {
         const auto = document.createElement('button');
         auto.className = `p-check${autoOn ? ' on' : ''}`;
         auto.disabled = !!held;
-        auto.addEventListener('click', () => apply(field.autoKey, !autoOn));
+        auto.addEventListener('click', () => set(field.autoKey, !autoOn));
         const autoLabel = document.createElement('span');
         autoLabel.className = 'p-auto-label';
         autoLabel.textContent = t('Auto');
@@ -310,7 +324,9 @@ function fieldRow(field) {
     const autoInCharge = !!(field.autoKey && valueOf(field.autoKey)) && !held;
     el.classList.toggle('is-off', !met && !autoInCharge);
     el.classList.toggle('is-auto', autoInCharge);
-    el.appendChild(helpMarker(held ? t(held) : t(field.help)));
+    // An add-on setting may come with no tooltip at all; a (?) that opens nothing is noise.
+    const help = held ? t(held) : tx(field.help);
+    if (help) el.appendChild(helpMarker(help, field.raw));
   return el;
 }
 
@@ -355,6 +371,8 @@ function renderPages() {
   host.innerHTML = '';
   if (pages.length === 0) return;
 
+  // Every page is listed, Pacing and HDR included whether or not their add-on is in the game -- as
+  // in-game. Without it the page greys itself and says why (renderHosted).
   for (const p of pages) {
     const b = document.createElement('button');
     b.textContent = t(p.page);
@@ -457,6 +475,9 @@ function renderFields() {
     // wrong rather than merely set badly.
     if (section.motion) renderMotion(host);
 
+    // An add-on's own settings, as the running game reports them -- not ini keys, so drawn from there.
+    if (section.hosted) renderHosted(host, section.hosted);
+
     for (const key of section.keys) {
       const field = fields.find((f) => f.key === key);
       if (field) host.appendChild(fieldRow(field));
@@ -495,6 +516,8 @@ async function loadGame(exePath) {
   current = targets.find((g) => g.exePath === exePath) || null;
   fields = [];
   forced = {};
+  // The last game's Pacing/HDR pages are not this one's; they come back with its first answer.
+  forgetHosted();
 
   if (!current) {
     stopTimingPoll();
@@ -649,6 +672,7 @@ function stopLive() {
   if (liveFor) window.api.panelLiveStop(liveFor).catch(() => {});
   liveFor = null;
   lastLive = null;
+  forgetHosted();
 }
 
 async function refreshLive() {
@@ -665,6 +689,7 @@ async function refreshLive() {
   renderBadge();
   renderFrameGenStatus();
   renderAutoTone();
+  await refreshHosted();
 }
 
 // The status line Adaptive resolution shows under its rows in the in-game panel, in the same words.
@@ -714,6 +739,260 @@ function renderLive(l) {
   const adaptive = autoScaleText(l.autoScale, r && r.shown > 0 ? r.shown : (l.fps || 0));
   if (adaptive) sub.push(adaptive);
   $('#p-timing-sub').textContent = sub.join('  ·  ');
+}
+
+// ── Pacing and HDR ──────────────────────────────────────────────────────────────────────────────
+//
+// The in-game panel's last two pages: ReLimiter's frame pacing and RenoDX's HDR, each drawn from what
+// the add-on itself describes. Neither can be changed through a file while the game runs (they read
+// their ini once, and ReLimiter writes its own back on exit), so these rows reach the running game
+// instead: the engine publishes the add-ons' settings (main.js panel:hosted) and applies what is
+// changed here through their host APIs (panel:hosted-set). No game running, no page.
+//
+// What a row shows is what the add-on reports. A change is shown at once, then held until the engine
+// acknowledges it -- the file read in between still carries the value from before, and drawing that
+// would flick the control back for a moment.
+let lastHosted = null;        // dlssnr.checkHosted's answer for the current game, or null
+let hostedSig = '';           // what was last drawn, so an unchanged poll redraws nothing
+let hostedWait = null;        // { seq, pid } of the last command not yet acknowledged
+let hostedDragging = false;   // a slider is held: redrawing would drop it out of the user's hand
+let hostedPending = null;     // { exePath, pacing, hdr }: changes gathered for the next write
+let hostedTimer = null;
+// A burst of changes -- a held arrow key, a Reset-and-pick -- goes out as one command.
+const HOSTED_COALESCE_MS = 150;
+
+document.addEventListener('pointerdown', (e) => { if (e.target.closest && e.target.closest('.p-hosted .p-slider')) hostedDragging = true; });
+document.addEventListener('pointerup', () => { hostedDragging = false; });
+
+function forgetHosted() {
+  if (hostedTimer !== null) { clearTimeout(hostedTimer); hostedTimer = null; flushHosted(); }
+  lastHosted = null;
+  hostedSig = '';
+  hostedWait = null;
+}
+
+async function refreshHosted() {
+  if (!current || !current.exePath) return;
+  const exePath = current.exePath;
+  let res = null;
+  try { res = await window.api.panelHosted(exePath); } catch { res = null; }
+  if (!current || current.exePath !== exePath) return;
+  const next = res && res.ok ? res.hosted : null;
+
+  // Our last change has not landed yet: keep showing it. A different process means the game was
+  // restarted and that change never will land, so stop waiting.
+  if (next && hostedWait && next.pid === hostedWait.pid && next.ack < hostedWait.seq) return;
+  hostedWait = null;
+  if (hostedPending) return;
+
+  // Whether the live readings answer is part of it: it is what tells "too old an engine" from "no game".
+  const sig = JSON.stringify(next ? [next.pacing, next.hdr] : [null, !!lastLive]);
+  if (sig === hostedSig) return;
+  // Not while a slider is held or a number is being typed; the next poll after that draws this.
+  if (hostedDragging || hostedTyping()) return;
+  lastHosted = next;
+  hostedSig = sig;
+  const shown = pages.find((p) => p.page === page);
+  if (shown && shown.sections.some((s) => s.hosted)) renderFields();
+}
+
+// Why a hosted page is greyed, in one plain line. The engine's codes are DlssNr_ReLimiter.h's and
+// DlssNr_RenoDx.h's, and the in-game page says the same thing in the same words.
+function hostedMissingText(kind) {
+  const h = lastHosted && lastHosted[kind];
+  if (!h) {
+    // The game answers the live readings but not this: its engine predates the hosted pages.
+    if (lastLive) return t('This game\'s DLSS 5 engine is too old to show these settings here. Update DLSS 5 from the app.');
+    return t('The game is not running. These settings can be changed here while it runs.');
+  }
+  const pacing = kind === 'pacing';
+  switch (h.reason) {
+    case 'no-api':
+      return pacing
+        ? t('ReLimiter is running, but this build of it cannot be driven from this panel -- its own overlay still works. Adding frame pacing again from the app installs one that can.')
+        : t('RenoDX is running, but this build of it cannot be driven from this panel -- its own overlay still works.');
+    case 'api-version':
+      return pacing
+        ? t('ReLimiter is running, but it speaks a different version of the panel\'s interface than this DLSS 5 engine. Update DLSS 5 or frame pacing from the app.')
+        : t('RenoDX is running, but it speaks a different version of the panel\'s interface than this DLSS 5 engine. Update DLSS 5 or RenoDX from the app.');
+    case 'empty':
+      return t('The add-on is running but offers no settings this panel can show.');
+    default:
+      return pacing
+        ? t('Frame pacing is not installed on this game -- turn it on from the app\'s card or the pop-out; it takes effect the next time the game starts.')
+        : t('HDR (RenoDX) is not installed on this game -- turn it on from the app\'s card or the pop-out; it takes effect the next time the game starts.');
+  }
+}
+
+// A setting as a row fieldRow can draw. The key is prefixed so it can never meet an ini key of the
+// same name in `forced` or a dependency; the add-on's own key goes to the game.
+function hostedField(kind, s) {
+  const base = {
+    key: `${kind}:${s.key}`, label: s.label, help: s.tooltip, raw: true, hosted: true,
+    disabled: !s.enabled, value: s.value, default: s.value, dependsOn: null,
+  };
+  if (s.type === 'bool') return { ...base, type: 'bool' };
+  if (s.type === 'enum') return { ...base, type: 'enum', options: s.choices.map((c) => [c, c]) };
+  // RenoDX's combo: the value IS the index, as in-game.
+  if (s.type === 'combo') return { ...base, type: 'enum', options: s.labels.map((l, i) => [i, l]) };
+  const int = s.type === 'int';
+  // A keyboard step of about a hundredth of the range, on a round number: 30..1000 moves by 10.
+  const step = int ? 1 : Number(((s.max - s.min) / 100).toPrecision(1));
+  return { ...base, type: int ? 'int' : 'float', min: s.min, max: s.max, step };
+}
+
+// What a control hands back, as the add-on's type wants it: a select gives strings.
+function hostedValue(s, v) {
+  if (s.type === 'bool') return !!v;
+  if (s.type === 'enum') return String(v);
+  if (s.type === 'combo' || s.type === 'int') return Math.round(Number(v));
+  return Number(v);
+}
+
+function hostedApply(kind, s, value) {
+  if (!current) return;
+  s.value = value;
+  if (!hostedPending || hostedPending.exePath !== current.exePath) {
+    if (hostedTimer !== null) { clearTimeout(hostedTimer); flushHosted(); }
+    hostedPending = { exePath: current.exePath, pacing: {}, hdr: {} };
+  }
+  hostedPending[kind][s.key] = value;
+  clearTimeout(hostedTimer);
+  hostedTimer = setTimeout(flushHosted, HOSTED_COALESCE_MS);
+  renderFields();
+}
+
+async function flushHosted() {
+  hostedTimer = null;
+  const batch = hostedPending;
+  hostedPending = null;
+  if (!batch) return;
+  let res = null;
+  try { res = await window.api.panelHostedSet(batch.exePath, { pacing: batch.pacing, hdr: batch.hdr }); } catch { res = null; }
+  if (!current || current.exePath !== batch.exePath) return;
+  if (!res || !res.ok) {
+    // The game went away between drawing the row and the change: show what is really there.
+    hostedSig = '';
+    setStatus(t('The game did not answer, so nothing was changed. Is it still running?'));
+    return;
+  }
+  hostedWait = { seq: res.seq, pid: res.pid };
+  setStatus(t('Sent to the running game.'), true);
+}
+
+function renderHosted(host, kind) {
+  const h = lastHosted && lastHosted[kind];
+
+  // THE HOOK for turning the add-on on or off from here. Empty on purpose: installing it is the app's
+  // job (relimiter:install, the add-ons picker), not the running game's, and that control is drawn by
+  // whoever fills this -- a function renderHostedEnable(el, kind, state) defined in this file, called
+  // on every draw of the page. `state` is what this page knows: whether the game answered at all, and
+  // the add-on's availability and reason as the engine reported them.
+  const enable = document.createElement('div');
+  enable.className = 'hosted-enable';
+  enable.dataset.kind = kind;
+  host.appendChild(enable);
+  if (typeof renderHostedEnable === 'function') {
+    renderHostedEnable(enable, kind, { answered: !!lastHosted, available: !!(h && h.available), reason: h ? h.reason : null });
+  }
+
+  // Not drivable here: the page stays, greyed, with one line saying why and what to do.
+  if (!h || !h.available) {
+    const why = document.createElement('div');
+    why.className = 'p-note p-hosted-missing is-off';
+    why.textContent = hostedMissingText(kind);
+    host.appendChild(why);
+    return;
+  }
+
+  // Which add-on is answering, and for RenoDX which game's mod -- a per-game add-on and the
+  // engine-wide one look the same in the folder, and this line is where the difference shows.
+  const who = document.createElement('div');
+  who.className = 'p-note';
+  who.textContent = kind === 'pacing'
+    ? `ReLimiter ${h.version || '?'}`
+    : `RenoDX -- ${h.module || '?'}`;
+  who.appendChild(helpMarker(kind === 'pacing'
+    ? t('ReLimiter holds the frame rate steady for a G-Sync or VRR display rather than making more frames. These are its own settings, changed live in the running game.')
+    : t('RenoDX replaces this game\'s tone mapping to give it real HDR. What appears here is whatever this game\'s mod offers, changed live in the running game.')));
+  host.appendChild(who);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'p-hosted';
+  let caption = null;
+  for (const s of h.settings) {
+    // The add-on's own grouping is the caption, as in-game -- not a list kept here that goes stale.
+    if (s.caption && s.caption !== caption) {
+      const cap = document.createElement('div');
+      cap.className = 'p-caption';
+      cap.textContent = s.caption;
+      wrap.appendChild(cap);
+      caption = s.caption;
+    }
+
+    // A labelled zero is a MODE (ReLimiter's target_fps = 0 is "stay below the VRR ceiling"), so it is
+    // its own tick box, as in-game; the number is offered only when the mode is off. Leaving the mode
+    // lands on the range's low end, a real value the add-on keeps.
+    if (s.zeroLabel) {
+      const autoOn = s.value === 0;
+      const box = {
+        key: `${kind}:${s.key}:zero`, label: s.zeroLabel, help: s.tooltip, raw: true, hosted: true,
+        disabled: !s.enabled, type: 'bool', value: autoOn, default: autoOn, dependsOn: null,
+      };
+      wrap.appendChild(fieldRow(box, (_k, on) => hostedApply(kind, s, on ? 0 : s.min)));
+      if (autoOn) continue;
+    }
+
+    // Typed, not dragged, for every ReLimiter number and RenoDX's whole numbers: a frame-rate cap has
+    // to land on 72 or 141 exactly, which a track from 30 to 1000 cannot do. RenoDX's floats (peak
+    // brightness, saturation) are looked at while they move, so they keep the slider.
+    const typed = kind === 'pacing' ? s.type !== 'bool' && s.type !== 'enum' : s.type === 'int';
+    const set = (_k, v) => hostedApply(kind, s, hostedValue(s, v));
+    wrap.appendChild(typed ? hostedNumberRow(hostedField(kind, s), s, set) : fieldRow(hostedField(kind, s), set));
+  }
+  host.appendChild(wrap);
+}
+
+// A typed number: the Edit dialog's frame-rate box (renderer.js relimiterTypedFps) and the in-game
+// NrNumberBox, here. Committed on change or Enter, never per keystroke; clamped to the setting's own
+// range, because a typed value ignores the input's min/max and the add-on would clamp it silently.
+function hostedNumberRow(field, s, set) {
+  const el = row(field);
+  const label = document.createElement('span');
+  label.className = 'p-row-label';
+  label.textContent = field.label;
+  const ctl = document.createElement('span');
+  ctl.className = 'p-row-ctl';
+  const box = document.createElement('input');
+  box.type = 'number';
+  box.className = 'p-select p-number';
+  box.min = String(s.min);
+  box.max = String(s.max);
+  box.step = s.type === 'int' ? '1' : 'any';
+  box.value = String(s.value);
+  box.disabled = !!field.disabled;
+  const commit = () => {
+    let n = Number(box.value);
+    if (box.value.trim() === '' || !Number.isFinite(n)) { box.value = String(s.value); return; }
+    n = Math.min(s.max, Math.max(s.min, n));
+    if (s.type === 'int') n = Math.round(n);
+    // Show what is actually stored, so a 5 typed into a 30..1000 box does not sit there reading 5.
+    box.value = String(n);
+    if (n !== s.value) set(field.key, n);
+  };
+  box.addEventListener('change', commit);
+  box.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } });
+  ctl.appendChild(box);
+  el.append(label, ctl);
+  el.classList.toggle('is-off', !!field.disabled);
+  if (field.help) el.appendChild(helpMarker(field.help, true));
+  return el;
+}
+
+// Focus in one of the page's number boxes: a redraw from the poll would throw away what is being typed.
+function hostedTyping() {
+  const a = document.activeElement;
+  return !!(a && a.classList && a.classList.contains('p-number') && a.closest('.p-hosted'));
 }
 
 // ── Frame Generation ────────────────────────────────────────────────────────────────────────────

@@ -1708,4 +1708,36 @@ window.I18N.register("ko", {
     "{name}은(는) 64비트 게임이 필요합니다. 이 게임은 32비트입니다.",
   "{name} on a Vulkan game needs ReShade’s own setup run for this game first.":
     "Vulkan 게임에서 {name}을(를) 쓰려면 먼저 이 게임에 대해 ReShade 자체 설치 프로그램을 실행해야 합니다.",
+  "Pacing":
+    "페이싱",
+  "HDR":
+    "HDR",
+  "HDR and tone mapping":
+    "HDR 및 톤 매핑",
+  "ReLimiter holds the frame rate steady for a G-Sync or VRR display rather than making more frames. These are its own settings, changed live in the running game.":
+    "ReLimiter는 프레임을 더 만들어 내는 대신 G-Sync 또는 VRR 디스플레이에 맞춰 프레임 속도를 안정적으로 유지합니다. ReLimiter 자체 설정이며, 실행 중인 게임에서 바로 바뀝니다.",
+  "RenoDX replaces this game's tone mapping to give it real HDR. What appears here is whatever this game's mod offers, changed live in the running game.":
+    "RenoDX는 이 게임의 톤 매핑을 교체해 진짜 HDR을 제공합니다. 여기에 나오는 항목은 이 게임용 모드가 제공하는 것이며, 실행 중인 게임에서 바로 바뀝니다.",
+  "The game did not answer, so nothing was changed. Is it still running?":
+    "게임이 응답하지 않아 아무것도 바뀌지 않았습니다. 게임이 아직 실행 중인가요?",
+  "Sent to the running game.":
+    "실행 중인 게임에 보냈습니다.",
+  "This game's DLSS 5 engine is too old to show these settings here. Update DLSS 5 from the app.":
+    "이 게임의 DLSS 5 엔진이 너무 오래되어 이 설정을 여기에 표시할 수 없습니다. 앱에서 DLSS 5를 업데이트하세요.",
+  "The game is not running. These settings can be changed here while it runs.":
+    "게임이 실행 중이 아닙니다. 게임이 실행되는 동안 여기에서 이 설정을 바꿀 수 있습니다.",
+  "ReLimiter is running, but this build of it cannot be driven from this panel -- its own overlay still works. Adding frame pacing again from the app installs one that can.":
+    "ReLimiter가 실행 중이지만 이 빌드는 이 패널에서 제어할 수 없습니다 -- 자체 오버레이는 계속 작동합니다. 앱에서 프레임 페이싱을 다시 추가하면 제어 가능한 빌드가 설치됩니다.",
+  "RenoDX is running, but this build of it cannot be driven from this panel -- its own overlay still works.":
+    "RenoDX가 실행 중이지만 이 빌드는 이 패널에서 제어할 수 없습니다 -- 자체 오버레이는 계속 작동합니다.",
+  "ReLimiter is running, but it speaks a different version of the panel's interface than this DLSS 5 engine. Update DLSS 5 or frame pacing from the app.":
+    "ReLimiter가 실행 중이지만 이 DLSS 5 엔진과 다른 버전의 패널 인터페이스를 사용합니다. 앱에서 DLSS 5 또는 프레임 페이싱을 업데이트하세요.",
+  "RenoDX is running, but it speaks a different version of the panel's interface than this DLSS 5 engine. Update DLSS 5 or RenoDX from the app.":
+    "RenoDX가 실행 중이지만 이 DLSS 5 엔진과 다른 버전의 패널 인터페이스를 사용합니다. 앱에서 DLSS 5 또는 RenoDX를 업데이트하세요.",
+  "The add-on is running but offers no settings this panel can show.":
+    "애드온이 실행 중이지만 이 패널에 표시할 수 있는 설정이 없습니다.",
+  "Frame pacing is not installed on this game -- turn it on from the app's card or the pop-out; it takes effect the next time the game starts.":
+    "이 게임에는 프레임 페이싱이 설치되어 있지 않습니다 -- 앱의 카드나 팝아웃 패널에서 켜세요. 다음에 게임을 시작할 때 적용됩니다.",
+  "HDR (RenoDX) is not installed on this game -- turn it on from the app's card or the pop-out; it takes effect the next time the game starts.":
+    "이 게임에는 HDR(RenoDX)이 설치되어 있지 않습니다 -- 앱의 카드나 팝아웃 패널에서 켜세요. 다음에 게임을 시작할 때 적용됩니다.",
 });

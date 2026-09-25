@@ -1708,4 +1708,36 @@ window.I18N.register("ru", {
     "{name} нужна 64-битная игра. Эта игра 32-битная.",
   "{name} on a Vulkan game needs ReShade’s own setup run for this game first.":
     "Для {name} в игре на Vulkan сначала нужно запустить собственный установщик ReShade для этой игры.",
+  "Pacing":
+    "Темп",
+  "HDR":
+    "HDR",
+  "HDR and tone mapping":
+    "HDR и тональная компрессия",
+  "ReLimiter holds the frame rate steady for a G-Sync or VRR display rather than making more frames. These are its own settings, changed live in the running game.":
+    "ReLimiter удерживает частоту кадров ровной для дисплея с G-Sync или VRR, а не добавляет новые кадры. Это его собственные настройки, они меняются прямо в запущенной игре.",
+  "RenoDX replaces this game's tone mapping to give it real HDR. What appears here is whatever this game's mod offers, changed live in the running game.":
+    "RenoDX заменяет тональную компрессию этой игры, чтобы дать ей настоящий HDR. Здесь показано то, что предлагает мод для этой игры; изменения применяются прямо в запущенной игре.",
+  "The game did not answer, so nothing was changed. Is it still running?":
+    "Игра не ответила, поэтому ничего не изменено. Она всё ещё запущена?",
+  "Sent to the running game.":
+    "Отправлено в запущенную игру.",
+  "This game's DLSS 5 engine is too old to show these settings here. Update DLSS 5 from the app.":
+    "Движок DLSS 5 в этой игре слишком старый, чтобы показывать эти настройки здесь. Обновите DLSS 5 в приложении.",
+  "The game is not running. These settings can be changed here while it runs.":
+    "Игра не запущена. Эти настройки можно менять здесь, пока она работает.",
+  "ReLimiter is running, but this build of it cannot be driven from this panel -- its own overlay still works. Adding frame pacing again from the app installs one that can.":
+    "ReLimiter запущен, но этой его сборкой нельзя управлять с этой панели -- его собственный оверлей по-прежнему работает. Если снова добавить выравнивание кадров в приложении, установится сборка, которой можно управлять.",
+  "RenoDX is running, but this build of it cannot be driven from this panel -- its own overlay still works.":
+    "RenoDX запущен, но этой его сборкой нельзя управлять с этой панели -- его собственный оверлей по-прежнему работает.",
+  "ReLimiter is running, but it speaks a different version of the panel's interface than this DLSS 5 engine. Update DLSS 5 or frame pacing from the app.":
+    "ReLimiter запущен, но использует другую версию интерфейса панели, чем этот движок DLSS 5. Обновите DLSS 5 или выравнивание кадров в приложении.",
+  "RenoDX is running, but it speaks a different version of the panel's interface than this DLSS 5 engine. Update DLSS 5 or RenoDX from the app.":
+    "RenoDX запущен, но использует другую версию интерфейса панели, чем этот движок DLSS 5. Обновите DLSS 5 или RenoDX в приложении.",
+  "The add-on is running but offers no settings this panel can show.":
+    "Дополнение запущено, но не предлагает настроек, которые эта панель может показать.",
+  "Frame pacing is not installed on this game -- turn it on from the app's card or the pop-out; it takes effect the next time the game starts.":
+    "Выравнивание кадров не установлено для этой игры -- включите его на карточке в приложении или во всплывающей панели; оно заработает при следующем запуске игры.",
+  "HDR (RenoDX) is not installed on this game -- turn it on from the app's card or the pop-out; it takes effect the next time the game starts.":
+    "HDR (RenoDX) не установлен для этой игры -- включите его на карточке в приложении или во всплывающей панели; он заработает при следующем запуске игры.",
 });

@@ -1708,4 +1708,36 @@ window.I18N.register("zh-CN", {
     "{name} 需要 64 位游戏。此游戏是 32 位的。",
   "{name} on a Vulkan game needs ReShade’s own setup run for this game first.":
     "在 Vulkan 游戏上使用 {name}，需要先为此游戏运行 ReShade 自带的安装程序。",
+  "Pacing":
+    "帧节奏",
+  "HDR":
+    "HDR",
+  "HDR and tone mapping":
+    "HDR 与色调映射",
+  "ReLimiter holds the frame rate steady for a G-Sync or VRR display rather than making more frames. These are its own settings, changed live in the running game.":
+    "ReLimiter 为 G-Sync 或 VRR 显示器稳定帧率，而不是生成更多帧。这些是它自己的设置，会在运行中的游戏里实时更改。",
+  "RenoDX replaces this game's tone mapping to give it real HDR. What appears here is whatever this game's mod offers, changed live in the running game.":
+    "RenoDX 替换此游戏的色调映射，为其提供真正的 HDR。这里显示的是此游戏的模组所提供的选项，会在运行中的游戏里实时更改。",
+  "The game did not answer, so nothing was changed. Is it still running?":
+    "游戏没有响应，因此没有做任何更改。它还在运行吗？",
+  "Sent to the running game.":
+    "已发送到运行中的游戏。",
+  "This game's DLSS 5 engine is too old to show these settings here. Update DLSS 5 from the app.":
+    "此游戏的 DLSS 5 引擎太旧，无法在这里显示这些设置。请在应用中更新 DLSS 5。",
+  "The game is not running. These settings can be changed here while it runs.":
+    "游戏没有在运行。游戏运行时可以在这里更改这些设置。",
+  "ReLimiter is running, but this build of it cannot be driven from this panel -- its own overlay still works. Adding frame pacing again from the app installs one that can.":
+    "ReLimiter 正在运行，但此版本无法从此面板控制——它自己的叠加层仍然可用。在应用中重新添加帧率节奏会安装一个可以控制的版本。",
+  "RenoDX is running, but this build of it cannot be driven from this panel -- its own overlay still works.":
+    "RenoDX 正在运行，但此版本无法从此面板控制——它自己的叠加层仍然可用。",
+  "ReLimiter is running, but it speaks a different version of the panel's interface than this DLSS 5 engine. Update DLSS 5 or frame pacing from the app.":
+    "ReLimiter 正在运行，但它使用的面板接口版本与此 DLSS 5 引擎不同。请在应用中更新 DLSS 5 或帧率节奏。",
+  "RenoDX is running, but it speaks a different version of the panel's interface than this DLSS 5 engine. Update DLSS 5 or RenoDX from the app.":
+    "RenoDX 正在运行，但它使用的面板接口版本与此 DLSS 5 引擎不同。请在应用中更新 DLSS 5 或 RenoDX。",
+  "The add-on is running but offers no settings this panel can show.":
+    "该附加组件正在运行，但没有此面板可以显示的设置。",
+  "Frame pacing is not installed on this game -- turn it on from the app's card or the pop-out; it takes effect the next time the game starts.":
+    "此游戏未安装帧率节奏——请在应用的卡片或弹出面板中开启；下次启动游戏时生效。",
+  "HDR (RenoDX) is not installed on this game -- turn it on from the app's card or the pop-out; it takes effect the next time the game starts.":
+    "此游戏未安装 HDR（RenoDX）——请在应用的卡片或弹出面板中开启；下次启动游戏时生效。",
 });
