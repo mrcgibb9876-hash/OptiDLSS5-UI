@@ -244,11 +244,18 @@ body {
   inset: 0;
   transform: rotateY(180deg);
   align-items: center;
-  justify-content: center;
+  /* safe: centred while it fits, top-aligned once it does not. At the 260px minimum column the failure
+     face (title, detail, three buttons, the sign-in code) is taller than the card, and plain centring
+     pushed the title and the code out of both ends where no scroll could reach them. The detail is the
+     one part that gives way (it scrolls itself); anything still left over scrolls the face. */
+  justify-content: safe center;
+  overflow-y: auto;
   text-align: center;
   gap: 14px;
   padding: 20px;
 }
+.card-face-back > * { flex-shrink: 0; }
+.card-face-back > .card-remove-detail { flex-shrink: 1; min-height: 2.8em; }
 .card-remove-title { font-weight: 600; font-size: 14px; }
 .card-remove-detail { font-size: 12px; color: var(--text-dim); line-height: 1.4; }
 .card-remove-actions { display: flex; gap: 8px; width: 100%; }
@@ -260,7 +267,8 @@ body {
 .card-face-back .card-remove-detail { max-height: 45%; overflow-y: auto; }
 .card-fail-actions { display: flex; flex-direction: column; gap: 8px; width: 100%; }
 .card-fail-actions .btn { width: 100%; }
-.card-fail-status { font-size: 12px; color: var(--text-dim); }
+.card-fail-status { font-size: 12px; color: var(--text-dim); overflow-wrap: anywhere; }
+.card-fail-status .help-send-code { display: block; margin: 4px 0 0 0; }
 .card-fail-status a { color: var(--accent); }
 
 .card-banner-wrap {

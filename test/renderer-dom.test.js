@@ -110,6 +110,29 @@ test('a failed game climbs the ladder: DXVK, then Chicken, then a report', () =>
   assert.ok(!/no known fix/.test(flip), 'the dead-end wording is gone from the ladder');
 });
 
+test('a Chicken rung that failed or was cancelled is not counted as tried', () => {
+  // 2026-09-25: tryFallback read game.neuralConsumer, which switchNeuralPass sets BEFORE installing,
+  // and installGame resolved undefined on every path -- so a refused switch read as done.
+  const install = js.slice(js.indexOf('async function installGame(game)'), js.indexOf('// ── PureDark'));
+  assert.doesNotMatch(install, /return;/, 'every exit of installGame says whether it worked');
+  assert.match(install, /return !!res\.ok;\r?\n\}/);
+  const sw = js.slice(js.indexOf('async function switchNeuralPass('), js.indexOf('async function loadSettingsDfc('));
+  assert.match(sw, /const ok = await installGame\(game\);[\s\S]*game\.neuralConsumer = previous;[\s\S]*return ok;/);
+  const tf = js.slice(js.indexOf('async function tryFallback('), js.indexOf('function flipToFailure('));
+  assert.match(tf, /if \(await switchNeuralPass\(game, 'dfc'\)\)/);
+  assert.doesNotMatch(tf, /game\.neuralConsumer === 'dfc'/);
+  assert.match(tf, /fb\.at = before\.at;/, 'an undo puts the old `at` back, not 0');
+});
+
+test('a report survives the grid being redrawn under it', () => {
+  // The window regaining focus after GitHub's page redraws the grid; the progress lives outside the card.
+  assert.match(js, /const reportProgress = new Map\(\);/);
+  const show = js.slice(js.indexOf('function showFailure('), js.indexOf('function escapeHtml('));
+  assert.match(show, /reportProgress\.get\(exePath\)/, 'a redrawn card turns back to a report in progress');
+  assert.match(show, /cardsByExe\.get\(exePath\)/, 'the delayed spin finds the live card');
+  assert.match(js, /function reportSignInShared\(\)/, 'one device flow is shared, never a second one started');
+});
+
 test('the DLSS 5 field table is not offered in two places at once', () => {
   // The in-game panel and Settings both write the same OptiScaler.ini, and the panel saves the
   // whole file whenever it changes something -- so a second copy of those controls in Settings

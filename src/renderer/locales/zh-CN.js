@@ -1,6 +1,12 @@
 // 简体中文. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("zh-CN", {
+  "GitHub sign-in code: {code} (copied). Enter it on the GitHub page that opened.":
+    "GitHub 登录代码：{code}（已复制）。请在打开的 GitHub 页面中输入。",
+  "Retry":
+    "重试",
+  "Manager update failed: {error}":
+    "Manager 更新失败：{error}",
   "This game runs on Vulkan, where ReShade only loads as a machine-wide layer that its own installer registers -- this app cannot do that for you. Run ReShade's setup once for this exe, choosing Vulkan and \"Enable loading of add-ons\", and frame pacing can be set up here afterwards.":
     "这个游戏运行在 Vulkan 上，ReShade 在那里只能作为由它自己的安装程序注册的全系统层加载 —— 本应用无法替你完成这一步。请为这个 exe 运行一次 ReShade 的安装程序，选择 Vulkan 和 \"Enable loading of add-ons\"，之后就可以在这里设置帧率节奏了。",
   "Frame pacing was installed here and its file is gone from the folder, so something removed it after the fact -- almost always antivirus. Add an exclusion for this game folder first, then add it again.":

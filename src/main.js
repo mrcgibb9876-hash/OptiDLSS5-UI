@@ -4418,8 +4418,10 @@ ipcMain.handle('report:signin', async () => {
     shell.openExternal(flow.verification_uri);
     const attempt = {};
     reportSignIn = attempt;
+    // A token from ANY attempt is kept: a player who typed the first code after a second flow started
+    // was signed in on GitHub and dropped here (2026-09-25). Only a superseded attempt's failure is quiet.
     ghreport.pollForToken(flow.device_code, { interval: flow.interval, expiresIn: flow.expires_in })
-      .then((token) => { if (reportSignIn !== attempt) return; writeReportToken(token); sendToWindows('report-signin', { ok: true }); })
+      .then((token) => { writeReportToken(token); sendToWindows('report-signin', { ok: true }); })
       .catch((error) => { if (reportSignIn === attempt) sendToWindows('report-signin', { ok: false, error: String(error && error.message ? error.message : error) }); });
     return { ok: true, userCode: flow.user_code, verificationUri: flow.verification_uri };
   } catch (error) {

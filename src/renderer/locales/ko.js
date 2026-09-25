@@ -1,6 +1,12 @@
 // 한국어. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("ko", {
+  "GitHub sign-in code: {code} (copied). Enter it on the GitHub page that opened.":
+    "GitHub 로그인 코드: {code} (복사됨). 열린 GitHub 페이지에 입력하세요.",
+  "Retry":
+    "다시 시도",
+  "Manager update failed: {error}":
+    "Manager 업데이트 실패: {error}",
   "This game runs on Vulkan, where ReShade only loads as a machine-wide layer that its own installer registers -- this app cannot do that for you. Run ReShade's setup once for this exe, choosing Vulkan and \"Enable loading of add-ons\", and frame pacing can be set up here afterwards.":
     "이 게임은 Vulkan으로 실행되며, 여기서 ReShade는 자체 설치 프로그램이 등록하는 시스템 전역 계층으로만 로드됩니다. 이 앱은 그 작업을 대신할 수 없습니다. 이 exe에 대해 ReShade 설치 프로그램을 한 번 실행하고 Vulkan과 \"Enable loading of add-ons\"를 선택하면, 그 후에 프레임 페이싱을 여기서 설정할 수 있습니다.",
   "Frame pacing was installed here and its file is gone from the folder, so something removed it after the fact -- almost always antivirus. Add an exclusion for this game folder first, then add it again.":

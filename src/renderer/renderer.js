@@ -952,6 +952,9 @@ async function confirmRemoveOnCard(card, game, { title = t('Remove DLSS 5?'), le
       if (res.ok) {
         await removeLosslessProfile(game);
         launchIssues.delete(game.exePath);
+        // The ladder was about what is now gone: a fresh install starts it from the top again.
+        delete game.fallback;
+        saveGamesSoon();
       }
       toast(res.ok ? describeUninstall(res) : t("Couldn't remove OptiScaler: {error}", { error: res.error }));
       renderGrid();
@@ -1058,6 +1061,9 @@ function flipToConfirm(card, { title, detail, onConfirm, confirmLabel = t('Remov
   card.querySelector('.card-fail-status').classList.add('hidden');
   card.querySelector('.card-remove-title').textContent = title;
   card.querySelector('.card-remove-detail').textContent = detail;
+  // flipToFailure puts the whole failure text in the tooltip; a confirm has its own words.
+  card.querySelector('.card-remove-detail').title = '';
+  card.classList.remove('card-spin');
   const confirmBtn = card.querySelector('.btn-flip-confirm');
   confirmBtn.textContent = confirmLabel;
   confirmBtn.classList.toggle('btn-danger', danger);
@@ -1087,14 +1093,21 @@ function addonMenuReason(kind, code) {
   }
 }
 
+// Games whose pacing/RenoDX change is running: a second click used to start the same install again.
+const addonMenuBusy = new Set();
+
 function paintAddonMenu(card) {
   const st = addonMenuState.get(card._exePath);
+  const busy = addonMenuBusy.has(card._exePath);
   for (const b of card.querySelectorAll('.btn-menu-addon')) {
     const kind = b.dataset.kind;
     const name = kind === 'pacing' ? t('Frame pacing') : 'HDR (RenoDX)';
     const s = st && st.ok ? st[kind] : null;
     b.classList.toggle('menu-addon-on', !!(s && s.installed));
-    if (!s) { b.textContent = name; b.disabled = !!(st && !st.ok); b.title = ''; continue; }
+    // Not known yet (the answer is still coming) or being changed: shown as such and not pressable --
+    // an entry that looked ready and did nothing when clicked read as broken.
+    if (!st || busy) { b.textContent = `${name}: …`; b.disabled = true; b.title = ''; continue; }
+    if (!s) { b.textContent = name; b.disabled = true; b.title = ''; continue; }
     const blocked = !s.installed && !!s.blocker;
     b.disabled = blocked;
     b.textContent = s.installed ? t('{name}: On — turn off', { name }) : t('{name}: Off — turn on', { name });
@@ -1104,20 +1117,35 @@ function paintAddonMenu(card) {
 
 async function refreshAddonMenu(card, game) {
   paintAddonMenu(card);
-  try { addonMenuState.set(game.exePath, await window.api.panelAddonToggles(game.exePath)); } catch {}
+  // A failed read is stored as one, so the entries leave their "…" instead of waiting on nothing.
+  let st;
+  try { st = await window.api.panelAddonToggles(game.exePath); } catch (e) { st = { ok: false, error: String((e && e.message) || e) }; }
+  addonMenuState.set(game.exePath, st || { ok: false });
   paintAddonMenu(card);
+  const live = cardsByExe.get(game.exePath);
+  if (live && live !== card) paintAddonMenu(live);
 }
 
 async function toggleAddonFromMenu(card, game, kind) {
+  if (addonMenuBusy.has(game.exePath)) return;
   const st = addonMenuState.get(game.exePath);
   const s = st && st.ok ? st[kind] : null;
   if (!s) return;
   if (!s.installed && s.blocker) { toast(addonMenuReason(kind, s.blocker)); return; }
   const name = kind === 'pacing' ? t('Frame pacing') : 'RenoDX';
   toast(s.installed ? t('Removing…') : t('Fetching and placing…'));
-  const res = kind === 'pacing'
-    ? (s.installed ? await window.api.relimiterRemove(game.exePath) : await window.api.relimiterInstall(game.exePath))
-    : (s.installed ? await window.api.addonsRemove(game.exePath, 'renodx') : await window.api.addonsInstall(game.exePath, 'renodx'));
+  addonMenuBusy.add(game.exePath);
+  paintAddonMenu(card);
+  let res;
+  try {
+    res = kind === 'pacing'
+      ? (s.installed ? await window.api.relimiterRemove(game.exePath) : await window.api.relimiterInstall(game.exePath))
+      : (s.installed ? await window.api.addonsRemove(game.exePath, 'renodx') : await window.api.addonsInstall(game.exePath, 'renodx'));
+  } catch (e) {
+    res = { ok: false, error: String((e && e.message) || e) };
+  } finally {
+    addonMenuBusy.delete(game.exePath);
+  }
   if (!res || !res.ok) {
     toast(t('Could not change {name}: {error}', { name, error: (res && addonMenuReason(kind, res.code)) || (res && res.error) || t('unknown') }));
   } else {
@@ -1171,7 +1199,8 @@ function failureEvidence(game, { route, diag, run, issue }) {
   }
   // Game Help with no fix for what it found. No run is needed: an install it already knows cannot work
   // (a 32-bit game where the route has no pass, say) is a dead end the ladder should take over too.
-  if (diag && diag.ok && (diag.status === 'unavailable' || diag.status === 'unknown') && !DLSS_NOT_ASKED.includes(diag.code)) {
+  // After a rung, though, a finding with no run behind it is still about the setup before the swap.
+  if (diag && diag.ok && (diag.status === 'unavailable' || diag.status === 'unknown') && !DLSS_NOT_ASKED.includes(diag.code) && (runAt || !since)) {
     return { sig: `help:${(run && run.at) || 'norun'}:${diag.code}`, when: runAt, text: helpWords(diag), code: diag.code };
   }
   return null;
@@ -1189,26 +1218,71 @@ function fallbackOffers(game, route) {
   return offers;
 }
 
+// A report in progress, per game (exePath -> { html, busy }). Kept here and not on the card: the grid is
+// redrawn whenever the window regains focus -- which is exactly what coming back from GitHub's sign-in
+// page does -- and the progress used to go on writing into the detached old card, with a second click
+// on the new one starting a second sign-in (2026-09-25).
+const reportProgress = new Map();
+const reportLinks = new Map(); // link id -> issue URL, for the "Open it" link in a repainted status
+
+function paintReportProgress(exePath) {
+  const card = cardsByExe.get(exePath);
+  if (!card || !card._failure) return;
+  const p = reportProgress.get(exePath);
+  const send = card.querySelector('.card-fail-actions .btn-report-issue');
+  if (send) send.disabled = !!(p && p.busy);
+  // Only while the back face shows the failure, not a Remove confirm sharing it.
+  if (card.querySelector('.card-fail-actions').classList.contains('hidden')) return;
+  const status = card.querySelector('.card-fail-status');
+  status.innerHTML = p ? p.html : '';
+  status.classList.toggle('hidden', !(p && p.html));
+}
+
+document.addEventListener('click', (e) => {
+  const link = e.target.closest && e.target.closest('a[data-report-link]');
+  if (!link) return;
+  e.preventDefault();
+  const url = reportLinks.get(link.dataset.reportLink);
+  if (url) window.api.openExternal(url);
+});
+
+// One rung at a time per game: the buttons stay live for the length of the un-flip, and a second click
+// there started the same swap twice.
+const fallbackBusy = new Set();
+
 async function tryFallback(card, game, rung) {
-  const fb = fallbackOf(game);
-  card.classList.remove('flipped', 'card-spin');
-  launchIssues.delete(game.exePath);
-  const before = fb.tried.slice();
-  if (!fb.tried.includes(rung)) fb.tried.push(rung);
-  fb.at = Date.now();
-  saveGamesSoon();
-  if (rung === 'dxvk') {
-    const res = await applyLayerSwap(game, 'swap-to-dxvk');
-    if (res && res.ok && res.done) { toast(t('DXVK is in. Launch the game again to see if DLSS 5 works now.')); return; }
-  } else {
-    await switchNeuralPass(game, 'dfc');
-    if (game.neuralConsumer === 'dfc') { toast(t('Deep Fried Chicken is in. Launch the game again to see if it works now.')); return; }
+  if (fallbackBusy.has(game.exePath)) return;
+  fallbackBusy.add(game.exePath);
+  for (const b of card.querySelectorAll('.card-fail-actions .btn')) b.disabled = true;
+  try {
+    const fb = fallbackOf(game);
+    card.classList.remove('flipped', 'card-spin');
+    const issue = launchIssues.get(game.exePath);
+    launchIssues.delete(game.exePath);
+    const before = { tried: fb.tried.slice(), at: fb.at };
+    if (!fb.tried.includes(rung)) fb.tried.push(rung);
+    fb.at = Date.now();
+    saveGamesSoon();
+    if (rung === 'dxvk') {
+      const res = await applyLayerSwap(game, 'swap-to-dxvk');
+      if (res && res.ok && res.done) { toast(t('DXVK is in. Launch the game again to see if DLSS 5 works now.')); return; }
+    } else if (await switchNeuralPass(game, 'dfc')) {
+      // switchNeuralPass says whether the install went through; the folder says whether Chicken is what
+      // is in it now. Both, because the choice recorded on the game proved nothing (it is set first).
+      let route = null;
+      try { route = await window.api.gameRoute(game.exePath, game.detectedPath); } catch {}
+      if (!route || route.consumerHere === 'dfc') { toast(t('Deep Fried Chicken is in. Launch the game again to see if it works now.')); return; }
+    }
+    // Cancelled or refused: the rung is still there to try, and the ladder is exactly as it was --
+    // the old `at` too, or evidence the last rung had already ruled out would count again.
+    fb.tried = before.tried;
+    fb.at = before.at;
+    if (issue && !launchIssues.has(game.exePath)) launchIssues.set(game.exePath, issue);
+    saveGamesSoon();
+    renderGrid();
+  } finally {
+    fallbackBusy.delete(game.exePath);
   }
-  // Cancelled or refused: the rung is still there to try.
-  fb.tried = before;
-  fb.at = 0;
-  saveGamesSoon();
-  renderGrid();
 }
 
 function flipToFailure(card, game, { spin = false } = {}) {
@@ -1242,14 +1316,26 @@ function flipToFailure(card, game, { spin = false } = {}) {
     card.querySelector('.card-remove-title').textContent = tried.length
       ? t('Nothing worked on {name} yet', { name: game.name })
       : t('DLSS 5 did not work on {name}', { name: game.name });
-    const send = button(t('Report issue'), 'btn-primary', async () => {
-      send.disabled = true;
+    button(t('Report issue'), 'btn-primary btn-report-issue', async () => {
+      const exePath = game.exePath;
+      if (reportProgress.has(exePath) && reportProgress.get(exePath).busy) return;
+      reportProgress.set(exePath, { html: '', busy: true });
+      paintReportProgress(exePath);
       try {
-        await sendGameFailure(game, { ...f.diag, code: (f.diag && f.diag.code) || f.code, run: f.run }, {
-          setStatus: (html) => { status.innerHTML = html; status.classList.toggle('hidden', !html); },
+        // An early exit is named as one: the diagnosis beside it ('nr-ran', say) is about the run before.
+        const code = f.code === 'early-exit' ? 'early-exit' : (f.diag && f.diag.code) || f.code;
+        await sendGameFailure(game, { ...f.diag, code, run: f.run }, {
+          setStatus: (html) => { reportProgress.set(exePath, { html, busy: true }); paintReportProgress(exePath); },
           tried,
         });
-      } finally { send.disabled = false; }
+      } catch (e) {
+        reportProgress.set(exePath, { html: escapeHtml(t('Could not send: {error}', { error: String((e && e.message) || e) })), busy: true });
+      } finally {
+        const last = reportProgress.get(exePath);
+        if (last && last.html) reportProgress.set(exePath, { html: last.html, busy: false });
+        else reportProgress.delete(exePath);
+        paintReportProgress(exePath);
+      }
     });
     if (f.route && f.route.optiInstalled) {
       button(t('Restore the original files'), 'btn-ghost', () => { card.classList.remove('card-spin'); confirmRemoveOnCard(card, game, { title: t('Restore the original files?'), confirmLabel: t('Restore originals') }); });
@@ -1258,6 +1344,7 @@ function flipToFailure(card, game, { spin = false } = {}) {
   button(t('Not now'), 'btn-ghost', () => card.classList.remove('flipped', 'card-spin'));
   card.classList.toggle('card-spin', spin);
   card.classList.add('flipped');
+  paintReportProgress(game.exePath);
 }
 
 // The front's problem row for a failure: short words, and the button that turns the card again.
@@ -1270,15 +1357,34 @@ function failureProblem(card, game, evidence) {
 // problem row's button to turn it again.
 function showFailure(card, game, evidence, ctx) {
   card._failure = { ...evidence, ...ctx };
+  const exePath = game.exePath;
+  // A report still going on this game: the grid was redrawn under it (the window regaining focus after
+  // GitHub's page does that), so the new card turns straight back to where the progress is shown.
+  const report = reportProgress.get(exePath);
+  if (report && report.busy) { flipToFailure(card, game); return; }
   const fb = fallbackOf(game);
   if (fb.seen === evidence.sig) return;
-  fb.seen = evidence.sig;
-  saveGamesSoon();
   // Only a failure from the last day turns the card on its own. Opening this build for the first time
   // would otherwise spin every card with an old crash in its log at once; those keep the row's button.
-  if (!evidence.when || Date.now() - evidence.when > 24 * 3600 * 1000) return;
-  // After the grid has painted, so the turn is seen rather than landing already turned.
-  setTimeout(() => { if (card.isConnected) flipToFailure(card, game, { spin: true }); }, 350);
+  if (!evidence.when || Date.now() - evidence.when > 24 * 3600 * 1000) {
+    fb.seen = evidence.sig;
+    saveGamesSoon();
+    return;
+  }
+  // After the grid has painted, so the turn is seen rather than landing already turned. The card is
+  // looked up again then: a redraw in those 350 ms replaced this one, and marking the failure seen
+  // before a turn that never happened lost the spin for good. A card already turned (a Remove confirm
+  // on the shared back face) is not spun under the player; the next render tries again.
+  setTimeout(() => {
+    const live = cardsByExe.get(exePath);
+    if (!live || !live.isConnected || !live._failure || live._failure.sig !== evidence.sig) return;
+    if (live.classList.contains('flipped')) return;
+    const g = live._game || game;
+    flipToFailure(live, g, { spin: true });
+    const liveFb = fallbackOf(g);
+    liveFb.seen = evidence.sig;
+    saveGamesSoon();
+  }, 350);
 }
 
 function escapeHtml(str) {
@@ -1953,6 +2059,28 @@ window.api.onReportSignIn((result) => {
   if (reportSignInWaiter) { reportSignInWaiter(result); reportSignInWaiter = null; }
 });
 
+// One device flow at a time, shared by every Report issue that needs it: a second press while the first
+// code is waiting reuses that code rather than starting a flow that makes the first one worthless.
+// Resolves { flow, result } where result is the promise of the sign-in's outcome.
+let reportSignInPending = null;
+function reportSignInShared() {
+  if (reportSignInPending) return reportSignInPending;
+  const pending = (async () => {
+    let flow;
+    try { flow = await window.api.reportSignIn(); } catch (e) { flow = { ok: false, error: String((e && e.message) || e) }; }
+    if (!flow || !flow.ok) return { flow: flow || { ok: false, error: '?' }, result: Promise.resolve({ ok: false, error: flow && flow.error }) };
+    const result = new Promise((resolve) => {
+      // Never left hanging: a waiter this replaces is told it was superseded.
+      if (reportSignInWaiter) reportSignInWaiter({ ok: false, superseded: true });
+      reportSignInWaiter = resolve;
+    });
+    return { flow, result };
+  })();
+  reportSignInPending = pending;
+  pending.then(({ result }) => result).finally(() => { if (reportSignInPending === pending) reportSignInPending = null; });
+  return pending;
+}
+
 // The whole send, from the card's "Report issue" once every other rung is
 // tried. setStatus takes HTML (already escaped here) for wherever the progress is shown. `tried` names
 // what the card's ladder already tried, so the report says it rather than the maintainer asking.
@@ -1978,12 +2106,14 @@ async function sendGameFailure(game, diag, { setStatus, tried = [] } = {}) {
       return;
     }
     if (!status.signedIn) {
-      const flow = await window.api.reportSignIn();
+      const { flow, result: outcome } = await reportSignInShared();
       if (!flow.ok) { toast(t('GitHub sign-in failed: {error}', { error: flow.error })); return; }
       try { await navigator.clipboard.writeText(flow.userCode); } catch {}
       setSendStatus(`${escapeHtml(t('Sign in once: on the GitHub page that opened, enter this code (it is already copied):'))} <strong class="help-send-code">${escapeHtml(flow.userCode)}</strong>`);
-      const result = await new Promise((resolve) => { reportSignInWaiter = resolve; });
-      if (!result.ok) { setSendStatus(escapeHtml(t('GitHub sign-in failed: {error}', { error: result.error }))); return; }
+      // Toasted as well: the card's back face is small, and a redraw can put the card on its front.
+      toast(t('GitHub sign-in code: {code} (copied). Enter it on the GitHub page that opened.', { code: flow.userCode }));
+      const result = await outcome;
+      if (!result.ok) { setSendStatus(escapeHtml(result.superseded ? '' : t('GitHub sign-in failed: {error}', { error: result.error }))); return; }
     }
     setSendStatus(escapeHtml(t('Gathering the report…')));
     const { title, body } = withTried(await buildGameReport(game, diag));
@@ -1996,10 +2126,11 @@ async function sendGameFailure(game, diag, { setStatus, tried = [] } = {}) {
     if (!res.ok) { setSendStatus(escapeHtml(t('Could not send: {error}', { error: res.error }))); return; }
     if (res.cancelled) { setSendStatus(''); return; }
     // An id per send: the status can be on a card as well as in Game Help, and both can be on screen.
+    // Opened through a delegated handler (reportLinks), so the link still works after the status is
+    // painted again onto a redrawn card.
     const linkId = `send-link-${Date.now()}`;
-    setSendStatus(`${escapeHtml(t('Sent as issue #{number}. The maintainer will reply there.', { number: res.issueNumber }))} <a href="#" id="${linkId}">${escapeHtml(t('Open it'))}</a>`);
-    const link = document.getElementById(linkId);
-    if (link) link.addEventListener('click', (e) => { e.preventDefault(); window.api.openExternal(res.issueUrl); });
+    reportLinks.set(linkId, res.issueUrl);
+    setSendStatus(`${escapeHtml(t('Sent as issue #{number}. The maintainer will reply there.', { number: res.issueNumber }))} <a href="#" data-report-link="${linkId}">${escapeHtml(t('Open it'))}</a>`);
   }
 }
 
@@ -2228,26 +2359,29 @@ function verifyInstall(game) {
   });
 }
 
+// Resolves true only when what was asked for is now in the folder; every refusal, cancel and failure
+// resolves false. The ladder's "Try with Deep Fried Chicken" reads this: it used to read the choice
+// it had just recorded, so a failed or cancelled switch counted as done (2026-09-25).
 async function installGame(game) {
   // Normally already on disk (bundled, then kept current); fetched here only if that failed.
   const engineId = engineOf(game);
   const ready = await ensureEngine(engineId);
   if (!ready.ok) {
     toast(t('Could not set up the {engine} build: {error}', { engine: engineLabel(engineId), error: ready.error }));
-    return;
+    return false;
   }
   const releaseFolder = engineFolder(engineId);
   const valid = await window.api.validateRelease(releaseFolder);
   if (!valid.valid) {
     toast(t('Set up the OptiScaler release folder in Settings first ({reason}).', { reason: valid.reason }));
     openSettingsModal();
-    return;
+    return false;
   }
   const nrValid = await window.api.validateNrDll(settings.nrDllPath);
   if (!nrValid.valid) {
     toast(t('DLSS NR file problem: {reason}', { reason: nrValid.reason }));
     openSettingsModal();
-    return;
+    return false;
   }
   // A Feeder game gets its whole route from this one button: the Feeder first (so nvngx_dlss.dll
   // and dlss5-feed.addon64 are on disk when autoConfigureGame runs and picks the DLSS 5 only
@@ -2263,7 +2397,7 @@ async function installGame(game) {
     game.detectedPath = await window.api.detectPath(game.exePath);
     window.api.saveGames(games);
   }
-  if (!(await preflightBeforeInstall(game))) return;
+  if (!(await preflightBeforeInstall(game))) return false;
   const route = await window.api.gameRoute(game.exePath, game.detectedPath);
   // Which add-on runs the neural pass here (Edit / the card menu). When the folder is set up for the
   // other one, this Install is the swap.
@@ -2280,12 +2414,12 @@ async function installGame(game) {
     if (!sw.ok) {
       toast(sw.code && String(sw.code).startsWith('dfc-') ? dfcUnsupportedWords(sw.code) : t('Could not switch this game: {error}', { error: sw.error }));
       renderGrid();
-      return;
+      return false;
     }
     if (consumer === 'dfc') {
       toast(t('Installed with Deep Fried Chicken. Press Home in the game for its menu.'));
       renderGrid();
-      return;
+      return true;
     }
     // Back to DLSS 5: this app's 32-bit route goes in below, from nothing, as on a first install.
     route.dgVoodooDeployed = false;
@@ -2305,18 +2439,18 @@ async function installGame(game) {
       try { report = await window.api.safetyDgVoodooQuarantine(game.exePath); } catch {}
       await showQuarantineNotice(report, 'dgVoodoo2');
       renderGrid();
-      return;
+      return false;
     }
     if (!dg.ok) {
       toast(dxvkChosen
         ? t('DXVK could not be set up: {error}', { error: dg.error })
         : t('dgVoodoo2 could not be set up: {error}', { error: dg.error }));
       renderGrid();
-      return;
+      return false;
     }
     if (dg.cancelled) {
       toast(t('Install stopped: this game\'s DirectX 8/9 route needs dgVoodoo2.'));
-      return;
+      return false;
     }
   }
 
@@ -2353,7 +2487,7 @@ async function installGame(game) {
         ? t('Installed, but ReShade\'s 32-bit Vulkan layer is not set up ({error}), so DLSS 5 cannot run under DXVK yet. Game Help can try again.', { error: res32.dxvkLayer.error })
         : t('Installed. No splash or menu appears in the game on this route -- Game Help shows how to reach it.'));
     renderGrid();
-    return;
+    return !!res32.ok;
   }
 
   // Which add-on runs the neural pass here (Edit > Neural pass). When the folder is set up for the
@@ -2375,22 +2509,22 @@ async function installGame(game) {
       const r = await window.api.feederOpenReShadeSetup();
       if (r && r.ok) toast(t('ReShade\'s installer is open: pick this game\'s exe, choose Vulkan, tick "Enable loading of add-ons". Then press Install again.'));
       renderGrid();
-      return;
+      return false;
     }
     if (!deployed.ok && deployed.code && String(deployed.code).startsWith('dfc-')) {
       toast(dfcUnsupportedWords(deployed.code));
       renderGrid();
-      return;
+      return false;
     }
     if (!deployed.ok && swapNeeded) {
       toast(t('Could not switch this game: {error}', { error: deployed.error }));
       renderGrid();
-      return;
+      return false;
     }
     if (deployed.ok && consumer === 'dfc') {
       toast(t('Installed with Deep Fried Chicken. Press Home in the game for its menu.'));
       renderGrid();
-      return;
+      return true;
     }
     if (!deployed.ok) {
       if (deployed.needsReShadeInstaller) {
@@ -2402,7 +2536,7 @@ async function installGame(game) {
         toast(t('Could not deploy the DLSS5 Feeder: {error}. OptiScaler was not installed -- without the Feeder it would have no DLSS call to hook. Retry once you are online.', { error: deployed.error }));
       }
       renderGrid();
-      return;
+      return false;
     }
     if (!route.feederDeployed) feederNote = ' ' + t('Deployed the DLSS5 Feeder first ({provider}).', { provider: provider.displayName });
   } else if (route.route !== 'feeder' && dfcOffered && (swapNeeded || consumer === 'dfc')) {
@@ -2413,18 +2547,18 @@ async function installGame(game) {
     if (!sw.ok) {
       toast(sw.code && String(sw.code).startsWith('dfc-') ? dfcUnsupportedWords(sw.code) : t('Could not switch this game: {error}', { error: sw.error }));
       renderGrid();
-      return;
+      return false;
     }
     if (consumer === 'dfc') {
       toast(t('Installed with Deep Fried Chicken. Press Home in the game for its menu.'));
       renderGrid();
-      return;
+      return true;
     }
     // A 32-bit Vulkan game has no DLSS 5 route of this app's own: taking Chicken out is all there is.
     if (route.route === 'unsupported') {
       toast(t('Deep Fried Chicken is out. DLSS 5 has no route of its own for this game.'));
       renderGrid();
-      return;
+      return true;
     }
     // Back to DLSS 5: OptiScaler goes in below, as on any install.
   }
@@ -2530,6 +2664,7 @@ async function installGame(game) {
     toast(t('Install failed: {error}', { error: res.error }));
   }
   renderGrid();
+  return !!res.ok;
 }
 
 // ── PureDark's Upscaler Base Plugin (Resident Evil pd route) ─────────────────
@@ -4062,19 +4197,28 @@ async function switchNeuralPass(game, to) {
   } else {
     ask = t('Switch {game} back to DLSS 5? This removes Deep Fried Chicken from the game folder and installs DLSS 5 in its place. Your Chicken settings are kept for next time.', { game: game.name });
   }
-  if (!window.confirm(ask)) return;
+  if (!window.confirm(ask)) return false;
   if (to === 'dfc') {
     const st = await window.api.dfcStatus(null);
     if (!st || !st.supplied) {
-      if (!window.confirm(t('Deep Fried Chicken is not added to this app yet. Pick the folder you unpacked it into now?'))) return;
+      if (!window.confirm(t('Deep Fried Chicken is not added to this app yet. Pick the folder you unpacked it into now?'))) return false;
       const res = await window.api.dfcSupply();
-      if (!res || res.cancelled) return;
-      if (!res.ok) { toast(t('That is not a Deep Fried Chicken download: {error}', { error: res.error })); return; }
+      if (!res || res.cancelled) return false;
+      if (!res.ok) { toast(t('That is not a Deep Fried Chicken download: {error}', { error: res.error })); return false; }
     }
   }
+  // Resolves with installGame's answer, so a caller can tell a switch that happened from one that was
+  // cancelled or refused. The choice goes back on a failure: left behind, it made the next Install try
+  // the swap again and the ladder read the game as switched (2026-09-25).
+  const previous = game.neuralConsumer;
   game.neuralConsumer = to === 'dfc' ? 'dfc' : 'optiscaler';
   window.api.saveGames(games);
-  await installGame(game);
+  const ok = await installGame(game);
+  if (!ok) {
+    game.neuralConsumer = previous;
+    window.api.saveGames(games);
+  }
+  return ok;
 }
 
 async function loadSettingsDfc() {
@@ -5708,6 +5852,8 @@ function renderManagerUpdate(state) {
   const dismissBtn = $('#btn-manager-dismiss');
   downloadBtn.classList.add('hidden');
   dismissBtn.classList.add('hidden');
+  downloadBtn.textContent = t('Download update');
+  delete downloadBtn.dataset.retry;
   if (!state || !state.supported) { banner.classList.add('hidden'); return; }
   if (state.phase === 'available') {
     if (managerUpdateDismissed === state.version) { banner.classList.add('hidden'); return; }
@@ -5717,6 +5863,19 @@ function renderManagerUpdate(state) {
     downloadBtn.disabled = false;
     dismissBtn.classList.remove('hidden');
     text.textContent = t('Manager v{version} is available.', { version: state.version || '?' });
+  } else if (state.phase === 'error') {
+    // Said, with a way to try again: a failed download used to take the banner away silently, which
+    // read as the update having vanished. With a version known the retry is the download (main keeps
+    // `version` on a failure); without one it is a fresh check.
+    if (state.version && managerUpdateDismissed === state.version) { banner.classList.add('hidden'); return; }
+    banner.classList.remove('hidden');
+    restartBtn.classList.add('hidden');
+    downloadBtn.classList.remove('hidden');
+    downloadBtn.disabled = false;
+    downloadBtn.textContent = t('Retry');
+    downloadBtn.dataset.retry = state.version ? 'download' : 'check';
+    dismissBtn.classList.remove('hidden');
+    text.textContent = t('Manager update failed: {error}', { error: state.error || t('unknown') });
   } else if (state.phase === 'downloading') {
     banner.classList.remove('hidden');
     restartBtn.classList.add('hidden');
@@ -5731,8 +5890,25 @@ function renderManagerUpdate(state) {
 }
 
 $('#btn-manager-download').addEventListener('click', async () => {
-  $('#btn-manager-download').disabled = true;
-  renderManagerUpdate(await window.api.managerUpdateDownload());
+  const btn = $('#btn-manager-download');
+  const retry = btn.dataset.retry;
+  btn.disabled = true;
+  let st;
+  try {
+    // A retry after a failed download re-checks first when main no longer holds 'available': the
+    // download refuses from any other phase and would just hand the error back.
+    if (retry === 'check') st = await window.api.managerUpdateCheck();
+    else {
+      st = await window.api.managerUpdateDownload();
+      if (retry && st && st.phase === 'error') {
+        st = await window.api.managerUpdateCheck();
+        if (st && st.phase === 'available') st = await window.api.managerUpdateDownload();
+      }
+    }
+  } catch (e) {
+    st = { supported: true, phase: 'error', error: String((e && e.message) || e) };
+  }
+  renderManagerUpdate(st);
 });
 $('#btn-manager-dismiss').addEventListener('click', async () => {
   const st = await window.api.managerUpdateState();
@@ -5869,8 +6045,16 @@ $('#btn-check-updates').addEventListener('click', async () => {
       if (st.supported) {
         // Found, not fetched: the banner offers Download (the player decides, 2026-09-25).
         managerUpdateDismissed = null;
-        renderManagerUpdate(await window.api.managerUpdateCheck());
-        lines.push(t('Manager v{version} is available -- press Download update in the banner at the top.', { version: managerRes.latestVersion }));
+        const ms = await window.api.managerUpdateCheck();
+        renderManagerUpdate(ms);
+        // Worded from where it actually is: "press Download" for one already downloaded pointed at a
+        // button the banner no longer shows.
+        const phase = ms && ms.phase;
+        const version = (ms && ms.version) || managerRes.latestVersion;
+        if (phase === 'downloaded') lines.push(t('Manager v{version} is ready -- restart to update.', { version }));
+        else if (phase === 'downloading') lines.push(t('Downloading Manager v{version}… {percent}%', { version, percent: ms.percent || 0 }));
+        else if (phase === 'error') lines.push(t('Manager update failed: {error}', { error: ms.error || t('unknown') }));
+        else lines.push(t('Manager v{version} is available -- press Download update in the banner at the top.', { version: managerRes.latestVersion }));
       } else {
         // Say WHY it did not just download it. The reason was sitting in the state and being thrown
         // away at the one moment someone is stood in front of the app wondering what changed -- so
@@ -5883,6 +6067,9 @@ $('#btn-check-updates').addEventListener('click', async () => {
         if (st.reason) lines.push(t('It could not update itself: {reason}.', { reason: t(st.reason) }));
       }
     }
+  } catch (e) {
+    // Whatever threw, the press still gets an answer rather than the button just coming back.
+    lines.push(t('Manager check failed: {error}', { error: String((e && e.message) || e) }));
   } finally {
     btn.disabled = false;
     btn.textContent = label;
@@ -6100,13 +6287,18 @@ async function openAddonsModal(game) {
   $('#addons-modal').classList.remove('hidden');
   $('#addons-list').innerHTML = `<p class="field-hint">${escapeHtml(t('Looking at this game…'))}</p>`;
   $('#addons-status').textContent = '';
-  await renderAddons();
+  await renderAddons(game);
 }
 
-async function renderAddons() {
+// Everything below works on the game it was called for, never on addonsGame read after an await: the
+// modal closed mid-install set that to null and the redraw threw, and reopened for another game it let a
+// late reply draw the first game's rows under the second's name (2026-09-25).
+async function renderAddons(game = addonsGame) {
+  if (!game) return;
   // A rejected invoke (a reply Electron cannot send, say) must say so, not leave "Looking…" up.
-  const res = await window.api.addonsForGame(addonsGame.exePath)
+  const res = await window.api.addonsForGame(game.exePath)
     .catch((error) => ({ ok: false, error: String(error && error.message ? error.message : error) }));
+  if (addonsGame !== game) return;
   if (!res || !res.ok) {
     $('#addons-list').innerHTML = `<p class="field-hint status-bad">${escapeHtml(res && res.error ? res.error : t('Could not read this game.'))}</p>`;
     return;
@@ -6250,14 +6442,15 @@ async function renderAddons() {
       el.disabled = true;
       $('#addons-status').className = 'field-hint';
       $('#addons-status').textContent = t('Switching to {name}…', { name: el.dataset.name });
-      const out = await window.api.addonsSetMvProvider(addonsGame.exePath, id, { licenseConfirmed });
+      const out = await window.api.addonsSetMvProvider(game.exePath, id, { licenseConfirmed });
+      if (addonsGame !== game) return;
       if (out && out.ok) {
         $('#addons-status').textContent = t('Motion vectors now come from {name}. Launch the game and see how it looks.', { name: el.dataset.name });
       } else {
         $('#addons-status').className = 'field-hint status-bad';
         $('#addons-status').textContent = (out && out.error) || t('That did not work.');
       }
-      await renderAddons();
+      await renderAddons(game);
     });
   }
 
@@ -6272,8 +6465,9 @@ async function renderAddons() {
       $('#addons-status').className = 'field-hint';
       $('#addons-status').textContent = removing ? t('Removing…') : t('Fetching and placing…');
       const out = removing
-        ? await window.api.addonsRemove(addonsGame.exePath, id)
-        : await window.api.addonsInstall(addonsGame.exePath, id);
+        ? await window.api.addonsRemove(game.exePath, id)
+        : await window.api.addonsInstall(game.exePath, id);
+      if (addonsGame !== game) return;
       if (out && out.ok) {
         const swapped = (out.swappedOut || []).map((sid) => {
           const s2 = res.catalogue.find((x) => x.id === sid);
@@ -6298,7 +6492,7 @@ async function renderAddons() {
         };
         $('#addons-status').textContent = (out && byCode[out.code]) || (out && out.error) || t('That did not work.');
       }
-      await renderAddons();
+      await renderAddons(game);
     });
   }
 }

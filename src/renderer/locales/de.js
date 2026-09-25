@@ -1,6 +1,12 @@
 // Deutsch. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("de", {
+  "GitHub sign-in code: {code} (copied). Enter it on the GitHub page that opened.":
+    "GitHub-Anmeldecode: {code} (kopiert). Gib ihn auf der GitHub-Seite ein, die sich geöffnet hat.",
+  "Retry":
+    "Erneut versuchen",
+  "Manager update failed: {error}":
+    "Manager-Update fehlgeschlagen: {error}",
   "This game runs on Vulkan, where ReShade only loads as a machine-wide layer that its own installer registers -- this app cannot do that for you. Run ReShade's setup once for this exe, choosing Vulkan and \"Enable loading of add-ons\", and frame pacing can be set up here afterwards.":
     "Dieses Spiel läuft auf Vulkan, wo ReShade nur als systemweite Schicht lädt, die sein eigenes Installationsprogramm registriert -- das kann diese App nicht für dich tun. Führe ReShades Setup einmal für diese Exe aus, wähle Vulkan und \"Enable loading of add-ons\", danach kann Frame-Pacing hier eingerichtet werden.",
   "Frame pacing was installed here and its file is gone from the folder, so something removed it after the fact -- almost always antivirus. Add an exclusion for this game folder first, then add it again.":
