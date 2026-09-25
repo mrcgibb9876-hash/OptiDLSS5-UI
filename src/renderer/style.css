@@ -388,10 +388,10 @@ body {
   letter-spacing: 0.02em;
   cursor: default;
 }
-/* RenoDX can do HDR here: a warm HDR-gold outline for a mod made for the game; the engine-wide match
-   stays in the neutral look, because it may do nothing (renodxTag). */
+/* RenoDX can do HDR here: gold for a mod made for the game, silver for an engine-wide match (which may
+   do nothing on a given game -- renodxTag says so on hover). */
 .card-store.card-renodx { border-color: rgba(245,197,24,0.75); color: #f5c518; }
-.card-store.card-renodx.card-renodx-engine { border-color: var(--border); color: var(--text-dim); font-style: italic; }
+.card-store.card-renodx.card-renodx-engine { border-color: rgba(192,198,204,0.7); color: #c0c6cc; }
 .card-mark.hidden { display: none; }
 .badge-installed { background: rgba(var(--accent-rgb),0.85); color: var(--on-accent); }
 .badge-partial { background: rgba(217,164,65,0.9); color: #0c0e0f; }
