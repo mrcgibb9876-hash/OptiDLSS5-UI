@@ -1732,4 +1732,12 @@ window.I18N.register("ru", {
     "DLSS 5 здесь не заработал",
   "GitHub sign-in has expired -- press Send again to sign in.":
     "Вход в GitHub истёк -- нажмите «Отправить» ещё раз, чтобы войти.",
+  "XeFG frame generation":
+    "Генерация кадров XeFG",
+  "XeFG is set up for this game. Start the game again, then switch it on here or in the in-game panel.":
+    "XeFG настроен для этой игры. Перезапустите игру, затем включите его здесь или во внутриигровой панели.",
+  "Intel's frame generation, run by OptiScaler. Off until you turn it on here; it is then set up for the next time the game starts, and switches on and off live from then on. Frame pacing works beside it.":
+    "Генерация кадров от Intel, которую запускает OptiScaler. Выключена, пока вы не включите её здесь; тогда она готовится к следующему запуску игры, а дальше включается и выключается на лету. Стабилизация кадров работает вместе с ней.",
+  "Not available for this game.":
+    "Недоступно для этой игры.",
 });

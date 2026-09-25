@@ -1742,4 +1742,12 @@ window.I18N.register("fr", {
     "DLSS 5 n’a pas fonctionné ici",
   "GitHub sign-in has expired -- press Send again to sign in.":
     "La connexion GitHub a expiré -- appuyez de nouveau sur Envoyer pour vous connecter.",
+  "XeFG frame generation":
+    "Génération d’images XeFG",
+  "XeFG is set up for this game. Start the game again, then switch it on here or in the in-game panel.":
+    "XeFG est configuré pour ce jeu. Relancez le jeu, puis activez-le ici ou dans le panneau en jeu.",
+  "Intel's frame generation, run by OptiScaler. Off until you turn it on here; it is then set up for the next time the game starts, and switches on and off live from then on. Frame pacing works beside it.":
+    "La génération d’images d’Intel, exécutée par OptiScaler. Désactivée tant que vous ne l’activez pas ici ; elle est alors préparée pour le prochain lancement du jeu, puis s’active et se désactive en direct. La régulation des images fonctionne à côté.",
+  "Not available for this game.":
+    "Non disponible pour ce jeu.",
 });

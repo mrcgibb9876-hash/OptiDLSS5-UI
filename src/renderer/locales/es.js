@@ -1732,4 +1732,12 @@ window.I18N.register("es", {
     "DLSS 5 no funcionó aquí",
   "GitHub sign-in has expired -- press Send again to sign in.":
     "La sesión de GitHub ha caducado -- pulsa Enviar de nuevo para iniciar sesión.",
+  "XeFG frame generation":
+    "Generación de fotogramas XeFG",
+  "XeFG is set up for this game. Start the game again, then switch it on here or in the in-game panel.":
+    "XeFG está configurado para este juego. Vuelve a abrir el juego y actívalo aquí o en el panel del juego.",
+  "Intel's frame generation, run by OptiScaler. Off until you turn it on here; it is then set up for the next time the game starts, and switches on and off live from then on. Frame pacing works beside it.":
+    "La generación de fotogramas de Intel, ejecutada por OptiScaler. Desactivada hasta que la actives aquí; entonces se prepara para el siguiente inicio del juego y desde ahí se activa y desactiva en directo. El ritmo de fotogramas funciona junto a ella.",
+  "Not available for this game.":
+    "No disponible para este juego.",
 });

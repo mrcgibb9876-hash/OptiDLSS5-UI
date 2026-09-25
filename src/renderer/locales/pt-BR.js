@@ -1733,4 +1733,12 @@ window.I18N.register('pt-BR', {
     "O DLSS 5 não funcionou aqui",
   "GitHub sign-in has expired -- press Send again to sign in.":
     "O login no GitHub expirou -- pressione Enviar de novo para entrar.",
+  "XeFG frame generation":
+    "Geração de quadros XeFG",
+  "XeFG is set up for this game. Start the game again, then switch it on here or in the in-game panel.":
+    "O XeFG foi configurado para este jogo. Abra o jogo de novo e ative-o aqui ou no painel do jogo.",
+  "Intel's frame generation, run by OptiScaler. Off until you turn it on here; it is then set up for the next time the game starts, and switches on and off live from then on. Frame pacing works beside it.":
+    "A geração de quadros da Intel, executada pelo OptiScaler. Desligada até você ativá-la aqui; então é preparada para a próxima vez que o jogo abrir e, a partir daí, liga e desliga ao vivo. O ritmo de quadros funciona junto.",
+  "Not available for this game.":
+    "Não disponível para este jogo.",
 });

@@ -807,7 +807,12 @@ async function loadFrameGen() {
   if (!current || !current.exePath) return;
   try { fgState = await window.api.frameGenMultiplier(current.exePath); } catch { fgState = null; }
   try { optiFgState = await window.api.optiFgLive(current.exePath); } catch { optiFgState = null; }
+  try { optiFgReady = await window.api.optiFgReadiness(current.exePath); } catch { optiFgReady = null; }
 }
+
+// Whether XeFG can be offered here at all (main.js optiFgReadiness: D3D12, no DLSS Frame Generation of
+// the game's own, not a Feeder game, the files present) and why not when it cannot.
+let optiFgReady = null;
 
 // OptiScaler's own XeFG / FSR FG, when Edit armed one for this game (main.js optifg:live). The same two
 // live switches the in-game panel has; which generator is a launch-time choice and stays in Edit.
@@ -847,12 +852,44 @@ function renderOptiFg(host) {
   const note = document.createElement('div');
   note.className = 'p-note';
   if (!s || !s.ok || !s.armed) {
+    // Listed always, off until asked for (2026-09-25): XeFG is offered right here where the game has no
+    // DLSS Frame Generation of its own, and shown greyed with the reason where it cannot be. Turning it
+    // on arms it for the next launch -- a generator is built when the swap chain is, so it cannot start
+    // mid-game -- and from then on the live switch below turns it on and off.
+    const r = optiFgReady;
+    const ok = !!(r && r.supported && r.available && r.available.xefg);
     note.textContent = t('This game has no NVIDIA DLSS Frame Generation of its own.');
     host.appendChild(note);
-    const hint = document.createElement('div');
-    hint.className = 'p-note';
-    hint.textContent = t('OptiScaler can generate frames here instead: pick XeFG or FSR FG for this game in Edit. It applies on the next launch, then switches on and off right here.');
-    host.appendChild(hint);
+    const row = document.createElement('div');
+    row.className = `p-row is-check${ok ? '' : ' is-off'}`;
+    const ctl = document.createElement('span');
+    ctl.className = 'p-row-ctl';
+    const box = document.createElement('button');
+    box.className = 'p-check';
+    box.disabled = !ok;
+    box.addEventListener('click', async () => {
+      box.disabled = true;
+      const res = await window.api.optiFgChoose(current.exePath, 'xefg', false);
+      if (!res || !res.ok) { setStatus(t('Could not save: {error}', { error: (res && res.error) || t('unknown') })); box.disabled = false; return; }
+      await loadFrameGen();
+      setStatus(t('XeFG is set up for this game. Start the game again, then switch it on here or in the in-game panel.'), true);
+      renderFields();
+    });
+    ctl.appendChild(box);
+    const label = document.createElement('span');
+    label.className = 'p-row-label';
+    label.textContent = t('XeFG frame generation');
+    row.append(ctl, label);
+    row.appendChild(helpMarker(ok
+      ? t('Intel\'s frame generation, run by OptiScaler. Off until you turn it on here; it is then set up for the next time the game starts, and switches on and off live from then on. Frame pacing works beside it.')
+      : t((r && r.reason) || 'Not available for this game.', (r && r.reasonVars) || {})));
+    host.appendChild(row);
+    if (!ok && r && r.reason) {
+      const why = document.createElement('div');
+      why.className = 'p-note';
+      why.textContent = t(r.reason, r.reasonVars || {});
+      host.appendChild(why);
+    }
     return;
   }
   note.classList.add('is-accent');

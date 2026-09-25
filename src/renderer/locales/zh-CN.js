@@ -1732,4 +1732,12 @@ window.I18N.register("zh-CN", {
     "DLSS 5 在这里没有生效",
   "GitHub sign-in has expired -- press Send again to sign in.":
     "GitHub 登录已过期 -- 请再次点击“发送”重新登录。",
+  "XeFG frame generation":
+    "XeFG 帧生成",
+  "XeFG is set up for this game. Start the game again, then switch it on here or in the in-game panel.":
+    "已为此游戏设置好 XeFG。请重新启动游戏，然后在这里或游戏内面板中开启。",
+  "Intel's frame generation, run by OptiScaler. Off until you turn it on here; it is then set up for the next time the game starts, and switches on and off live from then on. Frame pacing works beside it.":
+    "Intel 的帧生成，由 OptiScaler 运行。在这里开启之前保持关闭；开启后会为下次启动游戏做好准备，之后可随时实时开关。帧节奏可以与它一起使用。",
+  "Not available for this game.":
+    "此游戏不可用。",
 });

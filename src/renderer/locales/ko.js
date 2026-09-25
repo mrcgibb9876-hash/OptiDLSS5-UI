@@ -1732,4 +1732,12 @@ window.I18N.register("ko", {
     "여기서 DLSS 5가 작동하지 않았습니다",
   "GitHub sign-in has expired -- press Send again to sign in.":
     "GitHub 로그인이 만료되었습니다 -- 다시 로그인하려면 보내기를 다시 누르세요.",
+  "XeFG frame generation":
+    "XeFG 프레임 생성",
+  "XeFG is set up for this game. Start the game again, then switch it on here or in the in-game panel.":
+    "이 게임에 XeFG를 설정했습니다. 게임을 다시 시작한 뒤 여기나 게임 내 패널에서 켜세요.",
+  "Intel's frame generation, run by OptiScaler. Off until you turn it on here; it is then set up for the next time the game starts, and switches on and off live from then on. Frame pacing works beside it.":
+    "OptiScaler가 실행하는 Intel의 프레임 생성입니다. 여기서 켜기 전까지는 꺼져 있으며, 켜면 다음 게임 시작에 맞춰 설정되고 그 뒤로는 실시간으로 켜고 끌 수 있습니다. 프레임 페이싱과 함께 작동합니다.",
+  "Not available for this game.":
+    "이 게임에서는 사용할 수 없습니다.",
 });
