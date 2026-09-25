@@ -490,9 +490,6 @@ async function renderGrid() {
         </div>
         <div class="card-menu hidden">
           <button class="btn btn-ghost btn-edit">${escapeHtml(t('Settings'))}</button>
-          <button class="btn btn-ghost btn-help has-tip" data-tip="${escapeHtml(t('Checks this game\'s setup and its last run, applies the fix when the app has one, tells you plainly when DLSS 5 is not available here, and can save a bundle to share or ask an AI.'))}">${escapeHtml(t('Game Help'))}</button>
-          <button class="btn btn-ghost btn-analyse has-tip" data-tip="${escapeHtml(t('Starts the game once, as it is, for about 25 seconds and writes down what it really loads -- the graphics API, which DLLs from where, and which process hands off to which. Nothing is changed; the game is closed at the end.'))}">${escapeHtml(t('Analyse game'))}</button>
-          <button class="btn btn-ghost btn-verify has-tip${backends.optiscaler && !backends.dfc ? '' : ' hidden'}" data-tip="${escapeHtml(t('Starts the game for about 30 seconds, reads its logs the way Game Help does, and closes it again: did DLSS 5 run?'))}">${escapeHtml(t('Verify install'))}</button>
           <button class="btn btn-ghost btn-swap-layer hidden"></button>
           <button class="btn btn-ghost btn-neural-pass hidden"></button>
           <button class="btn btn-ghost btn-mv-provider hidden"></button>
@@ -661,9 +658,10 @@ async function renderGrid() {
         });
       });
     }
-    card.querySelector('.btn-help').addEventListener('click', () => openHelp(game));
-    card.querySelector('.btn-analyse').addEventListener('click', () => analyseGame(game));
-    card.querySelector('.btn-verify').addEventListener('click', () => verifyInstall(game));
+    // Game Help, Analyse game and Verify install left the ⋯ menu (2026-09-25): the card itself now says
+    // what went wrong and what to try next (flipToFailure), and its problem row's Help / Show me button
+    // still opens Game Help where there is more to read. analyseGame and verifyInstall have no caller
+    // now; they and their IPC are left in place for the clean-up pass to decide on.
     card.querySelector('.btn-launch').addEventListener('click', async () => {
       const res = await window.api.launchGame(game.exePath, game.launcher);
       if (!res.ok) { toast(t('Could not launch {name}: {error}', { name: game.name, error: res.error })); return; }

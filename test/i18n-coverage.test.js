@@ -19,7 +19,7 @@ const LANGUAGES = ['de', 'es', 'fr', 'ko', 'pt-BR', 'ru', 'zh-CN'];
 test('the scanner sees the renderer\'s strings', () => {
   const keys = strings.collect();
   assert.ok(keys.size > 900, `${keys.size} strings found`);
-  for (const k of ['Install', 'Analyse game', 'Verify install', 'Why this route?', 'Scan for Games', 'Settings']) {
+  for (const k of ['Install', 'Try with DXVK', 'Report issue', 'Why this route?', 'Scan for Games', 'Settings']) {
     assert.ok(keys.has(k), `"${k}" is collected`);
   }
 });
