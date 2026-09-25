@@ -353,10 +353,14 @@ body {
   cursor: default;
 }
 .card-warn.hidden { display: none; }
-/* The DLSS 5 / Chicken pill and the anti-cheat triangle, in a row under Launch rather than over the art
-   (2026-09-25). Same look, laid out in the flow instead of pinned to the banner's corner. */
-.card-icons { display: flex; align-items: center; gap: 8px; min-height: 34px; }
+/* The DLSS 5 / Chicken pill and the anti-cheat triangle, in a row just under the game's title and a size
+   smaller than they were on the art (2026-09-25). Laid out in the flow, not pinned to the banner. */
+.card-icons { display: flex; align-items: center; gap: 6px; min-height: 26px; }
 .card-icons .card-mark, .card-icons .card-warn { position: static; box-shadow: none; }
+.card-icons .card-mark { height: 26px; padding: 0 9px 0 4px; gap: 5px; font-size: 12px; border-width: 1px; }
+.card-icons .card-mark img { width: 18px; height: 18px; }
+.card-icons .card-mark .card-mark-icon { font-size: 15px; }
+.card-icons .card-warn { width: 24px; height: 24px; font-size: 15px; }
 .card-mark.hidden { display: none; }
 .badge-installed { background: rgba(var(--accent-rgb),0.85); color: var(--on-accent); }
 .badge-partial { background: rgba(217,164,65,0.9); color: #0c0e0f; }

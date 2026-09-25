@@ -469,16 +469,16 @@ async function renderGrid() {
       </div>
       <div class="card-body">
         <div class="card-title" title="${escapeHtml(game.name)}">${escapeHtml(game.name)}</div>
+        <div class="card-icons">
+          <span class="card-mark hidden"></span>
+          <span class="card-warn hidden" aria-label="Anti-cheat">&#9888;</span>
+        </div>
         <div class="card-path card-recommend hidden"></div>
         <div class="card-problem hidden"><span class="card-problem-text"></span></div>
         <div class="card-actions">
           <button class="btn btn-primary btn-card-primary"></button>
           <button class="btn btn-launch" title="${escapeHtml(t('Runs the game from its own folder -- for an Unreal game, the -Win64-Shipping.exe that OptiScaler is installed beside.'))}">&#9654; ${escapeHtml(t('Launch'))}</button>
           <button class="btn btn-ghost btn-card-menu" aria-label="${escapeHtml(t('More actions'))}" aria-expanded="false">&#8943;</button>
-        </div>
-        <div class="card-icons">
-          <span class="card-mark hidden"></span>
-          <span class="card-warn hidden" aria-label="Anti-cheat">&#9888;</span>
         </div>
         <div class="card-menu hidden">
           <button class="btn btn-ghost btn-menu-addon btn-menu-pacing" data-kind="pacing">${escapeHtml(t('Frame pacing'))}</button>
