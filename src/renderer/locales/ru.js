@@ -1648,4 +1648,7 @@ window.I18N.register("ru", {
     "64-битный помощник завершился при запуске -- Установить пересоберёт его",
   "the 64-bit helper went away this run -- host64\\dlss5-feed-host.log says why":
     "в этом запуске 64-битный помощник пропал -- причина в host64\\dlss5-feed-host.log",
+  "Adding frame pacing...": "Добавление выравнивания кадров...",
+  "Could not add frame pacing: {error}": "Не удалось добавить выравнивание кадров: {error}",
+  "This is upstream ReLimiter, which the in-game panel cannot drive -- use ReLimiter's own overlay in the game, or the target below.": "Это исходный ReLimiter, которым внутриигровая панель управлять не может -- используйте собственный оверлей ReLimiter в игре или цель ниже.",
 });

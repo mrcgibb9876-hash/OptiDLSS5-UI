@@ -1648,4 +1648,7 @@ window.I18N.register("zh-CN", {
     "64 位辅助程序启动时退出 -- “安装”会重新搭好",
   "the 64-bit helper went away this run -- host64\\dlss5-feed-host.log says why":
     "本次运行中 64 位辅助程序消失了 -- host64\\dlss5-feed-host.log 说明了原因",
+  "Adding frame pacing...": "正在添加帧率节奏...",
+  "Could not add frame pacing: {error}": "无法添加帧率节奏：{error}",
+  "This is upstream ReLimiter, which the in-game panel cannot drive -- use ReLimiter's own overlay in the game, or the target below.": "这是原版 ReLimiter，游戏内面板无法控制它——请在游戏中使用 ReLimiter 自带的覆盖层，或下方的目标值。",
 });

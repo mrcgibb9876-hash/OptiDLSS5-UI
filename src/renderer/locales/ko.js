@@ -1648,4 +1648,7 @@ window.I18N.register("ko", {
     "64비트 도우미가 시작 중 종료됨 -- 설치가 다시 구성함",
   "the 64-bit helper went away this run -- host64\\dlss5-feed-host.log says why":
     "이번 실행에서 64비트 도우미가 사라짐 -- host64\\dlss5-feed-host.log에 이유가 있음",
+  "Adding frame pacing...": "프레임 페이싱 추가 중...",
+  "Could not add frame pacing: {error}": "프레임 페이싱을 추가하지 못했습니다: {error}",
+  "This is upstream ReLimiter, which the in-game panel cannot drive -- use ReLimiter's own overlay in the game, or the target below.": "이것은 원본 ReLimiter로, 게임 내 패널에서 조작할 수 없습니다. 게임 안에서 ReLimiter 자체 오버레이나 아래 목표값을 사용하세요.",
 });

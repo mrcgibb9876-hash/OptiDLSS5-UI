@@ -55,6 +55,14 @@ test('optiScalerRuntimeApi reads the swapchain the game really created', async (
   const sottr = scratchDir('rt12with11');
   write(sottr, 'OptiScaler.log', '[21:37:49.654079] [I] hkD3D11CreateDevice Device captured\n[21:37:52.726083] [I] hkD3D12CreateDevice Adapter Desc: NVIDIA\n');
   assert.equal((await detect.optiScalerRuntimeApi(sottr)).api, 'dx12', 'a D3D11 device that made no swapchain is not the renderer');
+  // The same game with ReShade loaded beside OptiScaler (frame pacing): ReShade turns that throwaway
+  // D3D11CreateDevice into D3D11CreateDeviceAndSwapChain, with no swapchain description.
+  const sottrReShade = scratchDir('rt12with11reshade');
+  write(sottrReShade, 'OptiScaler.log', '[16:31:28.868587] [I] hkD3D11CreateDeviceAndSwapChain Device captured\n[16:31:30.065345] [I] hkD3D12CreateDevice Adapter Desc: NVIDIA\n');
+  assert.equal((await detect.optiScalerRuntimeApi(sottrReShade)).api, 'dx12', 'CreateDeviceAndSwapChain is a device line, not a swapchain');
+  const only11viaAndSwap = scratchDir('rt11devswap');
+  write(only11viaAndSwap, 'OptiScaler.log', '[00:00:01.000000] [I] hkD3D11CreateDeviceAndSwapChain Device captured\n');
+  assert.equal((await detect.optiScalerRuntimeApi(only11viaAndSwap)).api, 'dx11');
   const only11 = scratchDir('rt11dev');
   write(only11, 'OptiScaler.log', '[00:00:01.000000] [I] hkD3D11CreateDevice Device captured\n');
   assert.equal((await detect.optiScalerRuntimeApi(only11)).api, 'dx11');

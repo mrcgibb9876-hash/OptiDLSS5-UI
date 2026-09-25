@@ -1648,4 +1648,7 @@ window.I18N.register("de", {
     "Der 64-Bit-Helfer hat sich beim Start beendet -- Installieren baut ihn neu auf",
   "the 64-bit helper went away this run -- host64\\dlss5-feed-host.log says why":
     "der 64-Bit-Helfer ist in diesem Durchlauf verschwunden -- host64\\dlss5-feed-host.log nennt den Grund",
+  "Adding frame pacing...": "Frame-Pacing wird hinzugefügt...",
+  "Could not add frame pacing: {error}": "Frame-Pacing konnte nicht hinzugefügt werden: {error}",
+  "This is upstream ReLimiter, which the in-game panel cannot drive -- use ReLimiter's own overlay in the game, or the target below.": "Das ist das originale ReLimiter, das das In-Game-Panel nicht steuern kann -- nutze im Spiel das eigene Overlay von ReLimiter oder das Ziel unten.",
 });

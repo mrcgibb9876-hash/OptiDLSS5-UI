@@ -1648,4 +1648,7 @@ window.I18N.register("es", {
     "El auxiliar de 64 bits se cerró al arrancar -- Instalar lo reconstruye",
   "the 64-bit helper went away this run -- host64\\dlss5-feed-host.log says why":
     "el auxiliar de 64 bits desapareció en esta sesión -- host64\\dlss5-feed-host.log dice por qué",
+  "Adding frame pacing...": "Añadiendo el ritmo de fotogramas...",
+  "Could not add frame pacing: {error}": "No se pudo añadir el ritmo de fotogramas: {error}",
+  "This is upstream ReLimiter, which the in-game panel cannot drive -- use ReLimiter's own overlay in the game, or the target below.": "Este es el ReLimiter original, que el panel del juego no puede controlar: usa la superposición propia de ReLimiter en el juego, o el objetivo de abajo.",
 });

@@ -1658,4 +1658,7 @@ window.I18N.register("fr", {
     "L'auxiliaire 64 bits s'est arrêté au démarrage -- Installer le reconstruit",
   "the 64-bit helper went away this run -- host64\\dlss5-feed-host.log says why":
     "l'auxiliaire 64 bits a disparu cette fois -- host64\\dlss5-feed-host.log dit pourquoi",
+  "Adding frame pacing...": "Ajout de la cadence des images...",
+  "Could not add frame pacing: {error}": "Impossible d'ajouter la cadence des images : {error}",
+  "This is upstream ReLimiter, which the in-game panel cannot drive -- use ReLimiter's own overlay in the game, or the target below.": "C'est le ReLimiter d'origine, que le panneau en jeu ne peut pas piloter -- utilise l'overlay de ReLimiter en jeu, ou la cible ci-dessous.",
 });
