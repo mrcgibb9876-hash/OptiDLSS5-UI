@@ -91,3 +91,30 @@ test('Check for Updates goes live: a fresh answer is re-asked (with its ETag) fo
   assert.equal(calls, 2, 'after the minute the remembered answer is trusted again');
   ghapi._reset();
 });
+
+test('a live lookup never gets an old answer; a rejected token is not reused; offline falls back; same-URL calls share one request', async () => {
+  const { clock } = fresh();
+  ghapi.configure({ cacheFile: require('node:path').join(require('node:os').tmpdir(), `ghapi-${Date.now()}.json`), token: () => 'tok' });
+  let calls = 0; const auths = [];
+  const raw = async (u, init) => { calls++; auths.push(init.headers.Authorization || null); if (init.headers['x-optidlss5-live']) throw new Error('marker leaked to GitHub'); return auths.length === 1 ? { ok: false, status: 401, headers: headers({}) } : ok({ tag_name: 'v7' }); };
+  await ghapi.githubGet(raw, URL_, {}, clock);
+  assert.deepEqual(auths, ['Bearer tok', null]);
+  await ghapi.githubGet(raw, 'https://api.github.com/repos/o/y/releases/latest', {}, clock);
+  assert.equal(auths[2], null, 'the rejected token is not offered again');
+  // Live: skips the fresh window, and a refusal returns GitHub's answer instead of the remembered one.
+  const refused = async () => ({ ok: false, status: 403, headers: headers({ 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(Math.floor(clock.now() / 1000) + 600) }) });
+  const liveRes = await ghapi.githubGet(refused, URL_, { headers: { [ghapi.LIVE_HEADER]: '1' } }, clock);
+  assert.equal(liveRes.status, 403, 'no stale digest for a rolling tag');
+  // Offline: the remembered answer stands in for a normal read.
+  ghapi._reset(); fresh(); await ghapi.githubGet(async () => ok({ tag_name: 'v8' }), URL_, {}, clock);
+  const later = { now: () => clock.now() + ghapi.FRESH_MS + 1 };
+  const off = await ghapi.githubGet(async () => { throw new Error('ENOTFOUND'); }, URL_, {}, later);
+  assert.equal((await off.json()).tag_name, 'v8');
+  // Two at once share one request.
+  ghapi._reset(); fresh(); let n = 0;
+  const slow = async () => { n++; await new Promise((r) => setTimeout(r, 20)); return ok({ tag_name: 'v9' }); };
+  const [a, b] = await Promise.all([ghapi.githubGet(slow, URL_, {}, clock), ghapi.githubGet(slow, URL_, {}, clock)]);
+  assert.equal(n, 1);
+  assert.equal((await a.json()).tag_name, 'v9'); assert.equal((await b.json()).tag_name, 'v9');
+  ghapi._reset();
+});

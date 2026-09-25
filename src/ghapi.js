@@ -11,7 +11,8 @@
 //   2. An older one is re-asked WITH its ETag, and "not changed" (304) returns the remembered answer.
 //      For a signed-in call GitHub does not count a 304 against the limit at all.
 //   3. Signed in to GitHub (the Report issue sign-in), the call carries that token: 5,000 an hour
-//      instead of 60. A token GitHub rejects (401) is dropped and the call made again without it.
+//      instead of 60. A token GitHub rejects (401) is not offered again this session, and that call
+//      is made again without it.
 //   4. Refused for the hour (403/429 with no calls left), the last answer is returned however old --
 //      a release list from this morning beats no list -- and until the reset time nothing more is
 //      sent. With nothing remembered, it fails with words a player can act on, and code
@@ -53,17 +54,32 @@ function load() {
   return entries;
 }
 
+// Written off the main thread's hot path (fs.promises): the file can be a few MB with the unpaginated
+// release lists, and a synchronous rewrite after every change stalled the main process.
 function saveSoon() {
   if (!cacheFile || saveTimer) return;
   saveTimer = setTimeout(() => {
     saveTimer = null;
     try {
       const all = [...load().entries()].sort((a, b) => (b[1].at || 0) - (a[1].at || 0)).slice(0, MAX_ENTRIES);
-      fs.writeFileSync(cacheFile, JSON.stringify(Object.fromEntries(all)));
+      fs.promises.writeFile(cacheFile, JSON.stringify(Object.fromEntries(all))).catch(() => {});
     } catch {}
   }, 1000);
   if (saveTimer.unref) saveTimer.unref();
 }
+
+// A caller that must never be given an old answer -- integrity.releaseAssetDigest: `snapshot` is a
+// rolling tag whose assets are replaced in place, so a remembered digest would fail a fresh download's
+// checksum and blame antivirus. It marks the request with this header; it is stripped before sending,
+// always asks GitHub, and on a refusal gets GitHub's own answer back (the digest is then skipped, as it
+// was before this cache existed) instead of a stale one.
+const LIVE_HEADER = 'x-optidlss5-live';
+
+// Several callers asking for the same URL at once (a grid render, the startup checks) share one request.
+const inFlight = new Map();
+// A token GitHub has rejected (revoked, expired) is not offered again this session: re-sending it made
+// every uncached call two requests and repeated bad credentials can draw GitHub's lockout.
+let tokenRejected = false;
 
 // Only plain reads of the public API. Writes (the report's gist and issue) and calls that already
 // carry their own credentials are left exactly as they were.
@@ -115,24 +131,56 @@ function resetFrom(res, now) {
   return now + 15 * 60 * 1000;
 }
 
-async function githubGet(rawFetch, url, init = {}, { now = Date.now } = {}) {
-  const key = String(url);
+async function githubGet(rawFetch, url, init = {}, opts = {}) {
+  const headers = { ...(init.headers || {}) };
+  let live = false;
+  for (const k of Object.keys(headers)) {
+    if (k.toLowerCase() === LIVE_HEADER) { live = true; delete headers[k]; }
+  }
+  const key = `${live ? 'live:' : ''}${String(url)}`;
+  const copy = (r) => (r && typeof r.clone === 'function' ? r.clone() : r);
+  if (inFlight.has(key)) return copy(await inFlight.get(key));
+  const p = fetchOnce(rawFetch, String(url), { ...init, headers }, live, opts);
+  inFlight.set(key, p);
+  try {
+    return copy(await p);
+  } finally {
+    inFlight.delete(key);
+  }
+}
+
+async function fetchOnce(rawFetch, url, init, live, { now = Date.now } = {}) {
   const cache = load();
-  const cached = cache.get(key);
+  const cached = cache.get(url);
   const t = now();
-  if (cached && t - cached.at < FRESH_MS && t >= liveUntil) return asResponse(cached);
+  const stale = live ? null : cached; // what a refusal or an outage may fall back to
+  if (!live && cached && t - cached.at < FRESH_MS && t >= liveUntil) return asResponse(cached);
   if (t < blockedUntil) {
-    if (cached) return asResponse(cached);
+    if (stale) return asResponse(stale);
+    if (live) return new Response('{}', { status: 403, headers: { 'content-type': 'application/json' } });
     throw rateLimitError(blockedUntil);
   }
 
   const baseHeaders = { ...(init.headers || {}) };
   if (cached && cached.etag) baseHeaders['If-None-Match'] = cached.etag;
   let token = null;
-  try { token = tokenProvider ? await tokenProvider() : null; } catch {}
+  if (!tokenRejected) {
+    try { token = tokenProvider ? await tokenProvider() : null; } catch {}
+  }
 
-  let res = await rawFetch(url, { ...init, headers: token ? { ...baseHeaders, Authorization: `Bearer ${token}` } : baseHeaders });
-  if (res.status === 401 && token) res = await rawFetch(url, { ...init, headers: baseHeaders });
+  let res;
+  try {
+    res = await rawFetch(url, { ...init, headers: token ? { ...baseHeaders, Authorization: `Bearer ${token}` } : baseHeaders });
+    if (res.status === 401 && token) {
+      tokenRejected = true;
+      res = await rawFetch(url, { ...init, headers: baseHeaders });
+    }
+  } catch (e) {
+    // Offline, DNS, a proxy refusing: the last answer, however old, beats none -- except for a caller
+    // that asked never to be given an old one.
+    if (stale) return asResponse(stale);
+    throw e;
+  }
 
   if (res.status === 304 && cached) {
     cached.at = t;
@@ -142,19 +190,20 @@ async function githubGet(rawFetch, url, init = {}, { now = Date.now } = {}) {
   if (res.ok) {
     const body = typeof res.text === 'function' ? await res.text() : JSON.stringify(await res.json());
     const etag = res.headers && res.headers.get ? res.headers.get('etag') : null;
-    cache.set(key, { etag: etag || null, body, at: t });
+    cache.set(url, { etag: etag || null, body, at: t });
     saveSoon();
     return new Response(body, { status: res.status, headers: { 'content-type': 'application/json; charset=utf-8' } });
   }
   if (isRateLimited(res)) {
     blockedUntil = resetFrom(res, t);
-    if (cached) return asResponse(cached);
+    if (stale) return asResponse(stale);
+    if (live) return res;
     throw rateLimitError(blockedUntil);
   }
   return res;
 }
 
 // For tests.
-function _reset() { entries = null; blockedUntil = 0; liveUntil = 0; cacheFile = null; tokenProvider = null; }
+function _reset() { entries = null; blockedUntil = 0; liveUntil = 0; cacheFile = null; tokenProvider = null; tokenRejected = false; inFlight.clear(); }
 
-module.exports = { configure, handles, githubGet, goLive, FRESH_MS, _reset };
+module.exports = { configure, handles, githubGet, goLive, FRESH_MS, LIVE_HEADER, _reset };

@@ -183,7 +183,10 @@ async function releaseAssetDigest(url, { fetchImpl = netFetch, headers = {} } = 
     digestCache.set(key, (async () => {
       try {
         const api = `https://api.github.com/repos/${parsed.owner}/${parsed.repo}/releases/tags/${encodeURIComponent(parsed.tag)}`;
-        const res = await fetchImpl(api, { headers });
+        // Always asked live (ghapi.js LIVE_HEADER, stripped before sending): `snapshot` is a rolling tag
+        // whose assets are replaced in place, so a remembered digest would fail a fresh download and blame
+        // antivirus. Refused or offline, this gets no answer and the check is skipped, as before the cache.
+        const res = await fetchImpl(api, { headers: { ...(headers || {}), 'x-optidlss5-live': '1' } });
         if (!res.ok) return null;
         return (await res.json()).assets || [];
       } catch {
