@@ -544,7 +544,7 @@ ipcMain.handle('addons:forGame', async (_evt, { exePath } = {}) => {
       renodxSource = renodx.source;
       match = addons.matchRenodx(renodx.index, {
         steamAppid: steam ? steam.appid : null,
-        title: (steam && steam.name) || path.basename(dir),
+        title: renodxTitle(exePath, dir, steam),
         bitness: detected.bitness || null,
         // Lets an Unreal game with no bespoke mod still get the engine-wide one. Already on the
         // cached detection (the same field lumaue.js reads), so this costs no extra folder work.
@@ -693,7 +693,7 @@ ipcMain.handle('addons:install', perFolder(async (_evt, { exePath, id } = {}) =>
       opts.source = renodx.source;
       opts.match = addons.matchRenodx(renodx.index, {
         steamAppid: steam ? steam.appid : null,
-        title: (steam && steam.name) || path.basename(dir),
+        title: renodxTitle(exePath, dir, steam),
         bitness: detected.bitness || null,
         // Lets an Unreal game with no bespoke mod still get the engine-wide one. Already on the
         // cached detection (the same field lumaue.js reads), so this costs no extra folder work.
@@ -1300,7 +1300,7 @@ ipcMain.handle('panel:addonToggles', async (_evt, { exePath } = {}) => {
       const renodx = await renodxIndex();
       const match = addons.matchRenodx(renodx.index, {
         steamAppid: steam ? steam.appid : null,
-        title: (steam && steam.name) || path.basename(dir),
+        title: renodxTitle(exePath, dir, steam),
         bitness: detected.bitness || null,
         engineId: detected.engineId || null,
       });
@@ -3103,6 +3103,13 @@ function storedDetectionFor(exePath) {
   return storedDetections.byExe.get(String(exePath || '').toLowerCase()) || null;
 }
 
+// The name RenoDX's index is matched by when there is no Steam appid: Steam's own name, else the name the
+// game has on its card, else the folder. The folder alone was the only fallback, and a game added by
+// hand from bin\x64 matched as "x64" -- Cyberpunk 2077 showed no RenoDX though RenoDX has cp2077.
+function renodxTitle(exePath, dir, steam) {
+  refreshStoredGames();
+  return (steam && steam.name) || storedDetections.names.get(String(exePath || '').toLowerCase()) || path.basename(dir);
+}
 function detectFor(dir, exePath) {
   return detectGameCached(dir, exePath, { stored: storedDetectionFor(exePath) });
 }
@@ -3836,7 +3843,7 @@ function renodxCapability(exePath, dir) {
     const steam = library.steamManifestFor(exePath);
     const match = addons.matchRenodx(renodxIndexMemo.index, {
       steamAppid: steam ? steam.appid : null,
-      title: (steam && steam.name) || path.basename(dir),
+      title: renodxTitle(exePath, dir, steam),
       bitness: detected.bitness || null,
       engineId: detected.engineId || null,
     });

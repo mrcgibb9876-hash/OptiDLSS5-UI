@@ -369,10 +369,6 @@ body {
 .card-icons { flex-wrap: nowrap; min-width: 0; }
 .card-icons .card-mark, .card-icons .card-warn { flex-shrink: 0; }
 /* Where the game came from: muted and outlined, so the DLSS 5 pill stays the thing the eye lands on. */
-/* RenoDX can do HDR here: a warm HDR-gold outline for a mod made for the game; the engine-wide match
-   stays in the neutral look, because it may do nothing (renodxTag). */
-.card-renodx { border-color: rgba(245,197,24,0.75); color: #f5c518; }
-.card-renodx.card-renodx-engine { border-color: var(--border); color: var(--text-dim); font-style: italic; }
 .card-store {
   /* inline-block, not flex: text-overflow only ellipses a block's own line. */
   display: inline-block;
@@ -392,6 +388,10 @@ body {
   letter-spacing: 0.02em;
   cursor: default;
 }
+/* RenoDX can do HDR here: a warm HDR-gold outline for a mod made for the game; the engine-wide match
+   stays in the neutral look, because it may do nothing (renodxTag). */
+.card-store.card-renodx { border-color: rgba(245,197,24,0.75); color: #f5c518; }
+.card-store.card-renodx.card-renodx-engine { border-color: var(--border); color: var(--text-dim); font-style: italic; }
 .card-mark.hidden { display: none; }
 .badge-installed { background: rgba(var(--accent-rgb),0.85); color: var(--on-accent); }
 .badge-partial { background: rgba(217,164,65,0.9); color: #0c0e0f; }
