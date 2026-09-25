@@ -138,7 +138,7 @@ function steppedValue(field, value, dir, big) {
 function formatNumber(field, value) {
   if (field.percent) return `${Math.round(value * 100)}%`;
   if (field.type === 'int') return String(Math.round(value));
-  if (field.log) return `${Number(value).toFixed(2)}x`;
+  if (field.log && !field.hosted) return `${Number(value).toFixed(2)}x`;
   return Number(value).toFixed(2);
 }
 
@@ -192,7 +192,7 @@ function fieldRow(field, set = apply) {
       ctl.appendChild(box);
       value.textContent = held ? t('held off') : field.value === null ? t('default') : '';
       el.append(ctl, label, value);
-    } else if (field.type === 'enum' && (field.segmented || boxedChoices(field))) {
+    } else if (field.type === 'enum' && (field.segmented || field.boxes || (!field.noBoxes && boxedChoices(field)))) {
       // Boxed choices rather than a dropdown: the Models row across the whole width, and -- since
       // engine v2.2.8 -- any short list, because the in-game panel now draws a two-to-four option
       // choice as boxes with the active one ringed in the accent. A dropdown hides what the
@@ -922,11 +922,17 @@ function renderHosted(host, kind) {
   who.className = 'p-note';
   who.textContent = kind === 'pacing'
     ? `ReLimiter ${h.version || '?'}`
-    : `RenoDX -- ${h.module || '?'}`;
+    : `${h.title || 'RenoDX'} -- ${h.module || '?'}`;
   who.appendChild(helpMarker(kind === 'pacing'
     ? t('ReLimiter holds the frame rate steady for a G-Sync or VRR display rather than making more frames. These are its own settings, changed live in the running game.')
     : t('RenoDX replaces this game\'s tone mapping to give it real HDR. What appears here is whatever this game\'s mod offers, changed live in the running game.')));
   host.appendChild(who);
+
+  // A version-4 RenoDX add-on describes its whole overlay: drawn from that, in its order.
+  if (kind === 'hdr' && Array.isArray(h.rows)) {
+    renderHdrRows(host, h);
+    return;
+  }
 
   const wrap = document.createElement('div');
   wrap.className = 'p-hosted';
@@ -973,6 +979,178 @@ function renderHosted(host, kind) {
   }
 }
 
+// ── RenoDX's own overlay, row by row (host API version 4) ──
+//
+// dlssnr.js hdrRow checked each row; this draws it the way RenoDX's overlay does: sticky rows first, then
+// the preset switcher, then the rest under their sections, which fold open and shut as in the overlay.
+// Everything goes to the game through hostedApply, as the older settings rows do: a value by its key, a
+// text box's text as a string, a button as '$press' with its row index, the preset as '$preset', one
+// row's Reset as '$resetSetting'. Preset 0 is "Off": every row is greyed there, as in the overlay.
+const hdrSectionOpen = new Map();
+
+function renderHdrRows(host, h) {
+  const presets = h.presets;
+  const off = !!(presets && presets.selected === 0);
+  const wrap = document.createElement('div');
+  wrap.className = 'p-hosted p-hdr';
+
+  for (const r of h.rows.filter((x) => x.sticky)) {
+    const el = hdrRowEl(r, off, presets);
+    if (el) wrap.appendChild(el);
+  }
+
+  if (presets) {
+    // raw: the preset names are the add-on's own words, not keys to translate (the label is translated here).
+    const field = {
+      key: 'hdr:$preset', label: t('Preset'), help: '', raw: true, hosted: true, disabled: false,
+      type: 'enum', options: presets.labels.map((l, i) => [i, l]), value: presets.selected, default: presets.selected,
+      dependsOn: null, boxes: presets.segmented, noBoxes: !presets.segmented,
+    };
+    const el = fieldRow(field, (_k, v) => {
+      const n = Math.round(Number(v));
+      if (!Number.isInteger(n) || n === presets.selected) return;
+      presets.selected = n;
+      hostedApply('hdr', { key: '$preset' }, n);
+    });
+    el.classList.add('p-hdr-presets');
+    wrap.appendChild(el);
+  }
+
+  let section = null;
+  let open = true;
+  for (const r of h.rows) {
+    if (r.sticky) continue;
+    if (r.section && r.section !== section) {
+      section = r.section;
+      if (!hdrSectionOpen.has(section)) hdrSectionOpen.set(section, r.sectionOpen);
+      open = hdrSectionOpen.get(section);
+      const cap = document.createElement('button');
+      cap.className = `p-caption p-hdr-section${open ? ' is-open' : ''}`;
+      cap.textContent = `${open ? '\u25BE' : '\u25B8'} ${section}`;
+      const name = section;
+      cap.addEventListener('click', () => { hdrSectionOpen.set(name, !hdrSectionOpen.get(name)); renderFields(); });
+      wrap.appendChild(cap);
+    }
+    if (!open) continue;
+    const el = hdrRowEl(r, off, presets);
+    if (el) wrap.appendChild(el);
+  }
+  host.appendChild(wrap);
+
+  if (h.canReset) {
+    const reset = document.createElement('button');
+    reset.className = 'p-small p-hosted-reset';
+    reset.textContent = t('Reset all to default');
+    reset.addEventListener('click', () => hostedApply('hdr', { key: '$reset' }, true));
+    host.appendChild(reset);
+  }
+}
+
+// One row of RenoDX's overlay, or null for one that draws nothing.
+function hdrRowEl(r, off, presets) {
+  const greyed = !r.enabled || off;
+  const text = (r.labels && r.labels.length && (r.kind === 'label' || r.kind === 'bullet' || r.kind === 'text' || r.kind === 'textNowrap'))
+    ? r.labels[0] || r.label
+    : r.label;
+
+  if (r.kind === 'label' || r.kind === 'bullet' || r.kind === 'text' || r.kind === 'textNowrap' || r.kind === 'custom') {
+    const el = document.createElement('div');
+    el.className = `p-note p-hdr-text is-${r.kind}${r.multiline ? ' is-multiline' : ''}${greyed ? ' is-off' : ''}`;
+    el.textContent = r.kind === 'bullet' ? `\u2022 ${text}`
+      : r.kind === 'custom' ? t("{label} -- set this in ReShade's overlay (Home)", { label: text })
+      : text;
+    if (r.tint) el.style.color = r.tint;
+    if (r.tooltip) el.appendChild(helpMarker(r.tooltip, true));
+    return text ? el : null;
+  }
+
+  if (r.kind === 'button') {
+    const el = document.createElement('div');
+    el.className = `p-row p-hdr-button${greyed ? ' is-off' : ''}`;
+    const b = document.createElement('button');
+    b.className = 'p-small';
+    b.textContent = r.label;
+    b.disabled = greyed;
+    if (r.tint) b.style.color = r.tint;
+    b.addEventListener('click', () => hostedApply('hdr', { key: '$press' }, r.index));
+    el.appendChild(b);
+    if (r.tooltip) el.appendChild(helpMarker(r.tooltip, true));
+    return el;
+  }
+
+  let el;
+  if (r.kind === 'inputText') {
+    el = hdrTextRow(r, greyed);
+  } else {
+    const base = {
+      key: `hdr:${r.key}`, label: r.label, help: r.tooltip, raw: true, hosted: true,
+      disabled: greyed, value: r.value, default: r.value, dependsOn: null,
+    };
+    let field;
+    let set;
+    if (r.kind === 'bool' && r.labels && r.labels.length === 2 && r.segmented) {
+      field = { ...base, type: 'enum', options: [[0, r.labels[0]], [1, r.labels[1]]], value: r.value ? 1 : 0, default: r.value ? 1 : 0, boxes: true };
+      set = (_k, v) => hostedApply('hdr', r, Number(v) !== 0);
+    } else if (r.kind === 'bool') {
+      field = { ...base, type: 'bool' };
+      set = (_k, v) => hostedApply('hdr', r, !!v);
+    } else if (r.kind === 'int' && r.labels && r.labels.length) {
+      // A labelled int is a choice: its value is the index, as in RenoDX's overlay.
+      field = { ...base, type: 'enum', options: r.labels.map((l, i) => [i, l]), boxes: r.segmented, noBoxes: !r.segmented };
+      set = (_k, v) => hostedApply('hdr', r, Math.round(Number(v)));
+    } else {
+      const int = r.kind === 'int';
+      const step = int ? 1 : Number(((r.max - r.min) / 100).toPrecision(1));
+      // A log track needs a positive range; RenoDX never marks anything else logarithmic, but a zero
+      // minimum would make the scale meaningless, so that falls back to linear.
+      field = { ...base, type: int ? 'int' : 'float', min: r.min, max: r.max, step, log: r.logarithmic && r.min > 0 };
+      set = (_k, v) => hostedApply('hdr', r, int ? Math.round(Number(v)) : Number(v));
+    }
+    el = fieldRow(field, set);
+  }
+
+  if (r.tint) {
+    const label = el.querySelector('.p-row-label');
+    if (label) label.style.color = r.tint;
+  }
+  // The add-on's own per-setting reset, where it offers one and the value is not already its default.
+  if (r.canReset && !r.isUsingDefault && !(presets && presets.selected === 0)) {
+    const reset = document.createElement('button');
+    reset.className = 'p-small p-hdr-reset';
+    reset.textContent = t('Reset');
+    reset.disabled = !r.enabled;
+    reset.addEventListener('click', () => { r.isUsingDefault = true; hostedApply('hdr', { key: '$resetSetting' }, r.key); });
+    // Beside the control, before the row's (?), as on DLSS 5's own rows.
+    el.insertBefore(reset, el.querySelector(':scope > .p-help'));
+  }
+  return el;
+}
+
+// A text box (RenoDX INPUT_TEXT): committed on change or Enter, never per keystroke.
+function hdrTextRow(r, greyed) {
+  const el = document.createElement('div');
+  el.className = `p-row${greyed ? ' is-off' : ''}`;
+  const label = document.createElement('span');
+  label.className = 'p-row-label';
+  label.textContent = r.label;
+  const ctl = document.createElement('span');
+  ctl.className = 'p-row-ctl';
+  const box = document.createElement('input');
+  box.type = 'text';
+  box.className = 'p-select p-text';
+  box.value = r.value;
+  box.placeholder = r.placeholder || '';
+  if (r.maxLength > 0) box.maxLength = r.maxLength;
+  box.disabled = greyed;
+  const commit = () => { if (box.value !== r.value) hostedApply('hdr', r, box.value); };
+  box.addEventListener('change', commit);
+  box.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } });
+  ctl.appendChild(box);
+  el.append(label, ctl);
+  if (r.tooltip) el.appendChild(helpMarker(r.tooltip, true));
+  return el;
+}
+
 // A typed number: the Edit dialog's frame-rate box (renderer.js relimiterTypedFps) and the in-game
 // NrNumberBox, here. Committed on change or Enter, never per keystroke; clamped to the setting's own
 // range, because a typed value ignores the input's min/max and the add-on would clamp it silently.
@@ -1009,10 +1187,10 @@ function hostedNumberRow(field, s, set) {
   return el;
 }
 
-// Focus in one of the page's number boxes: a redraw from the poll would throw away what is being typed.
+// Focus in one of the page's number or text boxes: a redraw from the poll would throw away what is being typed.
 function hostedTyping() {
   const a = document.activeElement;
-  return !!(a && a.classList && a.classList.contains('p-number') && a.closest('.p-hosted'));
+  return !!(a && a.classList && (a.classList.contains('p-number') || a.classList.contains('p-text')) && a.closest('.p-hosted'));
 }
 
 // ── Frame Generation ────────────────────────────────────────────────────────────────────────────

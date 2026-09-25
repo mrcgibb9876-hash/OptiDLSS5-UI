@@ -202,6 +202,101 @@ test('the wiring: main answers both channels, preload bridges them, the panel dr
   assert.ok(body.indexOf('sendHosted(') < body.indexOf('patchIniValues('), 'and falls back to the ini only after');
 });
 
+// ── RenoDX host API version 4: the whole overlay, row by row ─────────────────────────────────────
+
+function v4hdr(over = {}) {
+  return {
+    available: true, module: 'renodx-ue-extended.addon64', addon: 'renodx', canReset: true, apiVersion: 4,
+    title: 'RenoDX UE-Extended',
+    presets: { count: 4, selected: 1, segmented: true, labels: ['Off', 'Preset #1', 'Preset #2', 'Preset #3'] },
+    settings: [
+      { key: 'ToneMapPeakNits', label: 'Peak Brightness', section: 'Tone Mapping', tooltip: '', type: 'float', min: 48, max: 4000, enabled: true, value: 1000 },
+    ],
+    rows: [
+      { index: 0, kind: 'int', key: 'SettingsMode', label: 'Settings Mode', section: '', sectionOpen: true, tooltip: '', enabled: true,
+        sticky: true, segmented: true, multiline: false, tint: null, canReset: false, isUsingDefault: true,
+        labels: ['Simple', 'Intermediate', 'Advanced'], min: 0, max: 2, logarithmic: false, value: 0, default: 0 },
+      { index: 1, kind: 'float', key: 'ToneMapPeakNits', label: 'Peak Brightness', section: 'Tone Mapping', sectionOpen: true, tooltip: 'Nits',
+        enabled: true, sticky: false, segmented: false, multiline: false, tint: '#3B8EEA', canReset: true, isUsingDefault: false,
+        min: 48, max: 4000, logarithmic: true, value: 1000, default: 203 },
+      { index: 2, kind: 'bool', key: 'Blowout', label: 'Blowout', section: 'Tone Mapping', sectionOpen: true, tooltip: '', enabled: false,
+        sticky: false, segmented: false, multiline: false, tint: null, canReset: true, isUsingDefault: true, value: true, default: false },
+      { index: 3, kind: 'button', key: '', label: 'Discord', section: 'About', sectionOpen: false, tooltip: '', enabled: true,
+        sticky: false, segmented: false, multiline: false, tint: '#5865F2', canReset: false, isUsingDefault: true },
+      { index: 4, kind: 'text', key: '', label: '', section: 'About', sectionOpen: false, tooltip: '', enabled: true, sticky: false,
+        segmented: false, multiline: true, tint: null, canReset: false, isUsingDefault: true, labels: ['Line one\nLine two'] },
+      { index: 5, kind: 'inputText', key: 'Name', label: 'Name', section: 'About', sectionOpen: false, tooltip: '', enabled: true, sticky: false,
+        segmented: false, multiline: false, tint: null, canReset: true, isUsingDefault: true, value: 'x', default: '', placeholder: 'type', maxLength: 32, inputTextFlags: 0 },
+      // Not drawable: a float with no range, a kind nobody knows.
+      { index: 6, kind: 'float', key: 'Broken', label: 'Broken', section: 'X', enabled: true, value: 1 },
+      { index: 7, kind: 'hologram', key: 'Nope', label: 'Nope', section: 'X', enabled: true },
+    ],
+    ...over,
+  };
+}
+
+test('v4: rows, presets, title, apiVersion and canReset come through; undrawable rows are dropped', () => {
+  const r = dlssnr.checkHosted(answer({ hdr: v4hdr() }), NOW);
+  assert.equal(r.ok, true);
+  const h = r.hosted.hdr;
+  assert.equal(h.available, true);
+  assert.equal(h.apiVersion, 4);
+  assert.equal(h.canReset, true);
+  assert.equal(h.title, 'RenoDX UE-Extended');
+  assert.deepEqual(h.presets, { count: 4, selected: 1, segmented: true, labels: ['Off', 'Preset #1', 'Preset #2', 'Preset #3'] });
+  assert.deepEqual(h.rows.map((x) => x.index), [0, 1, 2, 3, 4, 5], 'the broken float and the unknown kind are dropped');
+  const peak = h.rows[1];
+  assert.equal(peak.logarithmic, true);
+  assert.equal(peak.default, 203);
+  assert.equal(peak.tint, '#3B8EEA');
+  assert.equal(peak.isUsingDefault, false);
+  assert.equal(h.rows[0].sticky, true);
+  assert.deepEqual(h.rows[0].labels, ['Simple', 'Intermediate', 'Advanced']);
+  assert.equal(h.rows[3].sectionOpen, false);
+  assert.equal(h.rows[4].multiline, true);
+  assert.equal(h.rows[5].placeholder, 'type');
+  assert.equal(h.rows[5].maxLength, 32);
+  // Old settings stay parsed for older app code paths.
+  assert.equal(h.settings.length, 1);
+});
+
+test('v4: an older add-on has rows null (the panel draws settings), and apiVersion alone', () => {
+  const h = dlssnr.checkHosted(answer({ hdr: { ...answer().hdr, apiVersion: 3, canReset: true } }), NOW).hosted.hdr;
+  assert.equal(h.rows, null);
+  assert.equal(h.presets, null);
+  assert.equal(h.title, '');
+  assert.equal(h.apiVersion, 3);
+  assert.equal(h.canReset, true);
+  // A mod with no presets: null.
+  assert.equal(dlssnr.checkHosted(answer({ hdr: v4hdr({ presets: null }) }), NOW).hosted.hdr.presets, null);
+});
+
+test('v4 commands: preset, one row\'s reset and text go out; a press or reset-all is never sent twice', () => {
+  const at0 = dlssnr.checkHosted(answer({ ack: 0, hdr: v4hdr() }), NOW).hosted;
+  const a = dlssnr.nextHostedCommand(undefined, at0, { hdr: { $press: 3, $preset: 2, Name: 'hello' } });
+  assert.deepEqual(a.command.hdr, { $press: 3, $preset: 2, Name: 'hello' });
+  // Not yet acknowledged: the values ride along, the press does not (the engine may already have done it).
+  const b = dlssnr.nextHostedCommand(a.state, at0, { hdr: { $resetSetting: 'ToneMapPeakNits' } });
+  assert.deepEqual(b.command.hdr, { $preset: 2, Name: 'hello', $resetSetting: 'ToneMapPeakNits' });
+  const c = dlssnr.nextHostedCommand(b.state, at0, { hdr: { $reset: true } });
+  const d = dlssnr.nextHostedCommand(c.state, at0, { hdr: { ToneMapPeakNits: 400 } });
+  assert.equal(c.command.hdr.$reset, true);
+  assert.equal(d.command.hdr.$reset, undefined);
+});
+
+test('the pop-out draws v4 rows when present, and settings otherwise', () => {
+  const strip = (s) => s.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
+  const panel = strip(fs.readFileSync(path.join(REPO, 'src', 'renderer', 'panel.js'), 'utf8'));
+  assert.match(panel, /if \(kind === 'hdr' && Array\.isArray\(h\.rows\)\) \{\s*renderHdrRows\(host, h\);\s*return;/);
+  for (const cmd of ['$press', '$preset', '$resetSetting', '$reset']) {
+    assert.ok(panel.includes(`key: '${cmd}' }`), `${cmd} is sent`);
+  }
+  // The only typed number box in the pop-out is ReLimiter's frame-rate cap.
+  assert.equal((panel.match(/hostedNumberRow\(/g) || []).length, 2, 'defined once, called once');
+  assert.match(panel, /const typed = kind === 'pacing' && s\.key === 'target_fps';/);
+  assert.doesNotMatch(panel.slice(panel.indexOf('function renderHdrRows'), panel.indexOf('function hostedNumberRow')), /type = 'number'/);
+});
+
 test('RenoDX active: the pop-out hides Brightness, Contrast and both Auto rows and says why', () => {
   const panel = fs.readFileSync(path.join(REPO, 'src', 'renderer', 'panel.js'), 'utf8');
   assert.match(panel, /const TONE_TRIM_KEYS = \['Brightness', 'Contrast', 'AutoBrightness', 'AutoContrast'\];/);

@@ -1789,4 +1789,8 @@ window.I18N.register("fr", {
     "Le HDR d'Unreal n'a pas pu être activé dans l'Engine.ini ici -- activez le HDR dans les réglages du jeu.",
   "Brightness and contrast are handled by RenoDX in this game.":
     "Dans ce jeu, la luminosité et le contraste sont gérés par RenoDX.",
+  "Preset":
+    "Préréglage",
+  "{label} -- set this in ReShade's overlay (Home)":
+    "{label} -- à régler dans l'overlay de ReShade (Origine)",
 });

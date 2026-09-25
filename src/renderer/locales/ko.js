@@ -1779,4 +1779,8 @@ window.I18N.register("ko", {
     "여기서는 Engine.ini에서 언리얼 HDR을 켤 수 없었습니다. 게임 자체 설정에서 HDR을 켜세요.",
   "Brightness and contrast are handled by RenoDX in this game.":
     "이 게임에서는 밝기와 대비를 RenoDX가 처리합니다.",
+  "Preset":
+    "프리셋",
+  "{label} -- set this in ReShade's overlay (Home)":
+    "{label} -- ReShade 오버레이(Home)에서 설정하세요",
 });

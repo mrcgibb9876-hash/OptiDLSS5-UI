@@ -621,6 +621,66 @@ function hostedSetting(kind, s) {
   return out;
 }
 
+// ── RenoDX host API version 4: the whole overlay ─────────────────────────────────────────────────
+//
+// A version-4 RenoDX add-on describes every row its own overlay draws, in order: the engine publishes
+// them as hdr.rows (DlssNr_Hosted.cpp AppendHdrV4), with hdr.title and hdr.presets beside them, after
+// the old hdr.settings (kept for older app builds). When rows are there the pop-out draws those rather
+// than settings. Each is checked the way hostedSetting checks a setting: a row that cannot be drawn
+// honestly is dropped. Invisible rows never arrive (the engine skips them).
+const HDR_ROW_KINDS = new Set(['float', 'int', 'bool', 'button', 'label', 'bullet', 'text', 'textNowrap', 'custom', 'inputText']);
+const isBool = (v) => typeof v === 'boolean';
+const isInt = (v) => Number.isInteger(v);
+
+function hdrRow(r) {
+  if (!r || typeof r !== 'object' || !HDR_ROW_KINDS.has(r.kind) || !isInt(r.index) || r.index < 0) return null;
+  const out = {
+    index: r.index,
+    kind: r.kind,
+    key: isStr(r.key) ? r.key : '',
+    label: isStr(r.label) ? r.label : '',
+    section: isStr(r.section) ? r.section : '',
+    sectionOpen: r.sectionOpen !== false,
+    tooltip: isStr(r.tooltip) ? r.tooltip : '',
+    enabled: r.enabled !== false,
+    sticky: r.sticky === true,
+    segmented: r.segmented === true,
+    multiline: r.multiline === true,
+    tint: isStr(r.tint) && /^#[0-9A-Fa-f]{6}$/.test(r.tint) ? r.tint : null,
+    canReset: r.canReset === true,
+    isUsingDefault: r.isUsingDefault !== false,
+  };
+  if (Array.isArray(r.labels) && r.labels.every(isStr)) out.labels = r.labels;
+  if (r.kind === 'float' || r.kind === 'int') {
+    if (!out.key || !isNum(r.min) || !isNum(r.max) || r.min >= r.max || !isNum(r.value)) return null;
+    out.min = r.min;
+    out.max = r.max;
+    out.logarithmic = r.logarithmic === true;
+    out.value = r.value;
+    out.default = isNum(r.default) ? r.default : r.value;
+  } else if (r.kind === 'bool') {
+    if (!out.key || !isBool(r.value)) return null;
+    out.value = r.value;
+    out.default = isBool(r.default) ? r.default : r.value;
+  } else if (r.kind === 'inputText') {
+    if (!out.key || !isStr(r.value)) return null;
+    out.value = r.value;
+    out.default = isStr(r.default) ? r.default : '';
+    out.placeholder = isStr(r.placeholder) ? r.placeholder : '';
+    out.maxLength = isInt(r.maxLength) && r.maxLength > 0 ? r.maxLength : 0;
+    out.inputTextFlags = isInt(r.inputTextFlags) ? r.inputTextFlags : 0;
+  }
+  return out;
+}
+
+// hdr.presets: null when the mod has none, else { count, selected, segmented, labels }.
+function hdrPresets(p) {
+  if (!p || typeof p !== 'object' || !isInt(p.count) || p.count <= 0 || !isInt(p.selected) || p.selected < 0) return null;
+  const labels = Array.isArray(p.labels) && p.labels.every(isStr) ? p.labels.slice(0, p.count) : [];
+  while (labels.length < p.count) labels.push(String(labels.length));
+  return { count: p.count, selected: p.selected, segmented: p.segmented === true, labels };
+}
+
 // The engine's answer, or why it is not one. `now` is passed in so the staleness rule is testable.
 function checkHosted(raw, now, staleMs = HOSTED_STALE_MS) {
   if (!raw || typeof raw !== 'object' || raw.v !== 1 || !isNum(raw.at) || !isNum(raw.pid)) {
@@ -631,7 +691,10 @@ function checkHosted(raw, now, staleMs = HOSTED_STALE_MS) {
   for (const kind of HOSTED_KINDS) {
     const src = raw[kind] && typeof raw[kind] === 'object' ? raw[kind] : {};
     const settings = (Array.isArray(src.settings) ? src.settings : []).map((s) => hostedSetting(kind, s)).filter(Boolean);
-    const available = src.available === true && settings.length > 0;
+    // Version 4 RenoDX: the overlay's own rows. null (not []) when the add-on is older, so the renderer
+    // knows to draw settings instead.
+    const rows = kind === 'hdr' && Array.isArray(src.rows) ? src.rows.map(hdrRow).filter(Boolean) : null;
+    const available = src.available === true && (settings.length > 0 || (rows !== null && rows.length > 0));
     hosted[kind] = {
       // Available and with something to show. The page is listed either way; without this it is greyed
       // and says why.
@@ -645,6 +708,12 @@ function checkHosted(raw, now, staleMs = HOSTED_STALE_MS) {
     if (kind === 'hdr') {
       hosted[kind].module = isStr(src.module) ? src.module : '';
       hosted[kind].addon = isStr(src.addon) ? src.addon : '';
+      // Whether the add-on can put its own defaults back ('$reset'); host API version 3 and later.
+      hosted[kind].canReset = src.canReset === true;
+      hosted[kind].apiVersion = isNum(src.apiVersion) ? src.apiVersion : null;
+      hosted[kind].rows = rows;
+      hosted[kind].title = rows !== null && isStr(src.title) ? src.title : '';
+      hosted[kind].presets = rows !== null ? hdrPresets(src.presets) : null;
     }
   }
   return { ok: true, hosted };
@@ -658,6 +727,12 @@ function checkHosted(raw, now, staleMs = HOSTED_STALE_MS) {
 // the engine read only the second. Once ack reaches our last seq everything before it has landed and
 // the slate is clean. seq starts past the engine's ack, so a restarted app never sends a seq the game
 // has already applied (and would ignore); a new game process (a different pid) starts over entirely.
+// Actions rather than values: a button press and "reset everything". Setting a value twice is harmless,
+// doing one of these twice is not -- the engine may already have read the command it was in, and a
+// second copy riding along in the next one would press the button again. So they go in the command they
+// were made in and are never carried: one lost to a replaced file is pressed again by hand.
+const HOSTED_ONE_SHOT = new Set(['$press', '$reset']);
+
 function nextHostedCommand(state, hosted, changes) {
   const pid = hosted.pid;
   const ack = hosted.ack || 0;
@@ -666,6 +741,7 @@ function nextHostedCommand(state, hosted, changes) {
   const pending = {};
   for (const kind of HOSTED_KINDS) {
     pending[kind] = allLanded ? {} : { ...(prev.pending[kind] || {}) };
+    for (const key of HOSTED_ONE_SHOT) delete pending[kind][key];
     for (const [key, value] of Object.entries((changes && changes[kind]) || {})) {
       if (typeof value === 'boolean' || isNum(value) || isStr(value)) pending[kind][key] = value;
     }
@@ -675,4 +751,4 @@ function nextHostedCommand(state, hosted, changes) {
 }
 
 module.exports = { FIELDS, GROUPS, PAGES, HEADER_KEYS, SECTION, readSettings, writeSettings, parseValue, formatValue, isAuto,
-                   HOSTED_FILE, HOSTED_SET_FILE, HOSTED_STALE_MS, HOSTED_KINDS, checkHosted, nextHostedCommand };
+                   HOSTED_FILE, HOSTED_SET_FILE, HOSTED_STALE_MS, HOSTED_KINDS, HDR_ROW_KINDS, checkHosted, nextHostedCommand };

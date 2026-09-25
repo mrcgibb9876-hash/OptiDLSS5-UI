@@ -291,6 +291,18 @@ html, body { margin: 0; height: 100%; }
 .p-select.p-number:hover { background: #f5faf5; }
 /* A Pacing/HDR page whose add-on is not here: greyed, as in-game. */
 .p-hosted-missing { opacity: 0.6; }
+/* RenoDX's own overlay (host API v4): a text box that is plainly text, not the green number box that
+   only ReLimiter's frame-rate cap wears; section captions that fold; text rows as RenoDX draws them. */
+.p-select.p-text { cursor: text; }
+.p-caption.p-hdr-section {
+  display: block; width: 100%; text-align: left; background: none; border: 0;
+  border-bottom: 1px solid rgba(var(--accent-fill-rgb), 0.35); cursor: pointer; font-family: inherit;
+}
+.p-hdr-text.is-multiline { white-space: pre-wrap; }
+.p-hdr-text.is-textNowrap { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.p-hdr-text.is-label { color: var(--value); font-weight: 600; }
+.p-hdr-text.is-off, .p-hdr-button.is-off { opacity: 0.45; }
+.p-row > .p-hdr-reset { margin-left: 6px; }
 
 /* The Models pills take the whole row, as they do in the engine: four model names do not fit in a
    control column that starts 44% in. */

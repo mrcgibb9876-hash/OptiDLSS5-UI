@@ -1779,4 +1779,8 @@ window.I18N.register("de", {
     "Unreals HDR konnte hier nicht in der Engine.ini eingeschaltet werden -- schalte HDR in den Einstellungen des Spiels selbst ein.",
   "Brightness and contrast are handled by RenoDX in this game.":
     "Helligkeit und Kontrast übernimmt in diesem Spiel RenoDX.",
+  "Preset":
+    "Voreinstellung",
+  "{label} -- set this in ReShade's overlay (Home)":
+    "{label} -- das stellst du im ReShade-Overlay ein (Pos1)",
 });
