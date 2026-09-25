@@ -1742,4 +1742,10 @@ window.I18N.register("es", {
     "No disponible para este juego.",
   "Last run did not use DLSS -- switch DLSS on in the game's graphics settings":
     "La última partida no usó DLSS -- activa DLSS en los ajustes gráficos del juego",
+  "Manager v{version} is available.":
+    "Manager v{version} está disponible.",
+  "Download update":
+    "Descargar actualización",
+  "Manager v{version} is available -- press Download update in the banner at the top.":
+    "Manager v{version} está disponible -- pulsa Descargar actualización en el aviso de arriba.",
 });

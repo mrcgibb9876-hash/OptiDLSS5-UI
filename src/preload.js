@@ -176,6 +176,7 @@ contextBridge.exposeInMainWorld('api', {
   managerUpdateState: () => ipcRenderer.invoke('update:managerState'),
   managerUpdateCheck: () => ipcRenderer.invoke('update:managerCheck'),
   managerUpdateRestart: () => ipcRenderer.invoke('update:managerRestart'),
+  managerUpdateDownload: () => ipcRenderer.invoke('update:managerDownload'),
   onManagerUpdate: (cb) => { ipcRenderer.on('manager-update', (_evt, state) => cb(state)); },
   onReportSignIn: (cb) => { ipcRenderer.on('report-signin', (_evt, result) => cb(result)); },
 

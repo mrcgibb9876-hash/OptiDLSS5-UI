@@ -1742,4 +1742,10 @@ window.I18N.register("ko", {
     "이 게임에서는 사용할 수 없습니다.",
   "Last run did not use DLSS -- switch DLSS on in the game's graphics settings":
     "마지막 실행에서 DLSS를 쓰지 않았습니다 -- 게임의 그래픽 설정에서 DLSS를 켜세요",
+  "Manager v{version} is available.":
+    "Manager v{version}을(를) 사용할 수 있습니다.",
+  "Download update":
+    "업데이트 다운로드",
+  "Manager v{version} is available -- press Download update in the banner at the top.":
+    "Manager v{version}을(를) 사용할 수 있습니다 -- 위쪽 배너에서 업데이트 다운로드를 누르세요.",
 });

@@ -3,9 +3,9 @@
 // Until now the engine (OptiScaler_DLSSNR) updated itself at launch while the Manager only
 // opened its release page and left the install to the user -- so people ran an old Manager with a
 // new engine, or the other way round, and neither half could tell which. This closes that: the
-// Manager checks its own releases shortly after launch and every few hours after, downloads a
-// newer build in the background, tells the renderer so a banner can offer "Restart to update",
-// and installs on the next quit regardless (autoInstallOnAppQuit). release.yml publishes the
+// Manager checks its own releases shortly after launch and every few hours after and tells the
+// renderer, whose banner offers "Download update" and then "Restart to update". Since 2026-09-25
+// nothing downloads or installs without the player pressing those. release.yml publishes the
 // latest.yml + blockmap electron-updater reads, and package.json's build.publish block is what
 // makes electron-builder write app-update.yml into the packaged app.
 //
@@ -45,8 +45,10 @@ function setup({ app, autoUpdater, onChange }) {
   if (PORTABLE) { set({ supported: false, reason: 'the portable build cannot replace itself -- use the installer build for automatic updates' }); return state; }
 
   updater = autoUpdater;
-  updater.autoDownload = true;
-  updater.autoInstallOnAppQuit = true;
+  // The player decides (2026-09-25): a new build is announced, never fetched or installed on its own.
+  // Download is a button (download()), and only the Restart button installs -- quitting does not.
+  updater.autoDownload = false;
+  updater.autoInstallOnAppQuit = false;
   updater.allowDowngrade = false;
   updater.logger = null;
 
@@ -74,6 +76,18 @@ async function check() {
   return { ...state };
 }
 
+// Fetch the build check() found, when the player presses Download. Progress arrives through the events.
+async function download() {
+  if (!updater || state.phase !== 'available') return { ...state };
+  try {
+    set({ phase: 'downloading', percent: 0 });
+    await updater.downloadUpdate();
+  } catch (err) {
+    set({ phase: 'error', error: String(err && err.message ? err.message : err) });
+  }
+  return { ...state };
+}
+
 // Quit and run the downloaded installer silently, relaunching the new build afterwards.
 function restart() {
   if (!updater || state.phase !== 'downloaded') return false;
@@ -85,4 +99,4 @@ function snapshot() {
   return { ...state };
 }
 
-module.exports = { setup, check, restart, snapshot, CHECK_EVERY_MS };
+module.exports = { setup, check, download, restart, snapshot, CHECK_EVERY_MS };

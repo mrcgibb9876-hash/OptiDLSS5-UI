@@ -5766,15 +5766,29 @@ async function ensureNrModel({ force = false } = {}) {
   return true;
 }
 
-// The Manager's own update, as pushed by main.js (src/manager-update.js): a banner while it
-// downloads, and "Restart to update" once it is on disk. Nothing to click for the download
-// itself -- it happens on its own, and even an ignored banner installs on the next quit.
+// The Manager's own update, as pushed by main.js (src/manager-update.js). The player decides
+// (2026-09-25): the banner says a new version is there and offers Download; once it is on disk,
+// Restart installs it. Nothing downloads or installs on its own, and "Not now" hides the banner
+// for that version until the next launch.
+let managerUpdateDismissed = null;
 function renderManagerUpdate(state) {
   const banner = $('#manager-update-banner');
   const text = $('#manager-update-banner-text');
   const restartBtn = $('#btn-manager-restart');
+  const downloadBtn = $('#btn-manager-download');
+  const dismissBtn = $('#btn-manager-dismiss');
+  downloadBtn.classList.add('hidden');
+  dismissBtn.classList.add('hidden');
   if (!state || !state.supported) { banner.classList.add('hidden'); return; }
-  if (state.phase === 'downloading' || state.phase === 'available') {
+  if (state.phase === 'available') {
+    if (managerUpdateDismissed === state.version) { banner.classList.add('hidden'); return; }
+    banner.classList.remove('hidden');
+    restartBtn.classList.add('hidden');
+    downloadBtn.classList.remove('hidden');
+    downloadBtn.disabled = false;
+    dismissBtn.classList.remove('hidden');
+    text.textContent = t('Manager v{version} is available.', { version: state.version || '?' });
+  } else if (state.phase === 'downloading') {
     banner.classList.remove('hidden');
     restartBtn.classList.add('hidden');
     text.textContent = t('Downloading Manager v{version}… {percent}%', { version: state.version || '?', percent: state.percent || 0 });
@@ -5786,6 +5800,16 @@ function renderManagerUpdate(state) {
     banner.classList.add('hidden');
   }
 }
+
+$('#btn-manager-download').addEventListener('click', async () => {
+  $('#btn-manager-download').disabled = true;
+  renderManagerUpdate(await window.api.managerUpdateDownload());
+});
+$('#btn-manager-dismiss').addEventListener('click', async () => {
+  const st = await window.api.managerUpdateState();
+  managerUpdateDismissed = st && st.version;
+  $('#manager-update-banner').classList.add('hidden');
+});
 
 $('#btn-manager-restart').addEventListener('click', async () => {
   $('#btn-manager-restart').disabled = true;
@@ -5912,8 +5936,10 @@ $('#btn-check-updates').addEventListener('click', async () => {
     } else {
       const st = await window.api.managerUpdateState();
       if (st.supported) {
-        window.api.managerUpdateCheck();
-        lines.push(t('Downloading Manager {version} in the background -- you will be asked to restart when it is ready.', { version: managerRes.latestVersion }));
+        // Found, not fetched: the banner offers Download (the player decides, 2026-09-25).
+        managerUpdateDismissed = null;
+        renderManagerUpdate(await window.api.managerUpdateCheck());
+        lines.push(t('Manager v{version} is available -- press Download update in the banner at the top.', { version: managerRes.latestVersion }));
       } else {
         // Say WHY it did not just download it. The reason was sitting in the state and being thrown
         // away at the one moment someone is stood in front of the app wondering what changed -- so

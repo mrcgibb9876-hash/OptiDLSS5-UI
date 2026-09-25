@@ -1742,4 +1742,10 @@ window.I18N.register("zh-CN", {
     "此游戏不可用。",
   "Last run did not use DLSS -- switch DLSS on in the game's graphics settings":
     "上次运行没有使用 DLSS -- 请在游戏的图形设置中开启 DLSS",
+  "Manager v{version} is available.":
+    "Manager v{version} 已可用。",
+  "Download update":
+    "下载更新",
+  "Manager v{version} is available -- press Download update in the banner at the top.":
+    "Manager v{version} 已可用 -- 请点击顶部横幅中的“下载更新”。",
 });

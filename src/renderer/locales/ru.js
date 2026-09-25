@@ -1742,4 +1742,10 @@ window.I18N.register("ru", {
     "Недоступно для этой игры.",
   "Last run did not use DLSS -- switch DLSS on in the game's graphics settings":
     "В прошлый запуск DLSS не использовался -- включите DLSS в графических настройках игры",
+  "Manager v{version} is available.":
+    "Доступен Manager v{version}.",
+  "Download update":
+    "Скачать обновление",
+  "Manager v{version} is available -- press Download update in the banner at the top.":
+    "Доступен Manager v{version} -- нажмите «Скачать обновление» в баннере вверху.",
 });
