@@ -230,4 +230,26 @@ function repairExePath(exePath) {
     return chosen && chosen.exePath ? chosen.exePath : exePath;
 }
 
-module.exports = { scanForGames, chooseExe, walkExes, resolvePickedExe, repairExePath, isXboxInstall };
+// The other folder of a Microsoft Store / Xbox (GDK) install, or null. Such an install is two
+// folders: the package root (C:\XboxGames\<Game>\) and Content\ inside it, where the exe,
+// MicrosoftGame.config and gamelaunchhelper.exe live. This app's files belong in Content\ only,
+// but a card that recorded the Content FOLDER as its exe (#93, fixed in 2.3.14) installed into
+// the root, and a Remove from the repaired card never looked there again -- the "new files in the
+// main folder" and the leftovers of #123. So Remove asks for this folder too. Given either one,
+// returns the other; never a library folder (C:\XboxGames itself) and never anything else.
+const STORE_LIBRARY = /^(xboxgames|windowsapps|modifiablewindowsapps)$/i;
+function xboxPairedDir(dir) {
+    if (!dir || !isXboxInstall(dir)) return null;
+    const here = path.resolve(dir);
+    if (path.basename(here).toLowerCase() === 'content') {
+        const root = path.dirname(here);
+        if (root === here || STORE_LIBRARY.test(path.basename(root))) return null;
+        return root;
+    }
+    if (STORE_LIBRARY.test(path.basename(here))) return null;
+    const content = path.join(here, 'Content');
+    try { if (fs.statSync(content).isDirectory()) return content; } catch { /* no Content\ here */ }
+    return null;
+}
+
+module.exports = { scanForGames, chooseExe, walkExes, resolvePickedExe, repairExePath, isXboxInstall, xboxPairedDir };

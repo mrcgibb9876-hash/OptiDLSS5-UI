@@ -311,16 +311,18 @@ function refreshCardState(card) {
   if (state.exeMissing) {
     text = t('Settings');
     onClick = delegate('.btn-edit');
+  } else if (running) {
+    // Ahead of Restore originals and Fix it deliberately: both move DLLs the running game is holding
+    // open, so they would fail on the file they most need to replace; a Remove that half-ran around a
+    // proxy still mapped is how #123 ended up with a sim that would not start. main.js refuses it
+    // while the game runs too. The panel is live over the frame anyway.
+    text = t('Settings');
+    onClick = delegate('.btn-edit');
   } else if (issue && issue.canRestore && card._game) {
     text = t('Restore originals');
     cls = 'btn btn-card-primary btn-attention';
     onClick = () => offerRestore(card, card._game, issue);
     hideLaunch = false;
-  } else if (running) {
-    // Ahead of Fix it deliberately: a fix moves DLLs the running game is holding open, so it would
-    // fail on the file it most needs to replace. The panel is live over the frame anyway.
-    text = t('Settings');
-    onClick = delegate('.btn-edit');
   } else if (state.problem && state.problem.action) {
     text = state.problem.action.label;
     cls = state.problem.bad ? 'btn btn-card-primary btn-attention' : 'btn btn-card-primary';

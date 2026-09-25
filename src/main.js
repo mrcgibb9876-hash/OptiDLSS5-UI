@@ -665,6 +665,32 @@ async function gameRunningNow(exePath) {
   return [...names].some((n) => running.has(n.toLowerCase()));
 }
 
+// gameRunningNow, confirmed by where the process was started from, for Remove. The listing only has
+// image names, and "Game.exe" is not one game: a process of that name from another folder must not
+// block this one's Remove. Only asked when the name matches, so a Remove with nothing running costs
+// no PowerShell. A process whose path cannot be read (another user's, an elevated one) counts as
+// this game -- refusing a Remove wrongly costs a retry, running one wrongly can cost the game.
+async function gameRunningFromItsFolder(exePath) {
+  if (!(await gameRunningNow(exePath))) return false;
+  const names = new Set([path.basename(exePath)]);
+  try { names.add(path.basename(launchTarget(exePath))); } catch {}
+  try { names.add(path.basename(watchedExeFor(exePath))); } catch {}
+  const dir = path.resolve(gameDir(exePath)).toLowerCase();
+  const quoted = [...names].map((n) => `'${n.replace(/'/g, "''")}'`).join(',');
+  const script = `Get-CimInstance Win32_Process | Where-Object { @(${quoted}) -contains $_.Name } | ForEach-Object { if ($_.ExecutablePath) { $_.ExecutablePath } else { '?' } }`;
+  let stdout;
+  try {
+    ({ stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true }));
+  } catch { return true; }
+  const paths = String(stdout || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (!paths.length) return false; // exited between the two looks
+  return paths.some((p) => {
+    if (p === '?') return true;
+    const at = path.dirname(path.resolve(p)).toLowerCase();
+    return at === dir || at.startsWith(dir + path.sep);
+  });
+}
+
 // Removing a ReShade add-on while the game runs cannot work: the .addon64 and ReShade itself are
 // mapped into the process and Windows will not delete them. It used to half-work instead -- RenoDX's
 // marker entry dropped with the file still loaded, then pacing's Remove throwing on the loaded
@@ -4142,8 +4168,15 @@ const LEGACY_PAYLOAD = [
   'OptiScaler_DlssNr.addon64', 'OptiScaler_DlssNr.exp', 'OptiScaler_DlssNr.lib', 'OptiScaler_DlssNr.pdb', 'OptiScaler_DlssNr.dll',
   '.optdlss5-active-manifest.json', 'Verify-DLSS5Feeder.ps1', 'Run-DLSS5-Feeder-Install.bat', 'Remove_OptiScaler.bat',
   'dlss5-feed.cfg', 'dlss5-feed.log', 'dlss5-feed-crash.dmp',
+  // Written by the engine at runtime rather than by an install, so no journal ever lists them: the
+  // panel's live stats (DlssNr_Live.cpp writes the .tmp and renames it over the .json). Both
+  // survived every Remove until #123's "a lot of leftovers".
+  'OptiScaler.live.json', 'OptiScaler.live.json.tmp',
 ];
-const LEGACY_PATTERNS = [/^OptiScaler_DLSSNR-.*\.zip$/i, /\.release-backup$/i, /^ReShade\.log\d+$/i];
+// .dlss5ui-remove(-N): a proxy Remove could not delete because a running process had it mapped,
+// moved off its proxy name instead (moveProxyAside) -- ours, and gone at the next Remove.
+// OptiScaler_<ticks>.log: the engine's log when LogSingleFile is off (Config.cpp), one per start.
+const LEGACY_PATTERNS = [/^OptiScaler_DLSSNR-.*\.zip$/i, /\.release-backup$/i, /^ReShade\.log\d+$/i, /\.dlss5ui-remove(-\d+)?$/i, /^OptiScaler_\d+\.log$/i];
 
 async function uninstallEverything(dir) {
   const removed = [];
@@ -4451,10 +4484,51 @@ async function planUninstall(dir) {
   return { ok: true, remove: [...remove].sort(), restore: [...new Set(restore)], kept };
 }
 
+// The other folder of a Microsoft Store / Xbox install (discover.xboxPairedDir) when it holds
+// anything of this app's, else null. Only asked by Remove and its plan, never by game:status.
+function pairedDirWithOurFiles(dir) {
+  const other = discover.xboxPairedDir(dir);
+  if (!other) return null;
+  const b = detectInstalledBackends(other);
+  return b.optiscaler || b.leftovers.length ? other : null;
+}
+
+// Remove, for a game's folder -- and, on an Xbox / Microsoft Store install, for the package's other
+// folder as well when an older build put files there (#93 installed beside the Content FOLDER,
+// into C:\XboxGames\<Game>\; #123 found them still there after every Remove). What comes from the
+// other folder is named with that folder in front, so the report says where it was.
+async function uninstallGameFolders(dir) {
+  const result = await uninstallEverything(dir);
+  const other = pairedDirWithOurFiles(dir);
+  if (other) {
+    const r = await uninstallEverything(other);
+    invalidateDetection(other);
+    const tag = (s) => `${path.basename(other)}\\${s}`;
+    result.removed.push(...r.removed.map(tag));
+    result.restored.push(...r.restored.map(tag));
+    result.kept.push(...r.kept.map(tag));
+    result.failed.push(...r.failed.map((f) => ({ ...f, rel: tag(f.rel) })));
+  }
+  return result;
+}
+
+async function planGameFolders(dir) {
+  const plan = await planUninstall(dir);
+  const other = pairedDirWithOurFiles(dir);
+  if (other) {
+    const p = await planUninstall(other);
+    const tag = (s) => `${path.basename(other)}\\${s}`;
+    plan.remove.push(...p.remove.map(tag));
+    plan.restore.push(...p.restore.map(tag));
+    plan.kept.push(...p.kept.map(tag));
+  }
+  return plan;
+}
+
 ipcMain.handle('game:uninstallPlan', async (_evt, exePath) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
-    return await planUninstall(gameDir(exePath));
+    return await planGameFolders(gameDir(exePath));
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -4463,10 +4537,17 @@ ipcMain.handle('game:uninstallPlan', async (_evt, exePath) => {
 ipcMain.handle('game:run-uninstall', async (_evt, exePath) => {
   const dir = gameDir(exePath);
   try {
+    // Refused up front, nothing touched, while the game is still up -- a game still exiting after
+    // its window closed included (Flight Simulator 2024 lingers, #123). Its proxy is mapped then:
+    // Windows will not delete it, and a Remove that takes the ini from around a proxy it cannot take
+    // leaves OptiScaler loading on its defaults at the next start, from any launcher.
+    if (await gameRunningFromItsFolder(exePath)) {
+      throw Object.assign(new Error('DLSS 5 can’t be removed while the game is running: Windows will not delete files a running game has loaded. Close the game, wait for it to finish exiting, then try again.'), { code: 'game-running' });
+    }
     // Done here rather than by spawning the generated .bat: that script asks its own questions in
     // a console the app cannot see, and decides what to restore by guessing from filenames. This
     // reverses what the install recorded it did -- and every other stack this app deploys.
-    const result = await uninstallEverything(dir);
+    const result = await uninstallGameFolders(dir);
     invalidateDetection(dir);
     return { ok: true, ...result };
   } catch (err) {
@@ -4550,7 +4631,7 @@ ipcMain.handle('game:cleanFolder', async (_evt, { folder }) => {
         'This removes OptiScaler, the Feeder or Luma UE, Streamline, REFramework, swapped DLLs and every marker this app placed, and puts back anything it renamed or replaced. Files it did not place are left alone.',
     });
     if (first.response !== 0) return { ok: true, cancelled: true };
-    const result = await uninstallEverything(dir);
+    const result = await uninstallGameFolders(dir);
     const plan = await planForeignRemoval(dir, { ours: false });
     let foreignDone = null;
     if (plan.found.length && (plan.del.length || plan.restore.length)) {
@@ -5342,7 +5423,8 @@ async function applyHelpFix(exePath, fixId) {
         detail: 'The game goes back to how it was before Install. You can Install again later.',
       });
       if (answer.response !== 0) return { done: false, text: 'cancelled by the user' };
-      const r = await uninstallEverything(dir);
+      if (await gameRunningFromItsFolder(exePath)) return { done: false, text: 'the game is still running -- close it (and wait for it to finish exiting), then run this again. Nothing was changed' };
+      const r = await uninstallGameFolders(dir);
       invalidateDetection(dir);
       const tail = (r.failed || []).length
         ? ` -- but ${r.failed.map((f) => f.rel).join(', ')} could not be deleted, so close the game and run Remove again`
@@ -7690,6 +7772,17 @@ async function installProxy(dir, proxyName = DEFAULT_PROXY) {
   return { proxy: proxyName, created: true, backedUp };
 }
 
+// A proxy that could not be deleted, renamed off the name the game loads. null when even that failed.
+const PROXY_ASIDE_SUFFIX = '.dlss5ui-remove';
+async function moveProxyAside(proxyPath) {
+  for (let i = 0; i < 10; i++) {
+    const dest = proxyPath + PROXY_ASIDE_SUFFIX + (i ? `-${i}` : '');
+    if (fs.existsSync(dest)) continue;
+    try { await fsp.rename(proxyPath, dest); return dest; } catch { return null; }
+  }
+  return null;
+}
+
 // Reverses installProxy and clears out what the app copied in.
 //
 // Never deletes a file at a proxy name without confirming it is actually OptiScaler: if someone
@@ -7711,7 +7804,19 @@ async function uninstallOptiScaler(dir, { keepNr = false } = {}) {
       // The proxy is the file a still-running game has mapped, so it is the likeliest EPERM of all.
       const r = await saferemove.removePath(proxyPath);
       if (r.ok) removed.push(path.basename(proxyPath));
-      else failed.push({ rel: path.basename(proxyPath), code: r.code });
+      else {
+        // Deleting it failed, but the proxy must not stay under the name the game loads: the ini and
+        // the payload below go regardless, and an OptiScaler left as winmm.dll with no OptiScaler.ini
+        // loads on the next start -- from any launcher, the Start menu included -- on its defaults.
+        // That is the likeliest way Remove on Microsoft Flight Simulator 2024 left a sim that would
+        // not start (#123): the sim was still exiting with winmm.dll mapped, and the ini holding the
+        // one setting that made it run there (OverlayMenu=false) was deleted around it. Windows lets
+        // a mapped DLL be renamed where it will not delete it, so it moves off the proxy name and is
+        // cleared as a leftover by the next Remove (LEGACY_PATTERNS).
+        const aside = await moveProxyAside(proxyPath);
+        if (aside) kept.push(`${path.basename(proxyPath)} (still loaded by a running process -- renamed to ${path.basename(aside)} so nothing loads it; Remove again once it has closed)`);
+        failed.push({ rel: path.basename(proxyPath), code: r.code });
+      }
     } else {
       kept.push(
         `${path.basename(proxyPath)} (does not identify itself as OptiScaler -- left alone)`
