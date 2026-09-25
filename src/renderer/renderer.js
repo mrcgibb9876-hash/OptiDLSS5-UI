@@ -439,13 +439,8 @@ async function renderGrid() {
   const statuses = await Promise.all(games.map((game) => window.api.gameStatus(game.exePath).catch(() => ({ exeMissing: true }))));
   if (generation !== renderGeneration) return;
 
-  const filter = updateGridFilter(statuses);
-  let shown = 0;
-
   for (const [index, game] of games.entries()) {
     const status = statuses[index];
-    if (!gridFilterMatches(filter, status)) continue;
-    shown++;
     const card = document.createElement('div');
     card.className = 'card';
 
@@ -714,72 +709,7 @@ async function renderGrid() {
     grid.appendChild(card);
   }
 
-  if (games.length > 0 && shown === 0) {
-    const note = document.createElement('p');
-    note.className = 'grid-filter-empty';
-    note.textContent = t('No games match this filter.');
-    grid.appendChild(note);
-  }
 }
-
-// ── Grid filter ────────────────────────────────────────────────────────────────────────────────
-//
-// What the grid shows: every game, the ones DLSS 5 is installed in or not, or one store's. Stores come
-// from where each game is installed (library.storeFor, via game:status). Only the stores this library
-// actually has are offered, each with its count. The choice is this viewer's own, kept in localStorage.
-const STORE_LABELS = { steam: 'Steam', epic: 'Epic Games', gog: 'GOG', xbox: 'Xbox', ea: 'EA app', ubisoft: 'Ubisoft Connect', other: 'Other folders' };
-const GRID_FILTER_KEY = 'gridFilter';
-
-function readGridFilter() {
-  try { return localStorage.getItem(GRID_FILTER_KEY) || 'all'; } catch { return 'all'; }
-}
-
-function dlss5Installed(status) {
-  return !!(status && !status.exeMissing && status.backends && status.backends.optiscaler);
-}
-
-function gridFilterMatches(filter, status) {
-  if (filter === 'all') return true;
-  if (filter === 'installed') return dlss5Installed(status);
-  if (filter === 'not-installed') return !dlss5Installed(status);
-  if (filter.startsWith('store:')) return ((status && status.store) || 'other') === filter.slice(6);
-  return true;
-}
-
-// Rebuilds the options with their counts and returns the filter in force. A remembered store the
-// library no longer has falls back to all, rather than showing an empty grid for no visible reason.
-function updateGridFilter(statuses) {
-  const select = $('#grid-filter');
-  if (!select) return 'all';
-  const count = (f) => statuses.filter((s) => gridFilterMatches(f, s)).length;
-  const options = [
-    ['all', t('All games ({n})', { n: statuses.length })],
-    ['installed', t('DLSS 5 installed ({n})', { n: count('installed') })],
-    ['not-installed', t('Not installed ({n})', { n: count('not-installed') })],
-  ];
-  for (const store of Object.keys(STORE_LABELS)) {
-    const n = count(`store:${store}`);
-    if (n > 0) options.push([`store:${store}`, `${t(STORE_LABELS[store])} (${n})`]);
-  }
-
-  let filter = readGridFilter();
-  if (!options.some(([value]) => value === filter)) filter = 'all';
-
-  select.innerHTML = '';
-  for (const [value, text] of options) {
-    const o = document.createElement('option');
-    o.value = value;
-    o.textContent = text;
-    select.appendChild(o);
-  }
-  select.value = filter;
-  return filter;
-}
-
-$('#grid-filter').addEventListener('change', () => {
-  try { localStorage.setItem(GRID_FILTER_KEY, $('#grid-filter').value); } catch {}
-  renderGrid();
-});
 
 async function applyRecommendation(game, card, backends, generation = renderGeneration) {
   // Every await below belongs to one render of one card. A newer render has already replaced the
