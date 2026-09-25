@@ -56,9 +56,11 @@ test('the proxy hint rides along: dxgi.dll ignored in favour of System32\'s mean
 
 test('the analysis handlers are registered and refuse a missing exe without starting anything', async () => {
   const { handlers, invoke } = loadMain();
-  for (const ch of ['game:probe', 'game:probe-facts', 'game:preflight', 'game:preflight-fix', 'game:verify']) assert.ok(handlers[ch], ch);
+  for (const ch of ['game:probe-facts', 'game:preflight', 'game:preflight-fix']) assert.ok(handlers[ch], ch);
+  // Analyse game and Verify install had no button left; their launch-and-watch handlers are gone.
+  for (const ch of ['game:probe', 'game:verify']) assert.equal(handlers[ch], undefined, ch);
   const missing = path.join(scratchDir('wiring-missing'), 'nope.exe');
-  for (const ch of ['game:probe', 'game:preflight', 'game:preflight-fix', 'game:verify']) {
+  for (const ch of ['game:preflight', 'game:preflight-fix']) {
     const res = await invoke(ch, { exePath: missing });
     assert.equal(res.ok, false, ch);
   }

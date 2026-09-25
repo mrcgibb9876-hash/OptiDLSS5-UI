@@ -94,7 +94,9 @@ test('the card carries no chip line and no run counts, only the mark, the status
   assert.ok(!js.includes("ev.className = 'card-evidence'"), 'the run count is back on the card');
   assert.ok(!js.includes('engine-badge api-badge'), 'the API chip is back on the card');
   assert.ok(!js.includes('engine-badge route-badge'), 'the route chip is back on the card');
-  assert.match(js, /line\.classList\.add\('hidden'\)/);
+  // The hidden recommend line and problem row went too: nothing is left for a chip to be drawn into.
+  assert.ok(!js.includes('card-recommend'), 'the chip line is back in the card template');
+  assert.ok(!js.includes('card-problem'), 'the old problem row is back in the card template');
   assert.ok(!/mark\.title =/.test(js), 'the mark carries no hover text (2026-09-25)');
   assert.match(js, /class="card-warn hidden"/, 'anti-cheat is a triangle on the art');
   assert.ok(!js.includes('detectShort'), 'the advisory warning line is back on the card');

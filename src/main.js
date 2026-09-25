@@ -47,7 +47,6 @@ const gameupdate = require('./gameupdate');
 const probe = require('./probe');
 const preflight = require('./preflight');
 const gpupref = require('./gpupref');
-const verify = require('./verify');
 const translation = require('./translation');
 const catalog = require('./catalog');
 const routescore = require('./routescore');
@@ -3656,8 +3655,8 @@ ipcMain.handle('amdnr:deployNrModel', async (_evt, { exePath, replace }) => {
   }
 });
 
-// Same shape as game:run-setup: the tool's own installer is interactive, so it gets a console
-// the user answers in. Only ever runs a file already sitting in the game folder.
+// The tool's own installer is interactive, so it gets a console the user answers in. Only ever runs
+// a file already sitting in the game folder.
 ipcMain.handle('amdnr:runSetup', (_evt, exePath) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
@@ -3833,19 +3832,6 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
   } catch (err) {
     return { ok: false, error: err.message };
   }
-});
-
-ipcMain.handle('game:run-setup', async (_evt, exePath) => {
-  const dir = gameDir(exePath);
-  const bat = findSetupBat(dir);
-  if (!bat) return { ok: false, error: 'setup_windows.bat not found in game folder. Install first.' };
-  spawn('cmd.exe', ['/c', 'start', '""', 'cmd.exe', '/k', bat], {
-    cwd: dir,
-    detached: true,
-    stdio: 'ignore',
-    shell: false
-  }).unref();
-  return { ok: true };
 });
 
 async function removeSharedNrDllIfUnneeded(dir) {
@@ -4406,8 +4392,6 @@ const sendToWindows = (channel, payload) => {
 };
 
 ipcMain.handle('report:status', () => ({ configured: ghreport.configured(), signedIn: !!readReportToken() }));
-
-ipcMain.handle('report:signout', () => { clearReportToken(); return { ok: true }; });
 
 // Starts GitHub's device flow: returns the code to show, opens the page to type it into, and finishes in
 // the background (the renderer hears 'report-signin' when the player has approved, declined or timed out).
@@ -5415,35 +5399,9 @@ ipcMain.handle('game:launch', async (_evt, { exePath, launcher = 'auto', dryRun 
   return res;
 });
 
-// ── Analyse game, Checks before Install, Verify install ──────────────────────
-// Analyse (probe.js) and Verify (verify.js) each start the game and close it again, so only one of
-// either runs at a time. Neither focuses, clicks or types into the game: some games die on a focus
-// change (Assassin's Creed II), and the progress shows in this window whether it is in front or not.
-let watchedLaunchBusy = null;
-const sendTo = (sender, channel, payload) => { try { if (!sender.isDestroyed()) sender.send(channel, payload); } catch {} };
-
-ipcMain.handle('game:probe', async (evt, { exePath, launcher = 'auto' } = {}) => {
-  if (watchedLaunchBusy) return { ok: false, error: `${watchedLaunchBusy} is already running` };
-  try {
-    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
-    watchedLaunchBusy = 'Analyse game';
-    const workDir = path.join(os.tmpdir(), 'optidlss5-probe');
-    const res = await probe.runProbe({
-      exePath: launchTarget(exePath), execFileAsync, workDir,
-      launch: () => launchGame({ exePath, launcher }),
-      onProgress: (p) => sendTo(evt.sender, 'game:probe-progress', { exePath, ...p }),
-    });
-    if (!res.ok) return res;
-    // Stored under the card's exe, which is what effectiveDetection and the proxy helpers look up.
-    probe.writeFacts(probeFactsFile(), exePath, res.facts);
-    return { ok: true, summary: probe.summary(res.facts), proxyHint: probe.proxyHint(res.facts), closed: res.closed, etwError: res.etwError, facts: res.facts };
-  } catch (error) {
-    return { ok: false, error: String(error && error.message ? error.message : error) };
-  } finally {
-    watchedLaunchBusy = null;
-  }
-});
-
+// ── Checks before Install ─────────────────────────────────────────────────────
+// What a watched launch saw (probe.js facts, kept from earlier Analyse runs) still feeds the checks and
+// the proxy choice; nothing here starts the game.
 ipcMain.handle('game:probe-facts', (_evt, { exePath } = {}) => {
   const facts = probeFactsFor(exePath);
   return { ok: true, summary: probe.summary(facts), proxyHint: probe.proxyHint(facts) };
@@ -5502,36 +5460,8 @@ ipcMain.handle('game:preflight-fix', async (_evt, { exePath, fix } = {}) => {
   }
 });
 
-ipcMain.handle('game:verify', async (evt, { exePath, launcher = 'auto', detected } = {}) => {
-  if (watchedLaunchBusy) return { ok: false, error: `${watchedLaunchBusy} is already running` };
-  try {
-    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
-    watchedLaunchBusy = 'Verify install';
-    const res = await verify.runVerify({
-      exePath: launchTarget(exePath), execFileAsync, workDir: path.join(os.tmpdir(), 'optidlss5-probe'),
-      launch: () => launchGame({ exePath, launcher }),
-      readRun: async () => {
-        const ctx = await helpContext(exePath, detected);
-        return { run: ctx.run, diag: gamehelp.diagnose(ctx) };
-      },
-      onProgress: (p) => sendTo(evt.sender, 'game:verify-progress', { exePath, ...p }),
-    });
-    return res;
-  } catch (error) {
-    return { ok: false, error: String(error && error.message ? error.message : error) };
-  } finally {
-    watchedLaunchBusy = null;
-  }
-});
-
-// Whether the game's process is up, by image name -- the one signal that works for a direct
-// launch and a Steam one alike, so the help modal judges the log after the game stops, not
-// while it is still writing. null when tasklist cannot say.
-// Which of these games are running, from one process listing rather than one per game. The
-// single-game handler below spawns a tasklist.exe of its own, which is fine for the one game a
-// help modal is watching and is not fine for a grid that asks about every card every few seconds:
-// twenty games would be twenty process spawns a tick, which is the shape of the problem v1.59.0
-// spent its whole release removing.
+// Which of these games are running, from one process listing rather than one per game: a tasklist.exe
+// per card every few seconds is the shape of the problem v1.59.0 spent its whole release removing.
 ipcMain.handle('games:running', async (_evt, exePaths) => {
   try {
     const running = await runningImageSet();
@@ -5548,16 +5478,6 @@ ipcMain.handle('games:running', async (_evt, exePaths) => {
     return { ok: true, running: out };
   } catch (error) {
     return { ok: false, running: {}, error: String(error && error.message ? error.message : error) };
-  }
-});
-
-ipcMain.handle('game:running', async (_evt, { exePath } = {}) => {
-  try {
-    const name = path.basename(launchTarget(exePath));
-    const { stdout } = await execFileAsync('tasklist.exe', ['/FI', `IMAGENAME eq ${name}`, '/NH', '/FO', 'CSV'], { windowsHide: true });
-    return { ok: true, running: stdout.toLowerCase().includes(`"${name.toLowerCase()}"`) };
-  } catch (error) {
-    return { ok: false, running: null, error: String(error && error.message ? error.message : error) };
   }
 });
 
@@ -7667,10 +7587,6 @@ ipcMain.handle('update:check', async (_evt, { engine } = {}) => {
     return { ok: false, engine: id, error: err.message };
   }
 });
-
-ipcMain.handle('engine:list', () => Object.values(engines.ENGINES).map((e) => ({
-  ...e, managedFolder: managedReleaseFolder(e.id), releasePage: engines.releasePageUrl(e.id),
-})));
 
 // Releases and issues live in a public repo of their own: the source repo is private, and a private
 // repo's releases are private too, which would cut every installed copy off from its updates.

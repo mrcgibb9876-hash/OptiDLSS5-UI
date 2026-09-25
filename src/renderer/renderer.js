@@ -298,7 +298,6 @@ function refreshCardState(card) {
     : (state.problem && state.problem.bad) ? state.problem
     : running && state.panelHint ? { bad: false, text: state.panelHint.text, title: state.panelHint.title }
     : state.problem;
-  card.querySelector('.card-problem')?.classList.add('hidden');
 
   // The primary delegates to a real button rather than duplicating its work, so there is still one
   // implementation of Install, Tune and Launch and one place their confirmations live.
@@ -473,8 +472,6 @@ async function renderGrid() {
           <span class="card-mark hidden"></span>
           <span class="card-warn hidden" aria-label="Anti-cheat">&#9888;</span>
         </div>
-        <div class="card-path card-recommend hidden"></div>
-        <div class="card-problem hidden"><span class="card-problem-text"></span></div>
         <div class="card-actions">
           <button class="btn btn-primary btn-card-primary"></button>
           <button class="btn btn-launch" title="${escapeHtml(t('Runs the game from its own folder -- for an Unreal game, the -Win64-Shipping.exe that OptiScaler is installed beside.'))}">&#9654; ${escapeHtml(t('Launch'))}</button>
@@ -654,8 +651,7 @@ async function renderGrid() {
     }
     // Game Help, Analyse game and Verify install left the ⋯ menu (2026-09-25): the card itself now says
     // what went wrong and what to try next (flipToFailure), and its problem row's Help / Show me button
-    // still opens Game Help where there is more to read. analyseGame and verifyInstall have no caller
-    // now; they and their IPC are left in place for the clean-up pass to decide on.
+    // still opens Game Help where there is more to read. Analyse and Verify are gone altogether.
     card.querySelector('.btn-launch').addEventListener('click', async () => {
       const res = await window.api.launchGame(game.exePath, game.launcher);
       if (!res.ok) { toast(t('Could not launch {name}: {error}', { name: game.name, error: res.error })); return; }
@@ -718,7 +714,6 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   // Every await below belongs to one render of one card. A newer render has already replaced the
   // card this is filling in, so the work behind it is thrown away rather than finished.
   const current = () => generation === renderGeneration;
-  const line = card.querySelector('.card-recommend');
   const install = card.querySelector('.btn-install');
   let detected = game.detectedPath;
 
@@ -732,7 +727,6 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   }
   detected = detected || fresh || { recommend: 'unknown', reason: t('not detected yet') };
 
-  if (!line) return;
   const canRecommendInstall = !backends.optiscaler;
   const [route, diag] = await Promise.all([
     window.api.gameRoute(game.exePath, detected),
@@ -744,7 +738,6 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   // asked for 2026-09-25 as clutter. The card keeps three signals -- the DLSS 5 / Chicken mark on the
   // art, the status chip (Working, Needs attention...) and the one problem row -- and the detail that
   // used to sit in the chips (and the route text, removed from the card and Settings) is in Game Help.
-  line.classList.add('hidden');
 
 
   // The DXVK <-> dgVoodoo2 swap, in the overflow as well as in Game Help and Edit (layerSwapFor).
@@ -1350,7 +1343,7 @@ function flipToFailure(card, game, { spin = false } = {}) {
 // The front's problem row for a failure: short words, and the button that turns the card again.
 function failureProblem(card, game, evidence) {
   const next = fallbackOffers(game, (card._failCtx || {}).route).length ? t('What to try next') : t('Report issue');
-  return { bad: true, failure: true, text: t('DLSS 5 did not work here'), title: evidence.text, action: { label: next, run: () => flipToFailure(card, game) } };
+  return { bad: true, text: t('DLSS 5 did not work here'), title: evidence.text, action: { label: next, run: () => flipToFailure(card, game) } };
 }
 
 // Turns the card for a failure it has not shown yet; one it already showed stays on the front, with the
@@ -1400,8 +1393,6 @@ const helpModal = $('#help-modal');
 let helpGame = null;
 let helpFixesTried = [];
 let helpDiag = null;
-let helpPoll = null;
-let helpLastRunAt = null;
 // The fixes applied this session, per game, as { id, runAt } (see gamehelp.js): the modal and
 // the card read the same list, so a card does not offer "Fix it" again for a fix that is only
 // waiting on the next run.
@@ -1466,7 +1457,7 @@ function helpWords(diag) {
     case 'ok-exit-crash': return t('Neural Rendering ran ({count} passes). The game crashed only on the way out, inside NVIDIA\'s shutdown, which does not affect play.', v);
     case 'd3d11-native': return t('DLSS was created on the native D3D11 path, so the Neural Rendering pass never ran. Dx11Upscaler must be dlss_12. Reconfigure writes it.');
     case 'nr-disabled': return t('DLSS ran but Neural Rendering is switched off in OptiScaler.ini. Reconfigure turns it on.');
-    case 'dlss-no-nr': return t('DLSS was created and Neural Rendering is on, yet the pass never ran. This is not a known case. Save the bundle to share, or ask the AI.');
+    case 'dlss-no-nr': return t('DLSS was created and Neural Rendering is on, yet the pass never ran. This is not a known case. Report it with Report issue on the card (it sends the logs), or ask the AI.');
     case 'foreign-optiscaler': return t('Another OptiScaler build is in this folder as {file}, and it is not the one this app installed. That copy is what the game loads and what answers the DLSS calls -- an upstream OptiScaler has no neural pass, so DLSS 5 can never run while it is there, however complete everything else looks. Delete {file} (it is not ours to remove for you), then press Install here.', v);
     case 'asi-optiscaler': return t('OptiScaler is here as {file}, an ASI loader\'s plugin. This app never installs it that way -- it always uses a proxy DLL name -- so that copy is not ours, and it is the one the game loads and the one that answers the DLSS calls. Whatever this app has put beside it makes no difference while it is there. Remove {file} (it is not ours to remove for you), then press Install here.', v);
     case 'dlss-runtime-missing': return t('OptiScaler switched DLSS off a second into the run, because nvngx_dlss.dll is not beside the game exe -- its log says so in as many words. Nothing this app builds can make a DLSS call without it: not the Feeder\x27s synthesised one, not REFramework\x27s upscaler on a Resident Evil, not a DLSS 5 only profile. On this route the deploy fetches and places it, so running that again puts it back.');
@@ -1475,7 +1466,7 @@ function helpWords(diag) {
     case 'feeder-incomplete': return t('The Feeder is deployed here, but not all of it arrived: {missing} still missing. The add-on cannot load without those, so nothing feeds DLSS and the game runs as if none of this were installed. Install again puts them back. If it keeps failing at the same piece, the download is being blocked rather than the game refusing it.', v);
     case 'feeder-technique': return t('DLSS initialised but the Feeder\'s shader technique was missing. Install again to redeploy the Feeder.');
     case 'luma-select-dlss': return t('Luma UE is deployed but no DLSS call happened. In-game, press Home for Luma\'s overlay and select DLSS as the upscaler, in gameplay. Then check again.');
-    case 'init-no-feature': return t('DLSS initialised but no feature was ever created. This is not a known case. Save the bundle to share, or ask the AI.');
+    case 'init-no-feature': return t('DLSS initialised but no feature was ever created. This is not a known case. Report it with Report issue on the card (it sends the logs), or ask the AI.');
     case 'vulkan-layer-missing': return t('On Vulkan, the DLSS5 Feeder runs inside ReShade, and ReShade only reaches a Vulkan game as a layer installed for the whole PC. None is installed, so the Feeder never loaded and nothing called DLSS. Run ReShade\'s own installer (the version with add-on support), pick this exe, choose Vulkan, then Install here again. Or switch the emulator to Direct3D 11, if it has it, and pick DX11 in Edit: that needs no layer. Not OpenGL: DLSS 5 cannot draw its panel there.');
     case 'vulkan-layer-no-addon': return t('ReShade is installed as a Vulkan layer on this PC, but a build without add-on support, so the DLSS5 Feeder (an add-on) cannot load and nothing called DLSS. Reinstall ReShade with add-on support (its installer: "Enable loading of add-ons"), then Install here again.');
     case 'host32-opti-dll-gone': return t('OptiScaler\'s own file is missing from the helper folder. This app put it there -- its install record lists host64\\winmm.dll -- and it is not on disk now, so something removed it after the install. That is almost always antivirus: a 64-bit winmm.dll appearing beside a game exe looks exactly like a DLL hijack. Everything else is fine, which is why the Feeder\'s own window opens and the DLSS 5 overlay is not in it. Add an exclusion for this game\'s folder -- Windows Security > Virus & threat protection > Manage settings > Exclusions -- and then press Install here again. Do the exclusion first: without it, Install just puts the file back for it to be taken again. Protection history may also offer Allow for the item, but a cloud detection (a name ending in !cl) is often deleted rather than held, so do not count on finding one.');
@@ -1496,7 +1487,7 @@ function helpWords(diag) {
     case 'dxvk-crash': return t('The game still crashes inside {dll} with either layer in front of it. Remove puts the folder back as it was.', v);
     case 'dxvk-layer-missing': return t('DXVK presents this game through Vulkan, so ReShade -- and the DLSS5 Feeder add-on that rides on it -- can only reach it as ReShade\'s 32-bit Vulkan layer. That layer is {why} for {exe}, so the add-on never loads and DLSS 5 cannot run. Fix it runs ReShade\'s own setup again (it asks for administrator permission and installs the layer for the whole PC, switched on for this game).', { ...v, why: v.why === 'no-addon' ? t('a build without add-on support') : v.why === 'not-listed' ? t('installed but not switched on') : t('not installed') });
     case 'dxvk-reshade-ini-missing': return t('DXVK presents this game through Vulkan, and ReShade\'s Vulkan layer only starts in a game whose folder has a ReShade.ini -- this one has none any more, so the DLSS5 Feeder add-on cannot load. Install puts the Feeder\'s files, ReShade.ini among them, back.');
-    case 'dxvk-two-reshades': return t('{file} beside the game is ReShade again, while DXVK sends the game through ReShade\'s Vulkan layer too. Two ReShades in one game fight over the frame. Switch the game back off DXVK (More…), or move {file} out of the folder.', v);
+    case 'dxvk-two-reshades': return t('{file} beside the game is ReShade again, while DXVK sends the game through ReShade\'s Vulkan layer too. Two ReShades in one game fight over the frame. Switch the game back off DXVK (the card\'s ⋯ menu), or move {file} out of the folder.', v);
     case 'dxvk-addon-not-loaded': return t('The game ran under DXVK and ReShade\'s Vulkan layer loaded (it wrote ReShade.log), but the DLSS5 Feeder add-on did not: dlss5-feed.log has not been written since the swap. Open ReShade\'s overlay in the game (Home) and look at its Add-ons tab for DLSS 5 Feed and any error beside it; ReShade.log in the game folder names add-ons it refused. If it is not there at all, switch the game back off DXVK.', v);
     // Worded for both routes DXVK serves: in place of dgVoodoo2 (DX8/9) or of native Direct3D (32-bit DX10/11).
     case 'dxvk-needs-run': return t('DXVK is in front of the game, and it has not been run since. Launch it, reach gameplay, play a minute and quit. If ReShade.log and dlss5-feed.log in the game folder are still older than the swap after that, ReShade\'s Vulkan layer did not attach to this game.');
@@ -1515,7 +1506,7 @@ function helpWords(diag) {
     case 'no-hook': return t('Nothing called DLSS on the last run, so nothing was hooked. Check the game\'s own graphics settings have DLSS or DLAA selected. If they do, this is not a known case: save the bundle or ask the AI.');
     case 'ue-crash-luma': return t('The game crashed (Unreal crash report: {message}) with Luma UE deployed, and Luma is not verified on this game. Remove Luma UE and try the Feeder route.', { message: (v.message || '').slice(0, 120) });
     case 'ue-crash-feeder': return t('The game crashed (Unreal crash report: {message}) with the Feeder deployed. Remove the Feeder and check whether it runs clean.', { message: (v.message || '').slice(0, 120) });
-    case 'ue-crash': return t('The game crashed (Unreal crash report: {message}). No rule covers this. Save the bundle to share, or ask the AI.', { message: (v.message || '').slice(0, 120) });
+    case 'ue-crash': return t('The game crashed (Unreal crash report: {message}). No rule covers this. Report it with Report issue on the card (it sends the logs), or ask the AI.', { message: (v.message || '').slice(0, 120) });
     case 'luma-available': return t('The DLSS5 Feeder is running this game, but Luma-Framework has a mod for it that adds real DLSS with the game\'s own motion vectors -- sharper in motion than the Feeder\'s estimate. Switching removes the Feeder and sets up Luma (after you confirm its licence). Luma runs on DirectX 11.');
     case 'luma-needs-dx11': return t('Luma is set up here, but the game last ran on DirectX 12, where Luma does not load. Switch the game to DirectX 11 in its own graphics settings, then launch again.');
     case 'driver-outdated': return (v.min
@@ -1532,7 +1523,7 @@ function helpWords(diag) {
     case 'smooth-motion-stacked': return t('Two frame generators are running on this game. The DLSS5 Feeder saw NVIDIA Smooth Motion active in the process on the last run, and this app has {generator} set up here as well. Smooth Motion is frame generation done by the driver itself, after the frame leaves the game, so it does not replace the other one -- the two interleave their generated frames, which costs latency and shows as doubled motion artefacts. Turn one of them off: Smooth Motion is per game in the NVIDIA app, under Graphics -- Program Settings -- Driver Settings. Nothing here can switch it for you; NVIDIA publishes no setting for it that a program can read or write.', v);
     case 'wrapper-crash-swap': return t('The game crashed as it started, inside dgVoodoo2\'s {dll} -- before the DLSS5 Feeder or OptiScaler had done anything. No dgVoodoo2 setting is known to get past this: where it was first seen, every setting tried hung or crashed the same way. But dgVoodoo2 is not the only way to present DirectX 8/9 to a modern pipeline -- DXVK does the same job by a different route, and on one report the same game crashed under dgVoodoo2 on one machine while running through DXVK on another. Worth trying before giving up. Whatever dgVoodoo2 displaced is handed back first, so this can be undone; run the game afterwards and check here again.', v);
     case 'dgvoodoo-crash': return t('The game crashed as it started, inside dgVoodoo2\'s {dll} -- before the DLSS5 Feeder or OptiScaler had done anything. This DirectX 9 route cannot work without dgVoodoo2, and no dgVoodoo2 setting is known to get past this: where it was first seen, every setting tried hung or crashed the same way while the game ran fine without dgVoodoo2. The same fault can also show as a black screen that never responds, which leaves no log. Removing puts the game back exactly as it was.', v);
-    case 'wrapper-crash': return t('The game crashed as it started, inside {dll} in its own folder -- a DirectX wrapper this app did not place. No rule covers this. Save the bundle to share, or ask the AI.', v);
+    case 'wrapper-crash': return t('The game crashed as it started, inside {dll} in its own folder -- a DirectX wrapper this app did not place. No rule covers this. Report it with Report issue on the card (it sends the logs), or ask the AI.', v);
     case 'feeder-mv-broken': return t('The Feeder is deployed here, but its motion-vector shader is {why} ({provider}). DLSS is then fed no motion at all: sharp standing still, smearing the moment you move. Re-deploying writes the provider, its shader and the preset from one answer -- the default is VORT now, which compiles on the ReShade this app installs.', v);
     case 'feed-no-motion': return t('The Feeder ran and DLSS got no motion vectors. The Feeder\'s own log says: {detail} Re-deploying rewrites the provider, its shader, both DLSS5_MV_PROVIDER levels and the preset together.', v);
     // The 32-bit route: the provider is switched in place (legacy:setMvProvider), not redeployed.
@@ -1547,8 +1538,8 @@ function helpWords(diag) {
     case 'sr-backend-fallback': return v.why
       ? t('DLSS could not be created and OptiScaler silently upscaled with {backend} instead. The neural pass still ran on top of it, which is why this looks like a working run -- but the game is not running DLSS. NVIDIA\x27s own reason for refusing is {result}, {why}. One known cause worth ruling out first: a DLSS Override set for this game in the NVIDIA App makes the driver load its own DLSS out of C:\\ProgramData\\NVIDIA\\NGX\\models rather than the copy here, and when that one cannot be resolved DLSS refuses exactly like this. Turn the override off for the game and launch again. If it still refuses, send the report with nvngx.log -- NGX\x27s own log, beside the exe, and the only thing that says more than the code does.', v)
       : t('DLSS could not be created ({result}) and OptiScaler silently upscaled with {backend} instead. The neural pass still ran on top of it, which is why this looks like a working run -- but the game is not running DLSS. Check nvngx_dlss.dll is beside the exe and that the game\x27s own settings ask for DLSS; if both are right, OptiScaler.log has the NGX result for a bug report.', v);
-    case 'fix-failed': return t('The fix "{fix}" was applied and the result did not change. DLSS 5 is not currently available for this game with what this app can do on its own. Save the bundle to share, or ask the AI.', v);
-    default: return t('No rule covers this run ({verdict}). Save the bundle to share, or ask the AI.', { verdict: v.verdict || diag.code });
+    case 'fix-failed': return t('The fix "{fix}" was applied and the result did not change. DLSS 5 is not currently available for this game with what this app can do on its own. Report it with Report issue on the card (it sends the logs), or ask the AI.', v);
+    default: return t('No rule covers this run ({verdict}). Report it with Report issue on the card (it sends the logs), or ask the AI.', { verdict: v.verdict || diag.code });
   }
 }
 
@@ -1568,7 +1559,7 @@ function helpSteps(diag) {
   const v = diag.vars || {};
   const launch = t('Launch the game and check again');
   const fixIt = (what) => [what, launch];
-  const report = [t('Save the bundle (More…)'), t('Report it on GitHub (More…)')];
+  const report = [t('Still not working? Press Report issue on the card -- it sends the logs')];
   switch (diag.code) {
     case 'driver-outdated': return [v.min ? t('Update the NVIDIA driver ({min} or newer)', v) : t('Update the NVIDIA driver'), t('Restart the PC'), launch];
     case 'dfc-here': return [t('Launch the game'), t('Press Home and open the Deep Fried Chicken tab')];
@@ -1582,12 +1573,12 @@ function helpSteps(diag) {
     case 'nr-model-crash': return [
       t("Switch the game to Direct3D 11 if it has that option"),
       ...(v.smoothMotion ? [t('Turn off NVIDIA Smooth Motion for this game')] : []),
-      t('Still crashing? Save the bundle and report it'),
+      t('Still crashing? Press Report issue on the card'),
     ];
     case 'foreign': return fixIt(t('Press Fix it to remove {tool}', v));
     case 'foreign-optiscaler': return [t('Delete {file} from the game folder', v), t('Press Install')];
     case 'asi-optiscaler': return [t('Remove {file} from the ASI loader', v), t('Press Install')];
-    case 'asi-loader-blind': return [t('Check the .asi plugins in the game folder: {files}', v), t('Save the bundle or ask the AI')];
+    case 'asi-loader-blind': return [t('Check the .asi plugins in the game folder: {files}', v), t('Or press Report issue on the card, or ask the AI')];
     case 'feeder-misdeployed': case 'ue-crash-feeder': return fixIt(t('Press Fix it (removes the Feeder)'));
     case 'luma-known-bad': case 'ue-crash-luma': return fixIt(t('Press Fix it (removes Luma UE)'));
     case 'optiscaler-no-native-dlss': return [t('Turn DLSS or DLAA on in the game, if it has one', v), t('If it has none, delete {file} from the game folder', v), t('Press Install')];
@@ -1631,7 +1622,7 @@ function helpSteps(diag) {
     case 'vulkan-layer-blacklisted': return [t('Add {arg} to the launch arguments', { arg: '+r_allowBlackListedLayers 1' }), t('Steam: Properties > Launch Options. A shortcut: after the exe path'), launch];
     case 'host32-opti-dll-gone': return [t('Windows Security > Exclusions: add this game\'s folder'), t('Press Install here again'), t('Protection history may also offer Allow -- but may show nothing')];
     case 'host32-exe-gone': return [t('Windows Security > Exclusions: add this game\'s folder'), t('Press Install here again'), t('Protection history may also offer Allow -- but may show nothing')];
-    case 'feed-host-gone': return [t('Open host64\\dlss5-feed-host.log beside the game -- it names the reason'), t('Save the bundle to share: it carries that log')];
+    case 'feed-host-gone': return [t('Open host64\\dlss5-feed-host.log beside the game -- it names the reason'), t('Report issue on the card sends that log too')];
     case 'feed-host-startup': return fixIt(t('Press Install (rebuilds the helper and the add-on together)'));
     case 'opti-proxy-name': return fixIt(t('Press Fix it (moves OptiScaler to {to})', v));
     case 'opti-not-routed': return fixIt(t('Press Fix it (restores the NGX redirect keys)'));
@@ -1643,7 +1634,7 @@ function helpSteps(diag) {
     case 'dxvk-crash-native': return [t('Press Fix it to take DXVK back out'), launch];
     case 'dxvk-layer-missing': return [t('Press Fix it and allow the administrator prompt'), launch];
     case 'dxvk-reshade-ini-missing': return [t('Press Install on the card'), launch];
-    case 'dxvk-two-reshades': return [t('Switch the game back off DXVK (More…), or move the extra ReShade out'), launch];
+    case 'dxvk-two-reshades': return [t('Switch the game back off DXVK (the card\'s ⋯ menu), or move the extra ReShade out'), launch];
     case 'dxvk-addon-not-loaded': return [t('In the game, press Home and check ReShade\'s Add-ons tab for DLSS 5 Feed'), t('Read ReShade.log in the game folder'), ...report];
     case 'dxvk-needs-run': return [t('Launch the game'), t('Play a minute of actual gameplay, then quit'), t('Come back here')];
     case 'dxvk-panel-fullscreen': return [t('Set the game to borderless or windowed in its own options'), t('Restart it and press Insert')];
@@ -1904,8 +1895,6 @@ function fgSuggestionText(fg) {
   }
 }
 
-function stopHelpPoll() { if (helpPoll) { clearInterval(helpPoll); helpPoll = null; } $('#help-waiting').classList.add('hidden'); }
-
 async function openHelp(game) {
   helpGame = game;
   helpFixesTried = helpTriedFor(game);
@@ -1919,14 +1908,10 @@ async function openHelp(game) {
   $('#help-ai-out').classList.add('hidden');
   $('#help-ai-out').textContent = '';
   helpModal.classList.remove('hidden');
-  const diag = await refreshHelp();
-  // Closed, or reopened on another game, while that ran: what follows belongs to that one now.
-  if (helpGame !== game) return;
-  helpLastRunAt = diag && diag.run && diag.run.at ? diag.run.at : null;
-
+  await refreshHelp();
 }
 
-function closeHelp() { stopHelpPoll(); helpModal.classList.add('hidden'); helpGame = null; }
+function closeHelp() { helpModal.classList.add('hidden'); helpGame = null; }
 
 $('#help-close').addEventListener('click', closeHelp);
 helpModal.addEventListener('click', (e) => { if (e.target === helpModal) closeHelp(); });
@@ -2163,10 +2148,9 @@ $('#help-ai').addEventListener('click', async () => {
   refreshHelp();
 });
 
-// ── Checks before Install, Analyse game, Verify install ───────────────────────
-// One dialog for all three (src/preflight.js, src/probe.js, src/verify.js). Analyse and Verify start
-// the game and close it again; nothing here focuses the game or sends it input, and the progress is
-// written into this window whether it is in front or not.
+// ── Checks before Install ─────────────────────────────────────────────────────
+// src/preflight.js's findings, shown before Install goes ahead. (Analyse game and Verify install used
+// the same dialog; both are gone, 2026-09-25.)
 const checksModal = $('#checks-modal');
 let checksResolve = null;
 let checksExe = null;
@@ -2249,114 +2233,6 @@ async function preflightBeforeInstall(game) {
   for (const c of res.checks) addCheckItem(c.severity, t(c.text, c.vars || {}), { fix: c.fix, exePath: game.exePath });
   if (!blocked) showChecksGo(t('Install anyway'), () => closeChecks(true));
   return new Promise((resolve) => { checksResolve = resolve; });
-}
-
-const PROBE_API_NAMES = { dx8: 'DirectX 8', dx9: 'DirectX 9', dx10: 'DirectX 10', dx11: 'DirectX 11', dx12: 'DirectX 12', vulkan: 'Vulkan', opengl: 'OpenGL' };
-const baseName = (p) => String(p || '').split(/[\\/]/).pop();
-
-window.api.onProbeProgress((p) => {
-  if (!p || p.exePath !== checksExe) return;
-  const status = $('#checks-status');
-  if (p.phase === 'launching') status.textContent = p.method === 'etw' ? t('Starting the game…') : t('Starting the game (watching without administrator rights)…');
-  else if (p.phase === 'watching') status.textContent = t('Watching: {elapsed} of {seconds} s. Leave the game alone; it is closed by itself.', { elapsed: p.elapsed, seconds: p.seconds });
-  else if (p.phase === 'closing') status.textContent = t('Closing the game…');
-  else if (p.phase === 'reading') status.textContent = t('Reading what was seen…');
-});
-
-function analyseGame(game) {
-  openChecks({
-    exePath: game.exePath,
-    title: t('Analyse game -- {name}', { name: game.name }),
-    intro: t('Starts the game once, as it is, for about 25 seconds and writes down what it really loads: the graphics API, which DLLs from where, and which process hands off to which. Nothing is installed or changed, and the game is closed at the end. Leave it alone while it runs.'),
-  });
-  showChecksGo(t('Start'), async () => {
-    $('#checks-go').classList.add('hidden');
-    const res = await window.api.probeGame(game.exePath, game.launcher);
-    if (checksExe !== game.exePath) return;
-    const status = $('#checks-status');
-    if (!res.ok) {
-      status.textContent = res.cancelled ? t('Not launched.') : t('Analyse game failed: {error}', { error: res.error });
-      return;
-    }
-    const s = res.summary || {};
-    if (s.api) {
-      addCheckItem('info', t('Graphics API: {api} ({evidence}).', { api: PROBE_API_NAMES[s.api] || s.api, evidence: s.apiEvidence || '' }));
-    } else {
-      addCheckItem('warn', t('No graphics API was seen. The game may not have reached its renderer in time -- a launcher waiting for a sign-in looks like this.'));
-    }
-    if (s.handoff && s.realExe) addCheckItem('info', t('The launch hands off to {exe}: that is the process that really runs the game.', { exe: baseName(s.realExe) }));
-    if ((s.ignoredProxies || []).length) addCheckItem('warn', t('{files} sits beside the exe, but the game loaded Windows\' own copy instead.', { files: s.ignoredProxies.join(', ') }));
-    if (res.proxyHint) addCheckItem('info', t('DLSS 5 goes in as {name} for this game.', { name: res.proxyHint }));
-    if ((s.antiCheat || []).length) addCheckItem('warn', t('Anti-cheat seen: {list}.', { list: s.antiCheat.join(', ') }));
-    if ((s.overlays || []).length) addCheckItem('warn', t('Overlays seen: {list}.', { list: s.overlays.join(', ') }));
-    if (s.method === 'poll') addCheckItem('info', t('Watched without administrator rights, by listing modules once a second: a DLL that loads and unloads quickly, and most of a 32-bit game\'s modules, can be missed.'));
-    status.textContent = t('Done. The card uses what was seen from now on, until the game is updated.');
-    renderGrid();
-  });
-}
-
-window.api.onVerifyProgress((p) => {
-  if (!p || p.exePath !== checksExe) return;
-  const status = $('#checks-status');
-  if (p.phase === 'waiting') status.textContent = t('Waiting for the game to start…');
-  else if (p.phase === 'running') status.textContent = t('Running: {elapsed} of {seconds} s. Leave the game alone; it is closed by itself.', { elapsed: p.elapsed, seconds: p.seconds });
-  else if (p.phase === 'closing') status.textContent = t('Closing the game…');
-  else if (p.phase === 'reading') status.textContent = t('Reading the logs…');
-});
-
-function verifyInstall(game) {
-  openChecks({
-    exePath: game.exePath,
-    title: t('Verify install -- {name}', { name: game.name }),
-    intro: t('Starts the game for about 30 seconds, reads its logs the way Game Help does, and closes it again. Leave the game alone while it runs.'),
-  });
-  showChecksGo(t('Start'), async () => {
-    $('#checks-go').classList.add('hidden');
-    const res = await window.api.verifyInstall(game.exePath, game.launcher, game.detectedPath || null);
-    if (checksExe !== game.exePath) return;
-    const status = $('#checks-status');
-    if (!res.ok) {
-      status.textContent = res.cancelled ? t('Not launched.') : t('Verify install failed: {error}', { error: res.error });
-      return;
-    }
-    const v = res.verdict;
-    status.textContent = '';
-    switch (v.code) {
-      case 'ran':
-        addCheckItem('ok', t('DLSS 5 ran: {frames} frames in the log.', { frames: v.frames }));
-        break;
-      case 'not-started':
-        addCheckItem('warn', t('The game never appeared within a minute. If a launcher is waiting for you, finish there and verify again.'));
-        break;
-      case 'exited':
-        addCheckItem('warn', t('The game closed itself during the check -- often a launcher or a first-run prompt. Start it once by hand, then verify again.'));
-        break;
-      case 'no-log':
-        addCheckItem('warn', t('The game ran but wrote no new log, so OptiScaler may not have loaded. Game Help can say why.'));
-        showChecksGo(t('Game Help'), () => { closeChecks(); openHelp(game); });
-        break;
-      case 'diagnosis':
-        addCheckItem('warn', v.diag ? helpWords(v.diag) : t('The game ran, and the logs say something is off.'));
-        showChecksGo(t('Game Help'), () => { closeChecks(); openHelp(game); });
-        break;
-      case 'crash':
-        // Offered, not done: the crash can have a cause that has nothing to do with the install, and
-        // the files may be wanted for a report.
-        addCheckItem('block', t('The game crashed during the check.') + (v.diag ? ' ' + helpWords(v.diag) : ''));
-        showChecksGo(t('Uninstall DLSS 5'), async () => {
-          if (!window.confirm(t('Remove everything this app put in the game folder?'))) return;
-          $('#checks-go').disabled = true;
-          const un = await window.api.runUninstall(game.exePath);
-          if (un.ok) await removeLosslessProfile(game);
-          toast(un.ok ? describeUninstall(un) : t("Couldn't remove OptiScaler: {error}", { error: un.error }));
-          closeChecks();
-          renderGrid();
-        }, { danger: true });
-        break;
-      default:
-        addCheckItem('warn', t('The game ran, and the logs say something is off.'));
-    }
-  });
 }
 
 // Resolves true only when what was asked for is now in the folder; every refusal, cancel and failure
@@ -2768,16 +2644,6 @@ $('#pdplugin-browse').addEventListener('click', async () => {
 // Says what was actually done rather than what was started. The old flow could only report that a
 // terminal had opened, which is why the badge and the folder could disagree.
 // One sentence per runlog.js verdict, with the numbers that matter.
-// The same run as describeRun, with the words taken out: what the card shows beside the route,
-// where the chip has already said it worked and only the numbers add anything.
-function runEvidenceShort(run) {
-  if (!run || !run.ran || run.verdict !== 'nr-ran') return '';
-  const parts = [t('{count} passes', { count: run.nrFrames || run.nrDispatch })];
-  if (run.fps) parts.push(t('{fps} fps', { fps: run.fps }));
-  if (run.runtimeApi) parts.push(run.runtimeApi.toUpperCase());
-  return parts.join(' \u00b7 ');
-}
-
 function describeRun(run) {
   if (!run || !run.ran) return t('not run yet');
   const api = run.runtimeApi ? run.runtimeApi.toUpperCase() : null;
@@ -3321,14 +3187,6 @@ $('#btn-amdnr-run-setup').addEventListener('click', async () => {
 // of dgVoodoo2 on a DirectX 8/9 game, and instead of the game's own Direct3D on a 32-bit DirectX
 // 10/11 game (legacy.js dxvkReplacesNative, 2026-09-18) -- 'native' marks the second, whose other
 // side is "Direct3D 11 (native)" rather than dgVoodoo2.
-// A translation layer's display name (route.layerChoice, catalog setup.via).
-function layerName(via) {
-  if (via === 'dxvk') return t('DXVK (Vulkan)');
-  if (via === 'dgvoodoo') return t('dgVoodoo2 (Direct3D 11)');
-  if (via === 'native') return t('native Direct3D');
-  return String(via || '');
-}
-
 function layerSwapFor(route) {
   if (!(route && route.legacy && route.legacy.supported)) return null;
   if (route.consumerHere === 'dfc') return null;

@@ -115,6 +115,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 32px;
   padding: 14px 24px;
   background: var(--bg-elev);
   border-bottom: 1px solid var(--border);
@@ -133,12 +134,6 @@ body {
 .brand-name { font-weight: 600; font-size: 16px; }
 
 .topbar-actions { display: flex; gap: 10px; }
-
-/* Grid filter and the DLSS 5 at-start default, between the brand and the buttons. They wrap under
-   the brand on a narrow window rather than squeezing the buttons. */
-.topbar-filters { display: flex; gap: 10px; flex: 1 1 auto; justify-content: center; margin: 0 16px; min-width: 0; flex-wrap: wrap; }
-.topbar-select { flex: 0 1 auto; max-width: 260px; }
-.grid-filter-empty { grid-column: 1 / -1; color: var(--text-dim); padding: 24px 4px; margin: 0; }
 
 .btn {
   border: 1px solid var(--border);
@@ -378,27 +373,6 @@ body {
    next to a green "Working", not as broken next to a red "Exe missing". */
 .badge-attention { background: rgba(217,164,65,0.16); color: #d9a441; border: 1px solid rgba(217,164,65,0.45); }
 
-.engine-badge {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 3px 9px;
-  border-radius: 999px;
-  letter-spacing: 0.3px;
-}
-.engine-badge-known { background: rgba(var(--accent-rgb),0.18); color: var(--accent-text); border: 1px solid rgba(var(--accent-rgb),0.4); }
-.engine-badge-unsupported { background: rgba(var(--danger-rgb),0.16); color: var(--danger); border: 1px solid rgba(var(--danger-rgb),0.4); }
-.engine-badge-unknown { background: rgba(255,255,255,0.08); color: var(--text-dim); border: 1px solid rgba(255,255,255,0.15); }
-.api-badge { font-weight: 600; opacity: 0.9; }
-/* The route tag: what this game should get, and whether it is all there yet. */
-.route-badge-todo { background: rgba(88,166,255,0.16); color: #8ec5ff; border: 1px solid rgba(88,166,255,0.45); }
-.route-badge-done { background: rgba(var(--accent-rgb),0.18); color: var(--accent-text); border: 1px solid rgba(var(--accent-rgb),0.4); }
-.route-badge-unsupported { background: rgba(var(--danger-rgb),0.16); color: var(--danger); border: 1px solid rgba(var(--danger-rgb),0.4); }
-.route-badge-unknown { background: rgba(255,255,255,0.08); color: var(--text-dim); border: 1px solid rgba(255,255,255,0.15); }
-/* Three chips (engine, API, route) no longer fit one card line; the route tag is the one that
-   must never be the part clipped off. */
-.card-path.card-recommend { white-space: normal; overflow: visible; text-overflow: clip; line-height: 2; }
-
 .card-body {
   padding: 12px;
   display: flex;
@@ -415,39 +389,6 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.card-path {
-  font-size: 11px;
-  color: var(--text-dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* A run that worked, said beside the route it proves rather than on a line of its own.
-   nowrap so it moves to the next line whole rather than breaking inside itself: unwrapped, the
-   card split it as "1240 passes .." / "71 fps .. DX12", and shortening the text only moved the
-   break. It cannot overflow -- measured in the card's real 274px of inner width, the longest run
-   this can describe (999999 passes . 240 fps . VULKAN) is 190px. */
-.card-evidence { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
-
-/* The one row. Whatever the card has to say -- a fix waiting, an unfinished route, the 32-bit
-   key sequence -- says it here, in one of two tones. It wraps: these sentences are the point of
-   the card, and an ellipsed one tells nobody anything. */
-.card-problem {
-  font-size: 11.5px;
-  line-height: 1.4;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--border);
-  color: var(--text-dim);
-  white-space: normal;
-}
-.card-problem-bad {
-  background: rgba(217,164,65,0.10);
-  border-color: rgba(217,164,65,0.28);
-  color: #d9a441;
-}
-
 /* The overflow. Everything that is not the one next step, stacked under the actions row. */
 /* Drawn OVER the card, from its top to just above the buttons, rather than in its flow: in the flow it
    made the card taller, and with every row the same height (grid-auto-rows) every card in the grid
@@ -654,14 +595,11 @@ select:focus { outline: 1px solid var(--accent); }
 /* The add-ons list needs a third level between ok and bad: "this will work, and here is what
    to watch for" -- a name-only RenoDX match, or RenoDX beside the neural pass. */
 .status-warn { color: var(--warn); }
-/* A route's short explanation (route-explain.js): on the card folded under "How this route works",
-   in Edit under the route line and the translation layer select. */
+/* A route's short explanation (route-explain.js), in Edit under the route line and the translation
+   layer select. */
 .route-explain { font-size: 12px; line-height: 1.45; color: var(--text-dim); margin-top: 6px; }
 .route-explain-row + .route-explain-row { margin-top: 4px; }
 .route-explain-row strong { color: var(--text); font-weight: 600; }
-.card-explain { font-size: 12px; }
-.card-explain > summary { cursor: pointer; color: var(--text-dim); }
-.card-explain > .route-explain { margin-top: 4px; }
 
 .modal-wide { width: 620px; }
 
@@ -681,7 +619,6 @@ body:not(.show-advanced) #game-modal .advanced-only { display: none !important; 
 .btn-big { padding: 10px 18px; font-size: 14px; }
 .help-primary { justify-content: flex-start; margin-top: 16px; }
 .help-primary .btn-big { flex: 1; }
-.help-more-row { justify-content: flex-start; margin-top: 8px; }
 .help-status { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); margin-bottom: 6px; }
 .help-body { font-size: 12.5px; line-height: 1.5; margin: 6px 0 8px 0; white-space: pre-wrap; color: var(--text-dim); }
 .help-headline { font-size: 17px; font-weight: 600; line-height: 1.35; margin: 0 0 10px 0; }
@@ -692,7 +629,6 @@ body:not(.show-advanced) #game-modal .advanced-only { display: none !important; 
 /* Edit and Settings explanations: one line until clicked (users found the paragraphs a wall of text). */
 .field-hint { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
 .field-hint.open { display: block; overflow: visible; }
-.help-send-status { margin: 10px 0 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font-size: 13px; line-height: 1.5; }
 .help-send-code { display: inline-block; margin-left: 6px; font-size: 18px; letter-spacing: 0.12em; font-family: Consolas, monospace; user-select: all; }
 .help-ai-out { margin: 12px 0 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font: 12px/1.5 inherit; font-family: inherit; white-space: pre-wrap; max-height: 260px; overflow-y: auto; }
 .report-preview-label { margin: 12px 0 4px; font-size: 12px; font-weight: 600; color: var(--text-dim, inherit); }
@@ -752,7 +688,6 @@ body:not(.show-advanced) #game-modal .advanced-only { display: none !important; 
   border-radius: 6px;
   font-size: 12px;
 }
-.scan-empty { color: var(--text-dim); font-size: 12.5px; padding: 8px 2px; }
 
 .toast {
   position: fixed;
@@ -780,9 +715,6 @@ html[lang="ko"] { word-break: keep-all; }
 .pdplugin-candidate { align-items: center; margin-top: 6px; }
 .pdplugin-candidate-name { flex: 1; min-width: 0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Emulators, 32-bit games, DirectX 8/9: routes not yet confirmed on a live game (route.experimental). */
-.engine-badge-experimental { background: rgba(245,166,35,0.16); color: #f5b041; border: 1px solid rgba(245,166,35,0.45); }
-
 /* The DLSS 5 settings form, generated from the field table in dlssnr.js. A row is label, control,
    readout and -- for numbers -- a Default button, because auto is a state rather than a position
    on the track. A row whose dependency is not met is dimmed rather than hidden, so a setting never
@@ -793,36 +725,7 @@ html[lang="ko"] { word-break: keep-all; }
 .dlssnr-readout { flex: 0 0 88px; font-size: 11px; color: var(--text-dim); text-align: right; }
 .dlssnr-inactive { opacity: 0.45; }
 
-/* A game that is up right now. The dot pulses because the point of the line is that something is
-   happening this second: the settings below reach the running game as they are changed, which is
-   not a thing anyone would think to try unless the card said so. */
-/* Without the dot the line is still a state, just not a live one -- a running game that is not
-   on the 32-bit route gets the plain colour. */
-.card-live:has(.card-live-dot.hidden) { color: var(--text-dim); }
-.card-live {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  line-height: 1.3;
-  color: var(--accent-text);
-}
-.card-live-dot {
-  width: 7px;
-  height: 7px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: card-live-pulse 2s ease-in-out infinite;
-}
-@keyframes card-live-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.45); }
-  50% { opacity: 0.45; box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .card-live-dot { animation: none; }
-}
-/* Checks before Install, Analyse game, Verify install (one dialog). */
+/* Checks before Install. */
 .checks-intro { font-size: 13px; line-height: 1.5; color: var(--text-dim); margin: 0 0 10px 0; }
 .checks-list { list-style: none; margin: 0 0 10px 0; padding: 0; }
 .check-item { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; padding: 8px 10px; margin: 0 0 6px 0; border-left: 3px solid var(--border); font-size: 13.5px; line-height: 1.5; }

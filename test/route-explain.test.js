@@ -101,7 +101,9 @@ test('every route with OptiScaler in the game offers the break-away panel, and t
 });
 
 test('every locale translates every route explanation, keeping its placeholders', () => {
-  const keys = ['How this route works', 'What it does', 'Limits', 'Panel', ...explain.allStrings()];
+  // The card's folded 'How this route works' block and its 'What it does' / 'Limits' headings went with
+  // the card's route text (2026-09-25); 'Panel' still heads the pop-out line.
+  const keys = ['Panel', ...explain.allStrings()];
   const dir = path.join(REPO, 'src', 'renderer', 'locales');
   const norm = (s) => String(s).replace(/\s+/g, ' ').trim();
   for (const file of fs.readdirSync(dir).filter((f) => f.endsWith('.js'))) {
