@@ -328,8 +328,12 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   const nrDispatch = count(opti, /DlssNr_(?:Dx12|Vk)::Dispatch DLSS-NR (?:running|composition)|DLSS-NR Vulkan: running natively at/g);
   const nrComposition = count(opti, /DLSS-NR composition:/g);
   // "CreateFeature1 ... Creating new DLSS upscaler" is how the current engine words it; the older
-  // "CreateFeature ... Creating new DLSS feature" stays for logs from older engines.
-  const dlssCreated = count(opti, /NVSDK_NGX_(?:D3D1[12]|VULKAN)_CreateFeature1? Creating new DLSS (?:feature|upscaler)|TryCreateOptiFeature Creating OptiScaler feature/g);
+  // "CreateFeature ... Creating new DLSS feature" stays for logs from older engines. The name in the
+  // middle is the upscaler's DISPLAY name ("Creating new {UpscalerDisplayName} upscaler"), so a game
+  // OptiScaler upscales with XeSS or FSR -- the Vulkan and D3D11 defaults -- logs "Creating new XeSS
+  // upscaler" or "Creating new FSR 3.1.4 upscaler", and matching only "DLSS" read those runs as
+  // init-no-feature. Any short name on that one line counts; the line itself is the proof.
+  const dlssCreated = count(opti, /NVSDK_NGX_(?:D3D1[12]|VULKAN)_CreateFeature1? Creating new [^\r\n]{1,48}? (?:feature|upscaler)\b|TryCreateOptiFeature Creating OptiScaler feature/g);
   const dlssInit = /NVSDK_NGX_(?:D3D1[12]|VULKAN)_Init/.test(opti);
   const d3d11NativeFeature = /DLSSFeatureDx11::InitInternal/.test(opti);
   // OptiScaler's own load-time check, one line into the log: no nvngx_dlss.dll beside the exe, so
@@ -717,7 +721,10 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = 
     add('verdict', run.verdict + (run.detail ? ` (${run.detail})` : ''));
     add('at', run.at);
     add('runtime api', run.runtimeApi ? `${run.runtimeApi} -- what OptiScaler actually saw in the process` : null);
-    add('neural passes', run.nrFrames || run.nrDispatch || null);
+    // A number only when the engine logged one (its heartbeat). nrDispatch counts LINES, and an older
+    // Vulkan engine writes a single "running natively" line and no heartbeat, which read here as "1"
+    // pass for a ten-minute run. That the pass ran is still worth saying; a count it does not have is not.
+    add('neural passes', run.nrFrames || (run.nrDispatch ? 'ran (this engine logs no frame count)' : null));
     add('feeder frames', run.feedFrames || null);
     add('fps', run.fps);
     // What the neural pass costs (nrTiming, the engine's own heartbeat and cost lines), and the frame
