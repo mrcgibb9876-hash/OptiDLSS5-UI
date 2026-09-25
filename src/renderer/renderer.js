@@ -485,6 +485,8 @@ async function renderGrid() {
           <button class="btn btn-ghost btn-card-menu" aria-label="${escapeHtml(t('More actions'))}" aria-expanded="false">&#8943;</button>
         </div>
         <div class="card-menu hidden">
+          <button class="btn btn-ghost btn-menu-addon btn-menu-pacing" data-kind="pacing">${escapeHtml(t('Frame pacing'))}</button>
+          <button class="btn btn-ghost btn-menu-addon btn-menu-hdr" data-kind="hdr">HDR (RenoDX)</button>
           <button class="btn btn-ghost btn-edit">${escapeHtml(t('Settings'))}</button>
           <button class="btn btn-ghost btn-swap-layer hidden"></button>
           <button class="btn btn-ghost btn-neural-pass hidden"></button>
@@ -686,6 +688,8 @@ async function renderGrid() {
       e.stopPropagation();
       const open = menu.classList.toggle('hidden');
       menuBtn.setAttribute('aria-expanded', open ? 'false' : 'true');
+      // Asked when the menu opens, not on every render: it walks the folder and RenoDX's list.
+      if (!open) refreshAddonMenu(card, game);
       for (const other of grid.querySelectorAll('.card-menu')) if (other !== menu) other.classList.add('hidden');
     });
     menu.addEventListener('click', () => { menu.classList.add('hidden'); menuBtn.setAttribute('aria-expanded', 'false'); });
@@ -699,6 +703,7 @@ async function renderGrid() {
     card.querySelector('.btn-edit').addEventListener('click', () => openGameModal(game));
     card.querySelector('.btn-mv-provider').addEventListener('click', () => openGameModal(game, { focus: 'legacy-mv' }));
     card.querySelector('.btn-addons').addEventListener('click', () => openAddonsModal(game));
+    for (const b of card.querySelectorAll('.btn-menu-addon')) b.addEventListener('click', () => toggleAddonFromMenu(card, game, b.dataset.kind));
     card.querySelector('.btn-remove').addEventListener('click', () => removeGame(game));
     card.querySelector('.btn-flip-cancel').addEventListener('click', () => card.classList.remove('flipped'));
     card.querySelector('.btn-flip-confirm').addEventListener('click', () => {
@@ -1087,6 +1092,69 @@ function flipToConfirm(card, { title, detail, onConfirm, confirmLabel = t('Remov
   confirmBtn.classList.toggle('btn-primary', !danger);
   card._onFlipConfirm = onConfirm;
   card.classList.add('flipped');
+}
+
+// ── Frame pacing and RenoDX, first in the ⋯ menu ─────────────────────────────────────────────────
+//
+// They lived in Settings and in the add-ons picker, and were hard to find (2026-09-25). Here each is one
+// line saying whether it is on, and one click to change that. The state and the reasons come from
+// main.js panel:addonToggles -- the same answer the pop-out's switches use -- and the install/remove are
+// the same IPC the rest of the app uses, so there is still one implementation of each.
+const addonMenuState = new Map(); // exePath -> panel:addonToggles result
+
+function addonMenuReason(kind, code) {
+  const name = kind === 'pacing' ? t('Frame pacing') : 'RenoDX';
+  switch (code) {
+    case 'bitness-32': return t('{name} needs a 64-bit game. This one is 32-bit.', { name });
+    case 'vulkan-layer': return t('{name} on a Vulkan game needs ReShade’s own setup run for this game first.', { name });
+    case 'reshade-dlss-crash': return t('{name} needs a newer DLSS 5 engine on this game: update DLSS 5 here first.', { name });
+    case 'optifg-armed': return t('{name} can’t run beside frame generation on this game: switch frame generation off in Edit first, or to XeFG once DLSS 5 here is up to date.', { name });
+    case 'no-mod': return t('RenoDX has no mod for this game or its engine yet.');
+    case 'no-index': return t('Could not reach RenoDX’s list of mods. Check the connection and open the panel again.');
+    default: return '';
+  }
+}
+
+function paintAddonMenu(card) {
+  const st = addonMenuState.get(card._exePath);
+  for (const b of card.querySelectorAll('.btn-menu-addon')) {
+    const kind = b.dataset.kind;
+    const name = kind === 'pacing' ? t('Frame pacing') : 'HDR (RenoDX)';
+    const s = st && st.ok ? st[kind] : null;
+    b.classList.toggle('menu-addon-on', !!(s && s.installed));
+    if (!s) { b.textContent = name; b.disabled = !!(st && !st.ok); b.title = ''; continue; }
+    const blocked = !s.installed && !!s.blocker;
+    b.disabled = blocked;
+    b.textContent = s.installed ? t('{name}: On — turn off', { name }) : t('{name}: Off — turn on', { name });
+    b.title = blocked ? addonMenuReason(kind, s.blocker) : '';
+  }
+}
+
+async function refreshAddonMenu(card, game) {
+  paintAddonMenu(card);
+  try { addonMenuState.set(game.exePath, await window.api.panelAddonToggles(game.exePath)); } catch {}
+  paintAddonMenu(card);
+}
+
+async function toggleAddonFromMenu(card, game, kind) {
+  const st = addonMenuState.get(game.exePath);
+  const s = st && st.ok ? st[kind] : null;
+  if (!s) return;
+  if (!s.installed && s.blocker) { toast(addonMenuReason(kind, s.blocker)); return; }
+  const name = kind === 'pacing' ? t('Frame pacing') : 'RenoDX';
+  toast(s.installed ? t('Removing…') : t('Fetching and placing…'));
+  const res = kind === 'pacing'
+    ? (s.installed ? await window.api.relimiterRemove(game.exePath) : await window.api.relimiterInstall(game.exePath))
+    : (s.installed ? await window.api.addonsRemove(game.exePath, 'renodx') : await window.api.addonsInstall(game.exePath, 'renodx'));
+  if (!res || !res.ok) {
+    toast(t('Could not change {name}: {error}', { name, error: (res && addonMenuReason(kind, res.code)) || (res && res.error) || t('unknown') }));
+  } else {
+    toast(s.installed
+      ? t('{name} is off. The game drops it the next time it starts.', { name })
+      : t('{name} is on. Start the game to use it; its settings are in the DLSS 5 panel and the pop-out.', { name }));
+  }
+  addonMenuState.delete(game.exePath);
+  await refreshAddonMenu(card, game);
 }
 
 // ── A game DLSS 5 did not work on: the card turns round and says what to try next ────────────────

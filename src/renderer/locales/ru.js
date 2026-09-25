@@ -1796,4 +1796,14 @@ window.I18N.register("ru", {
     "Выключено. Игра перестанет его загружать со следующего запуска.",
   "Turned on. Start the game again to use it; its settings then appear below.":
     "Включено. Перезапустите игру, чтобы им пользоваться; его настройки появятся ниже.",
+  "{name}: On — turn off":
+    "{name}: вкл. — выключить",
+  "{name}: Off — turn on":
+    "{name}: выкл. — включить",
+  "Could not change {name}: {error}":
+    "Не удалось изменить {name}: {error}",
+  "{name} is off. The game drops it the next time it starts.":
+    "{name} выключен. Игра перестанет его загружать со следующего запуска.",
+  "{name} is on. Start the game to use it; its settings are in the DLSS 5 panel and the pop-out.":
+    "{name} включён. Запустите игру, чтобы им пользоваться; настройки — в панели DLSS 5 и во всплывающем окне.",
 });

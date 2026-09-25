@@ -1796,4 +1796,14 @@ window.I18N.register("de", {
     "Ausgeschaltet. Das Spiel lässt es beim nächsten Start weg.",
   "Turned on. Start the game again to use it; its settings then appear below.":
     "Eingeschaltet. Starte das Spiel neu, um es zu nutzen; seine Einstellungen erscheinen dann unten.",
+  "{name}: On — turn off":
+    "{name}: An — ausschalten",
+  "{name}: Off — turn on":
+    "{name}: Aus — einschalten",
+  "Could not change {name}: {error}":
+    "{name} konnte nicht geändert werden: {error}",
+  "{name} is off. The game drops it the next time it starts.":
+    "{name} ist aus. Das Spiel lässt es beim nächsten Start weg.",
+  "{name} is on. Start the game to use it; its settings are in the DLSS 5 panel and the pop-out.":
+    "{name} ist an. Starte das Spiel, um es zu nutzen; die Einstellungen findest du im DLSS-5-Panel und im Pop-out.",
 });

@@ -1796,4 +1796,14 @@ window.I18N.register("ko", {
     "껐습니다. 다음 게임 시작부터 빠집니다.",
   "Turned on. Start the game again to use it; its settings then appear below.":
     "켰습니다. 게임을 다시 시작해 사용하세요. 그러면 아래에 설정이 나타납니다.",
+  "{name}: On — turn off":
+    "{name}: 켜짐 — 끄기",
+  "{name}: Off — turn on":
+    "{name}: 꺼짐 — 켜기",
+  "Could not change {name}: {error}":
+    "{name}을(를) 바꾸지 못했습니다: {error}",
+  "{name} is off. The game drops it the next time it starts.":
+    "{name}이(가) 꺼졌습니다. 다음 게임 시작부터 빠집니다.",
+  "{name} is on. Start the game to use it; its settings are in the DLSS 5 panel and the pop-out.":
+    "{name}이(가) 켜졌습니다. 게임을 시작해 사용하세요. 설정은 DLSS 5 패널과 팝아웃에 있습니다.",
 });

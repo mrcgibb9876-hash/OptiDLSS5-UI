@@ -1797,4 +1797,14 @@ window.I18N.register('pt-BR', {
     "Desligado. O jogo deixa de usar na próxima vez que abrir.",
   "Turned on. Start the game again to use it; its settings then appear below.":
     "Ligado. Abra o jogo de novo para usar; as configurações aparecem abaixo.",
+  "{name}: On — turn off":
+    "{name}: Ligado — desligar",
+  "{name}: Off — turn on":
+    "{name}: Desligado — ligar",
+  "Could not change {name}: {error}":
+    "Não foi possível alterar {name}: {error}",
+  "{name} is off. The game drops it the next time it starts.":
+    "{name} está desligado. O jogo deixa de usar na próxima vez que abrir.",
+  "{name} is on. Start the game to use it; its settings are in the DLSS 5 panel and the pop-out.":
+    "{name} está ligado. Abra o jogo para usar; as configurações ficam no painel do DLSS 5 e na janela destacada.",
 });

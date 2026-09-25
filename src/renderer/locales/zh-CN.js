@@ -1796,4 +1796,14 @@ window.I18N.register("zh-CN", {
     "已关闭。下次启动游戏时不再加载。",
   "Turned on. Start the game again to use it; its settings then appear below.":
     "已开启。请重新启动游戏来使用；其设置随后会显示在下方。",
+  "{name}: On — turn off":
+    "{name}：已开启 — 关闭",
+  "{name}: Off — turn on":
+    "{name}：已关闭 — 开启",
+  "Could not change {name}: {error}":
+    "无法更改 {name}：{error}",
+  "{name} is off. The game drops it the next time it starts.":
+    "{name} 已关闭。下次启动游戏时不再加载。",
+  "{name} is on. Start the game to use it; its settings are in the DLSS 5 panel and the pop-out.":
+    "{name} 已开启。启动游戏即可使用；设置在 DLSS 5 面板和弹出面板中。",
 });

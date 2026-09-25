@@ -1796,4 +1796,14 @@ window.I18N.register("es", {
     "Desactivado. El juego lo deja de usar la próxima vez que se inicie.",
   "Turned on. Start the game again to use it; its settings then appear below.":
     "Activado. Vuelve a abrir el juego para usarlo; sus ajustes aparecerán abajo.",
+  "{name}: On — turn off":
+    "{name}: Activado — desactivar",
+  "{name}: Off — turn on":
+    "{name}: Desactivado — activar",
+  "Could not change {name}: {error}":
+    "No se pudo cambiar {name}: {error}",
+  "{name} is off. The game drops it the next time it starts.":
+    "{name} está desactivado. El juego lo deja de usar la próxima vez que se inicie.",
+  "{name} is on. Start the game to use it; its settings are in the DLSS 5 panel and the pop-out.":
+    "{name} está activado. Abre el juego para usarlo; sus ajustes están en el panel de DLSS 5 y en la ventana emergente.",
 });
