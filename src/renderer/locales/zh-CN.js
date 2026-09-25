@@ -27,8 +27,8 @@ window.I18N.register("zh-CN", {
     "添加帧率节奏",
   "Frame rate to hold":
     "要保持的帧率",
-  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. The slider covers the range people actually use; the box beside it goes up to 1000 for a display that needs it.":
-    "自动会保持在略低于显示器 VRR 上限的位置，这是多数人想要的；固定数值适合用来对上你在别处已经选定的数字。滑块覆盖大家实际会用的范围；旁边的输入框最高可到 1000，供需要的显示器使用。",
+  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. Type the frame rate: 30 to 1000.":
+    "“自动”会保持在显示器 VRR 上限稍下方，多数人需要的就是这个；设固定值是为了与你在别处已经选好的数字对齐。输入帧率：30 到 1000。",
   "Auto (stay below the VRR ceiling)":
     "自动（保持在 VRR 上限之下）",
   "fps":
@@ -1564,7 +1564,6 @@ window.I18N.register("zh-CN", {
   "Removed. {count} files taken back out.": "已移除，取回 {count} 个文件。",
   "Installed. {count} files placed, and the effect order was rewritten.": "已安装，放置 {count} 个文件，并重写了效果顺序。",
   "That did not work.": "没有成功。",
-  "This game already has ReShade in its folder, so these go in beside it. Pick per game; each one says who made it and under what licence, and is checked against a known hash before anything is placed.": "这款游戏的文件夹里已经有 ReShade，因此这些会放在它旁边。可按游戏分别选择；每一项都会写明作者与许可证，并在放置任何文件之前与已知哈希比对。",
   "Installing this replaces {other} -- both are ways of getting an HDR signal and only one can run. You can swap back any time.": "安装它会替换 {other} —— 两者都是获得 HDR 信号的方式，只能有一个运行。你随时可以换回来。",
   "RenoDX already gives this game native HDR, so leave this pack's inverse tonemapper switched off in ReShade. Its analysis shaders and its final tone mapping are still worth having -- that is what keeps highlights inside what your display can show.": "RenoDX 已经让这款游戏输出原生 HDR，因此请在 ReShade 中关闭本包的反向色调映射。它的分析着色器和最终色调映射仍然值得保留 —— 那是把高光控制在显示器能呈现范围内的东西。",
   "in use here": "此处正在使用",
@@ -1624,7 +1623,77 @@ window.I18N.register("zh-CN", {
   "OptiScaler's own file is missing from the helper folder. This app put it there -- its install record lists host64\\winmm.dll -- and it is not on disk now, so something removed it after the install. That is almost always antivirus: a 64-bit winmm.dll appearing beside a game exe looks exactly like a DLL hijack. Everything else is fine, which is why the Feeder's own window opens and the DLSS 5 overlay is not in it. Add an exclusion for this game's folder -- Windows Security > Virus & threat protection > Manage settings > Exclusions -- and then press Install here again. Do the exclusion first: without it, Install just puts the file back for it to be taken again. Protection history may also offer Allow for the item, but a cloud detection (a name ending in !cl) is often deleted rather than held, so do not count on finding one.": "辅助程序文件夹里缺少 OptiScaler 自己的文件。本应用把它放在那里过——安装记录里有 host64\\winmm.dll——而现在磁盘上没有它，说明安装之后有东西把它删掉了。这几乎总是杀毒软件：游戏 exe 旁边出现 64 位的 winmm.dll，看起来正是 DLL 劫持。其他一切都正常，所以 Feeder 的窗口会打开，而 DLSS 5 覆盖层不在里面。请为这个游戏的文件夹添加排除项——Windows 安全中心 > 病毒和威胁防护 > 管理设置 > 排除项——然后在这里再次按安装。先做排除：否则按安装只是把文件放回去再被拿走一次。保护历史记录里也许会为该项提供“允许”，但云端检测（名称以 !cl 结尾）常被删除而不是保留，所以别指望能找到。",
   "Windows Security > Exclusions: add this game's folder": "Windows 安全中心 > 排除项：添加这个游戏的文件夹",
   "Protection history may also offer Allow -- but may show nothing": "保护历史记录里也许有“允许”——也可能什么都没有",
+  "The helper program is missing from the helper folder. This app put it there -- its install record lists host64\\dlss5-feed-host64.exe -- and it is not on disk now, so something removed it after the install. A 64-bit exe appearing beside a game is the same thing antivirus takes a 64-bit winmm.dll for. Without it there is no helper to start, so the game renders perfectly and DLSS 5 does nothing at all. Add an exclusion for this game's folder -- Windows Security > Virus & threat protection > Manage settings > Exclusions -- and then press Install here again. Do the exclusion first: without it, Install just puts the file back for it to be taken again.":
+    "辅助程序在辅助文件夹中不见了。本应用曾把它放在那里 -- 安装记录中列有 host64\\dlss5-feed-host64.exe -- 现在磁盘上没有了，说明安装之后有东西把它删掉了。游戏旁边出现的 64 位 exe，正是杀毒软件对 64 位 winmm.dll 的那种怀疑对象。没有它就没有可启动的辅助程序，所以游戏画面完全正常，而 DLSS 5 什么都不做。请为这个游戏文件夹添加排除项 -- Windows 安全中心 > 病毒和威胁防护 > 管理设置 > 排除项 -- 然后在这里再次按“安装”。先加排除项：否则“安装”只是把文件放回去，让它再被删一次。",
+  "The DLSS work for a 32-bit game runs in a second program, a 64-bit helper beside the game, and this run it went away -- so the game kept rendering normally and DLSS 5 stopped. The Feeder's own words for why: {why}. The helper writes its own log, host64\\dlss5-feed-host.log beside the game, and that names the reason; this app cannot see inside another program, so that file is the next thing to read rather than anything to guess at. Save the bundle to share -- it now carries that log -- or ask the AI.":
+    "32 位游戏的 DLSS 工作在第二个程序里完成，也就是游戏旁边的 64 位辅助程序，而这一次它消失了 -- 游戏照常渲染，DLSS 5 停了。Feeder 自己给出的原因：{why}。辅助程序会写自己的日志，就在游戏旁边的 host64\\dlss5-feed-host.log 里，原因写在那里面；本应用无法看到另一个程序内部，所以下一步是读那个文件，而不是靠猜。保存可分享的打包文件（现在已包含该日志），或者问 AI。",
+  "The 64-bit helper that does the DLSS work for this game quit as it started: {why}. That is the add-on and the helper not being the same Feeder build, or a file missing from host64\\ -- both of which Install rebuilds from one download. Press Install here again, then launch.":
+    "为这个游戏做 DLSS 工作的 64 位辅助程序刚启动就退出了：{why}。这说明插件和辅助程序不是同一个 Feeder 版本，或者 host64\\ 里缺文件 -- 两者“安装”都会用一次下载重新搭好。请在这里再次按“安装”，然后启动游戏。",
+  "The 64-bit helper that does the DLSS work for this 32-bit game went away during the last run, so the feed stopped and the game carried on rendering by itself. host64\\dlss5-feed-host.log, beside the game, is its own account of why.":
+    "为这个 32 位游戏做 DLSS 工作的 64 位辅助程序在上一次运行中消失了，所以供帧停止，游戏自己继续渲染。游戏旁边的 host64\\dlss5-feed-host.log 就是它自己对原因的记录。",
+  "Open host64\\dlss5-feed-host.log beside the game -- it names the reason":
+    "打开游戏旁边的 host64\\dlss5-feed-host.log -- 里面写着原因",
+  "Save the bundle to share: it carries that log":
+    "保存可分享的打包文件：其中包含该日志",
+  "Press Install (rebuilds the helper and the add-on together)":
+    "按“安装”（把辅助程序和插件一起重新搭好）",
+  "The 64-bit helper went away":
+    "64 位辅助程序消失了",
+  "The 64-bit helper was removed from host64 -- check antivirus":
+    "64 位辅助程序已从 host64 移除 -- 检查杀毒软件",
+  "The 64-bit helper went away -- its own log says why":
+    "64 位辅助程序消失了 -- 它自己的日志说明了原因",
+  "The 64-bit helper quit at startup -- Install rebuilds it":
+    "64 位辅助程序启动时退出 -- “安装”会重新搭好",
+  "the 64-bit helper went away this run -- host64\\dlss5-feed-host.log says why":
+    "本次运行中 64 位辅助程序消失了 -- host64\\dlss5-feed-host.log 说明了原因",
   "Adding frame pacing...": "正在添加帧率节奏...",
   "Could not add frame pacing: {error}": "无法添加帧率节奏：{error}",
   "This is upstream ReLimiter, which the in-game panel cannot drive -- use ReLimiter's own overlay in the game, or the target below.": "这是原版 ReLimiter，游戏内面板无法控制它——请在游戏中使用 ReLimiter 自带的覆盖层，或下方的目标值。",
+  "Automatic ({name})":
+    "自动（{name}）",
+  "Automatic":
+    "自动",
+  "Set by hand to {name}.":
+    "已手动设为 {name}。",
+  "OptiScaler is currently installed as {installed} and moves on the next Install or Reconfigure.":
+    "OptiScaler 目前安装为 {installed}，将在下次安装或重新配置时移动。",
+  "OptiScaler is installed as {installed}, chosen automatically.":
+    "OptiScaler 安装为 {installed}，由程序自动选择。",
+  "Could not set the proxy DLL name: {error}":
+    "无法设置代理 DLL 名称：{error}",
+  "Moved OptiScaler from {from} to {to}.":
+    "已将 OptiScaler 从 {from} 移动到 {to}。",
+  "Did NOT move it: {why}.":
+    "并未移动：{why}。",
+  "OptiScaler will load as {name} for this game.":
+    "本游戏的 OptiScaler 将以 {name} 加载。",
+  "Back to the automatic proxy DLL name.":
+    "已恢复为自动选择代理 DLL 名称。",
+  "Proxy DLL name":
+    "代理 DLL 名称",
+  "OptiScaler is loaded by taking the name of a DLL the game already loads at start. The app picks that name itself and is right almost always -- change this only if you know which DLL your game loads, for instance because OptiScaler's own wiki page for it names one. Choosing a name moves the installed file to it straight away.":
+    "OptiScaler 借用游戏启动时本就会加载的某个 DLL 的名字来加载自己。这个名字由程序自行选择，几乎总是对的 —— 只有在你确实知道自己的游戏加载哪个 DLL 时才改它，例如 OptiScaler 维基中该游戏的页面点名了某一个。选定名称后，已安装的文件会立即移动过去。",
+  "A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.":
+    "名字选错并不危险，只是不起作用：游戏永远不会加载那个文件，所以 DLSS 5 什么都不做，也不会写日志。改回“自动”即可撤销。",
+  "These go in beside the game's ReShade, so a game without one is refused here and each row says which part is missing. Pick per game; each one says who made it and under what licence, and is checked against a known hash before anything is placed.":
+    "这些会装在游戏的 ReShade 旁边，因此没有 ReShade 的游戏会在这里被拒绝，每一行也会说明缺少什么。按游戏逐个选择；每一项都标明作者与授权，并在放入任何文件之前先比对已知哈希。",
+  "This game has no ReShade, so nothing here can load. Install DLSS 5 or frame pacing on this game and ReShade comes with it, or put your own copy in the folder.":
+    "这个游戏没有 ReShade，所以这里的任何东西都无法加载。为这个游戏安装 DLSS 5 或帧率平滑，ReShade 会一并装上，或者把你自己的副本放进文件夹。",
+  "The ReShade here is the plain build, which never loads an add-on -- it carries the same version and name as the Add-on build, so this is not something you can see in the folder. The shader packs below still work.":
+    "这里的 ReShade 是普通版本，永远不会加载附加组件——它与附加组件版本的版本号和名称完全相同，所以光看文件夹是看不出来的。下面的着色器包仍然可用。",
+  "Needs the Add-on build":
+    "需要附加组件版本",
+  "Needs ReShade":
+    "需要 ReShade",
+  "No mod is built for this game, but RenoDX has one for its whole engine: {title}, maintained by {who}.":
+    "没有为这个游戏专门制作的模组，但 RenoDX 有一个适用于它整个引擎的模组：{title}，由 {who} 维护。",
+  "This game does have its own mod, and RenoDX marks it superseded by the engine-wide one -- so the engine-wide one is what installs here.":
+    "这个游戏确实有自己的模组，但 RenoDX 标记它已被引擎通用模组取代——所以这里安装的是引擎通用模组。",
+  "Matched on the engine, not on this game. RenoDX rates it \"{compat}\" for the engine, but nobody here has run it on this title -- if the picture looks wrong, take it back off.":
+    "这是按引擎匹配的，不是按这个游戏匹配的。RenoDX 对该引擎的评级是“{compat}”，但这里没有人在这个游戏上实际试过——如果画面看起来不对，就把它卸下来。",
+  "From our build, which is the one the in-game DLSS 5 panel can show these settings on -- look for the HDR page in the overlay.":
+    "来自我们的构建——只有这个构建能让游戏内的 DLSS 5 面板显示这些设置，请在叠加层中查找 HDR 页面。",
+  "From RenoDX's own release. It works, but only through its own overlay: the DLSS 5 panel can only show these settings on our build.":
+    "来自 RenoDX 自己的发布版。它可以正常工作，但只能通过它自己的叠加层：DLSS 5 面板只能在我们的构建上显示这些设置。",
 });

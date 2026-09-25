@@ -293,14 +293,17 @@
 
           <div id="game-relimiter-target-block" class="field-subblock hidden">
             <label class="field-label" data-i18n>Frame rate to hold</label>
-            <p class="field-hint" data-i18n>Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. The slider covers the range people actually use; the box beside it goes up to 1000 for a display that needs it.</p>
+            <p class="field-hint" data-i18n>Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. Type the frame rate: 30 to 1000.</p>
             <label class="scan-checkbox-row">
               <input type="checkbox" id="game-relimiter-auto" checked />
               <span data-i18n>Auto (stay below the VRR ceiling)</span>
             </label>
+            <!-- Typed, not dragged. A slider cannot hit 72, or 141, or whatever figure the player has
+                 already set in their own frame limiter, and matching a number chosen elsewhere is
+                 what a fixed frame rate is FOR -- so the exact value has to be reachable by keyboard
+                 rather than approached with a mouse. -->
             <div id="game-relimiter-fixed-row" class="field-row hidden">
-              <input id="game-relimiter-fps-slider" type="range" min="30" max="360" step="1" value="120" style="flex: 1 1 220px;" />
-              <input id="game-relimiter-fps" type="number" min="30" max="1000" step="1" value="120" style="width: 90px;" />
+              <input id="game-relimiter-fps" type="number" min="30" max="1000" step="1" value="120" style="width: 110px;" />
               <span class="field-hint" data-i18n>fps</span>
             </div>
             <span id="game-relimiter-target-status" class="status-line"></span>
@@ -318,6 +321,21 @@
             <select id="game-api-select"></select>
           </div>
           <span id="game-api-status" class="status-line"></span>
+        </div>
+
+        <!-- The proxy DLL name. Advanced-only and defaulted to Automatic: the app's own answer is
+             right for nearly every game, and the reason this exists is the handful where it is not
+             and the user has better information than detection does (an OptiScaler wiki page for
+             their game, or a launch they watched). Only names detect.js can read a folder by are
+             offered -- see PROXY_CHOICE_NAMES. -->
+        <div id="game-proxy-section" class="advanced-only hidden">
+          <label class="field-label" data-i18n>Proxy DLL name</label>
+          <p class="field-hint" data-i18n>OptiScaler is loaded by taking the name of a DLL the game already loads at start. The app picks that name itself and is right almost always -- change this only if you know which DLL your game loads, for instance because OptiScaler's own wiki page for it names one. Choosing a name moves the installed file to it straight away.</p>
+          <p class="field-hint" data-i18n>A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.</p>
+          <div class="field-row">
+            <select id="game-proxy-select"></select>
+          </div>
+          <span id="game-proxy-status" class="status-line"></span>
         </div>
 
         <div id="game-feeder-section" class="advanced-only hidden">
@@ -392,7 +410,7 @@
   <div id="addons-modal" class="modal-overlay hidden">
     <div class="modal modal-wide">
       <h2 data-i18n>ReShade add-ons</h2>
-      <p class="field-hint" data-i18n>This game already has ReShade in its folder, so these go in beside it. Pick per game; each one says who made it and under what licence, and is checked against a known hash before anything is placed.</p>
+      <p class="field-hint" data-i18n>These go in beside the game's ReShade, so a game without one is refused here and each row says which part is missing. Pick per game; each one says who made it and under what licence, and is checked against a known hash before anything is placed.</p>
       <div id="addons-list"></div>
       <p id="addons-status" class="field-hint"></p>
       <div class="modal-actions">

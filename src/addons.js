@@ -35,6 +35,7 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const { BAND } = require('./preset-order');
 const integrity = require('./integrity');
+const { HOOK_DLLS } = require('./detect');
 
 const ADDONS_MARKER = '.dlss5ui-addons.json';
 
@@ -51,6 +52,26 @@ const RENODX_REPO = 'clshortfuse/renodx';
 const RENODX_TAG = 'snapshot';
 const RENODX_INDEX_ASSET = 'games-index.json';
 
+// Two sources, the same shape relimiter.js uses and for the same reason.
+//
+// Our fork first: only its build exports RenoDxGetHostApi, and without that export the engine's
+// in-game HDR page stays hidden (DlssNr_RenoDx.cpp finds nothing to drive). Upstream second, so
+// RenoDX still installs and works from its own overlay when the fork has published nothing -- a
+// missing fork release answers 404, which is an ordinary "try the next one", not a failure.
+//
+// THE INDEX AND THE ARTIFACT MUST COME FROM THE SAME SOURCE. Each release carries its own
+// games-index.json naming its own artifact files, so reading upstream's index and then fetching our
+// fork's asset (or the reverse) would ask for a filename that release may not have. resolveSource
+// picks one and everything downstream is told which.
+//
+// Integrity needs no extra work here: the download URL names owner, repo, tag and asset, and
+// integrity.releaseAssetDigest derives GitHub's own published digest from it, so whichever source
+// wins, what arrives is checked against that source's published hash.
+const RENODX_SOURCES = [
+  { repo: 'mrcgibb9876-hash/renodx', tag: 'snapshot', hostApi: true },
+  { repo: RENODX_REPO, tag: RENODX_TAG, hostApi: false },
+];
+
 const CATALOGUE = [
   {
     id: 'renodx',
@@ -60,8 +81,9 @@ const CATALOGUE = [
     licence: 'MIT -- Copyright (c) 2025 Carlos Lopez Jr.',
     homepage: 'https://github.com/clshortfuse/renodx',
     summary: 'A bespoke HDR and tone-mapping mod for this specific game, written against its own '
-      + 'shaders. Where one exists it is the best-looking option there is; there is no generic '
-      + 'version of it.',
+      + 'shaders. Where one exists it is the best-looking option there is. Where one does not, '
+      + 'RenoDX may still have a mod for the whole engine -- an Unreal game usually does -- and '
+      + 'this row offers that instead, saying so.',
     // Offered alongside DLSS 5 rather than instead of it, and the picker says once that the pair
     // is untested here. Both touch the final picture -- RenoDX rewrites the game's tone mapping,
     // the neural pass denoises what the game drew -- and nobody on this side has a GPU to watch
@@ -165,6 +187,63 @@ function conflictsFor(dir, id) {
 
 const byId = new Map(CATALOGUE.map((a) => [a.id, a]));
 
+// ---- is there a ReShade here at all? ----------------------------------------------------------
+//
+// The header above says every route this app installs puts ReShade in the game folder, and that is
+// true. The add-ons card is not a route: its button sits on every game card, including a game this
+// app has never installed anything into. Before this check, Install there placed a .addon64 beside
+// an exe with no ReShade to load it -- nothing failed, nothing loaded, and the row then read
+// "Remove" as though it had worked.
+//
+// Found by CONTENT, wherever it sits, and deliberately NOT through relimiter.reshadeFileIn(): that
+// recognises a proxy ReShade only when our own marker recorded it, so someone who installed ReShade
+// himself as dxgi.dll -- which is most of the people who want RenoDX -- would read as having none
+// and be refused the one thing he came for.
+//
+// HOOK_DLLS is the single proxy-name list (see the proxy note in CLAUDE.md; do not start a second
+// one), plus the two names a non-proxying ReShade uses. isReShadeProxy is the strict check: it reads
+// the PE OriginalFilename, so OptiScaler sitting in the dxgi.dll slot does not pass for ReShade
+// merely because OptiScaler.dll carries the string.
+const RESHADE_NAMES = [...new Set([...HOOK_DLLS, 'ReShade64.dll', 'ReShade32.dll'])];
+
+function reshadeIn(dir) {
+  // Required late: feeder reaches back into this module (installedTechniqueBands), so a top-level
+  // require here would close the loop.
+  const { isReShadeProxy } = require('./relimiter');
+  const { isAddonReShadeDll } = require('./feeder');
+
+  const found = [];
+  for (const name of RESHADE_NAMES) {
+    const file = path.join(dir, name);
+    if (!fs.existsSync(file) || !isReShadeProxy(file)) continue;
+    found.push({ file: name, addonBuild: isAddonReShadeDll(file) });
+  }
+  if (!found.length) return null;
+  // An Add-on build anywhere in the folder wins. It is the build that decides whether an add-on can
+  // load at all, and a plain ReShade64.dll lying beside it does not take that away.
+  return found.find((f) => f.addonBuild) || found[0];
+}
+
+// What stops this entry being installed here, or null. Two tiers, because the two shapes need
+// different things (see THE TWO SHAPES above):
+//
+//   'no-reshade'     Nothing to load either shape. Both are refused.
+//   'plain-reshade'  ReShade is here but it is the plain build, which carries the same version and
+//                    product name as the Add-on build and simply never loads an add-on (feeder.js's
+//                    issue-#53 note). Shader packs are fine -- they are effects, not add-ons -- so
+//                    only kind: 'addon' is refused.
+//
+// `rs` lets a caller that has already looked (the IPC handler builds the whole picker from one scan)
+// hand the answer in rather than making every row walk the folder again.
+function installBlocker(dir, id, rs) {
+  const spec = byId.get(id);
+  if (!spec) return null;
+  const found = rs !== undefined ? rs : reshadeIn(dir);
+  if (!found) return 'no-reshade';
+  if (spec.kind === 'addon' && !found.addonBuild) return 'plain-reshade';
+  return null;
+}
+
 // The list as the renderer sees it, so data only. An entry can carry a function (Lilium's bandFor),
 // and one function anywhere in an IPC reply makes Electron refuse the whole thing -- "An object
 // could not be cloned" -- which left the picker stuck on "Looking at this game…" for every game.
@@ -226,10 +305,65 @@ function pickArtifact(mod, bitness) {
     || null;
 }
 
+// Upstream's engine-wide mods, keyed by our own detect.engineId.
+//
+// RenoDX is per-game by nature -- 271 add-ons, each compiled against one game's shader hashes --
+// and there is no universal build: src/games/generic exists in its source with an empty
+// custom_shaders list and publishes no artifact at all. But the project has started shipping
+// ENGINE-wide mods (support: 'generic', category: 'engine'), and it is moving towards them: eight
+// per-game entries now carry a note reading "Superseded by Generic <engine> mod".
+//
+// The catch is how the index carries them. They are ordinary mods attached to games, so
+// renodx-unrealengine.addon64 is listed against exactly ONE game (Ace Combat 7) even though it is
+// the same binary for every Unreal title. An index lookup therefore finds it for almost nobody.
+// Matching on the engine instead is what takes RenoDX from "the 239 games in the index" to "any
+// Unreal game", which is most of a modern library.
+//
+// Unity is in the map because the index marks unityengine generic too -- but it has no artifact
+// today, and engineGenericMod refuses a mod it cannot actually download, so Unity games simply keep
+// saying "no mod for this game" until upstream publishes one. Nothing to change here when it does.
+const ENGINE_GENERIC_MODS = { unreal: 'unrealengine', unity: 'unityengine' };
+
+// The engine-wide mod for this engine, found wherever the index happens to hang it, or null.
+// Requires an artifact for the bitness asked for: offering a download that does not exist is worse
+// than offering nothing, and unityengine is exactly that case today.
+function engineGenericMod(index, engineId, bitness) {
+  const wanted = ENGINE_GENERIC_MODS[engineId];
+  if (!wanted) return null;
+  for (const game of (index && index.games) || []) {
+    for (const mod of game.mods || []) {
+      if (mod.id !== wanted || mod.support !== 'generic') continue;
+      if (!pickArtifact(mod, bitness)) continue;
+      return mod;
+    }
+  }
+  return null;
+}
+
+function describeMatch(mod, { gameId, gameTitle, bitness, how }) {
+  const artifact = pickArtifact(mod, bitness);
+  if (!artifact) return null;
+  return {
+    gameId,
+    gameTitle,
+    modId: mod.id,
+    title: mod.title || gameTitle,
+    status: mod.status || 'unknown',
+    compatibility: mod.compatibility || 'unknown',
+    summary: mod.summary || '',
+    maintainers: mod.maintainers || [],
+    notes: mod.notes || [],
+    artifact: artifact.name,
+    arch: artifact.arch,
+    size: artifact.size || null,
+    how,
+  };
+}
+
 // The RenoDX add-on for a game, or null. `how` says what the match rested on so the caller can be
 // honest about it: 'steam-appid' is an identifier match, 'title' is a name match that could be
 // the wrong game with a similar name.
-function matchRenodx(index, { steamAppid = null, title = null, bitness = null } = {}) {
+function matchRenodx(index, { steamAppid = null, title = null, bitness = null, engineId = null } = {}) {
   const { byAppid, byTitle } = indexRenodx(index);
   let entry = null;
   let how = null;
@@ -243,30 +377,33 @@ function matchRenodx(index, { steamAppid = null, title = null, bitness = null } 
       how = 'title';
     }
   }
-  if (!entry) return null;
+
+  // No bespoke mod for this game. Its engine may still have one, and for an Unreal game it usually
+  // does -- 'engine' is a weaker claim than an appid and the caller is told so through `how`.
+  const generic = engineGenericMod(index, engineId, bitness);
+  if (!entry) {
+    return generic
+      ? describeMatch(generic, { gameId: null, gameTitle: title || null, bitness, how: 'engine' })
+      : null;
+  }
 
   // Several mods can target one game (a bespoke one and a generic fallback, or an Archive
   // variant). Prefer the one whose status is furthest along rather than the first in the file:
   // the index lists them in build order, which says nothing about which to install.
   const rank = (m) => (m.status === 'stable' ? 0 : m.status === 'beta' ? 1 : 2);
   const mod = [...entry.mods].sort((a, b) => rank(a) - rank(b))[0];
-  const artifact = pickArtifact(mod, bitness);
-  if (!artifact) return null;
-  return {
-    gameId: entry.id,
-    gameTitle: entry.title,
-    modId: mod.id,
-    title: mod.title || entry.title,
-    status: mod.status || 'unknown',
-    compatibility: mod.compatibility || 'unknown',
-    summary: mod.summary || '',
-    maintainers: mod.maintainers || [],
-    notes: mod.notes || [],
-    artifact: artifact.name,
-    arch: artifact.arch,
-    size: artifact.size || null,
-    how,
-  };
+
+  // Upstream's own verdict, not ours: eight entries say "Superseded by Generic <engine> mod", so
+  // installing the bespoke one there would knowingly place the worse of the two. Taken only when
+  // the replacement is really downloadable -- five of those eight point at unityengine, which has
+  // no artifact, and dropping a working per-game mod for a file that does not exist would be a
+  // regression dressed up as an upgrade.
+  if (generic && (mod.notes || []).some((n) => /supersed/i.test(n))) {
+    const swap = describeMatch(generic, { gameId: entry.id, gameTitle: entry.title, bitness, how: 'engine-supersedes' });
+    if (swap) return swap;
+  }
+
+  return describeMatch(mod, { gameId: entry.id, gameTitle: entry.title, bitness, how });
 }
 
 // The download URL for one of the pinned release's assets. Built from the tag rather than read
@@ -276,8 +413,8 @@ function releaseAssetUrl(name, { repo = RENODX_REPO, tag = RENODX_TAG } = {}) {
   return `https://github.com/${repo}/releases/download/${tag}/${name}`;
 }
 
-function renodxIndexUrl() {
-  return releaseAssetUrl(RENODX_INDEX_ASSET);
+function renodxIndexUrl(source) {
+  return releaseAssetUrl(RENODX_INDEX_ASSET, source || undefined);
 }
 
 // ---- what is installed here ------------------------------------------------------------------
@@ -386,6 +523,18 @@ function destForPackFile(rel) {
 async function installAddon(dir, id, ctx, opts = {}) {
   const spec = byId.get(id);
   if (!spec) throw new Error(`Unknown add-on: ${id}`);
+
+  // Checked here and not only in the picker. A disabled button is a courtesy, not a gate: this is
+  // also reached from the IPC handler directly, and placing a file that can never load is the
+  // failure this whole check exists to stop -- before the swap below takes anything out.
+  const blocker = installBlocker(dir, id, opts.reshade);
+  if (blocker === 'no-reshade') {
+    throw Object.assign(new Error('This game folder has no ReShade, so there is nothing to load this -- install DLSS 5 or frame pacing here first, or put your own ReShade in'), { code: blocker });
+  }
+  if (blocker === 'plain-reshade') {
+    throw Object.assign(new Error('The ReShade in this folder is the plain build, which never loads an add-on -- the Add-on build is the one that can'), { code: blocker });
+  }
+
   const written = [];
 
   // Swap rather than refuse. Done before anything is fetched so a failed download cannot leave
@@ -453,7 +602,9 @@ async function installAddon(dir, id, ctx, opts = {}) {
 async function resolveAddonAsset(spec, ctx, opts) {
   if (spec.id === 'renodx') {
     if (!opts.match) throw new Error('renodx: no per-game match was passed');
-    return { url: releaseAssetUrl(opts.match.artifact, spec.release), name: opts.match.artifact };
+    // opts.source is the release the caller read the index from. Falling back to spec.release keeps
+    // a caller that passes no source working against upstream, which is where it used to look.
+    return { url: releaseAssetUrl(opts.match.artifact, opts.source || spec.release), name: opts.match.artifact };
   }
   const release = await ctx.resolveRelease(spec.source.repo, spec.source.tag || null);
   const want = opts.bitness === 32 ? /\.addon32$/i : /\.addon64$/i;
@@ -496,12 +647,14 @@ async function removeAddon(dir, id) {
 
 module.exports = {
   ADDONS_MARKER,
-  RENODX_REPO, RENODX_TAG, RENODX_INDEX_ASSET,
+  RENODX_REPO, RENODX_TAG, RENODX_INDEX_ASSET, RENODX_SOURCES,
   catalogue, addonById,
   titleKey, indexRenodx, pickArtifact, matchRenodx,
+  ENGINE_GENERIC_MODS, engineGenericMod,
   releaseAssetUrl, renodxIndexUrl,
   readMarker, writeMarker, filesPlaced, installedIds,
   techniquesIn, installedTechniqueBands,
   packFiles, destForPackFile, installAddon, removeAddon,
+  RESHADE_NAMES, reshadeIn, installBlocker,
   EXCLUSIVE_GROUPS, conflictsFor,
 };

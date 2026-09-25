@@ -26,7 +26,7 @@ const emulators = require('./emulators');
 const amdnr = require('./amdnr');
 const nrmodelonly = require('./nrmodelonly');
 const helpfix = require('./helpfix');
-const { detectGameCached, invalidateDetection, peOriginalFilename, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, antiCheatPresent, peImports, peBitness, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
+const { EARLY_PROXY_CANDIDATES, HOOK_DLLS, detectGameCached, invalidateDetection, peOriginalFilename, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, antiCheatPresent, peImports, peBitness, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const dlssnr = require('./dlssnr');
 const exeicon = require('./exeicon');
@@ -490,15 +490,32 @@ const addonCtx = () => ({
   },
 });
 
-// RenoDX's games-index.json, memoised for the session. It is ~260 KB and the picker asks for it
-// every time a card is opened, so re-fetching per card would be a download per click; and it is
-// an ordinary release asset, so it is digest-checked like the add-ons themselves.
+// RenoDX's games-index.json AND the release it came from, memoised together for the session.
+//
+// Together, because the two cannot be mixed: each release's index names its own artifact files, so
+// reading one source's index and then fetching the other's asset would ask for a filename that
+// release may not have (addons.RENODX_SOURCES says the same thing from the other end).
+//
+// Memoised because it is ~260 KB and the picker asks for it every time a card is opened, so
+// re-fetching per card would be a download per click. It is an ordinary release asset, so it is
+// digest-checked like the add-ons themselves -- integrity.releaseAssetDigest reads owner, repo, tag
+// and name straight off the download URL, which is why a second source needs no pin of its own.
 let renodxIndexMemo = null;
 async function renodxIndex() {
   if (renodxIndexMemo) return renodxIndexMemo;
-  const buf = await addonCtx().fetchBuffer(addons.renodxIndexUrl());
-  renodxIndexMemo = JSON.parse(buf.toString('utf8'));
-  return renodxIndexMemo;
+  const tried = [];
+  for (const source of addons.RENODX_SOURCES) {
+    try {
+      const buf = await addonCtx().fetchBuffer(addons.renodxIndexUrl(source));
+      renodxIndexMemo = { index: JSON.parse(buf.toString('utf8')), source };
+      return renodxIndexMemo;
+    } catch (error) {
+      // A fork that has published no release yet answers 404 here. That is the ordinary case, not a
+      // failure, so it is recorded and the next source is tried.
+      tried.push(`${source.repo}: ${(error && error.message) || error}`);
+    }
+  }
+  throw new Error(`No RenoDX index could be fetched (${tried.join('; ')})`);
 }
 
 // The catalogue as this game sees it: what is installed here, and which RenoDX add-on (if any)
@@ -511,14 +528,24 @@ ipcMain.handle('addons:forGame', async (_evt, { exePath } = {}) => {
     const detected = detectGameCached(exePath) || {};
     const steam = library.steamManifestFor(exePath);
     const installed = new Set(addons.installedIds(dir));
+    // Once, here: every row's blocker is derived from this rather than walking the folder again.
+    const reshade = addons.reshadeIn(dir);
 
     let match = null;
     let indexError = null;
+    // Which release the match came from. Reported because with two sources it decides whether the
+    // engine's in-game HDR page can appear at all, and "the tab is missing" is otherwise a mystery.
+    let renodxSource = null;
     try {
-      match = addons.matchRenodx(await renodxIndex(), {
+      const renodx = await renodxIndex();
+      renodxSource = renodx.source;
+      match = addons.matchRenodx(renodx.index, {
         steamAppid: steam ? steam.appid : null,
         title: (steam && steam.name) || path.basename(dir),
         bitness: detected.bitness || null,
+        // Lets an Unreal game with no bespoke mod still get the engine-wide one. Already on the
+        // cached detection (the same field lumaue.js reads), so this costs no extra folder work.
+        engineId: detected.engineId || null,
       });
     } catch (error) {
       indexError = String(error && error.message ? error.message : error);
@@ -530,14 +557,24 @@ ipcMain.handle('addons:forGame', async (_evt, { exePath } = {}) => {
       // The neural pass being installed here is what decides whether the RenoDX row shows its
       // "untested together" line, so the renderer is told rather than guessing from the card.
       neuralRendering: !!(detected && detected.optiscaler) || fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll')),
+      // Whether ReShade is here at all, and whether it is the build that can load an add-on. The
+      // card's button is on every game, so this is the one fact that decides whether any of these
+      // rows can do anything -- found by content rather than by our own marker, so a ReShade the
+      // user installed himself counts (addons.reshadeIn).
+      reshade,
       catalogue: addons.catalogue().map((a) => ({
         ...a,
         installed: installed.has(a.id),
+        // Why Install is refused here, or null. Per entry, because a plain ReShade stops an add-on
+        // and not a shader pack -- but from the ONE scan above, not a fresh walk of the folder per
+        // row. Never on an installed row: Remove must work whatever happened to ReShade since.
+        blocker: installed.has(a.id) ? null : addons.installBlocker(dir, a.id, reshade),
         // What pressing Install would swap out. The renderer says so up front rather than the
         // other row silently flipping to "Install" afterwards.
         replaces: addons.conflictsFor(dir, a.id),
       })),
       renodx: match,
+      renodxSource,
       indexError,
       // The motion-vector providers, shown in this same list. They are not add-ons in the
       // catalogue's sense -- the Feeder picks exactly one and the deploy owns it -- but this is
@@ -563,10 +600,16 @@ ipcMain.handle('addons:install', async (_evt, { exePath, id } = {}) => {
     const opts = { bitness: detected.bitness || null };
     if (id === 'renodx') {
       const steam = library.steamManifestFor(exePath);
-      opts.match = addons.matchRenodx(await renodxIndex(), {
+      const renodx = await renodxIndex();
+      // The asset comes from the release the index came from, never the other one.
+      opts.source = renodx.source;
+      opts.match = addons.matchRenodx(renodx.index, {
         steamAppid: steam ? steam.appid : null,
         title: (steam && steam.name) || path.basename(dir),
         bitness: detected.bitness || null,
+        // Lets an Unreal game with no bespoke mod still get the engine-wide one. Already on the
+        // cached detection (the same field lumaue.js reads), so this costs no extra folder work.
+        engineId: detected.engineId || null,
       });
       if (!opts.match) throw new Error('No RenoDX mod is built for this game');
     }
@@ -2610,6 +2653,34 @@ function readApiOverride(dir) {
   return marker && API_OVERRIDE_VALUES.includes(marker.api) ? marker.api : null;
 }
 
+// The proxy DLL name, chosen by hand. Same shape as the API choice above and for the same reason:
+// detection reads a file on disk, and which DLL a game actually loads at start is knowledge this
+// code does not always have. OptiScaler's own wiki names a proxy for several games this app has no
+// entry for, and until now there was no way to act on that -- a No Man's Sky reporter (#132) went
+// through every section of Edit looking for the setting before I could tell them it did not exist.
+//
+// Distinct from PROXY_OVERRIDES, which is this app's own table, keyed by exe and measured one game
+// at a time. That table stays the automatic answer; this is the user overruling it for their copy.
+const PROXY_CHOICE_MARKER = '.dlss5ui-proxy.json';
+
+function readProxyChoice(dir) {
+  const marker = readJson(path.join(dir, PROXY_CHOICE_MARKER), null);
+  const name = marker && typeof marker.proxy === 'string' ? marker.proxy.toLowerCase() : null;
+  // Only a name the folder scan can read back. A stored choice that is no longer offered (a name
+  // dropped from HOOK_DLLS in some later version) is ignored rather than honoured into a state
+  // where the app installs something it cannot then see -- the exact bug this control came out of.
+  return name && PROXY_CHOICE_NAMES.includes(name) ? name : null;
+}
+
+function writeProxyChoice(dir, name) {
+  const file = path.join(dir, PROXY_CHOICE_MARKER);
+  if (!name) {
+    if (fs.existsSync(file)) fs.rmSync(file);
+    return;
+  }
+  writeJson(file, { proxy: name, setAt: new Date().toISOString() });
+}
+
 function writeApiOverride(dir, api) {
   const file = path.join(dir, API_OVERRIDE_MARKER);
   if (!api) {
@@ -2695,7 +2766,10 @@ function effectiveDetection(dir, exePath, detected) {
   const lumaMod = lumaModFor(exePath, detected);
   const luma = lumaue.lumaUeDeployed(dir) || (!!lumaMod && lumaue.isLumaUeDefault(exePath, lumaMod));
   const observed = probe.applyProbe(detected || {}, probeFactsFor(exePath));
-  return withApiOverride(observed, readApiOverride(dir), { luma });
+  // The hand-set proxy name rides on the detection the way apiOverride does, because the two
+  // consumers are the same: the run digest, which should say a name was chosen rather than picked,
+  // and the route payload behind the card. A marker read, so this stays a stat per card.
+  return { ...withApiOverride(observed, readApiOverride(dir), { luma }), proxyChoice: readProxyChoice(dir) };
 }
 
 // ── Watched launch facts (probe.js) ──────────────────────────────────────────
@@ -2758,6 +2832,62 @@ ipcMain.handle('game:setApiOverride', async (_evt, { exePath, api }) => {
     // way optifg:set re-runs the configuration rather than waiting for the next sync.
     const configured = fs.existsSync(path.join(dir, 'OptiScaler.ini')) ? await autoConfigureGame(dir, exePath) : null;
     return { ok: true, api: api || null, applied: configured ? configured.applied : [] };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// What the Edit panel needs to draw the proxy row. Asked for when the panel opens, not per card
+// render: proxyNameForGame resolves the API and can read the exe's import table, which is too much
+// to pay for a list of fifty games.
+ipcMain.handle('game:proxyInfo', async (_evt, { exePath }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const host32 = !!legacy.status(dir).host32;
+    let automatic = null;
+    if (!host32) {
+      // What the app would pick with no choice set -- read past the choice deliberately, so the row
+      // can say "Automatic (winmm.dll)" while a different name is selected.
+      try { automatic = await proxyNameForGame(dir, exePath, isFeederGame(dir), { ignoreChoice: true }); } catch {}
+    }
+    return {
+      ok: true,
+      names: PROXY_CHOICE_NAMES,
+      chosen: readProxyChoice(dir),
+      automatic,
+      installed: (readInstallMarker(dir) || {}).proxy || null,
+      settable: !host32,
+    };
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  }
+});
+
+// The proxy DLL name for one game, set by hand. Writes the choice, then MOVES the installed
+// OptiScaler to it -- migrateProxyIfNeeded does the rename, refuses when the target name is
+// somebody else's file, and keeps the install journal straight so Remove still takes back the right
+// one. Setting it on a game with nothing installed is fine: the choice is read at install time too.
+ipcMain.handle('game:setProxyName', async (_evt, { exePath, proxy }) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const name = proxy ? String(proxy).toLowerCase() : null;
+    if (name && !PROXY_CHOICE_NAMES.includes(name)) {
+      // Refused rather than accepted-and-ignored: a name the folder scan cannot read back would
+      // install an OptiScaler the app then reports as missing (#132).
+      throw new Error(`${proxy} is not a name this app can install under and read back`);
+    }
+    const dir = gameDir(exePath);
+    // The 32-bit route has no proxy beside the exe at all -- OptiScaler lives in host64\ as
+    // winmm.dll, loaded by the helper, and renaming anything here would move a file nothing loads.
+    if (legacy.status(dir).host32) {
+      throw new Error('this game runs the 32-bit route, where OptiScaler is in host64\\ and there is no proxy beside the exe to name');
+    }
+    writeProxyChoice(dir, name);
+    let migration = null;
+    try { migration = await migrateProxyIfNeeded(dir, exePath); } catch (error) { migration = { error: String(error && error.message ? error.message : error) }; }
+    const configured = fs.existsSync(path.join(dir, 'OptiScaler.ini')) ? await autoConfigureGame(dir, exePath) : null;
+    return { ok: true, proxy: name, migration, applied: configured ? configured.applied : [] };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -3239,6 +3369,10 @@ ipcMain.handle('game:route', async (_evt, { exePath, detected }) => {
     detectedApis: (detected && detected.apis) || [],
     // The card's "Motion vectors: <provider> -- change…" entry on an installed 32-bit route game.
     legacyMv: legacyMvSummary(dir),
+    // Whether a proxy name is set by hand, for the card's badge. Just the marker read -- what the
+    // AUTOMATIC answer would be costs a detection and can read the exe's import table, so the Edit
+    // panel asks for that once through game:proxyInfo rather than paying it on every card render.
+    proxyChoice: readProxyChoice(dir),
   };
 });
 
@@ -3496,7 +3630,7 @@ function keptAsIs(dir) {
   return fs.existsSync(path.join(dir, KEEP_AS_IS_MARKER));
 }
 
-const APP_MARKERS = ['.dlss5ui-lossless.json', '.dlss5ui-framegen.json', '.dlss5ui-api.json', '.dlss5ui-optifg-enabled', '.optiscaler-manager-install.json', reengine.REFRAMEWORK_BUILD_MARKER, engines.ENGINE_MARKER, KEEP_AS_IS_MARKER, translation.PREFERENCE];
+const APP_MARKERS = ['.dlss5ui-lossless.json', '.dlss5ui-framegen.json', '.dlss5ui-api.json', PROXY_CHOICE_MARKER, '.dlss5ui-optifg-enabled', '.optiscaler-manager-install.json', reengine.REFRAMEWORK_BUILD_MARKER, engines.ENGINE_MARKER, KEEP_AS_IS_MARKER, translation.PREFERENCE];
 const LEGACY_PAYLOAD = [
   'OptiScaler_DlssNr.addon64', 'OptiScaler_DlssNr.exp', 'OptiScaler_DlssNr.lib', 'OptiScaler_DlssNr.pdb', 'OptiScaler_DlssNr.dll',
   '.optdlss5-active-manifest.json', 'Verify-DLSS5Feeder.ps1', 'Run-DLSS5-Feeder-Install.bat', 'Remove_OptiScaler.bat',
@@ -6814,7 +6948,9 @@ const DEFAULT_PROXY = 'dxgi.dll';
 // device pulled it in, too late for its loader hook to catch the Feeder's NGX module. The
 // Feeder's README says winmm.dll or version.dll ("a name the process imports at start"); the
 // exe's own import table says which of the candidates it actually imports.
-const EARLY_PROXY_CANDIDATES = ['winmm.dll', 'version.dll', 'dbghelp.dll', 'wininet.dll', 'winhttp.dll'];
+// Lives in detect.js, and is imported rather than repeated: every name the app can install under
+// has to be a name detect.js reads a folder by, and keeping one list is what makes that true.
+// (The two copies had drifted -- see the HOOK_DLLS note there.)
 // Games whose exe never loads a dxgi.dll from its own folder, measured one at a time. dxgi.dll works for
 // nearly every Direct3D game because the system's d3d11/d3d12 pull it in through the normal search order;
 // these load it some other way, so a dxgi.dll proxy sits there unused and OptiScaler never starts -- no
@@ -6831,9 +6967,29 @@ const EARLY_PROXY_CANDIDATES = ['winmm.dll', 'version.dll', 'dbghelp.dll', 'wini
 // use, with version.dll and OptiScaler.asi as the other two it accepts. RDR2.exe is the game;
 // PlayRDR2.exe is Rockstar's launcher shim and never loads any of this itself.
 //   https://github.com/optiscaler/OptiScaler/wiki/Red-Dead-Redemption-II
+// What Edit offers. Exactly the names detect.js reads a folder by, and no others: letting someone
+// pick a name the app cannot see afterwards would reproduce the drift bug by hand. dxgi.dll leads
+// because it is the answer for nearly every Direct3D game.
+const PROXY_CHOICE_NAMES = [...new Set(['dxgi.dll', ...EARLY_PROXY_CANDIDATES, ...HOOK_DLLS])];
+
+//
+// No Man's Sky (2026-09-25, #132): documented rather than measured, like RDR2 above, and the
+// weaker of the two cases -- so what it rests on is worth writing down. The game is Vulkan with
+// native DLSS, which means it is not a Feeder game, which means the early-proxy picker above never
+// runs for it and it got dxgi.dll. A Vulkan game does load a dxgi.dll, but late, for adapter
+// enumeration -- OptiScaler starts after the renderer is already up. OptiScaler's own wiki page
+// names dbghelp.dll for exactly that reason ("Recommended to use OptiScaler as dbghelp.dll for
+// early hooking"), and the reporter's verdict was init-no-feature: present, initialised, never
+// asked for a feature, which is the shape a late hook produces.
+//   https://github.com/optiscaler/OptiScaler/wiki/No-Man's-Sky
+// Not proven here, and the honest downside is bounded on both sides: if NMS.exe does not import
+// dbghelp.dll the proxy never loads and DLSS 5 does nothing -- which is what init-no-feature
+// already was. And since this release the user can set the name back by hand in Edit, which is
+// what makes shipping an unmeasured entry defensible at all.
 const PROXY_OVERRIDES = {
   'monsterhunterworld.exe': 'winmm.dll',
   'rdr2.exe': 'winmm.dll',
+  'nms.exe': 'dbghelp.dll',
 };
 
 function proxyOverrideFor(exePath) {
@@ -6847,6 +7003,12 @@ function proxyOverrideFor(exePath) {
 // Vulkan layer loads the system dxgi.dll by full path, and the Feeder reported "OptiScaler: not present" for
 // 18,000 frames of plain DLAA. Null when dxgi.dll is right.
 async function wantedProxyFor(dir, exePath) {
+  // The user's own choice outranks everything below it, including the measured table: they are
+  // saying which DLL their copy of the game loads, and unlike the automatic answer they can watch
+  // the result. Returned even when it is dxgi.dll -- picking the default back is a migration too,
+  // and migrateProxyIfNeeded no-ops when it already matches the journal.
+  const chosen = readProxyChoice(dir);
+  if (chosen) return chosen;
   const override = proxyOverrideFor(exePath);
   if (override) return override;
   // A watched launch that saw the game ignore a dxgi.dll beside it, or never load one (probe.proxyHint).
@@ -6891,7 +7053,9 @@ async function migrateProxyIfNeeded(dir, exePath) {
   return { from: journal.proxy, to: wanted };
 }
 
-async function proxyNameForGame(dir, exePath, feederGame) {
+async function proxyNameForGame(dir, exePath, feederGame, { ignoreChoice = false } = {}) {
+  const chosen = ignoreChoice ? null : readProxyChoice(dir);
+  if (chosen) return chosen;
   const override = proxyOverrideFor(exePath);
   if (override) return override;
   const observed = probe.proxyHint(probeFactsFor(exePath));

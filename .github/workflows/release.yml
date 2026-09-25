@@ -299,7 +299,19 @@ jobs:
     # "OptiDLSS5-UI Releases". It has died twice now -- once before v1.73.0, and again when the
     # setup bot was removed from the server, which cost the v1.74.1 and v1.74.2 announcements.
     # Remaking it needs Manage Webhooks in that server and `gh secret set DISCORD_RELEASE_WEBHOOK`.
+    # Stable releases only. A pre-release is a build handed to a handful of testers on purpose; a
+    # card in #announcements is the opposite of that -- it tells everyone, and the card's own text
+    # then has to spend two paragraphs talking them out of installing it. Asked for 2026-09-25, after
+    # the v2.14.0-beta cards went out. The step is skipped rather than made to post something quieter,
+    # because "announce this to the server" and "do not announce this" are not the same card.
+    #
+    # Both forms of true are tested on purpose. The input is declared `type: boolean`, but a run
+    # dispatched through the API can deliver the STRING "true" -- and GitHub compares a string to a
+    # boolean by casting both to numbers, so "true" becomes NaN, `!= true` is satisfied, and the card
+    # posts for exactly the build that must not announce. The PowerShell below already guards against
+    # the same thing with `-eq 'true'`.
     - name: Announce on Discord
+      if: ${{ inputs.prerelease != true && inputs.prerelease != 'true' }}
       shell: pwsh
       continue-on-error: true
       env:

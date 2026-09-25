@@ -27,8 +27,8 @@ window.I18N.register("ru", {
     "Добавить выравнивание кадров",
   "Frame rate to hold":
     "Какую частоту кадров держать",
-  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. The slider covers the range people actually use; the box beside it goes up to 1000 for a display that needs it.":
-    "Авто держится чуть ниже предела VRR дисплея -- это то, что нужно большинству; фиксированное число нужно, чтобы совпасть со значением, выбранным в другом месте. Ползунок покрывает диапазон, которым реально пользуются; поле рядом доходит до 1000 для дисплея, которому это нужно.",
+  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. Type the frame rate: 30 to 1000.":
+    "«Автоматически» держится чуть ниже предела VRR дисплея — этого хочет большинство; фиксированное число нужно, чтобы совпасть со значением, уже выбранным где-то ещё. Введите частоту кадров: от 30 до 1000.",
   "Auto (stay below the VRR ceiling)":
     "Авто (держаться ниже предела VRR)",
   "fps":
@@ -1564,7 +1564,6 @@ window.I18N.register("ru", {
   "Removed. {count} files taken back out.": "Удалено. Файлов возвращено: {count}.",
   "Installed. {count} files placed, and the effect order was rewritten.": "Установлено. Размещено файлов: {count}, порядок эффектов переписан.",
   "That did not work.": "Не получилось.",
-  "This game already has ReShade in its folder, so these go in beside it. Pick per game; each one says who made it and under what licence, and is checked against a known hash before anything is placed.": "В папке этой игры уже есть ReShade, так что эти лягут рядом. Выбор для каждой игры отдельно; каждый пункт называет автора и лицензию и сверяется с известным хешем, прежде чем что-либо будет размещено.",
   "Installing this replaces {other} -- both are ways of getting an HDR signal and only one can run. You can swap back any time.": "Установка этого заменит {other} -- оба дают HDR-сигнал, и работать может только один. Вернуться обратно можно в любой момент.",
   "RenoDX already gives this game native HDR, so leave this pack's inverse tonemapper switched off in ReShade. Its analysis shaders and its final tone mapping are still worth having -- that is what keeps highlights inside what your display can show.": "RenoDX уже даёт этой игре нативный HDR, поэтому обратный тонмаппер из этого набора оставьте выключенным в ReShade. Его шейдеры анализа и финальное тональное отображение всё равно полезны -- именно они удерживают яркие участки в пределах возможностей дисплея.",
   "in use here": "используется здесь",
@@ -1624,7 +1623,77 @@ window.I18N.register("ru", {
   "OptiScaler's own file is missing from the helper folder. This app put it there -- its install record lists host64\\winmm.dll -- and it is not on disk now, so something removed it after the install. That is almost always antivirus: a 64-bit winmm.dll appearing beside a game exe looks exactly like a DLL hijack. Everything else is fine, which is why the Feeder's own window opens and the DLSS 5 overlay is not in it. Add an exclusion for this game's folder -- Windows Security > Virus & threat protection > Manage settings > Exclusions -- and then press Install here again. Do the exclusion first: without it, Install just puts the file back for it to be taken again. Protection history may also offer Allow for the item, but a cloud detection (a name ending in !cl) is often deleted rather than held, so do not count on finding one.": "Собственный файл OptiScaler отсутствует в папке помощника. Это приложение его туда положило — в журнале установки есть host64\\winmm.dll — а сейчас его на диске нет, значит после установки его что-то удалило. Почти всегда это антивирус: 64-битная winmm.dll рядом с exe игры выглядит ровно как подмена DLL. Всё остальное в порядке — поэтому окно Feeder открывается, а оверлея DLSS 5 в нём нет. Добавьте исключение для папки этой игры — «Безопасность Windows» > «Защита от вирусов и угроз» > «Управление настройками» > «Исключения» — и затем нажмите «Установить» здесь снова. Сначала исключение: без него «Установить» лишь вернёт файл, чтобы его забрали опять. В «Журнале защиты» для записи может быть «Разрешить», но облачное обнаружение (имя, оканчивающееся на !cl) чаще удаляют, чем хранят, так что не рассчитывайте её найти.",
   "Windows Security > Exclusions: add this game's folder": "Безопасность Windows > Исключения: добавить папку этой игры",
   "Protection history may also offer Allow -- but may show nothing": "В журнале защиты может быть «Разрешить» — а может не быть ничего",
+  "The helper program is missing from the helper folder. This app put it there -- its install record lists host64\\dlss5-feed-host64.exe -- and it is not on disk now, so something removed it after the install. A 64-bit exe appearing beside a game is the same thing antivirus takes a 64-bit winmm.dll for. Without it there is no helper to start, so the game renders perfectly and DLSS 5 does nothing at all. Add an exclusion for this game's folder -- Windows Security > Virus & threat protection > Manage settings > Exclusions -- and then press Install here again. Do the exclusion first: without it, Install just puts the file back for it to be taken again.":
+    "Вспомогательной программы нет в папке помощника. Это приложение её туда положило -- в записи установки указан host64\\dlss5-feed-host64.exe -- а на диске её сейчас нет, значит что-то удалило её уже после установки. 64-битный exe рядом с игрой антивирус принимает ровно за то же, что и 64-битную winmm.dll. Без него запускать нечего, поэтому игра рисуется безупречно, а DLSS 5 не делает вообще ничего. Добавьте папку этой игры в исключения -- Безопасность Windows > Защита от вирусов и угроз > Управление настройками > Исключения -- и затем снова нажмите здесь Установить. Сначала исключение: без него Установить просто вернёт файл, чтобы его снова удалили.",
+  "The DLSS work for a 32-bit game runs in a second program, a 64-bit helper beside the game, and this run it went away -- so the game kept rendering normally and DLSS 5 stopped. The Feeder's own words for why: {why}. The helper writes its own log, host64\\dlss5-feed-host.log beside the game, and that names the reason; this app cannot see inside another program, so that file is the next thing to read rather than anything to guess at. Save the bundle to share -- it now carries that log -- or ask the AI.":
+    "Работу DLSS для 32-битной игры выполняет отдельная программа -- 64-битный помощник рядом с игрой, -- и в этом запуске он пропал: игра продолжила рисоваться как обычно, а DLSS 5 остановился. Причина словами самого Feeder: {why}. Помощник ведёт собственный журнал, host64\\dlss5-feed-host.log рядом с игрой, и причина указана в нём; заглянуть внутрь чужой программы это приложение не может, поэтому читать нужно именно этот файл, а не строить догадки. Сохраните пакет для отправки -- теперь он содержит этот журнал -- или спросите ИИ.",
+  "The 64-bit helper that does the DLSS work for this game quit as it started: {why}. That is the add-on and the helper not being the same Feeder build, or a file missing from host64\\ -- both of which Install rebuilds from one download. Press Install here again, then launch.":
+    "64-битный помощник, выполняющий работу DLSS для этой игры, завершился при запуске: {why}. Это значит, что дополнение и помощник собраны из разных версий Feeder либо в host64\\ не хватает файла -- и то и другое Установить восстанавливает одной загрузкой. Нажмите здесь Установить ещё раз, затем запустите игру.",
+  "The 64-bit helper that does the DLSS work for this 32-bit game went away during the last run, so the feed stopped and the game carried on rendering by itself. host64\\dlss5-feed-host.log, beside the game, is its own account of why.":
+    "64-битный помощник, выполняющий работу DLSS для этой 32-битной игры, пропал во время последнего запуска, поэтому подача кадров прекратилась, а игра продолжила рисоваться сама. host64\\dlss5-feed-host.log рядом с игрой -- его собственный отчёт о причине.",
+  "Open host64\\dlss5-feed-host.log beside the game -- it names the reason":
+    "Откройте host64\\dlss5-feed-host.log рядом с игрой -- в нём указана причина",
+  "Save the bundle to share: it carries that log":
+    "Сохраните пакет для отправки: в нём есть этот журнал",
+  "Press Install (rebuilds the helper and the add-on together)":
+    "Нажмите Установить (пересобирает помощник и дополнение вместе)",
+  "The 64-bit helper went away":
+    "64-битный помощник пропал",
+  "The 64-bit helper was removed from host64 -- check antivirus":
+    "64-битный помощник удалён из host64 -- проверьте антивирус",
+  "The 64-bit helper went away -- its own log says why":
+    "64-битный помощник пропал -- причина в его собственном журнале",
+  "The 64-bit helper quit at startup -- Install rebuilds it":
+    "64-битный помощник завершился при запуске -- Установить пересоберёт его",
+  "the 64-bit helper went away this run -- host64\\dlss5-feed-host.log says why":
+    "в этом запуске 64-битный помощник пропал -- причина в host64\\dlss5-feed-host.log",
   "Adding frame pacing...": "Добавление выравнивания кадров...",
   "Could not add frame pacing: {error}": "Не удалось добавить выравнивание кадров: {error}",
   "This is upstream ReLimiter, which the in-game panel cannot drive -- use ReLimiter's own overlay in the game, or the target below.": "Это исходный ReLimiter, которым внутриигровая панель управлять не может -- используйте собственный оверлей ReLimiter в игре или цель ниже.",
+  "Automatic ({name})":
+    "Автоматически ({name})",
+  "Automatic":
+    "Автоматически",
+  "Set by hand to {name}.":
+    "Задано вручную: {name}.",
+  "OptiScaler is currently installed as {installed} and moves on the next Install or Reconfigure.":
+    "Сейчас OptiScaler установлен как {installed} и будет перемещён при следующей установке или перенастройке.",
+  "OptiScaler is installed as {installed}, chosen automatically.":
+    "OptiScaler установлен как {installed}, имя выбрано автоматически.",
+  "Could not set the proxy DLL name: {error}":
+    "Не удалось задать имя прокси-DLL: {error}",
+  "Moved OptiScaler from {from} to {to}.":
+    "OptiScaler перемещён из {from} в {to}.",
+  "Did NOT move it: {why}.":
+    "НЕ перемещён: {why}.",
+  "OptiScaler will load as {name} for this game.":
+    "Для этой игры OptiScaler будет загружаться как {name}.",
+  "Back to the automatic proxy DLL name.":
+    "Возврат к автоматическому имени прокси-DLL.",
+  "Proxy DLL name":
+    "Имя прокси-DLL",
+  "OptiScaler is loaded by taking the name of a DLL the game already loads at start. The app picks that name itself and is right almost always -- change this only if you know which DLL your game loads, for instance because OptiScaler's own wiki page for it names one. Choosing a name moves the installed file to it straight away.":
+    "OptiScaler загружается под именем DLL, которую игра и так загружает при старте. Приложение выбирает это имя само и почти всегда угадывает -- меняйте только если знаете, какую DLL загружает ваша игра, например потому что её называет страница вики OptiScaler для этой игры. При выборе имени установленный файл сразу переносится под него.",
+  "A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.":
+    "Неверное имя не опасно, просто бесполезно: игра никогда не загрузит этот файл, поэтому DLSS 5 ничего не делает и журнал не пишется. Чтобы отменить, верните значение «Автоматически».",
+  "These go in beside the game's ReShade, so a game without one is refused here and each row says which part is missing. Pick per game; each one says who made it and under what licence, and is checked against a known hash before anything is placed.":
+    "Они ставятся рядом с ReShade игры, поэтому игра без ReShade здесь получает отказ, и каждая строка говорит, чего не хватает. Выбирайте для каждой игры; каждый пункт указывает автора и лицензию и проверяется по известному хешу, прежде чем что-либо будет размещено.",
+  "This game has no ReShade, so nothing here can load. Install DLSS 5 or frame pacing on this game and ReShade comes with it, or put your own copy in the folder.":
+    "В этой игре нет ReShade, поэтому ничто здесь не сможет загрузиться. Установите для этой игры DLSS 5 или выравнивание кадров -- ReShade придёт вместе с ними -- либо положите свою копию в папку.",
+  "The ReShade here is the plain build, which never loads an add-on -- it carries the same version and name as the Add-on build, so this is not something you can see in the folder. The shader packs below still work.":
+    "ReShade здесь -- обычная сборка, которая никогда не загружает дополнения: у неё та же версия и то же имя, что и у сборки с поддержкой дополнений, так что по папке этого не видно. Наборы шейдеров ниже по-прежнему работают.",
+  "Needs the Add-on build":
+    "Нужна сборка с поддержкой дополнений",
+  "Needs ReShade":
+    "Нужен ReShade",
+  "No mod is built for this game, but RenoDX has one for its whole engine: {title}, maintained by {who}.":
+    "Для этой игры мода не собрано, но у RenoDX есть мод для всего её движка: {title}, поддерживает {who}.",
+  "This game does have its own mod, and RenoDX marks it superseded by the engine-wide one -- so the engine-wide one is what installs here.":
+    "У этой игры есть и собственный мод, но RenoDX помечает его как заменённый модом для всего движка -- поэтому здесь ставится мод для движка.",
+  "Matched on the engine, not on this game. RenoDX rates it \"{compat}\" for the engine, but nobody here has run it on this title -- if the picture looks wrong, take it back off.":
+    "Сопоставлено по движку, а не по самой игре. RenoDX оценивает его для движка как \"{compat}\", но именно на этой игре его здесь никто не проверял: если картинка выглядит неправильно, снимите его.",
+  "From our build, which is the one the in-game DLSS 5 panel can show these settings on -- look for the HDR page in the overlay.":
+    "Из нашей сборки -- именно в ней панель DLSS 5 может показать эти настройки в игре; ищите страницу HDR в оверлее.",
+  "From RenoDX's own release. It works, but only through its own overlay: the DLSS 5 panel can only show these settings on our build.":
+    "Из собственного релиза RenoDX. Он работает, но только через свой оверлей: панель DLSS 5 показывает эти настройки лишь в нашей сборке.",
 });

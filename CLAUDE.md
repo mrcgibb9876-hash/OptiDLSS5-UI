@@ -23,6 +23,38 @@ pre-release) before pinning to it.
 The running app's engine updater (`update:check` in `main.js`, `engines.js`) follows the same pin: it
 offers `engineVersion`, and only *reports* a newer "latest" as untested with this app version.
 
+## Open: the engine fork's nightly upstream sync is armed
+
+Asked for 2026-09-25, fixed, then reverted the same day at the user's request. The fix is on
+`claude/freeze-fork-against-upstream` (`acc086a2`, engine PR #23) if it is wanted again -- a
+cherry-pick, not a rewrite. Reverted by PR #24. **The state below is the live one.**
+
+- **The engine fork.** `sync-upstream.yml` runs at 06:00 daily. Whenever
+  `Dagherbou/OptiScaler_DLSSNR:dlss-neural-rendering` has moved it fast-forwards the mirror branch,
+  merges that mirror into `dlss5-developer-controls-ui` and **pushes** -- the branch every engine
+  release is cut from, under a manager pin naming a tag built the night before. It has never fired,
+  purely because upstream has not moved since our mirror caught up to `97376162`. It would not be one
+  commit either: the mirror carries **144** commits that branch has never had, because the branch
+  forked at `4f17a05d`, before upstream's DLSS-NR work landed, and re-implemented it differently. So
+  the first scheduled run after any upstream push merges all 144 unreviewed. It opens a PR only when
+  the merge **conflicts**; a clean merge is pushed silently, which is backwards.
+- **The ReLimiter fork is not at risk.** No sync workflow, 9 ahead / 0 behind, and upstream reaches
+  it only if someone presses GitHub's own "Sync fork". Worth not pressing it: its `release.yml` fires
+  on any push to `main`, and a release is what the app then hands every user. It skips itself when
+  `VERSION`'s tag already exists, so a sync that does not bump `VERSION` publishes nothing.
+
+**Freezing the forks would not freeze what users get**, which is a separate hole and still open:
+
+- `relimiter.js` resolves `releases/latest` on our fork, then RankFTW's -- a moving pointer, not a
+  pin like `engineVersion`. Publish on the fork and every client changes on its next deploy.
+- `addons.js` pins RenoDX to the tag `snapshot`, which is clshortfuse's own rolling build: the tag
+  name is fixed and its **assets are replaced in place**. The digest check catches a corrupted
+  download, not a different upstream build.
+
+Both are honest `vX.Y.Z` pins away from behaving like the engine does. Not done -- doing it means the
+app stops picking up a fork release by itself, which is a product decision, not a cleanup.
+
+
 ## Downloads are checked (src/integrity.js)
 
 Every file the app downloads and places is checked against a sha256 before use:
@@ -149,6 +181,111 @@ it still matters.
 
 Until there is an answer the app must not download it. Its licence forbids bundling and
 redistribution, so the manager only links to the release page and fetches the model file.
+
+## The proxy DLL name: one list, and a way out
+
+OptiScaler is loaded by taking the name of a DLL the game already loads at start. Three things
+decide it, in order: the user's choice (`.dlss5ui-proxy.json`, set in Edit > Advanced), then
+`PROXY_OVERRIDES` (keyed by exe, this app's own table), then the automatic answer -- `dxgi.dll` for
+Direct3D, and for a **Feeder** game on Vulkan, OpenGL or DX9 the first of `EARLY_PROXY_CANDIDATES`
+the exe actually imports.
+
+- **Every name the app can install under must be a name `detect.js` can read a folder back by.**
+  Those were two hand-kept lists and they had drifted: `dbghelp.dll`, `wininet.dll` and
+  `winhttp.dll` were installable and unreadable, so a game importing one of them got an OptiScaler
+  the app could no longer see -- folder read empty, route "not installed yet", Install writing a
+  second copy beside the first. `HOOK_DLLS` is now built from `EARLY_PROXY_CANDIDATES`; do not
+  re-introduce a second list. `DETECT_VERSION` went to 21 for it.
+- **Widening the scanned names is safe only because the scan is content-gated.** `HOOK_NEEDLES`
+  decides, not the file name, so a game's own genuine Microsoft `dbghelp.dll` -- plenty of games
+  ship one -- is read and passed over. Same rule as `isAddonReShadeDll` and `isReLimiterAddon`.
+- **Edit offers only those names, never free text.** A name the app cannot read back would let a
+  user reproduce the drift bug by hand, and a stored choice outside the list is ignored rather than
+  honoured.
+- **The 32-bit route has no proxy beside the exe** -- OptiScaler is `host64\winmm.dll`, loaded by
+  the helper -- so the row is hidden there and the handler refuses.
+- `nms.exe -> dbghelp.dll` is **documented, not measured** (OptiScaler's wiki, "early hooking"),
+  like `rdr2.exe` before it. Shipping an unmeasured entry is defensible only because the user can
+  now set the name back by hand; it was not before v2.13.10.
+## RenoDX reaches a whole engine, not just the games in the index
+
+RenoDX is per-game by nature -- 271 add-ons in `src/games/`, each compiled against one game's shader
+hashes -- and there is **no universal build**: `src/games/generic` exists in its source with an empty
+`custom_shaders` list and publishes no artifact at all. So "available for every game" is not a switch
+anyone can throw.
+
+But the project ships **engine-wide** mods (`support: 'generic'`, `category: 'engine'`) and is moving
+towards them: eight per-game entries now carry a note reading "Superseded by Generic <engine> mod".
+The catch is how `games-index.json` carries them -- as ordinary mods hung off a game, so
+`renodx-unrealengine.addon64` is listed against **exactly one game** (Ace Combat 7) though it is the
+same binary for every Unreal title. An index lookup finds it for almost nobody.
+
+`matchRenodx` therefore takes `engineId` (from `detect`'s own cached `engineId`, the field
+`lumaue.js` reads, so it costs no extra folder work) and falls back to `engineGenericMod`:
+
+- A bespoke mod always wins. The fallback is a fallback, and `how` says which happened
+  (`steam-appid` / `title` / `engine` / `engine-supersedes`) so the row can be honest about it.
+- **A generic with no artifact is never offered.** `unityengine` is marked generic in the index today
+  and carries no artifact, so Unity games correctly still read as having nothing. Nothing to change
+  here when upstream publishes one.
+- **Upstream's "superseded" note moves the install** -- but only when the replacement is really
+  downloadable. Five of those eight notes point at `unityengine`, and dropping a working per-game mod
+  for a file that does not exist is a regression dressed up as an upgrade.
+- **Bitness still decides.** The engine-wide mod builds x64 only, so a 32-bit Unreal game is refused
+  rather than handed a DLL it can never load.
+
+Two field-name traps in that index, both of which cost a wrong answer while reading it: the artifact
+list is `artifacts` (an array on the mod), **not** `deploy.artifact`, which does not exist on any of
+the 249 mods; and the API for `clshortfuse/renodx` is blocked by the egress proxy in these sessions
+while the release *download* URL works, so read the index with `curl` on
+`releases/download/snapshot/games-index.json` rather than through the GitHub API.
+
+### The panel's HDR page, and the one thing it waits on
+
+Engine PR #25 (`claude/renodx-panel-page`) puts RenoDX's own settings on a page of the DLSS 5 panel,
+drawn from `describe_setting` the way the Pacing page draws ReLimiter's. It is hidden unless RenoDX is
+in the process **and** drivable -- which today means hidden for everyone, because **no shipped RenoDX
+build exports `RenoDxGetHostApi`**. Upstream's `settings.hpp` exports only `NAME`. The API is ours, on
+`mrcgibb9876-hash/renodx` branch `feat/host-api` (`7bcbbec`), and the patch is also saved as
+`renodx-host-api.patch`.
+
+- **The add-on's filename is not fixed, unlike ReLimiter's.** RenoDX ships one per game, so there is no
+  `GetModuleHandleW` name to ask for: `DlssNr_RenoDx.cpp` enumerates loaded modules and takes the one
+  exporting the entry point, which also finds a copy the user installed himself. `K32EnumProcessModules`
+  is resolved from kernel32 by name so `Psapi.lib` never joins the vcxproj's four dependency lines.
+- **`RenoDx_Api.h` is a hand-written ABI mirror, not a verbatim vendored copy** like `ReLimiter_Api.h`,
+  because RenoDX declares the API inside `settings.hpp`, which drags in imgui and `reshade.hpp`. Layout
+  is therefore the whole contract -- it was checked field for field against the original by script
+  (14/14, 11/11), and `struct_size`/`api_version` are verified at runtime before anything is read.
+- **The page honours `is_visible` and `is_enabled`.** RenoDX's first setting is Settings Mode
+  (Simple/Intermediate/Advanced) and most of the rest appear only above Simple, so honouring it mirrors
+  RenoDX's own progressive disclosure with no list kept here. `group` is read and ignored: RenoDX uses
+  it to pack controls onto one line, and this panel is one per row for a controller's sake.
+- **`set_number` applies live** -- it goes through `UpdateSetting`, which runs `Write()` and the
+  on_change callbacks -- so there is no `apply` to call, unlike ReLimiter's API. `save()` persists.
+- **Writing ReShade.ini is not a substitute.** RenoDX persists to the `[renodx]` section via
+  `set_config_value`, but only re-reads it in `LoadSettings` at init or on its own preset keypress, so
+  an ini write lands next launch and gives keys with no labels, ranges or tooltips.
+
+**A fork of `clshortfuse/renodx` cannot be created from a session.** Confirmed 2026-09-25, all routes:
+`fork_repository` is refused as out of session scope; `create_repository` answers `403 Resource not
+accessible by integration`; `list_repos` shows no renodx to attach; and the local clone is **shallow
+(depth 2) with all 7 submodules uninitialised**, with no MSVC anyway. So the user has to press Fork on
+github.com. It must be a real fork, not a hand-made mirror: GitHub only allows cross-repo PRs inside a
+fork network, so a mirror could never carry the upstream PR that would make our own build unnecessary.
+Once it exists, the rest is ours -- push the patch, add a workflow building
+`renodx-unrealengine.addon64`, and give `addons.js` the two-source arrangement `relimiter.js` already
+has (our fork's release first, upstream's `snapshot` second).
+
+- **The add-ons picker reuses that same list.** `addons.RESHADE_NAMES` is `HOOK_DLLS` plus
+  `ReShade64.dll` / `ReShade32.dll` (the two names a non-proxying ReShade uses), because the picker
+  has to find a ReShade wherever it sits -- a test fails if a `HOOK_DLLS` name is not searched. It
+  identifies it by `relimiter.isReShadeProxy` (PE OriginalFilename), never by name, so OptiScaler in
+  the `dxgi.dll` slot does not pass. Deliberately **not** `relimiter.reshadeFileIn`, which only
+  recognises a proxy ReShade our own marker recorded and so would read a user's own ReShade as none
+  -- and that user is most of the RenoDX audience. `addons.installBlocker` then refuses
+  `no-reshade` for everything and `plain-reshade` for `kind: 'addon'` only, since a plain ReShade
+  runs `.fx` effects perfectly well and simply never loads an add-on.
 
 ## Gotchas that have already cost time
 

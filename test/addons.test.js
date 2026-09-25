@@ -206,6 +206,12 @@ function fakeCtx(bodies) {
   };
 }
 
+// These tests are about what installAddon PLACES, not about the ReShade gate above it, and the
+// scratch folders have no ReShade -- nor can they on Linux, where there is no notepad.exe to
+// rename. So they state the precondition instead of faking a file: HAS_RESHADE is the fact the
+// IPC handler passes in for real, from one folder scan (addons.reshadeIn).
+const HAS_RESHADE = { reshade: { file: 'ReShade64.dll', addonBuild: true } };
+
 test('installing a shader pack places it, reads its techniques, and records what it wrote', async () => {
   const dir = scratchDir('addons-install');
   const files = addons.packFiles(addons.addonById('renofx'));
@@ -213,7 +219,7 @@ test('installing a shader pack places it, reads its techniques, and records what
   for (const rel of files) bodies[rel] = `technique ${path.basename(rel, '.fx').replace(/[^A-Za-z0-9_]/g, '')} { }`;
   const ctx = fakeCtx(bodies);
 
-  const res = await addons.installAddon(dir, 'renofx', ctx);
+  const res = await addons.installAddon(dir, 'renofx', ctx, HAS_RESHADE);
 
   for (const rel of files) {
     assert.ok(fs.existsSync(path.join(dir, 'reshade-shaders', ...rel.split('/'))), `${rel} is in place`);
@@ -240,7 +246,7 @@ test('installing RenoDX writes the matched artifact and nothing else', async () 
   const match = addons.matchRenodx(INDEX, { steamAppid: 1091500, bitness: 64 });
   const ctx = fakeCtx({ 'renodx-cyberpunk2077.addon64': 'MZ fake addon' });
 
-  const res = await addons.installAddon(dir, 'renodx', ctx, { match });
+  const res = await addons.installAddon(dir, 'renodx', ctx, { match, ...HAS_RESHADE });
 
   assert.deepEqual(res.files, ['renodx-cyberpunk2077.addon64']);
   assert.ok(fs.existsSync(path.join(dir, 'renodx-cyberpunk2077.addon64')));
@@ -256,7 +262,7 @@ test('remove takes back exactly what was placed, and forgets the claim', async (
   const files = addons.packFiles(addons.addonById('renofx'));
   const bodies = {};
   for (const rel of files) bodies[rel] = 'technique T { }';
-  await addons.installAddon(dir, 'renofx', fakeCtx(bodies));
+  await addons.installAddon(dir, 'renofx', fakeCtx(bodies), HAS_RESHADE);
 
   // A file the app did NOT place, sitting in the same folder.
   const theirs = path.join(dir, 'reshade-shaders', 'Shaders', 'TheirOwn.fx');
@@ -305,13 +311,13 @@ test('installing the other HDR source swaps it -- no lockout, and nothing is fet
   });
   const match = addons.matchRenodx(INDEX, { steamAppid: 1091500, bitness: 64 });
 
-  await addons.installAddon(dir, 'renodx', ctx, { match });
+  await addons.installAddon(dir, 'renodx', ctx, { match, ...HAS_RESHADE });
   assert.deepEqual(addons.installedIds(dir), ['renodx']);
   // With RenoDX here, AutoHDR reports what it would replace -- so the UI can say so up front
   // rather than the other row silently flipping afterwards.
   assert.deepEqual(addons.conflictsFor(dir, 'lilium-autohdr'), ['renodx']);
 
-  const res = await addons.installAddon(dir, 'lilium-autohdr', ctx, { bitness: 64 });
+  const res = await addons.installAddon(dir, 'lilium-autohdr', ctx, { bitness: 64, ...HAS_RESHADE });
 
   assert.deepEqual(res.swappedOut, ['renodx'], 'the swap is reported, not silent');
   assert.deepEqual(addons.installedIds(dir), ['lilium-autohdr']);
@@ -319,7 +325,7 @@ test('installing the other HDR source swaps it -- no lockout, and nothing is fet
   assert.ok(fs.existsSync(path.join(dir, 'autohdr.addon64')));
 
   // And back again: this is a swap, not a one-way door.
-  const back = await addons.installAddon(dir, 'renodx', ctx, { match });
+  const back = await addons.installAddon(dir, 'renodx', ctx, { match, ...HAS_RESHADE });
   assert.deepEqual(back.swappedOut, ['lilium-autohdr']);
   assert.deepEqual(addons.installedIds(dir), ['renodx']);
 
@@ -343,7 +349,7 @@ test('a pack\'s per-technique bands survive into what the preset is sorted by', 
   const files = addons.packFiles(addons.addonById('lilium-hdr'));
   const bodies = {};
   for (const rel of files) bodies[rel] = /\.fx$/i.test(rel) ? `technique T_${path.basename(rel, '.fx')} { }` : 'x';
-  await addons.installAddon(dir, 'lilium-hdr', fakeCtx(bodies));
+  await addons.installAddon(dir, 'lilium-hdr', fakeCtx(bodies), HAS_RESHADE);
 
   const bands = addons.installedTechniqueBands(dir);
   const last = bands.find((b) => /tone_mapping\.fx$/i.test(b.technique) && !/inverse/i.test(b.technique));
@@ -410,4 +416,283 @@ test('switching refuses on a game the Feeder is not deployed to, and is a no-op 
   feeder.writeFeederDeployMarker(dir, { feederVersion: 'v1', mvProviderId: 'vort', mvFiles: ['Shaders/vort_Motion.fx'] });
   const res = await feeder.switchMvProvider(dir, 'vort', dir, { 'User-Agent': 'x' }, {});
   assert.equal(res.changed, false, 'pressing the one already in use costs nothing');
+});
+
+// ── ReShade has to actually be there ──────────────────────────────────────────────────────────
+//
+// The add-ons button is on every game card, including a game this app has never installed anything
+// into, so the module header's "every route already puts ReShade in the folder" does not hold at
+// this door. Without the gate, Install placed a .addon64 beside an exe with nothing to load it: no
+// error, no effect, and the row then read "Remove".
+
+// notepad.exe with its version resource renamed, the way relimiter.test.js does it -- the only
+// honest way to get a file isReShadeProxy accepts, since it reads the PE OriginalFilename.
+// Windows only, because that is where notepad.exe is; CI runs there.
+const NOTEPAD = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'notepad.exe');
+const canFakePe = process.platform === 'win32' && fs.existsSync(NOTEPAD);
+function fakeReShade(dir, name, { addonBuild = true } = {}) {
+  const buf = fs.readFileSync(NOTEPAD);
+  const at = buf.indexOf(Buffer.from('NOTEPAD.EXE', 'utf16le'));
+  Buffer.from('RESHADE.DLL', 'utf16le').copy(buf, at);
+  const pad = Buffer.alloc(2 * 1024 * 1024, 0);
+  // The export name is the whole difference between the two builds. Same version, same product
+  // name, so nothing else in the file tells them apart (feeder.js's issue-#53 note).
+  pad.write(addonBuild ? 'ReShade ReShadeRegisterAddon' : 'ReShade', 64, 'latin1');
+  fs.writeFileSync(path.join(dir, name), Buffer.concat([buf, pad]));
+}
+
+test('every proxy name the app can install under is a name ReShade is looked for under', () => {
+  const detect = require('../src/detect');
+  for (const name of detect.HOOK_DLLS) {
+    assert.ok(addons.RESHADE_NAMES.includes(name), `${name} is searched for a ReShade`);
+  }
+  // The two a non-proxying ReShade uses, which are not proxy names and so are not in HOOK_DLLS.
+  assert.ok(addons.RESHADE_NAMES.includes('ReShade64.dll'));
+  assert.ok(addons.RESHADE_NAMES.includes('ReShade32.dll'));
+});
+
+test('a folder with no ReShade blocks every entry, add-on and shader pack alike', () => {
+  const dir = scratchDir('addons-no-reshade');
+  assert.equal(addons.reshadeIn(dir), null);
+  for (const a of addons.catalogue()) {
+    assert.equal(addons.installBlocker(dir, a.id), 'no-reshade', `${a.id} is refused`);
+  }
+});
+
+test('installAddon refuses rather than placing a file nothing will load', async () => {
+  const dir = scratchDir('addons-refuse');
+  // The renderer disables the button, but this path is also reached straight from IPC, and the
+  // refusal has to land BEFORE the conflict swap takes the other HDR source out.
+  await assert.rejects(
+    () => addons.installAddon(dir, 'renodx', { fetchBuffer: async () => { throw new Error('must not fetch'); } }),
+    (e) => e.code === 'no-reshade',
+  );
+  assert.deepEqual(fs.readdirSync(dir), [], 'nothing was written, and no marker either');
+});
+
+test('an unknown id is still an unknown id, not a ReShade problem', async () => {
+  const dir = scratchDir('addons-unknown');
+  assert.equal(addons.installBlocker(dir, 'not-a-thing'), null);
+  await assert.rejects(() => addons.installAddon(dir, 'not-a-thing', {}), /Unknown add-on/);
+});
+
+test('ReShade the user installed himself counts, wherever he put it', { skip: !canFakePe }, () => {
+  // The case that made a marker-based check wrong: no route of ours was ever run here, so there is
+  // no .dlss5ui-relimiter.json to read -- relimiter.reshadeFileIn would look for ReShade64.dll and
+  // find nothing. This is most of the people who want RenoDX.
+  const dir = scratchDir('addons-own-reshade');
+  fakeReShade(dir, 'dxgi.dll');
+  const rs = addons.reshadeIn(dir);
+  assert.equal(rs.file, 'dxgi.dll');
+  assert.equal(rs.addonBuild, true);
+  assert.equal(addons.installBlocker(dir, 'renodx'), null, 'the add-on is allowed');
+  assert.equal(addons.installBlocker(dir, 'renofx'), null, 'so is the shader pack');
+});
+
+test('the plain build stops an add-on and leaves the shader packs alone', { skip: !canFakePe }, () => {
+  const dir = scratchDir('addons-plain-reshade');
+  fakeReShade(dir, 'ReShade64.dll', { addonBuild: false });
+  assert.equal(addons.reshadeIn(dir).addonBuild, false);
+  // RenoDX is an add-on: the plain build would never load it.
+  assert.equal(addons.installBlocker(dir, 'renodx'), 'plain-reshade');
+  // RenoFX and Lilium are .fx effects, which the plain build runs perfectly well. Refusing those
+  // too would take away the answer the RenoDX row points at when there is no mod for the game.
+  assert.equal(addons.installBlocker(dir, 'renofx'), null);
+  assert.equal(addons.installBlocker(dir, 'lilium-hdr'), null);
+});
+
+test('an Add-on build anywhere in the folder wins over a plain one beside it', { skip: !canFakePe }, () => {
+  const dir = scratchDir('addons-both-builds');
+  fakeReShade(dir, 'ReShade64.dll', { addonBuild: false });
+  fakeReShade(dir, 'dxgi.dll', { addonBuild: true });
+  const rs = addons.reshadeIn(dir);
+  assert.equal(rs.addonBuild, true, 'the build that can load an add-on is the one reported');
+  assert.equal(rs.file, 'dxgi.dll');
+  assert.equal(addons.installBlocker(dir, 'renodx'), null);
+});
+
+test('OptiScaler in a proxy slot is not mistaken for ReShade', { skip: !canFakePe }, () => {
+  // OptiScaler.dll carries the string "ReShade" (its LoadReshade) and is megabytes, so the loose
+  // feeder.isReShadeDll check would take it. This gate reads the version resource instead.
+  const dir = scratchDir('addons-optiscaler-only');
+  const opti = Buffer.alloc(2 * 1024 * 1024, 5);
+  opti.write('OptiScaler LoadReshade ReShade ReShadeRegisterAddon', 128, 'latin1');
+  fs.writeFileSync(path.join(dir, 'dxgi.dll'), opti);
+  assert.equal(addons.reshadeIn(dir), null, 'a game with only OptiScaler has no ReShade here');
+  assert.equal(addons.installBlocker(dir, 'renodx'), 'no-reshade');
+});
+
+// ── the engine-wide fallback ───────────────────────────────────────────────────────────────────
+//
+// RenoDX is per-game by nature and publishes no universal build, but it does publish ENGINE-wide
+// mods -- and the index hangs renodx-unrealengine.addon64 off exactly ONE game (Ace Combat 7) even
+// though it is the same binary for every Unreal title. Matching on the engine is what takes the
+// offer from "the games in the index" to "any Unreal game".
+
+// Shaped exactly like the published games-index.json, including the two things that caught me out
+// when reading the real one: the artifact list is `artifacts` (not deploy.artifact), and the
+// engine-wide mod is an ordinary member of some game's `mods`.
+function indexWithEngineMods() {
+  const unreal = {
+    id: 'unrealengine', title: 'Unreal Engine', category: 'engine', support: 'generic',
+    compatibility: 'working', maintainers: ['ShortFuse'], notes: [],
+    artifacts: [{ name: 'renodx-unrealengine.addon64', arch: 'x64', size: 28734976 }],
+  };
+  // Marked generic by the index and carrying no artifact at all -- unityengine's real state today.
+  const unity = {
+    id: 'unityengine', title: 'Unity Engine', category: 'engine', support: 'generic',
+    compatibility: 'working', maintainers: ['ShortFuse'], notes: [], artifacts: [],
+  };
+  return {
+    games: [
+      {
+        id: 'ace-combat-7', title: 'Ace Combat 7', deploy: { steam_appid: 502500 },
+        mods: [
+          {
+            id: 'acecombat7', title: 'Ace Combat 7', category: 'game', status: 'stable',
+            notes: ['Superseded by Generic Unreal Engine mod'],
+            artifacts: [{ name: 'renodx-acecombat7.addon64', arch: 'x64' }],
+          },
+          unreal,
+        ],
+      },
+      {
+        id: 'death-s-door', title: "Death's Door", deploy: { steam_appid: 894020 },
+        mods: [
+          {
+            id: 'deathsdoor', title: "Death's Door", category: 'game', status: 'stable',
+            notes: ['Superseded by Generic Unity mod'],
+            artifacts: [{ name: 'renodx-deathsdoor.addon64', arch: 'x64' }],
+          },
+          unity,
+        ],
+      },
+      {
+        id: 'cyberpunk-2077', title: 'Cyberpunk 2077', deploy: { steam_appid: 1091500 },
+        mods: [{ id: 'cp2077', title: 'Cyberpunk 2077', category: 'game', status: 'stable', notes: [], artifacts: [{ name: 'renodx-cp2077.addon64', arch: 'x64' }] }],
+      },
+    ],
+  };
+}
+
+test('an Unreal game with no mod of its own is offered the engine-wide one', () => {
+  const idx = indexWithEngineMods();
+  const m = addons.matchRenodx(idx, { title: 'Some Unlisted UE5 Game', engineId: 'unreal', bitness: 64 });
+  assert.equal(m.artifact, 'renodx-unrealengine.addon64');
+  assert.equal(m.how, 'engine', 'the caller can tell this was not a match on the game');
+  assert.equal(m.gameId, null, 'because the index does not list this game at all');
+  assert.equal(m.compatibility, 'working', "upstream's rating travels with it, to be quoted not claimed");
+});
+
+test('without an engine there is no fallback, so nothing about the old behaviour changes', () => {
+  const idx = indexWithEngineMods();
+  assert.equal(addons.matchRenodx(idx, { title: 'Some Unlisted UE5 Game', bitness: 64 }), null);
+  assert.equal(addons.matchRenodx(idx, { title: 'Some Unlisted UE5 Game', engineId: 're', bitness: 64 }), null);
+});
+
+test('a generic mod with no artifact is not offered at all', () => {
+  // unityengine is marked generic in the real index and has no artifact. Offering a download that
+  // does not exist is worse than saying "no mod for this game".
+  const idx = indexWithEngineMods();
+  assert.equal(addons.engineGenericMod(idx, 'unity', 64), null, 'no usable Unity mod');
+  // And the Unreal one, which does have an artifact, is found.
+  assert.equal(addons.engineGenericMod(idx, 'unreal', 64).id, 'unrealengine');
+  // A Unity game therefore still reads as having nothing, exactly as before.
+  assert.equal(addons.matchRenodx(idx, { title: 'Unlisted Unity Game', engineId: 'unity', bitness: 64 }), null);
+});
+
+test('the engine-wide mod is only offered for a bitness it actually ships', () => {
+  const idx = indexWithEngineMods();
+  // It builds x64 only, and a 32-bit game takes its own bitness -- handing it a 64-bit DLL would
+  // put a file in the folder that can never load, which is the whole failure the gate above stops.
+  assert.equal(addons.matchRenodx(idx, { title: 'Unlisted UE 32', engineId: 'unreal', bitness: 32 }), null);
+});
+
+test("upstream's own 'superseded' note moves the install to the engine-wide mod", () => {
+  const idx = indexWithEngineMods();
+  const m = addons.matchRenodx(idx, { steamAppid: 502500, engineId: 'unreal', bitness: 64 });
+  assert.equal(m.artifact, 'renodx-unrealengine.addon64', 'not the bespoke acecombat7 one');
+  assert.equal(m.how, 'engine-supersedes');
+  assert.equal(m.gameId, 'ace-combat-7', 'the game IS in the index here, unlike the plain engine case');
+});
+
+test('a superseding mod that cannot be downloaded never displaces a working one', () => {
+  // Five of the eight real "superseded" notes point at unityengine, which has no artifact. Dropping
+  // a working per-game mod for a file that does not exist is a regression dressed up as an upgrade.
+  const idx = indexWithEngineMods();
+  const m = addons.matchRenodx(idx, { steamAppid: 894020, engineId: 'unity', bitness: 64 });
+  assert.equal(m.artifact, 'renodx-deathsdoor.addon64');
+  assert.equal(m.how, 'steam-appid');
+});
+
+test('a bespoke mod with no superseded note is still what installs', () => {
+  const idx = indexWithEngineMods();
+  // Even on an Unreal game: a mod written against this game's shaders beats one written against the
+  // engine, which is why the fallback is a fallback.
+  const m = addons.matchRenodx(idx, { steamAppid: 1091500, engineId: 'unreal', bitness: 64 });
+  assert.equal(m.artifact, 'renodx-cp2077.addon64');
+  assert.equal(m.how, 'steam-appid');
+});
+
+test('the engine map only claims engines the index really has a generic for', () => {
+  assert.equal(addons.ENGINE_GENERIC_MODS.unreal, 'unrealengine');
+  assert.equal(addons.ENGINE_GENERIC_MODS.unity, 'unityengine');
+  // detect.js's other engine ids must not silently resolve to something.
+  for (const id of ['re', 'red', 'cryengine', 'godot', 'anvil', 'emulator', null, undefined]) {
+    assert.equal(addons.ENGINE_GENERIC_MODS[id], undefined, `${id} has no generic mod`);
+  }
+});
+
+// ── two sources for RenoDX ─────────────────────────────────────────────────────────────────────
+//
+// Our fork first, because only its build exports RenoDxGetHostApi and without that the engine's
+// in-game HDR page stays hidden. Upstream second, so RenoDX still installs when the fork has
+// published nothing. Same shape as relimiter.RELEASE_SOURCES.
+
+test('the fork is tried before upstream, and only it claims the host API', () => {
+  assert.equal(addons.RENODX_SOURCES.length, 2);
+  assert.equal(addons.RENODX_SOURCES[0].repo, 'mrcgibb9876-hash/renodx');
+  assert.equal(addons.RENODX_SOURCES[0].hostApi, true);
+  assert.equal(addons.RENODX_SOURCES[1].repo, addons.RENODX_REPO);
+  assert.equal(addons.RENODX_SOURCES[1].hostApi, false, 'upstream cannot drive the panel');
+  // Both on the rolling tag, so neither is a pin: what keeps them honest is the digest, which
+  // integrity derives from the download URL -- hence a per-source tag and no per-source hash.
+  for (const s of addons.RENODX_SOURCES) assert.equal(s.tag, 'snapshot');
+});
+
+test('the index URL follows the source it is asked for', () => {
+  const [fork, upstream] = addons.RENODX_SOURCES;
+  assert.equal(addons.renodxIndexUrl(fork),
+    'https://github.com/mrcgibb9876-hash/renodx/releases/download/snapshot/games-index.json');
+  assert.equal(addons.renodxIndexUrl(upstream), addons.renodxIndexUrl(),
+    'no source means upstream, which is where this used to look');
+});
+
+test('the artifact comes from the release the index came from, never the other one', async () => {
+  // The failure this prevents: each release carries its own index naming its own files, so reading
+  // one source's index and fetching the other's asset asks for a name that release may not have.
+  const dir = scratchDir('addons-source-pairing');
+  const match = { artifact: 'renodx-unrealengine.addon64', modId: 'unrealengine', title: 'Unreal Engine' };
+  const asked = [];
+  const ctx = { fetchBuffer: async (url) => { asked.push(url); return Buffer.from('x'); } };
+
+  await addons.installAddon(dir, 'renodx', ctx, {
+    match, ...HAS_RESHADE, source: addons.RENODX_SOURCES[0],
+  });
+  assert.match(asked[0], /^https:\/\/github\.com\/mrcgibb9876-hash\/renodx\/releases\/download\/snapshot\//);
+
+  asked.length = 0;
+  const dir2 = scratchDir('addons-source-pairing-upstream');
+  await addons.installAddon(dir2, 'renodx', ctx, {
+    match, ...HAS_RESHADE, source: addons.RENODX_SOURCES[1],
+  });
+  assert.match(asked[0], /^https:\/\/github\.com\/clshortfuse\/renodx\/releases\/download\/snapshot\//);
+});
+
+test('no source still installs from upstream, so an old caller is not broken', async () => {
+  const dir = scratchDir('addons-source-default');
+  const asked = [];
+  await addons.installAddon(dir, 'renodx', { fetchBuffer: async (u) => { asked.push(u); return Buffer.from('x'); } },
+    { match: { artifact: 'renodx-cp2077.addon64', modId: 'cp2077' }, ...HAS_RESHADE });
+  assert.match(asked[0], /clshortfuse\/renodx/);
 });

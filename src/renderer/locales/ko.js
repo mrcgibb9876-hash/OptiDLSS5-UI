@@ -27,8 +27,8 @@ window.I18N.register("ko", {
     "프레임 페이싱 추가",
   "Frame rate to hold":
     "유지할 프레임 레이트",
-  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. The slider covers the range people actually use; the box beside it goes up to 1000 for a display that needs it.":
-    "자동은 디스플레이의 VRR 상한 바로 아래를 유지하며 대부분의 경우 이것이 적합합니다. 고정 값은 다른 곳에서 이미 정한 수치에 맞출 때 쓰세요. 슬라이더는 실제로 많이 쓰는 범위를 다루고, 옆의 입력란은 필요한 디스플레이를 위해 1000까지 올라갑니다.",
+  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. Type the frame rate: 30 to 1000.":
+    "자동은 디스플레이의 VRR 상한 바로 아래를 유지하며, 대부분은 이것을 원합니다. 고정값은 다른 곳에서 이미 정해 둔 수치에 맞출 때 씁니다. 프레임 레이트를 입력하세요: 30~1000.",
   "Auto (stay below the VRR ceiling)":
     "자동 (VRR 상한 아래로 유지)",
   "fps":
@@ -1564,7 +1564,6 @@ window.I18N.register("ko", {
   "Removed. {count} files taken back out.": "제거했습니다. 파일 {count}개를 되돌렸습니다.",
   "Installed. {count} files placed, and the effect order was rewritten.": "설치했습니다. 파일 {count}개를 배치하고 효과 순서를 다시 썼습니다.",
   "That did not work.": "실패했습니다.",
-  "This game already has ReShade in its folder, so these go in beside it. Pick per game; each one says who made it and under what licence, and is checked against a known hash before anything is placed.": "이 게임 폴더에는 이미 ReShade가 있으므로 이것들은 그 옆에 들어갑니다. 게임마다 선택하세요. 각 항목은 제작자와 라이선스를 밝히며, 무엇이든 배치하기 전에 알려진 해시와 대조해 확인합니다.",
   "Installing this replaces {other} -- both are ways of getting an HDR signal and only one can run. You can swap back any time.": "이것을 설치하면 {other}을(를) 대체합니다 -- 둘 다 HDR 신호를 얻는 방법이며 하나만 동작할 수 있습니다. 언제든 다시 바꿀 수 있습니다.",
   "RenoDX already gives this game native HDR, so leave this pack's inverse tonemapper switched off in ReShade. Its analysis shaders and its final tone mapping are still worth having -- that is what keeps highlights inside what your display can show.": "RenoDX가 이미 이 게임에 네이티브 HDR을 제공하므로, 이 팩의 역 톤매퍼는 ReShade에서 꺼 두세요. 분석 셰이더와 최종 톤 매핑은 여전히 쓸모 있습니다 -- 그것이 하이라이트를 디스플레이가 표현할 수 있는 범위 안에 붙잡아 둡니다.",
   "in use here": "여기서 사용 중",
@@ -1624,7 +1623,77 @@ window.I18N.register("ko", {
   "OptiScaler's own file is missing from the helper folder. This app put it there -- its install record lists host64\\winmm.dll -- and it is not on disk now, so something removed it after the install. That is almost always antivirus: a 64-bit winmm.dll appearing beside a game exe looks exactly like a DLL hijack. Everything else is fine, which is why the Feeder's own window opens and the DLSS 5 overlay is not in it. Add an exclusion for this game's folder -- Windows Security > Virus & threat protection > Manage settings > Exclusions -- and then press Install here again. Do the exclusion first: without it, Install just puts the file back for it to be taken again. Protection history may also offer Allow for the item, but a cloud detection (a name ending in !cl) is often deleted rather than held, so do not count on finding one.": "도우미 폴더에 OptiScaler 자체 파일이 없습니다. 이 앱이 그곳에 넣었고(설치 기록에 host64\\winmm.dll이 있습니다) 지금 디스크에는 없으므로, 설치 후에 무언가가 제거한 것입니다. 거의 항상 백신입니다. 게임 exe 옆의 64비트 winmm.dll은 DLL 하이재킹과 똑같아 보입니다. 나머지는 모두 정상이며, 그래서 Feeder 창은 열리지만 그 안에 DLSS 5 오버레이가 없습니다. 이 게임 폴더에 대한 제외 항목을 추가하세요 -- Windows 보안 > 바이러스 및 위협 방지 > 설정 관리 > 제외 -- 그런 다음 여기서 설치를 다시 누르세요. 제외를 먼저 하세요. 그렇지 않으면 설치는 파일을 다시 가져가도록 되돌려 놓을 뿐입니다. 보호 기록에서 해당 항목에 허용이 제공될 수도 있지만, 클라우드 탐지(!cl로 끝나는 이름)는 보관되기보다 삭제되는 경우가 많으니 있을 것이라고 기대하지 마세요.",
   "Windows Security > Exclusions: add this game's folder": "Windows 보안 > 제외: 이 게임 폴더 추가",
   "Protection history may also offer Allow -- but may show nothing": "보호 기록에 허용이 있을 수도, 아무것도 없을 수도 있습니다",
+  "The helper program is missing from the helper folder. This app put it there -- its install record lists host64\\dlss5-feed-host64.exe -- and it is not on disk now, so something removed it after the install. A 64-bit exe appearing beside a game is the same thing antivirus takes a 64-bit winmm.dll for. Without it there is no helper to start, so the game renders perfectly and DLSS 5 does nothing at all. Add an exclusion for this game's folder -- Windows Security > Virus & threat protection > Manage settings > Exclusions -- and then press Install here again. Do the exclusion first: without it, Install just puts the file back for it to be taken again.":
+    "도우미 폴더에 도우미 프로그램이 없습니다. 이 앱이 거기에 넣었고 -- 설치 기록에 host64\\dlss5-feed-host64.exe가 있습니다 -- 지금은 디스크에 없으므로 설치 후에 무언가가 지운 것입니다. 게임 옆에 놓인 64비트 exe는 백신이 64비트 winmm.dll을 의심하는 것과 똑같은 대상입니다. 이 파일이 없으면 시작할 도우미 자체가 없으므로 게임은 완벽하게 그려지고 DLSS 5는 아무 일도 하지 않습니다. 이 게임 폴더를 제외 목록에 추가한 뒤 -- Windows 보안 > 바이러스 및 위협 방지 > 설정 관리 > 제외 -- 여기서 설치를 다시 누르세요. 제외가 먼저입니다. 그렇지 않으면 설치는 파일을 다시 가져다 놓을 뿐이고 또 지워집니다.",
+  "The DLSS work for a 32-bit game runs in a second program, a 64-bit helper beside the game, and this run it went away -- so the game kept rendering normally and DLSS 5 stopped. The Feeder's own words for why: {why}. The helper writes its own log, host64\\dlss5-feed-host.log beside the game, and that names the reason; this app cannot see inside another program, so that file is the next thing to read rather than anything to guess at. Save the bundle to share -- it now carries that log -- or ask the AI.":
+    "32비트 게임의 DLSS 작업은 게임 옆의 64비트 도우미라는 별도 프로그램에서 실행되는데, 이번 실행에서 그 프로그램이 사라졌습니다. 그래서 게임은 정상적으로 계속 그려지고 DLSS 5만 멈췄습니다. Feeder가 밝힌 이유: {why}. 도우미는 게임 옆 host64\\dlss5-feed-host.log에 자체 로그를 기록하며 거기에 이유가 있습니다. 이 앱은 다른 프로그램 내부를 볼 수 없으므로 추측하기보다 그 파일을 읽는 것이 다음 단계입니다. 공유용 번들을 저장하거나(이제 그 로그가 포함됩니다) AI에게 물어보세요.",
+  "The 64-bit helper that does the DLSS work for this game quit as it started: {why}. That is the add-on and the helper not being the same Feeder build, or a file missing from host64\\ -- both of which Install rebuilds from one download. Press Install here again, then launch.":
+    "이 게임의 DLSS 작업을 맡는 64비트 도우미가 시작하자마자 종료되었습니다: {why}. 애드온과 도우미가 서로 다른 Feeder 빌드이거나 host64\\에 파일이 빠졌다는 뜻이며, 설치가 한 번의 다운로드로 두 가지를 모두 다시 구성합니다. 여기서 설치를 다시 누른 다음 실행하세요.",
+  "The 64-bit helper that does the DLSS work for this 32-bit game went away during the last run, so the feed stopped and the game carried on rendering by itself. host64\\dlss5-feed-host.log, beside the game, is its own account of why.":
+    "이 32비트 게임의 DLSS 작업을 맡는 64비트 도우미가 지난 실행 중에 사라져서 피드가 멈췄고 게임만 계속 그려졌습니다. 게임 옆의 host64\\dlss5-feed-host.log가 그 이유에 대한 도우미 자신의 기록입니다.",
+  "Open host64\\dlss5-feed-host.log beside the game -- it names the reason":
+    "게임 옆의 host64\\dlss5-feed-host.log를 여세요 -- 이유가 적혀 있습니다",
+  "Save the bundle to share: it carries that log":
+    "공유용 번들 저장: 그 로그가 들어 있습니다",
+  "Press Install (rebuilds the helper and the add-on together)":
+    "설치 누르기(도우미와 애드온을 함께 다시 구성)",
+  "The 64-bit helper went away":
+    "64비트 도우미가 사라짐",
+  "The 64-bit helper was removed from host64 -- check antivirus":
+    "64비트 도우미가 host64에서 제거됨 -- 백신 확인",
+  "The 64-bit helper went away -- its own log says why":
+    "64비트 도우미가 사라짐 -- 자체 로그에 이유가 있음",
+  "The 64-bit helper quit at startup -- Install rebuilds it":
+    "64비트 도우미가 시작 중 종료됨 -- 설치가 다시 구성함",
+  "the 64-bit helper went away this run -- host64\\dlss5-feed-host.log says why":
+    "이번 실행에서 64비트 도우미가 사라짐 -- host64\\dlss5-feed-host.log에 이유가 있음",
   "Adding frame pacing...": "프레임 페이싱 추가 중...",
   "Could not add frame pacing: {error}": "프레임 페이싱을 추가하지 못했습니다: {error}",
   "This is upstream ReLimiter, which the in-game panel cannot drive -- use ReLimiter's own overlay in the game, or the target below.": "이것은 원본 ReLimiter로, 게임 내 패널에서 조작할 수 없습니다. 게임 안에서 ReLimiter 자체 오버레이나 아래 목표값을 사용하세요.",
+  "Automatic ({name})":
+    "자동 ({name})",
+  "Automatic":
+    "자동",
+  "Set by hand to {name}.":
+    "직접 {name}(으)로 설정했습니다.",
+  "OptiScaler is currently installed as {installed} and moves on the next Install or Reconfigure.":
+    "OptiScaler는 현재 {installed}(으)로 설치되어 있으며 다음 설치 또는 재구성 때 옮겨집니다.",
+  "OptiScaler is installed as {installed}, chosen automatically.":
+    "OptiScaler가 자동으로 선택된 {installed}(으)로 설치되어 있습니다.",
+  "Could not set the proxy DLL name: {error}":
+    "프록시 DLL 이름을 설정할 수 없습니다: {error}",
+  "Moved OptiScaler from {from} to {to}.":
+    "OptiScaler를 {from}에서 {to}(으)로 옮겼습니다.",
+  "Did NOT move it: {why}.":
+    "옮기지 않았습니다: {why}.",
+  "OptiScaler will load as {name} for this game.":
+    "이 게임에서 OptiScaler가 {name}(으)로 로드됩니다.",
+  "Back to the automatic proxy DLL name.":
+    "자동 프록시 DLL 이름으로 되돌렸습니다.",
+  "Proxy DLL name":
+    "프록시 DLL 이름",
+  "OptiScaler is loaded by taking the name of a DLL the game already loads at start. The app picks that name itself and is right almost always -- change this only if you know which DLL your game loads, for instance because OptiScaler's own wiki page for it names one. Choosing a name moves the installed file to it straight away.":
+    "OptiScaler는 게임이 시작할 때 이미 로드하는 DLL의 이름을 가져와 로드됩니다. 앱이 그 이름을 스스로 고르며 거의 항상 맞습니다. 게임이 어떤 DLL을 로드하는지 알 때만 바꾸세요. 예를 들어 OptiScaler 위키의 해당 게임 문서에 이름이 적혀 있는 경우입니다. 이름을 고르면 설치된 파일이 즉시 그 이름으로 옮겨집니다.",
+  "A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.":
+    "이름이 틀려도 위험하지는 않고 아무 일도 하지 않을 뿐입니다. 게임이 그 파일을 절대 로드하지 않으므로 DLSS 5도 동작하지 않고 로그도 남지 않습니다. 되돌리려면 자동으로 다시 설정하세요.",
+  "These go in beside the game's ReShade, so a game without one is refused here and each row says which part is missing. Pick per game; each one says who made it and under what licence, and is checked against a known hash before anything is placed.":
+    "이들은 게임의 ReShade 옆에 설치되므로, ReShade가 없는 게임은 여기서 거부되고 각 항목이 무엇이 빠졌는지 알려줍니다. 게임별로 선택하세요. 각 항목은 제작자와 라이선스를 밝히며, 무엇이든 설치하기 전에 알려진 해시와 대조해 확인합니다.",
+  "This game has no ReShade, so nothing here can load. Install DLSS 5 or frame pacing on this game and ReShade comes with it, or put your own copy in the folder.":
+    "이 게임에는 ReShade가 없어 여기 있는 어떤 것도 로드될 수 없습니다. 이 게임에 DLSS 5나 프레임 페이싱을 설치하면 ReShade가 함께 설치되며, 직접 받은 사본을 폴더에 넣어도 됩니다.",
+  "The ReShade here is the plain build, which never loads an add-on -- it carries the same version and name as the Add-on build, so this is not something you can see in the folder. The shader packs below still work.":
+    "여기 있는 ReShade는 애드온을 절대 로드하지 않는 일반 빌드입니다. 애드온 빌드와 버전과 이름이 같아서 폴더만 봐서는 알 수 없습니다. 아래의 셰이더 팩은 그대로 작동합니다.",
+  "Needs the Add-on build":
+    "애드온 빌드가 필요합니다",
+  "Needs ReShade":
+    "ReShade가 필요합니다",
+  "No mod is built for this game, but RenoDX has one for its whole engine: {title}, maintained by {who}.":
+    "이 게임을 위해 따로 만든 모드는 없지만, RenoDX에는 이 게임의 엔진 전체를 위한 모드가 있습니다: {title}, 관리자 {who}.",
+  "This game does have its own mod, and RenoDX marks it superseded by the engine-wide one -- so the engine-wide one is what installs here.":
+    "이 게임에는 전용 모드가 있지만, RenoDX가 이를 엔진 전체용 모드로 대체되었다고 표시하고 있어 여기서는 엔진 전체용 모드를 설치합니다.",
+  "Matched on the engine, not on this game. RenoDX rates it \"{compat}\" for the engine, but nobody here has run it on this title -- if the picture looks wrong, take it back off.":
+    "이 게임이 아니라 엔진을 기준으로 찾은 결과입니다. RenoDX는 해당 엔진에 대해 \"{compat}\"으로 평가하지만, 이 타이틀에서 실제로 시험해 본 사람은 없습니다. 화면이 이상해 보이면 다시 제거하세요.",
+  "From our build, which is the one the in-game DLSS 5 panel can show these settings on -- look for the HDR page in the overlay.":
+    "우리 빌드에서 가져왔습니다. 게임 내 DLSS 5 패널이 이 설정을 보여줄 수 있는 것은 이 빌드뿐입니다. 오버레이에서 HDR 페이지를 찾아보세요.",
+  "From RenoDX's own release. It works, but only through its own overlay: the DLSS 5 panel can only show these settings on our build.":
+    "RenoDX 자체 릴리스에서 가져왔습니다. 작동은 하지만 RenoDX 자체 오버레이를 통해서만 가능합니다. DLSS 5 패널은 우리 빌드에서만 이 설정을 보여줄 수 있습니다.",
 });

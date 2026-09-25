@@ -88,6 +88,8 @@ contextBridge.exposeInMainWorld('api', {
   gameRoute: (exePath, detected) => ipcRenderer.invoke('game:route', { exePath, detected }),
   gpuInfo: () => ipcRenderer.invoke('gpu:info'),
   setApiOverride: (exePath, api) => ipcRenderer.invoke('game:setApiOverride', { exePath, api }),
+  proxyInfo: (exePath) => ipcRenderer.invoke('game:proxyInfo', { exePath }),
+  setProxyName: (exePath, proxy) => ipcRenderer.invoke('game:setProxyName', { exePath, proxy }),
 
   amdNrStatus: (exePath, api) => ipcRenderer.invoke('amdnr:status', { exePath, api }),
   amdNrLatest: () => ipcRenderer.invoke('amdnr:latest'),
