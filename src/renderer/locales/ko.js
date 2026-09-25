@@ -1776,4 +1776,22 @@ window.I18N.register("ko", {
     "RenoDX (엔진)",
   "RenoDX has an HDR mod made for this game. Turn it on from the ⋯ menu.":
     "RenoDX에 이 게임 전용 HDR 모드가 있습니다. ⋯ 메뉴에서 켜세요.",
+  "RenoDX UE-Extended has settings made for this Unreal game. Turn it on from the ⋯ menu.":
+    "RenoDX UE-Extended에 이 언리얼 게임 전용 설정이 있습니다. ⋯ 메뉴에서 켜세요.",
+  "RenoDX UE+":
+    "RenoDX UE+",
+  "No mod is built for this game, but RenoDX UE-Extended has settings made for it: {title}, maintained by {who}.":
+    "이 게임 전용 모드는 없지만 RenoDX UE-Extended에 이 게임용 설정이 있습니다: {title}, 관리자 {who}.",
+  "UE-Extended is the Unreal add-on that replaces RenoDX's generic Unreal mod here -- it has no settings made for this game, so it runs on its defaults.":
+    "UE-Extended는 여기서 RenoDX의 범용 언리얼 모드를 대신하는 언리얼 애드온입니다. 이 게임 전용 설정이 없어 기본값으로 동작합니다.",
+  "This game outputs its own HDR, so installing this also switches Unreal's HDR on in the game's Engine.ini and makes that file read-only (the game deletes it otherwise). Remove puts it back as it was.":
+    "이 게임은 자체 HDR을 출력하므로, 설치 시 게임의 Engine.ini에서 언리얼 HDR도 켜고 그 파일을 읽기 전용으로 만듭니다(그렇지 않으면 게임이 삭제합니다). 제거하면 원래대로 되돌립니다.",
+  "Installed here: {file}. This game now gets {title} instead -- Switch replaces it.":
+    "여기에 설치됨: {file}. 이 게임은 이제 대신 {title}을(를) 받습니다. 전환을 누르면 교체됩니다.",
+  "Switch":
+    "전환",
+  "Unreal's HDR was switched on in {file}, now read-only so the game keeps it.":
+    "{file}에서 언리얼 HDR을 켰고, 게임이 유지하도록 이제 읽기 전용입니다.",
+  "Unreal's HDR could not be switched on in Engine.ini here -- turn HDR on in the game's own settings.":
+    "여기서는 Engine.ini에서 언리얼 HDR을 켤 수 없었습니다. 게임 자체 설정에서 HDR을 켜세요.",
 });

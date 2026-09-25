@@ -1776,4 +1776,22 @@ window.I18N.register("zh-CN", {
     "RenoDX（引擎）",
   "RenoDX has an HDR mod made for this game. Turn it on from the ⋯ menu.":
     "RenoDX 有专为此游戏制作的 HDR 模组。在 ⋯ 菜单中开启。",
+  "RenoDX UE-Extended has settings made for this Unreal game. Turn it on from the ⋯ menu.":
+    "RenoDX UE-Extended 为这款虚幻引擎游戏准备了专门设置。请在 ⋯ 菜单中开启。",
+  "RenoDX UE+":
+    "RenoDX UE+",
+  "No mod is built for this game, but RenoDX UE-Extended has settings made for it: {title}, maintained by {who}.":
+    "没有专为这款游戏制作的模组，但 RenoDX UE-Extended 为它准备了设置：{title}，维护者 {who}。",
+  "UE-Extended is the Unreal add-on that replaces RenoDX's generic Unreal mod here -- it has no settings made for this game, so it runs on its defaults.":
+    "UE-Extended 是在此替代 RenoDX 通用虚幻模组的虚幻插件——它没有为这款游戏准备的设置，因此以默认值运行。",
+  "This game outputs its own HDR, so installing this also switches Unreal's HDR on in the game's Engine.ini and makes that file read-only (the game deletes it otherwise). Remove puts it back as it was.":
+    "这款游戏自行输出 HDR，因此安装时还会在游戏的 Engine.ini 中开启虚幻 HDR，并将该文件设为只读（否则游戏会删除它）。移除会将其恢复原样。",
+  "Installed here: {file}. This game now gets {title} instead -- Switch replaces it.":
+    "此处已安装：{file}。这款游戏现在改用 {title}——点“切换”即可替换。",
+  "Switch":
+    "切换",
+  "Unreal's HDR was switched on in {file}, now read-only so the game keeps it.":
+    "已在 {file} 中开启虚幻 HDR，该文件现为只读，游戏会保留它。",
+  "Unreal's HDR could not be switched on in Engine.ini here -- turn HDR on in the game's own settings.":
+    "此处无法在 Engine.ini 中开启虚幻 HDR——请在游戏自身的设置中开启 HDR。",
 });

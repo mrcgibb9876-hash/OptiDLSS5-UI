@@ -1776,4 +1776,22 @@ window.I18N.register("ru", {
     "RenoDX (движок)",
   "RenoDX has an HDR mod made for this game. Turn it on from the ⋯ menu.":
     "У RenoDX есть HDR-мод специально для этой игры. Включите его в меню ⋯.",
+  "RenoDX UE-Extended has settings made for this Unreal game. Turn it on from the ⋯ menu.":
+    "В RenoDX UE-Extended есть настройки, сделанные для этой игры на Unreal. Включите его в меню ⋯.",
+  "RenoDX UE+":
+    "RenoDX UE+",
+  "No mod is built for this game, but RenoDX UE-Extended has settings made for it: {title}, maintained by {who}.":
+    "Отдельного мода для этой игры нет, но в RenoDX UE-Extended есть настройки для неё: {title}, сопровождает {who}.",
+  "UE-Extended is the Unreal add-on that replaces RenoDX's generic Unreal mod here -- it has no settings made for this game, so it runs on its defaults.":
+    "UE-Extended — это аддон для Unreal, который здесь заменяет общий Unreal-мод RenoDX. Настроек для этой игры в нём нет, поэтому он работает со значениями по умолчанию.",
+  "This game outputs its own HDR, so installing this also switches Unreal's HDR on in the game's Engine.ini and makes that file read-only (the game deletes it otherwise). Remove puts it back as it was.":
+    "Эта игра сама выводит HDR, поэтому установка также включает HDR Unreal в Engine.ini игры и делает этот файл доступным только для чтения (иначе игра его удаляет). «Удалить» вернёт всё как было.",
+  "Installed here: {file}. This game now gets {title} instead -- Switch replaces it.":
+    "Здесь установлен: {file}. Теперь этой игре подходит {title} — «Сменить» заменит его.",
+  "Switch":
+    "Сменить",
+  "Unreal's HDR was switched on in {file}, now read-only so the game keeps it.":
+    "HDR Unreal включён в {file}; файл теперь только для чтения, чтобы игра его сохранила.",
+  "Unreal's HDR could not be switched on in Engine.ini here -- turn HDR on in the game's own settings.":
+    "Не удалось включить HDR Unreal в Engine.ini здесь — включите HDR в настройках самой игры.",
 });

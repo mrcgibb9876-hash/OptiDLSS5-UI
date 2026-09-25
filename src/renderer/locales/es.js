@@ -1776,4 +1776,22 @@ window.I18N.register("es", {
     "RenoDX (motor)",
   "RenoDX has an HDR mod made for this game. Turn it on from the ⋯ menu.":
     "RenoDX tiene un mod de HDR hecho para este juego. Actívalo desde el menú ⋯.",
+  "RenoDX UE-Extended has settings made for this Unreal game. Turn it on from the ⋯ menu.":
+    "RenoDX UE-Extended tiene ajustes hechos para este juego de Unreal. Actívalo desde el menú ⋯.",
+  "RenoDX UE+":
+    "RenoDX UE+",
+  "No mod is built for this game, but RenoDX UE-Extended has settings made for it: {title}, maintained by {who}.":
+    "No hay un mod hecho para este juego, pero RenoDX UE-Extended tiene ajustes hechos para él: {title}, mantenido por {who}.",
+  "UE-Extended is the Unreal add-on that replaces RenoDX's generic Unreal mod here -- it has no settings made for this game, so it runs on its defaults.":
+    "UE-Extended es el complemento de Unreal que aquí sustituye al mod genérico de Unreal de RenoDX; no tiene ajustes hechos para este juego, así que funciona con sus valores por defecto.",
+  "This game outputs its own HDR, so installing this also switches Unreal's HDR on in the game's Engine.ini and makes that file read-only (the game deletes it otherwise). Remove puts it back as it was.":
+    "Este juego emite su propio HDR, así que al instalar esto también se activa el HDR de Unreal en el Engine.ini del juego y ese archivo se marca como de solo lectura (si no, el juego lo borra). Quitar lo deja como estaba.",
+  "Installed here: {file}. This game now gets {title} instead -- Switch replaces it.":
+    "Instalado aquí: {file}. Este juego ahora recibe {title} en su lugar; Cambiar lo reemplaza.",
+  "Switch":
+    "Cambiar",
+  "Unreal's HDR was switched on in {file}, now read-only so the game keeps it.":
+    "Se activó el HDR de Unreal en {file}, ahora de solo lectura para que el juego lo conserve.",
+  "Unreal's HDR could not be switched on in Engine.ini here -- turn HDR on in the game's own settings.":
+    "No se pudo activar el HDR de Unreal en el Engine.ini aquí; activa el HDR en los ajustes del propio juego.",
 });

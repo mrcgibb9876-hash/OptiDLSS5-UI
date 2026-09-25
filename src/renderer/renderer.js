@@ -941,6 +941,11 @@ function storeTag(status) {
 // often never reaches a given game's tone mapping. Nothing until RenoDX's list has been fetched once.
 function renodxTag(status) {
   if (!status || status.exeMissing || !status.renodx) return '';
+  // Blue: an Unreal game RenoDX UE-Extended has settings made for (main.js renodxCapability).
+  if (status.renodx === 'ue-plus') {
+    const tip = t('RenoDX UE-Extended has settings made for this Unreal game. Turn it on from the ⋯ menu.');
+    return `<span class="card-store card-renodx card-renodx-ueplus" title="${escapeHtml(tip)}">${escapeHtml(t('RenoDX UE+'))}</span>`;
+  }
   if (status.renodx === 'engine') {
     const tip = t('RenoDX has no mod made for this game, only one for its whole engine. It may not change this game\'s picture at all -- if the HDR settings do nothing, turn it off.');
     return `<span class="card-store card-renodx card-renodx-engine" title="${escapeHtml(tip)}">${escapeHtml(t('RenoDX (engine)'))}</span>`;
@@ -6237,9 +6242,14 @@ async function renderAddons(game = addonsGame) {
       const who = (match.maintainers || []).join(', ') || t('the RenoDX project');
       // An engine-wide mod is a different offer from a bespoke one and must not be dressed up as
       // the same thing: it was written for the engine, not for this game, and no bespoke mod exists.
-      const byEngine = match.how === 'engine' || match.how === 'engine-supersedes';
-      if (byEngine) {
+      const byEngine = /^engine/.test(match.how || '');
+      if (match.modId === 'ue-extended' && !byEngine) {
+        bits.push(`<div class="field-hint">${escapeHtml(t('No mod is built for this game, but RenoDX UE-Extended has settings made for it: {title}, maintained by {who}.', { title: match.title, who }))}</div>`);
+      } else if (byEngine) {
         bits.push(`<div class="field-hint">${escapeHtml(t('No mod is built for this game, but RenoDX has one for its whole engine: {title}, maintained by {who}.', { title: match.title, who }))}</div>`);
+        if (match.modId === 'ue-extended') {
+          bits.push(`<div class="field-hint">${escapeHtml(t("UE-Extended is the Unreal add-on that replaces RenoDX's generic Unreal mod here -- it has no settings made for this game, so it runs on its defaults."))}</div>`);
+        }
         if (match.how === 'engine-supersedes') {
           bits.push(`<div class="field-hint">${escapeHtml(t('This game does have its own mod, and RenoDX marks it superseded by the engine-wide one -- so the engine-wide one is what installs here.'))}</div>`);
         }
@@ -6254,6 +6264,17 @@ async function renderAddons(game = addonsGame) {
           bits.push(`<div class="field-hint status-warn">${escapeHtml(t('Matched by name, not by a Steam ID -- check the title above is really this game before installing.'))}</div>`);
         }
       }
+    }
+    // Unreal's own HDR is what UE-Extended's native-HDR path works on, and it is off in Engine.ini on
+    // most of these games -- said before Install rather than discovered in the file afterwards.
+    if (perGame && match && match.ueExtended && match.ueExtended.nativeHdr) {
+      bits.push(`<div class="field-hint">${escapeHtml(t("This game outputs its own HDR, so installing this also switches Unreal's HDR on in the game's Engine.ini and makes that file read-only (the game deletes it otherwise). Remove puts it back as it was."))}</div>`);
+    }
+    // The file installed here is not the one this game gets now: offer the switch (one RenoDX add-on
+    // per folder -- Install takes the old one out through Remove first).
+    const switchTo = perGame && a.installed && match && (res.renodxInstalledFiles || []).length && !(res.renodxInstalledFiles || []).includes(match.artifact);
+    if (switchTo) {
+      bits.push(`<div class="field-hint status-warn">${escapeHtml(t('Installed here: {file}. This game now gets {title} instead -- Switch replaces it.', { file: res.renodxInstalledFiles.join(', '), title: match.title }))}</div>`);
     }
     if (unavailable) {
       bits.push(`<div class="field-hint">${escapeHtml(res.indexError
@@ -6308,7 +6329,7 @@ async function renderAddons(game = addonsGame) {
       ? `<button class="btn btn-ghost" disabled>${escapeHtml(t('Not for this game'))}</button>`
       : blocking
         ? `<button class="btn btn-ghost" disabled>${escapeHtml(a.blocker === 'plain-reshade' ? t('Needs the Add-on build') : t('Needs ReShade'))}</button>`
-        : `<button class="btn ${a.installed ? 'btn-ghost btn-danger' : 'btn-primary'} addon-act" data-id="${escapeHtml(a.id)}" data-installed="${a.installed ? '1' : ''}">${escapeHtml(a.installed ? t('Remove') : t('Install'))}</button>`;
+        : `${switchTo ? `<button class="btn btn-primary addon-act" data-id="${escapeHtml(a.id)}" data-installed="">${escapeHtml(t('Switch'))}</button> ` : ''}<button class="btn ${a.installed ? 'btn-ghost btn-danger' : 'btn-primary'} addon-act" data-id="${escapeHtml(a.id)}" data-installed="${a.installed ? '1' : ''}">${escapeHtml(a.installed ? t('Remove') : t('Install'))}</button>`;
 
     return `<div class="addon-row"><div class="addon-body">${bits.join('')}</div><div class="addon-action">${button}</div></div>`;
   });
@@ -6396,6 +6417,13 @@ async function renderAddons(game = addonsGame) {
           : swapped.length
             ? t('Installed, replacing {other}. {count} files placed, and the effect order was rewritten.', { other: swapped.join(', '), count: (out.files || []).length })
             : t('Installed. {count} files placed, and the effect order was rewritten.', { count: (out.files || []).length });
+        // What happened to Engine.ini for UE-Extended's native-HDR path (ueini.js).
+        const ei = out.engineIni;
+        if (!removing && ei && ei.file) {
+          $('#addons-status').textContent += ' ' + t("Unreal's HDR was switched on in {file}, now read-only so the game keeps it.", { file: ei.file });
+        } else if (!removing && ei && (ei.skipped || ei.error)) {
+          $('#addons-status').textContent += ' ' + t("Unreal's HDR could not be switched on in Engine.ini here -- turn HDR on in the game's own settings.");
+        }
       } else {
         $('#addons-status').className = 'field-hint status-bad';
         // The refusals shared with frame pacing (ensureReShadeAddonHost) arrive worded for pacing, so the

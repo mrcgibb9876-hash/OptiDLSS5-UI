@@ -1776,4 +1776,22 @@ window.I18N.register("de", {
     "RenoDX (Engine)",
   "RenoDX has an HDR mod made for this game. Turn it on from the ⋯ menu.":
     "RenoDX hat einen HDR-Mod speziell für dieses Spiel. Schalte ihn im ⋯-Menü ein.",
+  "RenoDX UE-Extended has settings made for this Unreal game. Turn it on from the ⋯ menu.":
+    "RenoDX UE-Extended hat Einstellungen speziell für dieses Unreal-Spiel. Schalte es im ⋯-Menü ein.",
+  "RenoDX UE+":
+    "RenoDX UE+",
+  "No mod is built for this game, but RenoDX UE-Extended has settings made for it: {title}, maintained by {who}.":
+    "Für dieses Spiel gibt es keinen eigenen Mod, aber RenoDX UE-Extended hat Einstellungen speziell dafür: {title}, gepflegt von {who}.",
+  "UE-Extended is the Unreal add-on that replaces RenoDX's generic Unreal mod here -- it has no settings made for this game, so it runs on its defaults.":
+    "UE-Extended ist das Unreal-Add-on, das hier den generischen Unreal-Mod von RenoDX ersetzt -- für dieses Spiel hat es keine eigenen Einstellungen, es läuft also mit seinen Standardwerten.",
+  "This game outputs its own HDR, so installing this also switches Unreal's HDR on in the game's Engine.ini and makes that file read-only (the game deletes it otherwise). Remove puts it back as it was.":
+    "Dieses Spiel gibt selbst HDR aus. Deshalb schaltet die Installation auch Unreals HDR in der Engine.ini des Spiels ein und setzt die Datei schreibgeschützt (sonst löscht das Spiel sie). Entfernen stellt sie wieder her, wie sie war.",
+  "Installed here: {file}. This game now gets {title} instead -- Switch replaces it.":
+    "Hier installiert: {file}. Dieses Spiel bekommt jetzt stattdessen {title} -- Wechseln ersetzt es.",
+  "Switch":
+    "Wechseln",
+  "Unreal's HDR was switched on in {file}, now read-only so the game keeps it.":
+    "Unreals HDR wurde in {file} eingeschaltet; die Datei ist jetzt schreibgeschützt, damit das Spiel sie behält.",
+  "Unreal's HDR could not be switched on in Engine.ini here -- turn HDR on in the game's own settings.":
+    "Unreals HDR konnte hier nicht in der Engine.ini eingeschaltet werden -- schalte HDR in den Einstellungen des Spiels selbst ein.",
 });

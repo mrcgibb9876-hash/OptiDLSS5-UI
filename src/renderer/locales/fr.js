@@ -1786,4 +1786,22 @@ window.I18N.register("fr", {
     "RenoDX (moteur)",
   "RenoDX has an HDR mod made for this game. Turn it on from the ⋯ menu.":
     "RenoDX a un mod HDR fait pour ce jeu. Activez-le depuis le menu ⋯.",
+  "RenoDX UE-Extended has settings made for this Unreal game. Turn it on from the ⋯ menu.":
+    "RenoDX UE-Extended a des réglages faits pour ce jeu Unreal. Activez-le depuis le menu ⋯.",
+  "RenoDX UE+":
+    "RenoDX UE+",
+  "No mod is built for this game, but RenoDX UE-Extended has settings made for it: {title}, maintained by {who}.":
+    "Aucun mod n'est fait pour ce jeu, mais RenoDX UE-Extended a des réglages faits pour lui : {title}, maintenu par {who}.",
+  "UE-Extended is the Unreal add-on that replaces RenoDX's generic Unreal mod here -- it has no settings made for this game, so it runs on its defaults.":
+    "UE-Extended est l'add-on Unreal qui remplace ici le mod Unreal générique de RenoDX -- il n'a pas de réglages faits pour ce jeu, il tourne donc avec ses valeurs par défaut.",
+  "This game outputs its own HDR, so installing this also switches Unreal's HDR on in the game's Engine.ini and makes that file read-only (the game deletes it otherwise). Remove puts it back as it was.":
+    "Ce jeu produit son propre HDR : l'installation active donc aussi le HDR d'Unreal dans l'Engine.ini du jeu et met ce fichier en lecture seule (sinon le jeu le supprime). Retirer le remet comme avant.",
+  "Installed here: {file}. This game now gets {title} instead -- Switch replaces it.":
+    "Installé ici : {file}. Ce jeu reçoit maintenant {title} à la place -- Changer le remplace.",
+  "Switch":
+    "Changer",
+  "Unreal's HDR was switched on in {file}, now read-only so the game keeps it.":
+    "Le HDR d'Unreal a été activé dans {file}, désormais en lecture seule pour que le jeu le garde.",
+  "Unreal's HDR could not be switched on in Engine.ini here -- turn HDR on in the game's own settings.":
+    "Le HDR d'Unreal n'a pas pu être activé dans l'Engine.ini ici -- activez le HDR dans les réglages du jeu.",
 });

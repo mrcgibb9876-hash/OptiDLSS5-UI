@@ -1777,4 +1777,22 @@ window.I18N.register('pt-BR', {
     "RenoDX (motor)",
   "RenoDX has an HDR mod made for this game. Turn it on from the ⋯ menu.":
     "O RenoDX tem um mod de HDR feito para este jogo. Ative pelo menu ⋯.",
+  "RenoDX UE-Extended has settings made for this Unreal game. Turn it on from the ⋯ menu.":
+    "O RenoDX UE-Extended tem configurações feitas para este jogo Unreal. Ative-o no menu ⋯.",
+  "RenoDX UE+":
+    "RenoDX UE+",
+  "No mod is built for this game, but RenoDX UE-Extended has settings made for it: {title}, maintained by {who}.":
+    "Não há um mod feito para este jogo, mas o RenoDX UE-Extended tem configurações feitas para ele: {title}, mantido por {who}.",
+  "UE-Extended is the Unreal add-on that replaces RenoDX's generic Unreal mod here -- it has no settings made for this game, so it runs on its defaults.":
+    "O UE-Extended é o add-on de Unreal que substitui aqui o mod genérico de Unreal do RenoDX -- ele não tem configurações feitas para este jogo, então roda com os valores padrão.",
+  "This game outputs its own HDR, so installing this also switches Unreal's HDR on in the game's Engine.ini and makes that file read-only (the game deletes it otherwise). Remove puts it back as it was.":
+    "Este jogo gera o próprio HDR, então instalar isto também liga o HDR do Unreal no Engine.ini do jogo e deixa esse arquivo somente leitura (senão o jogo o apaga). Remover o deixa como estava.",
+  "Installed here: {file}. This game now gets {title} instead -- Switch replaces it.":
+    "Instalado aqui: {file}. Este jogo agora recebe {title} no lugar -- Trocar o substitui.",
+  "Switch":
+    "Trocar",
+  "Unreal's HDR was switched on in {file}, now read-only so the game keeps it.":
+    "O HDR do Unreal foi ligado em {file}, agora somente leitura para o jogo mantê-lo.",
+  "Unreal's HDR could not be switched on in Engine.ini here -- turn HDR on in the game's own settings.":
+    "Não foi possível ligar o HDR do Unreal no Engine.ini aqui -- ligue o HDR nas configurações do próprio jogo.",
 });
