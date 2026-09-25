@@ -1708,4 +1708,28 @@ window.I18N.register("ko", {
     "{name}은(는) 64비트 게임이 필요합니다. 이 게임은 32비트입니다.",
   "{name} on a Vulkan game needs ReShade’s own setup run for this game first.":
     "Vulkan 게임에서 {name}을(를) 쓰려면 먼저 이 게임에 대해 ReShade 자체 설치 프로그램을 실행해야 합니다.",
+  "DXVK is in. Launch the game again to see if DLSS 5 works now.":
+    "DXVK를 넣었습니다. 게임을 다시 실행해 DLSS 5가 이제 작동하는지 확인하세요.",
+  "Deep Fried Chicken is in. Launch the game again to see if it works now.":
+    "Deep Fried Chicken을 넣었습니다. 게임을 다시 실행해 이제 작동하는지 확인하세요.",
+  "DLSS 5 did not work on {name}":
+    "{name}에서 DLSS 5가 작동하지 않았습니다",
+  "Try with DXVK":
+    "DXVK로 시도",
+  "Try with Deep Fried Chicken":
+    "Deep Fried Chicken으로 시도",
+  "Nothing worked on {name} yet":
+    "{name}에서 아직 아무것도 작동하지 않았습니다",
+  "Report issue":
+    "문제 보고",
+  "Restore the original files":
+    "원본 파일 복원",
+  "Not now":
+    "나중에",
+  "What to try next":
+    "다음에 시도할 것",
+  "DLSS 5 did not work here":
+    "여기서 DLSS 5가 작동하지 않았습니다",
+  "GitHub sign-in has expired -- press Send again to sign in.":
+    "GitHub 로그인이 만료되었습니다 -- 다시 로그인하려면 보내기를 다시 누르세요.",
 });

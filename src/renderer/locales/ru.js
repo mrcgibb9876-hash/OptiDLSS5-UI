@@ -1708,4 +1708,28 @@ window.I18N.register("ru", {
     "{name} нужна 64-битная игра. Эта игра 32-битная.",
   "{name} on a Vulkan game needs ReShade’s own setup run for this game first.":
     "Для {name} в игре на Vulkan сначала нужно запустить собственный установщик ReShade для этой игры.",
+  "DXVK is in. Launch the game again to see if DLSS 5 works now.":
+    "DXVK установлен. Запустите игру снова, чтобы проверить, работает ли теперь DLSS 5.",
+  "Deep Fried Chicken is in. Launch the game again to see if it works now.":
+    "Deep Fried Chicken установлен. Запустите игру снова, чтобы проверить, работает ли он теперь.",
+  "DLSS 5 did not work on {name}":
+    "DLSS 5 не заработал в {name}",
+  "Try with DXVK":
+    "Попробовать с DXVK",
+  "Try with Deep Fried Chicken":
+    "Попробовать с Deep Fried Chicken",
+  "Nothing worked on {name} yet":
+    "В {name} пока ничего не заработало",
+  "Report issue":
+    "Сообщить о проблеме",
+  "Restore the original files":
+    "Восстановить исходные файлы",
+  "Not now":
+    "Не сейчас",
+  "What to try next":
+    "Что попробовать дальше",
+  "DLSS 5 did not work here":
+    "DLSS 5 здесь не заработал",
+  "GitHub sign-in has expired -- press Send again to sign in.":
+    "Вход в GitHub истёк -- нажмите «Отправить» ещё раз, чтобы войти.",
 });

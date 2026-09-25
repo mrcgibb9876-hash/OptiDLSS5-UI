@@ -1708,4 +1708,28 @@ window.I18N.register("zh-CN", {
     "{name} 需要 64 位游戏。此游戏是 32 位的。",
   "{name} on a Vulkan game needs ReShade’s own setup run for this game first.":
     "在 Vulkan 游戏上使用 {name}，需要先为此游戏运行 ReShade 自带的安装程序。",
+  "DXVK is in. Launch the game again to see if DLSS 5 works now.":
+    "DXVK 已装好。请重新启动游戏，看看 DLSS 5 现在是否可用。",
+  "Deep Fried Chicken is in. Launch the game again to see if it works now.":
+    "Deep Fried Chicken 已装好。请重新启动游戏，看看现在是否可用。",
+  "DLSS 5 did not work on {name}":
+    "DLSS 5 在 {name} 上没有生效",
+  "Try with DXVK":
+    "改用 DXVK 试试",
+  "Try with Deep Fried Chicken":
+    "改用 Deep Fried Chicken 试试",
+  "Nothing worked on {name} yet":
+    "{name} 上暂时都没有成功",
+  "Report issue":
+    "报告问题",
+  "Restore the original files":
+    "恢复原始文件",
+  "Not now":
+    "以后再说",
+  "What to try next":
+    "接下来试什么",
+  "DLSS 5 did not work here":
+    "DLSS 5 在这里没有生效",
+  "GitHub sign-in has expired -- press Send again to sign in.":
+    "GitHub 登录已过期 -- 请再次点击“发送”重新登录。",
 });

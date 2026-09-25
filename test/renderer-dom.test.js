@@ -87,16 +87,25 @@ test('the pop-out panel still renders every group', () => {
   assert.ok(!panel.includes('EDITABLE_GROUPS'), 'the pop-out panel must not filter groups');
 });
 
-test('the card shows the run as numbers, and keeps the sentence for the tooltip', () => {
-  // At the card's 300px the full "Neural Rendering ran (1240 passes, 71 fps, DX12)" wrapped across
-  // the chip line mid-phrase, and a longer game name made it worse. The chip beside it already says
-  // the pass ran, so the card takes the numbers alone. renderer.js cannot be required here -- it
-  // touches document at module scope -- so this guards the wiring rather than the output.
-  const block = js.slice(js.indexOf("ev.className = 'card-evidence'"), js.indexOf('line.appendChild(ev)'));
-  assert.ok(block.includes('runEvidenceShort(run)'), 'the card text comes from the short form');
-  assert.ok(!/ev\.textContent\s*=\s*`?\s*\$?\{?\s*describeRun/.test(block), 'not the full sentence');
-  assert.ok(block.includes('describeRun(run)'), 'and the full sentence is still the hover text');
-  assert.match(js, /function runEvidenceShort\(run\)/);
+test('the card carries no chip line and no run counts, only the mark, the status and one row', () => {
+  // Asked for 2026-09-25: the DX12/Vulkan/Experimental/route chips and "1240 passes · 71 fps" were
+  // clutter. The DLSS 5 / Chicken mark and the Working chip stay. renderer.js cannot be required here
+  // -- it touches document at module scope -- so this guards the wiring rather than the output.
+  assert.ok(!js.includes("ev.className = 'card-evidence'"), 'the run count is back on the card');
+  assert.ok(!js.includes('engine-badge api-badge'), 'the API chip is back on the card');
+  assert.ok(!js.includes('engine-badge route-badge'), 'the route chip is back on the card');
+  assert.match(js, /line\.classList\.add\('hidden'\)/);
+  assert.match(js, /mark\.title = t\('Deep Fried Chicken runs the neural pass here'\)/);
+});
+
+test('a failed game climbs the ladder: DXVK, then Chicken, then a report', () => {
+  const offers = js.slice(js.indexOf('function fallbackOffers('), js.indexOf('async function tryFallback('));
+  assert.ok(offers.indexOf("offers.push('dxvk')") < offers.indexOf("offers.push('dfc')"), 'DXVK is offered before Chicken');
+  assert.match(offers, /swap\.id === 'swap-to-dxvk'/, 'DXVK only where the game can take it');
+  assert.match(offers, /dfcSupport\.ok/, 'Chicken only where it supports the game');
+  const flip = js.slice(js.indexOf('function flipToFailure('), js.indexOf('function failureProblem('));
+  assert.match(flip, /sendGameFailure\(/, 'the last rung sends the report');
+  assert.ok(!/no known fix/.test(flip), 'the dead-end wording is gone from the ladder');
 });
 
 test('the DLSS 5 field table is not offered in two places at once', () => {

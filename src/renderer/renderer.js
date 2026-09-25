@@ -276,7 +276,10 @@ function refreshCardState(card) {
 
   let tone = 'badge-none';
   let label = t('Not installed');
-  const issue = !running && card._exePath ? launchIssues.get(card._exePath) : null;
+  let issue = !running && card._exePath ? launchIssues.get(card._exePath) : null;
+  // An early exit the failure ladder has taken on is shown by it (the problem row and the turned card),
+  // not by the restore offer below.
+  if (issue && card._failure && card._failure.code === 'early-exit') issue = null;
   if (state.exeMissing) { tone = 'badge-missing'; label = t('Exe missing'); }
   else if (issue) { tone = 'badge-attention'; label = issue.kind === 'never-started' ? t('Did not start') : t('Closed early'); }
   else if (running) { tone = 'badge-installed'; label = `\u25cf ${t('Running')}`; }
@@ -477,7 +480,7 @@ async function renderGrid() {
       </div>
       <div class="card-body">
         <div class="card-title">${escapeHtml(game.name)}</div>
-        <div class="card-path card-recommend" title="${escapeHtml(t('Which install path suits this game'))}">${escapeHtml(t('Checking graphics API…'))}</div>
+        <div class="card-path card-recommend hidden"></div>
         <details class="card-explain hidden"><summary>${escapeHtml(t('How this route works'))}</summary><div class="route-explain"></div></details>
         <div class="card-problem hidden"><span class="card-problem-text"></span></div>
         <div class="card-actions">
@@ -508,6 +511,8 @@ async function renderGrid() {
           <button class="btn btn-ghost btn-flip-cancel">${escapeHtml(t('Cancel'))}</button>
           <button class="btn btn-danger btn-flip-confirm">${escapeHtml(t('Remove'))}</button>
         </div>
+        <div class="card-fail-actions hidden"></div>
+        <div class="card-fail-status hidden"></div>
       </div>
       </div>
     `;
@@ -799,77 +804,17 @@ async function applyRecommendation(game, card, backends, generation = renderGene
 
   if (!line) return;
   const canRecommendInstall = !backends.optiscaler;
-  const badgeClass = detected.recommend === 'unsupported' ? 'engine-badge-unsupported'
-    : detected.recommend === 'optiscaler' ? 'engine-badge-known'
-    : 'engine-badge-unknown';
-  const title = escapeHtml(detected.reason);
-  // The route tag: which stack this game should get (OptiScaler alone, + Feeder, + Luma UE), and
-  // whether it is all there yet -- decided in main.js (route.js) from the folder and the cached
-  // detection above, so the card answers "what do I click" before the Edit dialog ever opens.
-  // It also carries the user's per-game API choice, which the API chip shows in place of the guess.
   const [route, diag] = await Promise.all([
     window.api.gameRoute(game.exePath, detected),
     window.api.gameHelp(game.exePath, game.detectedPath || null, helpTriedFor(game)),
   ]);
   if (!current()) return;
 
-  const engineText = detected.engine || (detected.apiBadge ? null : (detected.badge || t('Unknown')));
-  const chips = [];
-  if (engineText) chips.push(`<span class="engine-badge ${badgeClass}" title="${title}">${escapeHtml(engineText)}</span>`);
-  if (route.apiOverride) {
-    const chosenTitle = escapeHtml(t('Set to {api} in Edit (detection said {detected})', { api: API_LABEL[route.apiOverride], detected: detected.apiBadge || t('unknown') }));
-    chips.push(`<span class="engine-badge api-badge engine-badge-known" title="${chosenTitle}">${API_LABEL[route.apiOverride]} \u2713</span>`);
-  } else if (detected.apiBadge) {
-    // A game with both DX12 and DX11 is set up for DX12 (route.js preferDx12): the chip says what is used.
-    const shown = route.effectiveApi && API_LABEL[route.effectiveApi] ? API_LABEL[route.effectiveApi] : detected.apiBadge;
-    chips.push(`<span class="engine-badge api-badge ${badgeClass}" title="${title}">${escapeHtml(shown)}</span>`);
-  }
-
-  const routeClass = route.route === 'unsupported' ? 'route-badge-unsupported'
-    : route.route === 'unknown' ? 'route-badge-unknown'
-    : route.complete ? 'route-badge-done'
-    : 'route-badge-todo';
-  const routeText = route.complete ? `\u2713 ${t(route.label)}` : t(route.label);
-  const routeTitle = escapeHtml(route.nextStep && route.optiInstalled ? `${t(route.reason, route.reasonVars)} ${t('Next: {step}.', { step: t(route.nextStep) })}` : t(route.reason, route.reasonVars));
-  chips.push(`<span class="engine-badge route-badge ${routeClass}" title="${routeTitle}">${escapeHtml(routeText)}</span>`);
-  // Emulators, 32-bit games and DirectX 8/9: routes built from the Feeder's documented paths but not
-  // yet run on a live game here (emulators.js, legacy.js).
-  // A route with no proof for this game in the known-good catalog (route.js unproven) is Experimental;
-  // one the catalog proves is not, whatever kind of route it is.
-  const kg = route.knownGood || null;
-  const proven = !!(kg && kg.proven);
-  if (route.experimental && !proven) {
-    chips.push(`<span class="engine-badge engine-badge-experimental" title="${escapeHtml(t('Experimental: built from the DLSS5 Feeder\'s documented route for this kind of game, but not yet confirmed on a real one. It may not work, and depth or motion can be rough.'))}">${escapeHtml(t('Experimental'))}</span>`);
-  } else if (route.unproven) {
-    chips.push(`<span class="engine-badge engine-badge-experimental" title="${escapeHtml(t('Experimental: this route has not been confirmed on this game yet. It is the app\'s best choice from what the game is built on; a working run here, or a report, makes it known-good.'))}">${escapeHtml(t('Experimental'))}</span>`);
-  }
-  // Only a dated, human confirmation from the registry (src/verified-games.json) earns this.
-  const verifiedTick = !!(route.verified && route.verified.route === route.route);
-  if (verifiedTick) {
-    chips.push(`<span class="engine-badge engine-badge-known" title="${escapeHtml(route.verified.notes || '')}">✓ ${escapeHtml(t('Verified {date}', { date: route.verified.verified }))}</span>`);
-  }
-  // The catalog's own word (catalog.badgeFor): a known issue always, "Known good" where no tick says it.
-  const badge = kg && kg.badge;
-  if (badge && (badge.kind === 'issue' || !verifiedTick)) {
-    const cls = badge.kind === 'issue' ? 'engine-badge-experimental' : 'engine-badge-known';
-    chips.push(`<span class="engine-badge ${cls}" title="${escapeHtml(badge.title || '')}">${escapeHtml(t(badge.text, badge.vars || {}))}</span>`);
-  }
-  if (route.catalogDefault) {
-    chips.push(`<span class="engine-badge engine-badge-known" title="${escapeHtml(t('The app\'s rules would pick another route; this one is proven on this game, so it is the default.'))}">${escapeHtml(t('Proven route'))}</span>`);
-  }
-  // The translation layer the known-good catalog proves for this game (layerdefault.js). When it is not
-  // the route's usual one and nothing was picked or installed, it is what Install puts in.
-  const layerChoice = route.layerChoice || null;
-  if (layerChoice && layerChoice.proven) {
-    const layer = layerName(layerChoice.proven.via);
-    const applied = layerChoice.from === 'proven' && layerChoice.layer !== layerChoice.standard;
-    const tip = applied
-      ? t('{layer} is proven on this game, so Install puts it in front of the game instead of the usual layer.', { layer })
-      : t('{layer} is the layer this game was proven on.', { layer });
-    chips.push(`<span class="engine-badge engine-badge-known" title="${escapeHtml(tip)}">${escapeHtml(t('Proven layer: {layer}', { layer }))}</span>`);
-  }
-
-  line.innerHTML = chips.join(' ');
+  // The chip line (engine, API, route, Experimental, Verified, Known good, Proven route/layer) is gone:
+  // asked for 2026-09-25 as clutter. The card keeps three signals -- the DLSS 5 / Chicken mark on the
+  // art, the status chip (Working, Needs attention...) and the one problem row -- and the detail that
+  // used to sit in the chips is in Settings, Game Help and "How this route works".
+  line.classList.add('hidden');
 
   // What the route does, what it cannot do, and where the panel is (route-explain.js), folded away.
   const explainBox = card.querySelector('.card-explain');
@@ -952,21 +897,10 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   const ran = run && run.ran;
   const runBad = ran && ['duplicate-dlss', 'shutdown-fault', 'ue-crash', 'feed-stopped', 'feed-host-gone',
     'feed-no-motion', 'feed-depth-flat', 'feed-agility-redist', 'no-dlss'].includes(run.verdict);
+  // Kept on the card so a launch that closes early later (setLaunchIssue) can be judged the same way.
+  card._failCtx = { route, diag, run };
+  const failure = failureEvidence(game, { route, diag, run, issue: launchIssues.get(game.exePath) || null });
 
-  // A run that worked is evidence, not a warning, so it belongs on the route line beside the
-  // route it proves -- which is what lets the "Working" chip mean something.
-  if (ran && run.verdict === 'nr-ran') {
-    const when = new Date(run.at);
-    const stamp = isNaN(when) ? '' : when.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    const ev = document.createElement('span');
-    ev.className = 'card-evidence';
-    ev.textContent = ` ${runEvidenceShort(run)}`;
-    // The sentence is the hover text; the card gets the numbers alone. At the card's 300px the full
-    // "Neural Rendering ran (1240 passes, 71 fps, DX12)" broke across the chip line mid-phrase, and
-    // a longer game name made it worse -- and the chip beside it already says the pass ran.
-    ev.title = t('Last run {when}: {verdict}', { when: stamp, verdict: describeRun(run) });
-    line.appendChild(ev);
-  }
 
   // One row, one state. The last run, Game Help's verdict, the route's unfinished step and what
   // detection found beside the exe were five stacked lines that a game in trouble showed at once,
@@ -975,6 +909,15 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   // and the primary button through refreshCardState.
   let problem = null;
   const claim = (p) => { if (!problem) problem = p; };
+
+  // DLSS 5 failed here and there is no known fix: the card turns round to the next thing to try, and
+  // the row says so in words instead of "no known fix" (flipToFailure).
+  if (failure && !(diag && diag.ok && diag.status === 'fix')) {
+    claim(failureProblem(card, game, failure));
+    showFailure(card, game, failure, { route, diag, run });
+  } else {
+    card._failure = null;
+  }
 
   if (diag && diag.ok && ['fix', 'step', 'unavailable', 'unknown'].includes(diag.status)) {
     const bad = diag.status === 'unavailable' || diag.status === 'unknown';
@@ -1133,6 +1076,14 @@ function setLaunchIssue(notice) {
     if (!launchIssues.delete(notice.exePath)) return;
   } else {
     launchIssues.set(notice.exePath, notice);
+    // A game DLSS 5 is on that closed early is a failure for the ladder, judged as the render would.
+    if (card && card._failCtx && card._game) {
+      const ev = failureEvidence(card._game, { ...card._failCtx, issue: notice });
+      if (ev && ev.code === 'early-exit') {
+        card._state.problem = failureProblem(card, card._game, ev);
+        showFailure(card, card._game, ev, card._failCtx);
+      }
+    }
   }
   if (card) refreshCardState(card);
 }
@@ -1147,6 +1098,8 @@ function offerRestore(card, game, notice) {
 
 window.api.onLaunchOutcome((notice) => {
   if (!notice || !notice.exePath) return;
+  // Stamped here: it is what tells this early exit from the last one (failureEvidence's signature).
+  notice.at = Date.now();
   setLaunchIssue(notice);
   if (notice.kind === 'ok') return;
   const game = games.find((g) => g.exePath === notice.exePath);
@@ -1190,6 +1143,10 @@ async function checkQuarantineAfterInstall(game) {
 }
 
 function flipToConfirm(card, { title, detail, onConfirm, confirmLabel = t('Remove'), danger = true }) {
+  // The back face is shared with the failure ladder below; a confirm always shows its own two buttons.
+  card.querySelector('.card-remove-actions').classList.remove('hidden');
+  card.querySelector('.card-fail-actions').classList.add('hidden');
+  card.querySelector('.card-fail-status').classList.add('hidden');
   card.querySelector('.card-remove-title').textContent = title;
   card.querySelector('.card-remove-detail').textContent = detail;
   const confirmBtn = card.querySelector('.btn-flip-confirm');
@@ -1198,6 +1155,152 @@ function flipToConfirm(card, { title, detail, onConfirm, confirmLabel = t('Remov
   confirmBtn.classList.toggle('btn-primary', !danger);
   card._onFlipConfirm = onConfirm;
   card.classList.add('flipped');
+}
+
+// ── A game DLSS 5 did not work on: the card turns round and says what to try next ────────────────
+//
+// The ladder, in order: DLSS 5 -> DXVK in front of it, where the game can take DXVK -> Deep Fried
+// Chicken in place of it, where Chicken supports the game -> report it. Each rung is offered once;
+// what was tried is remembered on the game (game.fallback), so the next failure moves down a rung
+// instead of offering the same thing again. This replaced the card's "no known fix" lines: a player
+// who hit one of those was left with nothing to press.
+//
+// What counts as failed: DLSS 5 is installed here (ours or Chicken) and either the last launch closed
+// early, or the last run's log says it crashed or the pass never ran, or Game Help has no fix for what
+// it found. A diagnosis WITH a fix keeps its own "Fix it" button: that is a known answer, not a dead end.
+// Anti-cheat refusing the game is not DLSS 5 failing, so that keeps its restore offer.
+const FAILED_RUN_VERDICTS = ['duplicate-dlss', 'shutdown-fault', 'ue-crash', 'wrapper-crash', 'feed-stopped', 'feed-host-gone',
+  'feed-no-motion', 'feed-depth-flat', 'feed-agility-redist', 'no-dlss', 'dlss-no-nr', 'init-no-feature', 'nr-model-crash'];
+
+function fallbackOf(game) {
+  return game.fallback || (game.fallback = { tried: [], at: 0, seen: null });
+}
+
+// The evidence for "it failed", or null. Only evidence newer than the last rung tried counts: after a
+// switch to DXVK the old run's crash is about the old setup, and until the game runs again there is
+// nothing to say about the new one.
+function failureEvidence(game, { route, diag, run, issue }) {
+  const installed = !!(route && (route.optiInstalled || route.consumerHere));
+  if (!installed) return null;
+  const since = fallbackOf(game).at || 0;
+  if (issue && issue.kind === 'early-exit' && !issue.antiCheat && (issue.at || Date.now()) > since) {
+    return { sig: `exit:${issue.at || ''}`, when: issue.at || Date.now(), text: launchIssueText(issue, game.name), code: 'early-exit' };
+  }
+  const runAt = run && run.at ? new Date(run.at).getTime() : 0;
+  if (runAt && runAt <= since) return null;
+  if (run && run.ran && FAILED_RUN_VERDICTS.includes(run.verdict)) {
+    return { sig: `run:${run.at}:${run.verdict}`, when: runAt, text: describeRun(run), code: run.verdict };
+  }
+  // Game Help with no fix for what it found. No run is needed: an install it already knows cannot work
+  // (a 32-bit game where the route has no pass, say) is a dead end the ladder should take over too.
+  if (diag && diag.ok && (diag.status === 'unavailable' || diag.status === 'unknown')) {
+    return { sig: `help:${(run && run.at) || 'norun'}:${diag.code}`, when: runAt, text: helpWords(diag), code: diag.code };
+  }
+  return null;
+}
+
+// The rungs still to try on this game, in ladder order.
+function fallbackOffers(game, route) {
+  const tried = new Set(fallbackOf(game).tried);
+  if (route && route.dxvkDeployed) tried.add('dxvk');
+  if (route && route.consumerHere === 'dfc') tried.add('dfc');
+  const offers = [];
+  const swap = layerSwapFor(route);
+  if (swap && swap.id === 'swap-to-dxvk' && !tried.has('dxvk')) offers.push('dxvk');
+  if (route && route.dfcSupport && route.dfcSupport.ok && route.consumerHere !== 'dfc' && !tried.has('dfc')) offers.push('dfc');
+  return offers;
+}
+
+async function tryFallback(card, game, rung) {
+  const fb = fallbackOf(game);
+  card.classList.remove('flipped', 'card-spin');
+  launchIssues.delete(game.exePath);
+  const before = fb.tried.slice();
+  if (!fb.tried.includes(rung)) fb.tried.push(rung);
+  fb.at = Date.now();
+  saveGamesSoon();
+  if (rung === 'dxvk') {
+    const res = await applyLayerSwap(game, 'swap-to-dxvk');
+    if (res && res.ok && res.done) { toast(t('DXVK is in. Launch the game again to see if DLSS 5 works now.')); return; }
+  } else {
+    await switchNeuralPass(game, 'dfc');
+    if (game.neuralConsumer === 'dfc') { toast(t('Deep Fried Chicken is in. Launch the game again to see if it works now.')); return; }
+  }
+  // Cancelled or refused: the rung is still there to try.
+  fb.tried = before;
+  fb.at = 0;
+  saveGamesSoon();
+  renderGrid();
+}
+
+function flipToFailure(card, game, { spin = false } = {}) {
+  const f = card._failure;
+  if (!f) return;
+  const offers = fallbackOffers(game, f.route);
+  card.querySelector('.card-remove-actions').classList.add('hidden');
+  const box = card.querySelector('.card-fail-actions');
+  const status = card.querySelector('.card-fail-status');
+  status.classList.add('hidden');
+  status.innerHTML = '';
+  box.classList.remove('hidden');
+  box.innerHTML = '';
+  const button = (label, cls, run) => {
+    const b = document.createElement('button');
+    b.className = `btn ${cls}`;
+    b.textContent = label;
+    b.addEventListener('click', run);
+    box.appendChild(b);
+    return b;
+  };
+  card.querySelector('.card-remove-detail').textContent = f.text;
+  card.querySelector('.card-remove-detail').title = f.text;
+  if (offers.length) {
+    card.querySelector('.card-remove-title').textContent = t('DLSS 5 did not work on {name}', { name: game.name });
+    for (const rung of offers) {
+      button(rung === 'dxvk' ? t('Try with DXVK') : t('Try with Deep Fried Chicken'), offers[0] === rung ? 'btn-primary' : 'btn-ghost', () => tryFallback(card, game, rung));
+    }
+  } else {
+    const tried = fallbackOf(game).tried;
+    card.querySelector('.card-remove-title').textContent = tried.length
+      ? t('Nothing worked on {name} yet', { name: game.name })
+      : t('DLSS 5 did not work on {name}', { name: game.name });
+    const send = button(t('Report issue'), 'btn-primary', async () => {
+      send.disabled = true;
+      try {
+        await sendGameFailure(game, { ...f.diag, code: (f.diag && f.diag.code) || f.code, run: f.run }, {
+          setStatus: (html) => { status.innerHTML = html; status.classList.toggle('hidden', !html); },
+          tried,
+        });
+      } finally { send.disabled = false; }
+    });
+    if (f.route && f.route.optiInstalled) {
+      button(t('Restore the original files'), 'btn-ghost', () => { card.classList.remove('card-spin'); confirmRemoveOnCard(card, game, { title: t('Restore the original files?'), confirmLabel: t('Restore originals') }); });
+    }
+  }
+  button(t('Not now'), 'btn-ghost', () => card.classList.remove('flipped', 'card-spin'));
+  card.classList.toggle('card-spin', spin);
+  card.classList.add('flipped');
+}
+
+// The front's problem row for a failure: short words, and the button that turns the card again.
+function failureProblem(card, game, evidence) {
+  const next = fallbackOffers(game, (card._failCtx || {}).route).length ? t('What to try next') : t('Report issue');
+  return { bad: true, failure: true, text: t('DLSS 5 did not work here'), title: evidence.text, action: { label: next, run: () => flipToFailure(card, game) } };
+}
+
+// Turns the card for a failure it has not shown yet; one it already showed stays on the front, with the
+// problem row's button to turn it again.
+function showFailure(card, game, evidence, ctx) {
+  card._failure = { ...evidence, ...ctx };
+  const fb = fallbackOf(game);
+  if (fb.seen === evidence.sig) return;
+  fb.seen = evidence.sig;
+  saveGamesSoon();
+  // Only a failure from the last day turns the card on its own. Opening this build for the first time
+  // would otherwise spin every card with an old crash in its log at once; those keep the row's button.
+  if (!evidence.when || Date.now() - evidence.when > 24 * 3600 * 1000) return;
+  // After the grid has painted, so the turn is seen rather than landing already turned.
+  setTimeout(() => { if (card.isConnected) flipToFailure(card, game, { spin: true }); }, 350);
 }
 
 function escapeHtml(str) {
@@ -2002,11 +2105,23 @@ window.api.onReportSignIn((result) => {
 
 $('#help-send').addEventListener('click', async () => {
   if (!helpGame || !helpDiag) return;
-  const game = helpGame;
-  const diag = helpDiag;
   const btn = $('#help-send');
   btn.disabled = true;
   try {
+    await sendGameFailure(helpGame, helpDiag, { setStatus: setSendStatus });
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// The whole send, from Game Help's button and from the card's "Report issue" once every other rung is
+// tried. setStatus takes HTML (already escaped here) for wherever the progress is shown. `tried` names
+// what the card's ladder already tried, so the report says it rather than the maintainer asking.
+async function sendGameFailure(game, diag, { setStatus, tried = [] } = {}) {
+  const triedLine = tried.length ? `**Also tried:** ${tried.map((r) => (r === 'dxvk' ? 'DXVK' : 'Deep Fried Chicken')).join(', ')}` : '';
+  const withTried = (r) => (triedLine ? { ...r, body: `${r.body}\n${triedLine}` } : r);
+  {
+    const setSendStatus = setStatus;
     const status = await window.api.reportStatus();
     if (!status.configured) {
       // Not set up in this build: save the bundle and open the prefilled issue, together.
@@ -2016,7 +2131,7 @@ $('#help-send').addEventListener('click', async () => {
       // opens with it selected, for a browser that does not take a pasted file.
       const copied = await window.api.copyZipToClipboard(saved.zipPath);
       window.api.openPath(saved.zipPath);
-      const { title, body } = await buildGameReport(game, diag, { manual: true });
+      const { title, body } = withTried(await buildGameReport(game, diag, { manual: true }));
       window.api.openExternal(`https://github.com/mrcgibb9876-hash/OptiDLSS5-UI-releases/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`);
       setSendStatus(escapeHtml(copied && copied.ok
         ? t('GitHub opened with the report filled in, and the log zip is copied. Click at the end of the report on GitHub, press Ctrl+V to attach the zip, then press Submit.')
@@ -2032,22 +2147,22 @@ $('#help-send').addEventListener('click', async () => {
       if (!result.ok) { setSendStatus(escapeHtml(t('GitHub sign-in failed: {error}', { error: result.error }))); return; }
     }
     setSendStatus(escapeHtml(t('Gathering the report…')));
-    const { title, body } = await buildGameReport(game, diag);
+    const { title, body } = withTried(await buildGameReport(game, diag));
     const prepared = await window.api.reportPrepare({ exePath: game.exePath, detected: game.detectedPath || null, title, body, game: game.name, finding: diag.code });
     if (!prepared.ok) { setSendStatus(escapeHtml(t('Could not send: {error}', { error: prepared.error }))); return; }
     if (!(await previewReport(prepared))) { window.api.reportDiscard(prepared.id); setSendStatus(''); return; }
     setSendStatus(escapeHtml(t('Sending…')));
     const res = await window.api.reportSend(prepared.id);
-    if (res.signedOut) { setSendStatus(escapeHtml(t('GitHub sign-in has expired -- press Send game failure again to sign in.'))); return; }
+    if (res.signedOut) { setSendStatus(escapeHtml(t('GitHub sign-in has expired -- press Send again to sign in.'))); return; }
     if (!res.ok) { setSendStatus(escapeHtml(t('Could not send: {error}', { error: res.error }))); return; }
     if (res.cancelled) { setSendStatus(''); return; }
-    setSendStatus(`${escapeHtml(t('Sent as issue #{number}. The maintainer will reply there.', { number: res.issueNumber }))} <a href="#" id="help-send-link">${escapeHtml(t('Open it'))}</a>`);
-    const link = $('#help-send-link');
+    // An id per send: the status can be on a card as well as in Game Help, and both can be on screen.
+    const linkId = `send-link-${Date.now()}`;
+    setSendStatus(`${escapeHtml(t('Sent as issue #{number}. The maintainer will reply there.', { number: res.issueNumber }))} <a href="#" id="${linkId}">${escapeHtml(t('Open it'))}</a>`);
+    const link = document.getElementById(linkId);
     if (link) link.addEventListener('click', (e) => { e.preventDefault(); window.api.openExternal(res.issueUrl); });
-  } finally {
-    btn.disabled = false;
   }
-});
+}
 
 window.api.onGameHelpAiText(({ exePath, text }) => {
   if (!helpGame || helpGame.exePath !== exePath) return;
