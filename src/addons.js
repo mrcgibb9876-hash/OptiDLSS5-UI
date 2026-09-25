@@ -35,6 +35,7 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const { BAND } = require('./preset-order');
 const integrity = require('./integrity');
+const saferemove = require('./saferemove');
 const { HOOK_DLLS } = require('./detect');
 
 const ADDONS_MARKER = '.dlss5ui-addons.json';
@@ -531,27 +532,33 @@ async function installAddon(dir, id, ctx, opts = {}) {
   const spec = byId.get(id);
   if (!spec) throw new Error(`Unknown add-on: ${id}`);
 
+  // opts.prepareHost (main.js: ensureReShadeAddonHost) puts ReShade in the folder for a kind: 'addon'
+  // entry. It runs only AFTER the add-on is fetched: a download that fails, or a RenoDX build that is
+  // not there, must not leave a ReShade hooking the game for nothing (it used to run first). The
+  // ReShade check below is then made once the host is in place rather than before.
+  const hostFirst = spec.kind === 'addon' && typeof opts.prepareHost === 'function';
+
   // Checked here and not only in the picker. A disabled button is a courtesy, not a gate: this is
   // also reached from the IPC handler directly, and placing a file that can never load is the
   // failure this whole check exists to stop -- before the swap below takes anything out.
-  const blocker = installBlocker(dir, id, opts.reshade);
-  if (blocker === 'no-reshade') {
-    throw Object.assign(new Error('This game folder has no ReShade, so there is nothing to load this -- install DLSS 5 or frame pacing here first, or put your own ReShade in'), { code: blocker });
-  }
-  if (blocker === 'plain-reshade') {
-    throw Object.assign(new Error('The ReShade in this folder is the plain build, which never loads an add-on -- the Add-on build is the one that can'), { code: blocker });
-  }
+  if (!hostFirst) assertReShadeFor(dir, id, opts.reshade);
 
   const written = [];
 
-  // Swap rather than refuse. Done before anything is fetched so a failed download cannot leave
-  // the game with neither -- and reported back, so the UI can say what moved instead of the
-  // other row silently flipping to "Install".
+  // Swap rather than refuse, and reported back, so the UI can say what moved instead of the other row
+  // silently flipping to "Install". For an add-on with a host to prepare it happens after the fetch,
+  // so a failed download cannot leave the game with neither.
   const swappedOut = [];
-  for (const other of conflictsFor(dir, id)) {
-    await removeAddon(dir, other);
-    swappedOut.push(other);
-  }
+  const swap = async () => {
+    for (const other of conflictsFor(dir, id)) {
+      const r = await removeAddon(dir, other);
+      if (r.failed && r.failed.length) {
+        throw Object.assign(new Error(`${other} could not be taken out first (${r.failed.map((f) => `${f.rel}: ${f.code}`).join(', ')}) -- close the game and try again`), { code: 'remove-failed' });
+      }
+      swappedOut.push(other);
+    }
+  };
+  if (!hostFirst) await swap();
 
   if (spec.kind === 'shaders') {
     const files = packFiles(spec);
@@ -589,6 +596,11 @@ async function installAddon(dir, id, ctx, opts = {}) {
   if (spec.kind === 'addon') {
     const { url, name } = await resolveAddonAsset(spec, ctx, opts);
     const buf = await ctx.fetchBuffer(url);
+    if (hostFirst) {
+      await opts.prepareHost();
+      assertReShadeFor(dir, id);
+      await swap();
+    }
     const dest = path.join(dir, name);
     await fsp.writeFile(dest, buf);
     written.push(name);
@@ -621,6 +633,17 @@ async function resolveAddonAsset(spec, ctx, opts) {
   return { url: asset.browser_download_url, name: asset.name };
 }
 
+// The refusal installBlocker describes, as the error the install throws.
+function assertReShadeFor(dir, id, rs) {
+  const blocker = installBlocker(dir, id, rs);
+  if (blocker === 'no-reshade') {
+    throw Object.assign(new Error('This game folder has no ReShade, so there is nothing to load this -- install DLSS 5 or frame pacing here first, or put your own ReShade in'), { code: blocker });
+  }
+  if (blocker === 'plain-reshade') {
+    throw Object.assign(new Error('The ReShade in this folder is the plain build, which never loads an add-on -- the Add-on build is the one that can'), { code: blocker });
+  }
+}
+
 function recordInstall(dir, entry) {
   const marker = readMarker(dir) || { version: 1, installed: [] };
   marker.installed = (marker.installed || []).filter((e) => e.id !== entry.id);
@@ -631,25 +654,33 @@ function recordInstall(dir, entry) {
 // Take one back out. Only the files the marker says this app wrote: a pack the user also had, or
 // a file they edited in place, is still theirs, and this app does not delete what it did not put
 // there. Empty folders left behind are left behind -- reshade-shaders\ is shared with the Feeder.
-async function removeAddon(dir, id) {
+//
+// A file Windows will not delete (the .addon64 is mapped into a running game) is reported in
+// `failed` and STAYS in the marker. It used to be swallowed and its marker entry dropped anyway, so
+// Remove said it worked while RenoDX went on loading, untracked: the app no longer claimed it, and
+// the next Remove had nothing to take. What did go is taken off the entry; the entry itself goes only
+// once nothing of it is left. `opts.fs` is for tests (saferemove's injectable fs).
+async function removeAddon(dir, id, opts = {}) {
   const marker = readMarker(dir);
   const entry = ((marker && marker.installed) || []).find((e) => e.id === id);
-  if (!entry) return { removed: [], kept: [] };
+  if (!entry) return { removed: [], kept: [], failed: [] };
   const removed = [];
+  const failed = [];
   for (const rel of entry.files || []) {
     const p = path.join(dir, ...rel.split('/'));
-    try {
-      await fsp.rm(p, { force: true });
-      removed.push(rel);
-    } catch {
-      // A file already gone, or locked by a running game: the marker entry still goes, so the
-      // app stops claiming it.
-    }
+    const r = await saferemove.removePath(p, { fs: opts.fs });
+    if (r.ok) removed.push(rel);
+    else failed.push({ rel, code: r.code });
+  }
+  if (failed.length) {
+    entry.files = failed.map((f) => f.rel);
+    writeMarker(dir, marker);
+    return { removed, kept: [], failed };
   }
   marker.installed = marker.installed.filter((e) => e.id !== id);
   if (marker.installed.length) writeMarker(dir, marker);
   else await fsp.rm(path.join(dir, ADDONS_MARKER), { force: true });
-  return { removed, kept: [] };
+  return { removed, kept: [], failed };
 }
 
 module.exports = {

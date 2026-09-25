@@ -371,7 +371,10 @@ async function deployLumaUeStack(dir, { cacheDir, getRhiManifest, compareVersion
 // Reverses deployLumaUeStack(): Luma's shader folder, its add-on, the ReShade it brought (a plain
 // ReShade64.dll plus the ini/preset/log ReShade writes beside it), nvngx_dlss.dll when this app
 // placed it, and the marker. Same shape as feeder.removeFeederStack().
-async function removeLumaStack(dir) {
+// keepReShade: something else here still loads that ReShade -- frame pacing or a RenoDX add-on
+// (main.js decides). Luma's own add-on and shaders still go; ReShade64.dll and its ini/preset stay.
+// Deleting it regardless left pacing and RenoDX in the folder with nothing to load them.
+async function removeLumaStack(dir, { keepReShade = false } = {}) {
   const removed = [];
   const kept = [];
   let marker = null;
@@ -384,7 +387,8 @@ async function removeLumaStack(dir) {
   };
   await rm('Luma');
   for (const addon of lumaAddonsIn(dir)) await rm(addon);
-  for (const name of [RESHADE_DLL_NAME, 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log']) await rm(name);
+  if (keepReShade) kept.push(RESHADE_DLL_NAME + ' (frame pacing or another ReShade add-on here still uses it)');
+  else for (const name of [RESHADE_DLL_NAME, 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log']) await rm(name);
   if (!(marker && marker.placedNvngxDlss === false)) await rm('nvngx_dlss.dll');
   else kept.push('nvngx_dlss.dll (was already here before Luma)');
   // The game's own old DLSS runtime, set aside at deploy, goes back.

@@ -1974,7 +1974,8 @@ async function removeFeederStack(dir, { keepReShade = false } = {}) {
   }
 
   if (keepReShade) {
-    kept.push(RESHADE_DLL_NAME + ' (Luma UE still needs it)');
+    // Luma UE, frame pacing or a RenoDX add-on (main.js decides which asked for it).
+    kept.push(RESHADE_DLL_NAME + ' (something else here still uses it)');
   } else {
     for (const name of [RESHADE_DLL_NAME, 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log']) await rm(name);
   }

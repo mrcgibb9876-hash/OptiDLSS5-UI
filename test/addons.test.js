@@ -712,3 +712,49 @@ test('detectGameCached is never called as though it were synchronous and took on
   const main = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'main.js'), 'utf8');
   assert.ok(!/detectGameCached\(exePath\)/.test(main), 'detectGameCached(exePath) is back in main.js');
 });
+
+// ── ReShade goes in only after the add-on is fetched (main.js prepareHost) ──────────────────────────
+
+test('with a host to prepare, ReShade is put in only after the add-on has been fetched', { skip: !canFakePe }, async () => {
+  const dir = scratchDir('addons-host-after-fetch');
+  const match = addons.matchRenodx(INDEX, { steamAppid: 1091500, bitness: 64 });
+  const events = [];
+  const ctx = fakeCtx({ 'renodx-cyberpunk2077.addon64': 'MZ fake addon' });
+  const fetchBuffer = ctx.fetchBuffer;
+  ctx.fetchBuffer = async (url) => { events.push('fetch'); return fetchBuffer(url); };
+  // No ReShade in the folder before: the host is what puts it there.
+  const res = await addons.installAddon(dir, 'renodx', ctx, { match, prepareHost: async () => { events.push('host'); fakeReShade(dir, 'ReShade64.dll'); } });
+  assert.deepEqual(events, ['fetch', 'host']);
+  assert.deepEqual(res.files, ['renodx-cyberpunk2077.addon64']);
+});
+
+test('a failed download never prepares the host, so no ReShade is left hooking the game', async () => {
+  const dir = scratchDir('addons-host-offline');
+  const match = addons.matchRenodx(INDEX, { steamAppid: 1091500, bitness: 64 });
+  let hosted = false;
+  await assert.rejects(addons.installAddon(dir, 'renodx', { fetchBuffer: async () => { throw new Error('fetch failed'); } }, {
+    match, prepareHost: async () => { hosted = true; },
+  }), /fetch failed/);
+  assert.equal(hosted, false);
+  assert.deepEqual(fs.readdirSync(dir), []);
+});
+
+// ── a file Windows will not delete ──────────────────────────────────────────────────────────────────
+
+test('an add-on file that cannot be deleted is reported, and stays recorded as ours', async () => {
+  const dir = scratchDir('addons-remove-locked');
+  const match = addons.matchRenodx(INDEX, { steamAppid: 1091500, bitness: 64 });
+  await addons.installAddon(dir, 'renodx', fakeCtx({ 'renodx-cyberpunk2077.addon64': 'MZ fake addon' }), { match, ...HAS_RESHADE });
+  // The .addon64 mapped into a running game: unlink answers EPERM however often it is asked.
+  const fsp = require('node:fs/promises');
+  const locked = { ...fsp, rm: async () => { throw Object.assign(new Error('EPERM: operation not permitted'), { code: 'EPERM' }); } };
+  const res = await addons.removeAddon(dir, 'renodx', { fs: locked });
+  assert.deepEqual(res.removed, []);
+  assert.deepEqual(res.failed, [{ rel: 'renodx-cyberpunk2077.addon64', code: 'EPERM' }]);
+  assert.deepEqual(addons.installedIds(dir), ['renodx'], 'the app still claims it, so the next Remove finds it');
+  assert.ok(fs.existsSync(path.join(dir, 'renodx-cyberpunk2077.addon64')));
+  // Once it can go, it goes, with the claim.
+  const again = await addons.removeAddon(dir, 'renodx');
+  assert.deepEqual(again.removed, ['renodx-cyberpunk2077.addon64']);
+  assert.deepEqual(addons.installedIds(dir), []);
+});
