@@ -104,8 +104,10 @@ html, body { margin: 0; height: 100%; }
   font-size: 12px;
   letter-spacing: var(--tracking);
   text-transform: uppercase;
-  color: var(--caption);
-  border-bottom: 1px solid rgba(var(--shade), 0.14);
+  /* Green, so each section (Frame Generation, Pacing, HDR...) stands out from its rows (2026-09-25). */
+  color: var(--accent);
+  font-weight: 700;
+  border-bottom: 1px solid rgba(var(--accent-fill-rgb), 0.35);
 }
 .p-caption:first-child { margin-top: 4px; }
 
