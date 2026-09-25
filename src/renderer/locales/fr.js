@@ -1775,4 +1775,14 @@ window.I18N.register("fr", {
     "Ce jeu a déjà votre propre ReShade, et c’est la version simple, qui ne charge jamais d’add-ons. Installez vous-même ReShade avec la prise en charge complète des add-ons par-dessus, ou retirez le vôtre, puis réessayez.",
   "Sorry -- sending straight from the app is not set up on our side yet, so the report was not sent. GitHub has opened with it filled in: press Submit there.":
     "Désolé -- l’envoi direct depuis l’app n’est pas encore configuré de notre côté, le rapport n’a donc pas été envoyé. GitHub s’est ouvert avec le rapport déjà rempli : appuyez sur Submit.",
+  "HDR (RenoDX, engine-wide)":
+    "HDR (RenoDX, pour tout le moteur)",
+  "HDR (RenoDX, engine-wide) on this game":
+    "HDR (RenoDX, pour tout le moteur) dans ce jeu",
+  "RenoDX has no mod made for this game, only one for its whole engine. It may not change this game's picture at all -- if the HDR settings do nothing, turn it off.":
+    "RenoDX n’a pas de mod fait pour ce jeu, seulement un pour tout son moteur. Il peut ne rien changer à l’image de ce jeu -- si les réglages HDR n’ont aucun effet, désactivez-le.",
+  "RenoDX (engine)":
+    "RenoDX (moteur)",
+  "RenoDX has an HDR mod made for this game. Turn it on from the ⋯ menu.":
+    "RenoDX a un mod HDR fait pour ce jeu. Activez-le depuis le menu ⋯.",
 });

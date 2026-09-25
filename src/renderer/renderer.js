@@ -471,7 +471,7 @@ async function renderGrid() {
         <div class="card-icons">
           <span class="card-mark hidden"></span>
           <span class="card-warn hidden" aria-label="Anti-cheat">&#9888;</span>
-          ${storeTag(status)}
+          ${storeTag(status)}${renodxTag(status)}
         </div>
         <div class="card-actions">
           <button class="btn btn-primary btn-card-primary"></button>
@@ -934,6 +934,17 @@ function storeTag(status) {
   const label = STORE_LABELS[status.store] || t('User');
   return `<span class="card-store" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`;
 }
+// Whether RenoDX can give this game HDR (main.js renodxCapability): a mod made for the game gets the tag;
+// one that only matches the game's engine gets a dimmer one that says so, because an engine-wide mod
+// often never reaches a given game's tone mapping. Nothing until RenoDX's list has been fetched once.
+function renodxTag(status) {
+  if (!status || status.exeMissing || !status.renodx) return '';
+  if (status.renodx === 'engine') {
+    const tip = t('RenoDX has no mod made for this game, only one for its whole engine. It may not change this game\'s picture at all -- if the HDR settings do nothing, turn it off.');
+    return `<span class="card-store card-renodx card-renodx-engine" title="${escapeHtml(tip)}">${escapeHtml(t('RenoDX (engine)'))}</span>`;
+  }
+  return `<span class="card-store card-renodx" title="${escapeHtml(t('RenoDX has an HDR mod made for this game. Turn it on from the ⋯ menu.'))}">RenoDX</span>`;
+}
 
 const API_LABEL = { dx12: 'DX12', dx11: 'DX11', vulkan: 'Vulkan', opengl: 'OpenGL', dx10: 'DX10', dx9: 'DX9', dx8: 'DX8' };
 
@@ -1110,8 +1121,10 @@ function paintAddonMenu(card) {
   const busy = addonMenuBusy.has(card._exePath);
   for (const b of card.querySelectorAll('.btn-menu-addon')) {
     const kind = b.dataset.kind;
-    const name = kind === 'pacing' ? t('Frame pacing') : 'HDR (RenoDX)';
     const s = st && st.ok ? st[kind] : null;
+    // An engine-wide RenoDX mod is labelled as one: it often never reaches a given game's tone mapping.
+    const engineWide = kind === 'hdr' && !!(s && s.byEngine);
+    const name = kind === 'pacing' ? t('Frame pacing') : engineWide ? t('HDR (RenoDX, engine-wide)') : 'HDR (RenoDX)';
     b.classList.toggle('menu-addon-on', !!(s && s.installed));
     // Not known yet (the answer is still coming) or being changed: shown as such and not pressable --
     // an entry that looked ready and did nothing when clicked read as broken.
@@ -1120,7 +1133,9 @@ function paintAddonMenu(card) {
     const blocked = !s.installed && !!s.blocker;
     b.disabled = blocked;
     b.textContent = s.installed ? t('{name}: On — turn off', { name }) : t('{name}: Off — turn on', { name });
-    b.title = blocked ? addonMenuReason(kind, s.blocker) : '';
+    b.title = blocked ? addonMenuReason(kind, s.blocker)
+      : engineWide ? t('RenoDX has no mod made for this game, only one for its whole engine. It may not change this game\'s picture at all -- if the HDR settings do nothing, turn it off.')
+      : '';
   }
 }
 

@@ -1289,26 +1289,30 @@ ipcMain.handle('panel:addonToggles', async (_evt, { exePath } = {}) => {
     const blocker = await reshadeAddonBlocker(dir, exePath);
     const hdrInstalled = addons.installedIds(dir).includes('renodx');
     let hdrBlocker = blocker;
-    if (!hdrInstalled && !hdrBlocker) {
-      try {
-        const detected = (await detectFor(gameDir(exePath), exePath).catch(() => null)) || {};
-        const steam = library.steamManifestFor(exePath);
-        const renodx = await renodxIndex();
-        const match = addons.matchRenodx(renodx.index, {
-          steamAppid: steam ? steam.appid : null,
-          title: (steam && steam.name) || path.basename(dir),
-          bitness: detected.bitness || null,
-          engineId: detected.engineId || null,
-        });
-        if (!match) hdrBlocker = 'no-mod';
-      } catch {
-        hdrBlocker = 'no-index';
-      }
+    // Whether the RenoDX mod is built for THIS game or only for its engine. An engine-wide mod (the
+    // generic Unreal one, say) often never touches a given game's tone mapping -- The Blood of Dawnwalker
+    // (2026-09-25) had RenoDX loaded and its HDR sliders changing nothing -- so the switches say so rather
+    // than presenting it like a real per-game mod. Asked for even when installed: the match is memoised.
+    let byEngine = false;
+    try {
+      const detected = (await detectFor(gameDir(exePath), exePath).catch(() => null)) || {};
+      const steam = library.steamManifestFor(exePath);
+      const renodx = await renodxIndex();
+      const match = addons.matchRenodx(renodx.index, {
+        steamAppid: steam ? steam.appid : null,
+        title: (steam && steam.name) || path.basename(dir),
+        bitness: detected.bitness || null,
+        engineId: detected.engineId || null,
+      });
+      byEngine = !!(match && /^engine/.test(match.how || ''));
+      if (!match && !hdrInstalled && !hdrBlocker) hdrBlocker = 'no-mod';
+    } catch {
+      if (!hdrInstalled && !hdrBlocker) hdrBlocker = 'no-index';
     }
     return {
       ok: true,
       pacing: { installed: relimiter.deployed(dir), blocker },
-      hdr: { installed: hdrInstalled, blocker: hdrBlocker },
+      hdr: { installed: hdrInstalled, blocker: hdrBlocker, byEngine },
     };
   } catch (e) {
     return { ok: false, error: String((e && e.message) || e) };
@@ -3814,8 +3818,34 @@ ipcMain.handle('game:status', async (_evt, exePath) => {
     }));
   const marker = engines.readEngineMarker(dir);
   const engine = marker && marker.engine ? engines.normalizeEngine(marker.engine) : null;
-  return { exeMissing: false, hasIni, hasNr, hasUninstaller, dir, backends, foreign, warnings, engine, store: storeOf(exePath) };
+  return { exeMissing: false, hasIni, hasNr, hasUninstaller, dir, backends, foreign, warnings, engine, store: storeOf(exePath), renodx: renodxCapability(exePath, dir) };
 });
+
+// The card's RenoDX tag: 'game' when RenoDX has a mod made for this game, 'engine' when only its engine's
+// generic one matches, null otherwise -- for store and user-added games alike (the match also works by
+// title and by engine, not only by Steam appid). Asked on every card render, so it never waits: it reads
+// the RenoDX index only once it has been fetched (and starts that fetch in the background), and the
+// stored detection rather than a scan (the grid's performance rules, see CLAUDE.md).
+function renodxCapability(exePath, dir) {
+  if (!renodxIndexMemo) {
+    renodxIndex().catch(() => {});
+    return null;
+  }
+  try {
+    const detected = storedDetectionFor(exePath) || {};
+    const steam = library.steamManifestFor(exePath);
+    const match = addons.matchRenodx(renodxIndexMemo.index, {
+      steamAppid: steam ? steam.appid : null,
+      title: (steam && steam.name) || path.basename(dir),
+      bitness: detected.bitness || null,
+      engineId: detected.engineId || null,
+    });
+    if (!match) return null;
+    return /^engine/.test(match.how || '') ? 'engine' : 'game';
+  } catch {
+    return null;
+  }
+}
 
 // The one-line answer the card tags and the Install button acts on -- see route.js. `detected`
 // is the cached detection the renderer already holds for this game, so this never rescans the exe.

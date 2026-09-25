@@ -1765,4 +1765,14 @@ window.I18N.register("ru", {
     "В этой игре уже есть ваш собственный ReShade, причём обычная версия, которая не загружает дополнения. Установите поверх неё ReShade с полной поддержкой дополнений сами или удалите свой, затем попробуйте снова.",
   "Sorry -- sending straight from the app is not set up on our side yet, so the report was not sent. GitHub has opened with it filled in: press Submit there.":
     "Извините -- отправка прямо из приложения у нас пока не настроена, поэтому отчёт не отправлен. GitHub открылся с уже заполненным отчётом: нажмите там Submit.",
+  "HDR (RenoDX, engine-wide)":
+    "HDR (RenoDX, для всего движка)",
+  "HDR (RenoDX, engine-wide) on this game":
+    "HDR (RenoDX, для всего движка) в этой игре",
+  "RenoDX has no mod made for this game, only one for its whole engine. It may not change this game's picture at all -- if the HDR settings do nothing, turn it off.":
+    "У RenoDX нет мода для этой игры, только общий для её движка. Он может вообще не менять картинку этой игры -- если настройки HDR ничего не дают, выключите его.",
+  "RenoDX (engine)":
+    "RenoDX (движок)",
+  "RenoDX has an HDR mod made for this game. Turn it on from the ⋯ menu.":
+    "У RenoDX есть HDR-мод специально для этой игры. Включите его в меню ⋯.",
 });

@@ -222,3 +222,15 @@ test('the card shows where the game came from, read from status.store', () => {
   assert.strictEqual(ctx.storeTag({ exeMissing: true }), '', 'a missing exe has no install to read a store from');
   assert.match(ctx.storeTag({ store: 'steam' }), /class="card-store"/);
 });
+
+test('cards tag RenoDX capability: a gold tag for a per-game mod, a dim one for an engine-wide match', () => {
+  assert.match(js, /\$\{renodxTag\(status\)\}/, 'the card template draws the RenoDX tag');
+  const fn = js.slice(js.indexOf('function renodxTag('), js.indexOf('const API_LABEL'));
+  assert.match(fn, /status\.renodx === 'engine'/);
+  assert.match(fn, /card-renodx-engine/);
+  const main = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'main.js'), 'utf8');
+  assert.match(main, /renodx: renodxCapability\(exePath, dir\)/, 'game:status carries the capability');
+  const cap = main.slice(main.indexOf('function renodxCapability('), main.indexOf('function renodxCapability(') + 1400);
+  assert.match(cap, /if \(!renodxIndexMemo\)/, 'never waits on the network during a grid render');
+  assert.match(cap, /storedDetectionFor\(exePath\)/, 'never scans the exe during a grid render');
+});

@@ -1765,4 +1765,14 @@ window.I18N.register("ko", {
     "이 게임에는 이미 직접 설치한 ReShade가 있으며, 애드온을 전혀 불러오지 않는 일반 버전입니다. 그 위에 애드온 전체 지원 ReShade를 직접 설치하거나 기존 것을 제거한 뒤 다시 시도하세요.",
   "Sorry -- sending straight from the app is not set up on our side yet, so the report was not sent. GitHub has opened with it filled in: press Submit there.":
     "죄송합니다 -- 앱에서 바로 보내는 기능이 아직 저희 쪽에서 설정되지 않아 보고서를 보내지 못했습니다. 내용이 채워진 GitHub 페이지가 열렸으니 거기서 Submit을 누르세요.",
+  "HDR (RenoDX, engine-wide)":
+    "HDR (RenoDX, 엔진 공통)",
+  "HDR (RenoDX, engine-wide) on this game":
+    "이 게임의 HDR (RenoDX, 엔진 공통)",
+  "RenoDX has no mod made for this game, only one for its whole engine. It may not change this game's picture at all -- if the HDR settings do nothing, turn it off.":
+    "RenoDX에는 이 게임 전용 모드가 없고 엔진 전체용 모드만 있습니다. 이 게임의 화면을 전혀 바꾸지 못할 수도 있습니다 -- HDR 설정이 아무 효과가 없으면 끄세요.",
+  "RenoDX (engine)":
+    "RenoDX (엔진)",
+  "RenoDX has an HDR mod made for this game. Turn it on from the ⋯ menu.":
+    "RenoDX에 이 게임 전용 HDR 모드가 있습니다. ⋯ 메뉴에서 켜세요.",
 });

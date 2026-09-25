@@ -1200,7 +1200,9 @@ function renderHostedEnable(el, kind) {
   const exe = current.exePath;
   const busyKey = `${exe}|${kind}`;
   const blocked = !s.installed && !!s.blocker;
-  const label = kind === 'pacing' ? t('Frame pacing on this game') : t('HDR (RenoDX) on this game');
+  const engineWide = kind === 'hdr' && !!s.byEngine;
+  const label = kind === 'pacing' ? t('Frame pacing on this game')
+    : engineWide ? t('HDR (RenoDX, engine-wide) on this game') : t('HDR (RenoDX) on this game');
   optiFgCheckRow(el, s.installed, label,
     s.installed
       ? t('On. Turning it off takes it out of the game folder; the game drops it the next time it starts.')
@@ -1245,6 +1247,11 @@ function renderHostedEnable(el, kind) {
     why.className = 'p-note';
     why.textContent = addonBlockerText(kind, s.blocker);
     el.appendChild(why);
+  } else if (engineWide) {
+    const note = document.createElement('div');
+    note.className = 'p-note';
+    note.textContent = t('RenoDX has no mod made for this game, only one for its whole engine. It may not change this game\'s picture at all -- if the HDR settings do nothing, turn it off.');
+    el.appendChild(note);
   }
 }
 

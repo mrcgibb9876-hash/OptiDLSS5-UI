@@ -1765,4 +1765,14 @@ window.I18N.register("zh-CN", {
     "此游戏已有你自己安装的 ReShade，而且是不会加载任何附加组件的普通版。请自行在其上安装带完整附加组件支持的 ReShade，或移除你的版本，然后重试。",
   "Sorry -- sending straight from the app is not set up on our side yet, so the report was not sent. GitHub has opened with it filled in: press Submit there.":
     "抱歉 -- 我们这边还没有设置好从应用直接发送，所以报告没有发出。GitHub 已打开并填好了报告：请在那里点击 Submit。",
+  "HDR (RenoDX, engine-wide)":
+    "HDR（RenoDX，引擎通用）",
+  "HDR (RenoDX, engine-wide) on this game":
+    "此游戏的 HDR（RenoDX，引擎通用）",
+  "RenoDX has no mod made for this game, only one for its whole engine. It may not change this game's picture at all -- if the HDR settings do nothing, turn it off.":
+    "RenoDX 没有专为此游戏制作的模组，只有适用于整个引擎的通用模组。它可能完全不会改变此游戏的画面 -- 如果 HDR 设置没有任何效果，请关闭它。",
+  "RenoDX (engine)":
+    "RenoDX（引擎）",
+  "RenoDX has an HDR mod made for this game. Turn it on from the ⋯ menu.":
+    "RenoDX 有专为此游戏制作的 HDR 模组。在 ⋯ 菜单中开启。",
 });
