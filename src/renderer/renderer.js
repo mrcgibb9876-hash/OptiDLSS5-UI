@@ -1437,6 +1437,9 @@ function emulatorRendererWords(r) {
 
 function helpWords(diag) {
   const v = diag.vars || {};
+  // A pass count only from the engine's frame heartbeat: without one, nrDispatch is 1 (a dispatch was
+  // seen), and "ran 1 passes" read as nearly nothing having happened. No count, then no number.
+  const counted = !!(diag.run && diag.run.nrFrames > 0);
   switch (diag.code) {
     case 'dfc-hand-placed': return t('Deep Fried Chicken was copied into this folder by hand ({files}). Switch this game to Chicken from its ⋯ menu and the app takes it over, or delete those files to stay on DLSS 5.', v);
     case 'dfc-here': return v.state
@@ -1466,11 +1469,11 @@ function helpWords(diag) {
     case 'pd-enable-ingame': return t('Everything is in place but the last run made no DLSS call. In-game, press Insert for REFramework\'s menu, open TemporalUpscaler, tick Enabled and set Upscale Type to DLSS. Then play a minute and quit.');
     case 'needs-run': return t('No run to judge yet. Launch the game, reach actual gameplay (not a menu), play a minute, then quit. Come back here and it is checked.');
     case 'needs-run-after-fix': return t('"{fix}" was applied. The old log still says what it said, so launch the game, reach gameplay, play a minute, quit, and this is checked again.', { fix: helpFixLabel(v.fix) });
-    case 'ok': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}{api}.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '', api: v.api ? ' (' + v.api + ')' : '' });
-    case 'ok-panel-in-helper': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}. A 32-bit game cannot run DLSS itself, so the neural pass and OptiScaler run in the 64-bit helper beside the game. Press Insert in the game for the DLSS 5 panel: the helper draws it, the game shows it over itself, and its controls take clicks there -- the same key as every other game.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '' })
+    case 'ok': return (counted ? t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}{api}.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '', api: v.api ? ' (' + v.api + ')' : '' }) : t('DLSS 5 is working here: Neural Rendering ran on the last run{fps}{api}.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '', api: v.api ? ' (' + v.api + ')' : '' }));
+    case 'ok-panel-in-helper': return (counted ? t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run{fps}. A 32-bit game cannot run DLSS itself, so the neural pass and OptiScaler run in the 64-bit helper beside the game. Press Insert in the game for the DLSS 5 panel: the helper draws it, the game shows it over itself, and its controls take clicks there -- the same key as every other game.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '' }) : t('DLSS 5 is working here: Neural Rendering ran on the last run{fps}. A 32-bit game cannot run DLSS itself, so the neural pass and OptiScaler run in the 64-bit helper beside the game. Press Insert in the game for the DLSS 5 panel: the helper draws it, the game shows it over itself, and its controls take clicks there -- the same key as every other game.', { count: v.count, fps: v.fps ? ' ' + t(' at {fps} fps', { fps: v.fps }) : '' }))
       // Assassin's Creed II (2026-09-18): the picture, UI included, jumped on VORT.
       + (v.otherMv ? ' ' + t('If the picture jumps or smears when things move, try LumeniteFX for motion vectors instead of {provider}: card menu > Motion vectors > change.', { provider: v.otherMv }) : '');
-    case 'ok-exit-crash': return t('Neural Rendering ran ({count} passes). The game crashed only on the way out, inside NVIDIA\'s shutdown, which does not affect play.', v);
+    case 'ok-exit-crash': return (counted ? t('Neural Rendering ran ({count} passes). The game crashed only on the way out, inside NVIDIA\'s shutdown, which does not affect play.', v) : t('Neural Rendering ran. The game crashed only on the way out, inside NVIDIA\'s shutdown, which does not affect play.', v));
     case 'd3d11-native': return t('DLSS was created on the native D3D11 path, so the Neural Rendering pass never ran. Dx11Upscaler must be dlss_12. Reconfigure writes it.');
     case 'nr-disabled': return t('DLSS ran but Neural Rendering is switched off in OptiScaler.ini. Reconfigure turns it on.');
     case 'dlss-no-nr': return t('DLSS was created and Neural Rendering is on, yet the pass never ran. This is not a known case. Report it with Report issue on the card (it sends the logs), or ask the AI.');
@@ -1507,9 +1510,9 @@ function helpWords(diag) {
     case 'dxvk-addon-not-loaded': return t('The game ran under DXVK and ReShade\'s Vulkan layer loaded (it wrote ReShade.log), but the DLSS5 Feeder add-on did not: dlss5-feed.log has not been written since the swap. Open ReShade\'s overlay in the game (Home) and look at its Add-ons tab for DLSS 5 Feed and any error beside it; ReShade.log in the game folder names add-ons it refused. If it is not there at all, switch the game back off DXVK.', v);
     // Worded for both routes DXVK serves: in place of dgVoodoo2 (DX8/9) or of native Direct3D (32-bit DX10/11).
     case 'dxvk-needs-run': return t('DXVK is in front of the game, and it has not been run since. Launch it, reach gameplay, play a minute and quit. If ReShade.log and dlss5-feed.log in the game folder are still older than the swap after that, ReShade\'s Vulkan layer did not attach to this game.');
-    case 'dxvk-panel-fullscreen': return t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run. But the game was in exclusive fullscreen when the DLSS5 Feeder started its helper, so the helper has no window and the Insert panel has nothing to show -- under dgVoodoo2 this app held the game borderless, and DXVK has no such setting. Switch the game to borderless or windowed in its own options and restart it for the panel.', v);
+    case 'dxvk-panel-fullscreen': return (counted ? t('DLSS 5 is working here: Neural Rendering ran {count} passes on the last run. But the game was in exclusive fullscreen when the DLSS5 Feeder started its helper, so the helper has no window and the Insert panel has nothing to show -- under dgVoodoo2 this app held the game borderless, and DXVK has no such setting. Switch the game to borderless or windowed in its own options and restart it for the panel.', v) : t('DLSS 5 is working here: Neural Rendering ran on the last run. But the game was in exclusive fullscreen when the DLSS5 Feeder started its helper, so the helper has no window and the Insert panel has nothing to show -- under dgVoodoo2 this app held the game borderless, and DXVK has no such setting. Switch the game to borderless or windowed in its own options and restart it for the panel.', v));
     case 'nr-model-only': return t('The game never loaded OptiScaler ({file}), and it does not need to: this game ships its own DLSS, so Neural Rendering only wants the model file beside the exe -- the game\'s own Streamline loads it and the driver dispatches the pass. Taking OptiScaler out removes the one thing this app put into the game\'s loader, which is what a game that will not start with it needs. The cost is the in-game panel and the DLSS 5 controls that live on it; Install puts them back.', v);
-    case 'opti-not-loaded': return t('The DLSS5 Feeder ran and reported OptiScaler as not present: the game never loaded {file}, so the Feeder\'s DLSS calls went to the driver and no neural pass ran. OptiScaler has to sit under a DLL name this exe imports at start (winmm.dll or version.dll suit most games; never dxgi.dll on a Vulkan, OpenGL or DirectX 9 game). Rename it in the game folder, then launch again -- or save the bundle so the name can be picked from the exe.', v);
+    case 'opti-not-loaded': return t('The DLSS5 Feeder ran and reported OptiScaler as not present: the game never loaded {file}, so the Feeder\'s DLSS calls went to the driver and no neural pass ran. OptiScaler has to sit under a DLL name this exe imports at start (winmm.dll or version.dll suit most games; never dxgi.dll on a Vulkan, OpenGL or DirectX 9 game). Rename it in the game folder, then launch again -- or send a report with Report issue on the card, so the name can be picked from the exe.', v);
     case 'opti-not-fork': return t('The DLSS5 Feeder found a stock OptiScaler in this game, not the DLSS-NR fork: it takes the DLSS calls and upscales, and no neural pass can ever run. Install puts the fork this app ships back in its place.');
     case 'opti-not-routed': return t('OptiScaler is loaded, but the driver answered the DLSS5 Feeder\'s NGX probe instead of it, so its neural pass never sees a frame. OptiScaler.ini decides that with two keys ([Inputs] EnableDlssInputs and [Hooks] HookOriginalNvngxOnly); Reconfigure sets both back to the values the redirect needs.');
     case 'feed-vulkan-interop': return (v.hook === 'not-installed'
@@ -1518,8 +1521,8 @@ function helpWords(diag) {
         ? t('The DLSS5 Feeder stopped before its first frame: the Vulkan interop extensions it needs were not on the game\'s device -- its hook on vkCreateDevice was installed but this game creates its device some way the hook does not intercept.')
         : t('The DLSS5 Feeder stopped before its first frame: the Vulkan interop extensions it needs were not on the game\'s device.')) + ' ' +
       t('The Feeder\'s own fallback is its out-of-process layer: in its release zip, run layer\\run-with-feed-layer.bat with the path to this game\'s exe. This app does not deploy that layer; dlss5-feed.log has the driver\'s answer above the stop line.');
-    case 'asi-loader-blind': return t('Nothing called DLSS on the last run -- but there is an ASI loader in this folder, with {count} plugin(s) beside the game: {files}. This app installs OptiScaler under a proxy DLL name and reads the folder by those names, so it cannot see what an ASI loader loads, and the findings here may be about the wrong files entirely. Check what your .asi plugins are doing first. If none of them is an upscaler, save the bundle to share, or ask the AI.', v);
-    case 'no-hook': return t('Nothing called DLSS on the last run, so nothing was hooked. Check the game\'s own graphics settings have DLSS or DLAA selected. If they do, this is not a known case: save the bundle or ask the AI.');
+    case 'asi-loader-blind': return t('Nothing called DLSS on the last run -- but there is an ASI loader in this folder, with {count} plugin(s) beside the game: {files}. This app installs OptiScaler under a proxy DLL name and reads the folder by those names, so it cannot see what an ASI loader loads, and the findings here may be about the wrong files entirely. Check what your .asi plugins are doing first. If none of them is an upscaler, report it with Report issue on the card (it sends the logs), or ask the AI.', v);
+    case 'no-hook': return t('Nothing called DLSS on the last run, so nothing was hooked. Check the game\'s own graphics settings have DLSS or DLAA selected. If they do, this is not a known case: press Report issue on the card, or ask the AI.');
     case 'ue-crash-luma': return t('The game crashed (Unreal crash report: {message}) with Luma UE deployed, and Luma is not verified on this game. Remove Luma UE and try the Feeder route.', { message: (v.message || '').slice(0, 120) });
     case 'ue-crash-feeder': return t('The game crashed (Unreal crash report: {message}) with the Feeder deployed. Remove the Feeder and check whether it runs clean.', { message: (v.message || '').slice(0, 120) });
     case 'ue-crash': return t('The game crashed (Unreal crash report: {message}). No rule covers this. Report it with Report issue on the card (it sends the logs), or ask the AI.', { message: (v.message || '').slice(0, 120) });
@@ -1532,7 +1535,7 @@ function helpWords(diag) {
       t('Nothing in the game folder can work around that -- plain DLSS may still start, but the neural model either never loads or crashes on its first frame. Update the driver from the NVIDIA app or nvidia.com, then launch the game again.');
     case 'nr-model-crash-emulator': return t('The DLSS 5 model crashed on its very first frame, inside NVIDIA\'s own code, and the Feeder stopped -- {name} carried on without it. It crashed on {name}\'s Direct3D 12 device, where the Feeder hands the model the emulator\'s own device. No ini setting changes that. What to try: in {name}, Graphics > Backend: Direct3D 11. On D3D11 the Feeder runs DLSS on a device of its own, the path that keeps working where this one crashes. Launch once and this app picks up the new API by itself.', v) +
       (v.smoothMotion ? ' ' + t('NVIDIA Smooth Motion was also on inside this process. Turn it off for this game in the NVIDIA app if the crash stays.') : '');
-    case 'nr-model-crash': return t('The DLSS 5 model crashed on its very first frame, inside NVIDIA\'s own code ({stack}), and the Feeder stopped. The game carried on without it. No ini setting this app knows changes that. If the game has a Direct3D 11 mode, try it: the Feeder then runs DLSS on a device of its own. Otherwise save the bundle to share.', v) +
+    case 'nr-model-crash': return t('The DLSS 5 model crashed on its very first frame, inside NVIDIA\'s own code ({stack}), and the Feeder stopped. The game carried on without it. No ini setting this app knows changes that. If the game has a Direct3D 11 mode, try it: the Feeder then runs DLSS on a device of its own. Otherwise report it with Report issue on the card (it sends the logs).', v) +
       (v.smoothMotion ? ' ' + t('NVIDIA Smooth Motion was also on inside this process. Turn it off for this game in the NVIDIA app if the crash stays.') : '');
     case 'feed-host-gone': return t('The 64-bit helper that does the DLSS work for this 32-bit game went away during the last run, so the feed stopped and the game carried on rendering by itself. host64\\dlss5-feed-host.log, beside the game, is its own account of why.');
     case 'feed-stopped': return t('The Feeder gave up on the last run. Reconfigure rewrites its ReShade settings; if it stops again, dlss5-feed.log has its own diagnosis.');
@@ -2090,22 +2093,27 @@ async function sendGameFailure(game, diag, { setStatus, tried = [] } = {}) {
   const withTried = (r) => (triedLine ? { ...r, body: `${r.body}\n${triedLine}` } : r);
   {
     const setSendStatus = setStatus;
-    const status = await window.api.reportStatus();
-    if (!status.configured) {
-      // Not set up in this build: save the bundle and open the prefilled issue, together.
+    // The prefilled issue in the browser, with the log zip saved and copied: the whole report when this
+    // build has no GitHub app, and the fallback when GitHub refuses the app's post. `lead` is said first.
+    const openInBrowser = async (lead = '') => {
       const saved = await window.api.supportBundle(game.exePath, game.detectedPath || null);
-      if (!saved.ok || saved.cancelled) { if (!saved.ok) toast(t('Could not save the support bundle: {error}', { error: saved.error })); return; }
+      if (!saved.ok || saved.cancelled) {
+        if (!saved.ok) toast(t('Could not save the support bundle: {error}', { error: saved.error }));
+        setSendStatus(lead ? escapeHtml(lead) : '');
+        return;
+      }
       // The zip goes on the clipboard as a file: one Ctrl+V in GitHub's box attaches it. The folder still
       // opens with it selected, for a browser that does not take a pasted file.
       const copied = await window.api.copyZipToClipboard(saved.zipPath);
       window.api.openPath(saved.zipPath);
       const { title, body } = withTried(await buildGameReport(game, diag, { manual: true }));
       window.api.openExternal(`https://github.com/mrcgibb9876-hash/OptiDLSS5-UI-releases/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`);
-      setSendStatus(escapeHtml(copied && copied.ok
+      setSendStatus(escapeHtml((lead ? lead + ' ' : '') + (copied && copied.ok
         ? t('GitHub opened with the report filled in, and the log zip is copied. Click at the end of the report on GitHub, press Ctrl+V to attach the zip, then press Submit.')
-        : t('GitHub opened with the report filled in. Drag the zip from the folder that opened onto it, then press Submit.')));
-      return;
-    }
+        : t('GitHub opened with the report filled in. Drag the zip from the folder that opened onto it, then press Submit.'))));
+    };
+    const status = await window.api.reportStatus();
+    if (!status.configured) { await openInBrowser(); return; }
     if (!status.signedIn) {
       const { flow, result: outcome } = await reportSignInShared();
       if (!flow.ok) { toast(t('GitHub sign-in failed: {error}', { error: flow.error })); return; }
@@ -2672,7 +2680,10 @@ function describeRun(run) {
   if (!run || !run.ran) return t('not run yet');
   const api = run.runtimeApi ? run.runtimeApi.toUpperCase() : null;
   switch (run.verdict) {
-    case 'nr-ran': return t('Neural Rendering ran ({count} passes{fps}{api})', { count: run.nrFrames || run.nrDispatch, fps: run.fps ? ', ' + run.fps + ' fps' : '', api: api ? ', ' + api : '' });
+    // The count only from the frame heartbeat (see helpWords); without it, fps and API alone.
+    case 'nr-ran': return run.nrFrames > 0
+      ? t('Neural Rendering ran ({count} passes{fps}{api})', { count: run.nrFrames, fps: run.fps ? ', ' + run.fps + ' fps' : '', api: api ? ', ' + api : '' })
+      : ((details) => t('Neural Rendering ran') + (details ? ` (${details})` : ''))([run.fps ? run.fps + ' fps' : '', api].filter(Boolean).join(', '));
     case 'dlss-no-nr': return run.detail === 'd3d11-native'
       ? t('DLSS was created on the native D3D11 path, so Neural Rendering never ran -- Dx11Upscaler must be dlss_12; Install again to fix the ini')
       : t('DLSS was created but Neural Rendering never ran');
@@ -5747,15 +5758,18 @@ function renderManagerUpdate(state) {
     text.textContent = t('Manager v{version} is available.', { version: state.version || '?' });
   } else if (state.phase === 'error') {
     // Said, with a way to try again: a failed download used to take the banner away silently, which
-    // read as the update having vanished. With a version known the retry is the download (main keeps
-    // `version` on a failure); without one it is a fresh check.
-    if (state.version && managerUpdateDismissed === state.version) { banner.classList.add('hidden'); return; }
+    // read as the update having vanished. A failed DOWNLOAD retries the download (manager-update.js keeps
+    // `availableVersion` and marks it failed: 'download', and its download() takes that state as a
+    // retry); a failed check has nothing to download, so it checks again. An older main process sends
+    // no `failed`: there a known version means the download failed.
+    const version = state.availableVersion || state.version;
+    if (version && managerUpdateDismissed === version) { banner.classList.add('hidden'); return; }
     banner.classList.remove('hidden');
     restartBtn.classList.add('hidden');
     downloadBtn.classList.remove('hidden');
     downloadBtn.disabled = false;
     downloadBtn.textContent = t('Retry');
-    downloadBtn.dataset.retry = state.version ? 'download' : 'check';
+    downloadBtn.dataset.retry = state.failed === 'download' || (state.failed == null && version) ? 'download' : 'check';
     dismissBtn.classList.remove('hidden');
     text.textContent = t('Manager update failed: {error}', { error: state.error || t('unknown') });
   } else if (state.phase === 'downloading') {
@@ -5782,7 +5796,9 @@ $('#btn-manager-download').addEventListener('click', async () => {
     if (retry === 'check') st = await window.api.managerUpdateCheck();
     else {
       st = await window.api.managerUpdateDownload();
-      if (retry && st && st.phase === 'error') {
+      // Only where main REFUSED (an older build, whose download() wants phase 'available'), not where the
+      // download itself failed again -- that answer is the one to show.
+      if (retry && st && st.phase === 'error' && st.failed !== 'download') {
         st = await window.api.managerUpdateCheck();
         if (st && st.phase === 'available') st = await window.api.managerUpdateDownload();
       }
