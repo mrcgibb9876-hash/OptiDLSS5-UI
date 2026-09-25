@@ -696,3 +696,11 @@ test('no source still installs from upstream, so an old caller is not broken', a
     { match: { artifact: 'renodx-cp2077.addon64', modId: 'cp2077' }, ...HAS_RESHADE });
   assert.match(asked[0], /clshortfuse\/renodx/);
 });
+
+test('only ReShade add-ons count as sharing ReShade with frame pacing, not shader packs', () => {
+  const dir = scratchDir('addon-ids');
+  const pack = addons.catalogue().find((a) => a.kind !== 'addon');
+  addons.writeMarker(dir, { installed: [{ id: 'renodx', files: ['renodx-x.addon64'] }, ...(pack ? [{ id: pack.id, files: [] }] : [])] });
+  assert.deepEqual(addons.installedAddonIds(dir), ['renodx']);
+  assert.deepEqual(addons.installedAddonIds(scratchDir('addon-ids-none')), []);
+});

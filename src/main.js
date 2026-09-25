@@ -645,7 +645,8 @@ ipcMain.handle('addons:install', async (_evt, { exePath, id } = {}) => {
       applied: configured ? configured.applied : [],
     };
   } catch (error) {
-    return { ok: false, error: String(error && error.message ? error.message : error) };
+    // The code lets the renderer word the shared refusals for this add-on rather than for frame pacing.
+    return { ok: false, code: (error && error.code) || null, error: String(error && error.message ? error.message : error) };
   }
 });
 
@@ -678,6 +679,18 @@ ipcMain.handle('addons:remove', async (_evt, { exePath, id } = {}) => {
     const dir = gameDir(exePath);
     const res = await addons.removeAddon(dir, id);
     reorderPresetFor(dir);
+    // The last ReShade add-on out takes the ReShade this app placed for it (ensureReShadeAddonHost
+    // recorded it in pacing's marker), unless frame pacing still uses it. The Feeder's, Luma's,
+    // Chicken's or the user's own ReShade was never recorded as placed, so it is never touched.
+    const spec = addons.addonById(id);
+    if (spec && spec.kind === 'addon' && !addons.installedAddonIds(dir).length && !relimiter.deployed(dir) && relimiter.ownsReShade(dir)) {
+      // Something deployed since may have come to rely on that same file, so it stays for them.
+      const sharedNow = feeder.feederDeployed(dir) || lumaue.lumaUeDeployed(dir) || !!dfc.dfcPresent(dir);
+      res.removed = [...res.removed, ...relimiter.remove(dir, sharedNow ? { keepReShade: true } : { withPlacedReShade: true })];
+      if (!sharedNow && fs.existsSync(path.join(optiScalerDirFor(dir), 'OptiScaler.ini'))) {
+        try { patchIniValues(path.join(optiScalerDirFor(dir), 'OptiScaler.ini'), [{ section: 'Plugins', key: 'LoadReshade', value: 'auto' }]); } catch {}
+      }
+    }
     return { ok: true, ...res };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
@@ -975,9 +988,15 @@ async function pacingBesideUpscalerBlocker(dir) {
 // add-on, the ReShade64.dll this app placed for it, and OptiScaler's LoadReshade (unless Luma UE still
 // needs ReShade). Run BEFORE autoConfigureGame, which forces LoadReshade=true wherever pacing is
 // deployed. Returns what was removed, or null.
+// RenoDX goes with it for the same reasons (ensureReShadeAddonHost refuses both on the same blocker):
+// FSR frame generation switched on in Edit afterwards, or an older engine put back, would otherwise
+// leave an add-on loading beside the upscaler -- the Shadow of the Tomb Raider crash.
 async function dropBlockedPacing(dir, feederGame = isFeederGame(dir)) {
-  if (feederGame || !relimiter.deployed(dir) || !(await pacingBesideUpscalerBlocker(dir))) return null;
-  const removed = relimiter.remove(dir, { withPlacedReShade: true });
+  const addonIds = addons.installedAddonIds(dir);
+  if (feederGame || (!relimiter.deployed(dir) && !addonIds.length) || !(await pacingBesideUpscalerBlocker(dir))) return null;
+  const removed = [];
+  for (const id of addonIds) removed.push(...(await addons.removeAddon(dir, id)).removed);
+  removed.push(...relimiter.remove(dir, { withPlacedReShade: true }));
   if (!lumaue.lumaUeDeployed(dir)) {
     try { patchIniValues(path.join(optiScalerDirFor(dir), 'OptiScaler.ini'), [{ section: 'Plugins', key: 'LoadReshade', value: 'auto' }]); } catch {}
   }
@@ -1065,7 +1084,10 @@ ipcMain.handle('relimiter:install', async (_evt, exePath) => {
 
 ipcMain.handle('relimiter:remove', async (_evt, exePath) => {
   try {
-    return { ok: true, removed: relimiter.remove(gameDir(exePath)) };
+    const dir = gameDir(exePath);
+    // RenoDX installed through the same ReShade keeps it: pacing's Remove used to delete the standalone
+    // proxy it had placed, and RenoDX went dark with it.
+    return { ok: true, removed: relimiter.remove(dir, { keepReShade: addons.installedAddonIds(dir).length > 0 }) };
   } catch (e) {
     return { ok: false, error: String((e && e.message) || e) };
   }
@@ -3721,6 +3743,13 @@ async function uninstallEverything(dir) {
     const r = await stage('frame pacing', () => relimiter.remove(dir));
     if (r) removed.push(...r);
   }
+  // The add-ons picker's installs (RenoDX, the shader packs) for the same reason, and from their own
+  // marker: every file in it is one this app placed. Left behind, a RenoDX .addon64 sat in a folder
+  // with no ReShade and the picker still read "Remove".
+  for (const id of addons.installedIds(dir)) {
+    const r = await stage(`the ${id} add-on`, () => addons.removeAddon(dir, id));
+    if (r) removed.push(...r.removed, ...(addons.installedIds(dir).length ? [] : [addons.ADDONS_MARKER]));
+  }
   if (feeder.feederDeployed(dir)) {
     const r = await stage('the Feeder stack', () => feeder.removeFeederStack(dir, { keepReShade: false }));
     if (r) { removed.push(...r.removed); kept.push(...r.kept); }
@@ -3921,6 +3950,8 @@ async function planUninstall(dir) {
     if (m) add(relimiter.MARKER);
     if (m && m.reshadeProxy && m.reshadePlaced && relimiter.isReShadeProxy(path.join(dir, m.reshadeProxy))) add(m.reshadeProxy);
   }
+  for (const rel of addons.filesPlaced(dir)) add(rel);
+  add(addons.ADDONS_MARKER);
   if (feeder.feederDeployed(dir)) {
     for (const n of ['dlss5-feed.addon64', 'dlss5-feed.cfg', 'dlss5-feed.log', 'ReShade64.dll', 'ReShade.ini', 'ReShadePreset.ini', 'ReShade.log', '.dlss5ui-feeder-deploy.json']) add(n);
     for (const f of ['DLSS5_Feed.fx', 'ReShade.fxh', 'ReShadeUI.fxh']) add('reshade-shaders/Shaders/' + f);
@@ -6659,7 +6690,9 @@ async function autoConfigureGame(dir, exePath) {
   // Frame pacing on a non-Feeder game needs the same: OptiScaler leaves LoadReshade off by default, so
   // without this the ReShade64.dll placed for ReLimiter would never load. relimiter:install and
   // dropBlockedPacing keep pacing off the games where it would crash or see no frames.
-  if ((feederGame && feeder.feederDeployed(dir)) || relimiterHere) {
+  // RenoDX (any kind: 'addon' from the picker) is loaded by the same ReShade and needs the same line;
+  // addons:install writes it once, and this keeps it written on every sync as it does for pacing.
+  if ((feederGame && feeder.feederDeployed(dir)) || relimiterHere || addons.installedAddonIds(dir).length > 0) {
     // Only where ReShade is the plain ReShade64.dll beside the exe. As the game's opengl32.dll
     // or as the Vulkan layer it is already in the process, and a second copy loaded by
     // OptiScaler would be two ReShades.

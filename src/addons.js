@@ -451,6 +451,13 @@ function installedIds(dir) {
   return ((marker && marker.installed) || []).map((e) => e.id);
 }
 
+// The installed entries that are ReShade ADD-ONS (RenoDX today), not shader packs. These are what
+// share ReShade with frame pacing: each one needs the Add-on build loaded, so the ReShade this app
+// placed must outlive whichever of them is removed first, and go with the last.
+function installedAddonIds(dir) {
+  return installedIds(dir).filter((id) => (byId.get(id) || {}).kind === 'addon');
+}
+
 // The technique names an effect file declares. Read from the shader itself at install time rather
 // than kept in a table here, because a table would be a second copy of something the file already
 // states -- and the packs this list carries are large, versioned upstream, and free to rename a
@@ -652,7 +659,7 @@ module.exports = {
   titleKey, indexRenodx, pickArtifact, matchRenodx,
   ENGINE_GENERIC_MODS, engineGenericMod,
   releaseAssetUrl, renodxIndexUrl,
-  readMarker, writeMarker, filesPlaced, installedIds,
+  readMarker, writeMarker, filesPlaced, installedIds, installedAddonIds,
   techniquesIn, installedTechniqueBands,
   packFiles, destForPackFile, installAddon, removeAddon,
   RESHADE_NAMES, reshadeIn, installBlocker,

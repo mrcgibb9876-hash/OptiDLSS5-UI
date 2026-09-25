@@ -1700,4 +1700,12 @@ window.I18N.register("ru", {
     "В этой игре ещё нет ReShade. При установке вместе с ним ставится сборка ReShade с поддержкой дополнений -- так же, как при выравнивании кадров.",
   "The ReShade here is the plain build, which never loads an add-on. Installing this replaces it with the Add-on build.":
     "ReShade здесь -- обычная сборка, которая не загружает дополнения. При установке она заменяется сборкой с поддержкой дополнений.",
+  "{name} needs a newer DLSS 5 engine on this game: update DLSS 5 here first.":
+    "{name} нужен более новый движок DLSS 5 в этой игре: сначала обновите здесь DLSS 5.",
+  "{name} can’t run beside frame generation on this game: switch frame generation off in Edit first, or to XeFG once DLSS 5 here is up to date.":
+    "{name} не может работать вместе с генерацией кадров в этой игре: сначала выключите её в «Изменить» или переключите на XeFG, когда DLSS 5 здесь будет обновлён.",
+  "{name} needs a 64-bit game. This one is 32-bit.":
+    "{name} нужна 64-битная игра. Эта игра 32-битная.",
+  "{name} on a Vulkan game needs ReShade’s own setup run for this game first.":
+    "Для {name} в игре на Vulkan сначала нужно запустить собственный установщик ReShade для этой игры.",
 });

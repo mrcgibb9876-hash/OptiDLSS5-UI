@@ -1700,4 +1700,12 @@ window.I18N.register("zh-CN", {
     "这个游戏还没有 ReShade。安装它会一并装上 ReShade 的附加组件版本，方式与帧率平滑相同。",
   "The ReShade here is the plain build, which never loads an add-on. Installing this replaces it with the Add-on build.":
     "这里的 ReShade 是不会加载附加组件的普通版本。安装它会将其替换为附加组件版本。",
+  "{name} needs a newer DLSS 5 engine on this game: update DLSS 5 here first.":
+    "{name} 在此游戏上需要更新的 DLSS 5 引擎：请先在这里更新 DLSS 5。",
+  "{name} can’t run beside frame generation on this game: switch frame generation off in Edit first, or to XeFG once DLSS 5 here is up to date.":
+    "{name} 无法在此游戏上与帧生成同时运行：请先在“编辑”中关闭帧生成，或在此处 DLSS 5 更新后切换到 XeFG。",
+  "{name} needs a 64-bit game. This one is 32-bit.":
+    "{name} 需要 64 位游戏。此游戏是 32 位的。",
+  "{name} on a Vulkan game needs ReShade’s own setup run for this game first.":
+    "在 Vulkan 游戏上使用 {name}，需要先为此游戏运行 ReShade 自带的安装程序。",
 });

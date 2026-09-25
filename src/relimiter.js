@@ -237,10 +237,12 @@ function status(dir, { api = 'dx12', bitness = 64 } = {}) {
     addonName: name,
     // Claimed by our marker but gone from disk -- the antivirus shape that cost Max Payne 2 a
     // diagnosis, and worth telling apart from "never installed".
-    addonGone: !!(m && !addon),
+    // m.files, not m alone: a marker can also exist only to record a ReShade this app placed for
+    // RenoDX (ensureReShadeAddonHost), with pacing never installed -- that is not pacing gone.
+    addonGone: !!(m && m.files && !addon),
     reshade,
     reshadeIsAddonBuild: reshade ? addonBuild : null,
-    ours: !!m,
+    ours: !!(m && m.files),
     version: m ? m.version || null : null,
     reshadeFile,
     standalone: !!(m && m.reshadeProxy),
@@ -345,9 +347,26 @@ function configureReShadeIni(dir, { addon = 'relimiter' } = {}) {
 // using is how a clean-up turns into a bug report.
 // withPlacedReShade: also the plain ReShade64.dll this app placed for pacing (placedReShade), for a game
 // where OptiScaler would otherwise go on loading it beside its upscaler with nothing to show for it.
-function remove(dir, { withPlacedReShade = false } = {}) {
+// keepReShade: another ReShade add-on this app installed (RenoDX, addons.installedAddonIds) still needs
+// the ReShade placed here. Only pacing's own files go; the ReShade stays, and so does the part of our
+// marker that records it as ours, so the last add-on's Remove -- or installing DLSS 5, which demotes a
+// standalone proxy -- can still find it.
+function remove(dir, { withPlacedReShade = false, keepReShade = false } = {}) {
   const m = marker(dir);
   const removed = [];
+  if (keepReShade) {
+    for (const name of (m && m.files) || [ADDON_64, ADDON_32]) {
+      const p = path.join(dir, name);
+      if (fs.existsSync(p)) { fs.rmSync(p, { force: true }); removed.push(name); }
+    }
+    if (m && m.reshadePlaced) {
+      fs.writeFileSync(path.join(dir, MARKER), JSON.stringify({ tool: m.tool || 'ReLimiter', reshadePlaced: true, reshadeProxy: m.reshadeProxy || null }, null, 2));
+    } else if (m) {
+      fs.rmSync(path.join(dir, MARKER), { force: true });
+      removed.push(MARKER);
+    }
+    return removed;
+  }
   if (withPlacedReShade && placedReShade(dir)) {
     fs.rmSync(path.join(dir, 'ReShade64.dll'), { force: true });
     removed.push('ReShade64.dll');

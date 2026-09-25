@@ -1700,4 +1700,12 @@ window.I18N.register("de", {
     "Dieses Spiel hat noch kein ReShade. Beim Installieren kommt ReShades Add-on-Variante mit, genauso wie beim Frame-Pacing.",
   "The ReShade here is the plain build, which never loads an add-on. Installing this replaces it with the Add-on build.":
     "Das ReShade hier ist die einfache Variante, die niemals ein Add-on lädt. Beim Installieren wird sie durch die Add-on-Variante ersetzt.",
+  "{name} needs a newer DLSS 5 engine on this game: update DLSS 5 here first.":
+    "{name} braucht auf diesem Spiel eine neuere DLSS-5-Engine: Aktualisiere zuerst DLSS 5 hier.",
+  "{name} can’t run beside frame generation on this game: switch frame generation off in Edit first, or to XeFG once DLSS 5 here is up to date.":
+    "{name} kann auf diesem Spiel nicht neben Frame Generation laufen: Schalte Frame Generation zuerst unter Bearbeiten aus, oder auf XeFG, sobald DLSS 5 hier aktuell ist.",
+  "{name} needs a 64-bit game. This one is 32-bit.":
+    "{name} braucht ein 64-Bit-Spiel. Dieses ist 32-Bit.",
+  "{name} on a Vulkan game needs ReShade’s own setup run for this game first.":
+    "{name} braucht auf einem Vulkan-Spiel zuerst einen Durchlauf von ReShades eigenem Setup für dieses Spiel.",
 });

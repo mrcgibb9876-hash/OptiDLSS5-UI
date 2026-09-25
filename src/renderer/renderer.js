@@ -6347,7 +6347,17 @@ async function renderAddons() {
             : t('Installed. {count} files placed, and the effect order was rewritten.', { count: (out.files || []).length });
       } else {
         $('#addons-status').className = 'field-hint status-bad';
-        $('#addons-status').textContent = (out && out.error) || t('That did not work.');
+        // The refusals shared with frame pacing (ensureReShadeAddonHost) arrive worded for pacing, so the
+        // ones with a code are said here about the add-on actually being installed.
+        const spec = res.catalogue.find((x) => x.id === id);
+        const name = (spec && spec.displayName) || id;
+        const byCode = {
+          'reshade-dlss-crash': t('{name} needs a newer DLSS 5 engine on this game: update DLSS 5 here first.', { name }),
+          'optifg-armed': t('{name} can’t run beside frame generation on this game: switch frame generation off in Edit first, or to XeFG once DLSS 5 here is up to date.', { name }),
+          'bitness-32': t('{name} needs a 64-bit game. This one is 32-bit.', { name }),
+          'vulkan-layer': t('{name} on a Vulkan game needs ReShade’s own setup run for this game first.', { name }),
+        };
+        $('#addons-status').textContent = (out && byCode[out.code]) || (out && out.error) || t('That did not work.');
       }
       await renderAddons();
     });

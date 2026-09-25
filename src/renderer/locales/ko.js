@@ -1700,4 +1700,12 @@ window.I18N.register("ko", {
     "이 게임에는 아직 ReShade가 없습니다. 이것을 설치하면 프레임 페이싱과 같은 방식으로 ReShade 애드온 빌드도 함께 설치됩니다.",
   "The ReShade here is the plain build, which never loads an add-on. Installing this replaces it with the Add-on build.":
     "여기 있는 ReShade는 애드온을 로드하지 않는 일반 빌드입니다. 이것을 설치하면 애드온 빌드로 교체됩니다.",
+  "{name} needs a newer DLSS 5 engine on this game: update DLSS 5 here first.":
+    "{name}은(는) 이 게임에서 더 새로운 DLSS 5 엔진이 필요합니다. 먼저 여기서 DLSS 5를 업데이트하세요.",
+  "{name} can’t run beside frame generation on this game: switch frame generation off in Edit first, or to XeFG once DLSS 5 here is up to date.":
+    "{name}은(는) 이 게임에서 프레임 생성과 함께 실행할 수 없습니다. 먼저 편집에서 프레임 생성을 끄거나, 여기의 DLSS 5가 최신이면 XeFG로 바꾸세요.",
+  "{name} needs a 64-bit game. This one is 32-bit.":
+    "{name}은(는) 64비트 게임이 필요합니다. 이 게임은 32비트입니다.",
+  "{name} on a Vulkan game needs ReShade’s own setup run for this game first.":
+    "Vulkan 게임에서 {name}을(를) 쓰려면 먼저 이 게임에 대해 ReShade 자체 설치 프로그램을 실행해야 합니다.",
 });

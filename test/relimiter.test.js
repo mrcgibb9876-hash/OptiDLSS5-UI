@@ -260,6 +260,35 @@ test('Remove takes back a standalone ReShade it placed, because nothing else loa
   assert.deepEqual(fs.readdirSync(dir).sort(), []);
 });
 
+// RenoDX rides on the same ReShade (ensureReShadeAddonHost). Removing pacing first must leave that
+// ReShade -- and the record that it is ours -- for RenoDX, and for RenoDX's own Remove to take later.
+test('Remove with another add-on still here keeps the standalone ReShade and its record', { skip: !canFakePe }, () => {
+  const dir = scratchDir('rl-standalone-shared');
+  realishReShade(dir, 'ReShade64.dll');
+  relimiter.promoteToStandalone(dir, 'dx11');
+  relimiter.deploy(dir, fakeAddon(scratchDir('rl-standalone-shared-src')));
+  const removed = relimiter.remove(dir, { keepReShade: true });
+  assert.deepEqual(removed, ['relimiter.addon64']);
+  assert.equal(fs.existsSync(path.join(dir, 'dxgi.dll')), true, 'RenoDX still loads through it');
+  assert.equal(relimiter.ownsReShade(dir), true, 'still ours to take back later');
+  const st = relimiter.status(dir, { api: 'dx11' });
+  assert.equal(st.addonGone, false, 'pacing removed on purpose is not pacing gone missing');
+  assert.equal(st.ours, false);
+  // The last add-on out then takes it.
+  relimiter.remove(dir, { withPlacedReShade: true });
+  assert.deepEqual(fs.readdirSync(dir).sort(), []);
+});
+
+test('a marker that only records a ReShade placed for RenoDX does not read as pacing gone', () => {
+  const dir = scratchDir('rl-renodx-only-marker');
+  fakeReShade(dir);
+  relimiter.writeMarker(dir, { reshadePlaced: true });
+  const st = relimiter.status(dir, { api: 'dx12' });
+  assert.equal(st.addon, false);
+  assert.equal(st.addonGone, false);
+  assert.equal(st.ours, false);
+});
+
 test('the fork is tried first for its host API, and upstream stands in when it has no release', async () => {
   const calls = [];
   const release = (tag) => ({ tag_name: tag, assets: [
