@@ -23,27 +23,27 @@ pre-release) before pinning to it.
 The running app's engine updater (`update:check` in `main.js`, `engines.js`) follows the same pin: it
 offers `engineVersion`, and only *reports* a newer "latest" as untested with this app version.
 
-## Nothing upstream reaches our forks on its own
+## Open: the engine fork's nightly upstream sync is armed
 
-Asked for 2026-09-25: a fork must stay constant when its source moves. It does now, but only one of
-the two was ever at risk, and it is worth knowing which.
+Asked for 2026-09-25, fixed, then reverted the same day at the user's request. The fix is on
+`claude/freeze-fork-against-upstream` (`acc086a2`, engine PR #23) if it is wanted again -- a
+cherry-pick, not a rewrite. Reverted by PR #24. **The state below is the live one.**
 
-- **The engine fork was.** `sync-upstream.yml` ran at 06:00 daily and, whenever
-  `Dagherbou/OptiScaler_DLSSNR:dlss-neural-rendering` had moved, merged the refreshed mirror into
-  `dlss5-developer-controls-ui` and pushed it -- the branch every engine release is cut from, under a
-  pin naming a tag built the night before. It never fired, purely because upstream has not moved
-  since our mirror caught up. It would not have been one commit either: the mirror carries **144**
-  commits that branch has never had, because the branch forked at `4f17a05d`, before upstream's
-  DLSS-NR work landed, and re-implemented it differently. The schedule is gone. A dispatched run
-  refreshes the **mirror branch only** and opens a PR into the UI branch -- every time, not only on
-  conflict, because a clean merge of unread work is the thing being guarded against. Cherry-pick and
-  close it; it reopens next time upstream moves.
-- **The ReLimiter fork never was.** No sync workflow, 9 ahead / 0 behind, and upstream reaches it
-  only if someone presses GitHub's own "Sync fork". Worth not pressing it: its `release.yml` fires on
-  any push to `main`, and a release is what the app then hands every user. It skips itself when
+- **The engine fork.** `sync-upstream.yml` runs at 06:00 daily. Whenever
+  `Dagherbou/OptiScaler_DLSSNR:dlss-neural-rendering` has moved it fast-forwards the mirror branch,
+  merges that mirror into `dlss5-developer-controls-ui` and **pushes** -- the branch every engine
+  release is cut from, under a manager pin naming a tag built the night before. It has never fired,
+  purely because upstream has not moved since our mirror caught up to `97376162`. It would not be one
+  commit either: the mirror carries **144** commits that branch has never had, because the branch
+  forked at `4f17a05d`, before upstream's DLSS-NR work landed, and re-implemented it differently. So
+  the first scheduled run after any upstream push merges all 144 unreviewed. It opens a PR only when
+  the merge **conflicts**; a clean merge is pushed silently, which is backwards.
+- **The ReLimiter fork is not at risk.** No sync workflow, 9 ahead / 0 behind, and upstream reaches
+  it only if someone presses GitHub's own "Sync fork". Worth not pressing it: its `release.yml` fires
+  on any push to `main`, and a release is what the app then hands every user. It skips itself when
   `VERSION`'s tag already exists, so a sync that does not bump `VERSION` publishes nothing.
 
-**The forks being frozen does not freeze what users get**, and that is a separate hole:
+**Freezing the forks would not freeze what users get**, which is a separate hole and still open:
 
 - `relimiter.js` resolves `releases/latest` on our fork, then RankFTW's -- a moving pointer, not a
   pin like `engineVersion`. Publish on the fork and every client changes on its next deploy.
