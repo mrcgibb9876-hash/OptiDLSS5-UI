@@ -412,6 +412,7 @@ window.I18N.register("ko", {
   "Searching...": "검색 중...",
   "No matches found.": "일치하는 항목이 없습니다.",
   "Pick the game .exe first.": "먼저 게임 .exe를 고르세요.",
+  "Game .exe has to be the game's .exe file itself, not a folder. Use Browse, or pick one from the list under the field.": "게임 .exe는 폴더가 아니라 .exe 파일 자체여야 합니다. 찾아보기를 쓰거나 입력란 아래 목록에서 고르세요.",
   "Give the game a name.": "게임 이름을 입력하세요.",
   "GPU: {gpu}": "GPU: {gpu}",
   "-- Neural Rendering here goes through DLSS-NR-on-AMD (see a game's Edit dialog), not OptiScaler.": "-- 여기서 Neural Rendering은 OptiScaler가 아닌 DLSS-NR-on-AMD를 통합니다(게임의 편집 대화상자 참고).",

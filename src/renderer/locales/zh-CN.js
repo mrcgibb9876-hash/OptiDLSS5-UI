@@ -412,6 +412,7 @@ window.I18N.register("zh-CN", {
   "Searching...": "正在搜索...",
   "No matches found.": "没有匹配结果。",
   "Pick the game .exe first.": "请先选择游戏 .exe。",
+  "Game .exe has to be the game's .exe file itself, not a folder. Use Browse, or pick one from the list under the field.": "游戏 .exe 必须是 .exe 文件本身，而不是文件夹。请用“浏览”，或从输入框下方的列表中选择。",
   "Give the game a name.": "请给游戏起个名称。",
   "GPU: {gpu}": "GPU：{gpu}",
   "-- Neural Rendering here goes through DLSS-NR-on-AMD (see a game's Edit dialog), not OptiScaler.": "-- 这里的神经渲染通过 DLSS-NR-on-AMD（见游戏的“编辑”对话框），而不是 OptiScaler。",

@@ -412,6 +412,7 @@ window.I18N.register("ru", {
   "Searching...": "Поиск...",
   "No matches found.": "Ничего не найдено.",
   "Pick the game .exe first.": "Сначала выберите .exe игры.",
+  "Game .exe has to be the game's .exe file itself, not a folder. Use Browse, or pick one from the list under the field.": ".exe игры должен быть самим файлом .exe, а не папкой. Нажмите «Обзор» или выберите файл из списка под полем.",
   "Give the game a name.": "Дайте игре название.",
   "GPU: {gpu}": "Видеокарта: {gpu}",
   "-- Neural Rendering here goes through DLSS-NR-on-AMD (see a game's Edit dialog), not OptiScaler.": "-- Neural Rendering здесь идёт через DLSS-NR-on-AMD (см. окно Изменить у игры), а не через OptiScaler.",

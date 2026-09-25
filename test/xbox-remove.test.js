@@ -15,6 +15,8 @@
 //     its defaults at every start;
 //   - a proxy that still could not be deleted is renamed off its proxy name, and swept later;
 //   - the engine's runtime files (OptiScaler.live.json, OptiScaler_<ticks>.log) go with Remove;
+//   - a folder can no longer be installed to as if it were the exe;
+//   - Game Help never offers to rename a Store package's D3D12\ folder.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -22,6 +24,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { scratchDir, write, fakeExe, fakeReleaseFolder, fakeNrModel, loadMain, listing } = require('./helpers');
 const discover = require('../src/discover');
+const gamehelp = require('../src/gamehelp');
 
 const onWindows = process.platform === 'win32';
 const readSrc = (...rel) => fs.readFileSync(path.join(__dirname, '..', 'src', ...rel), 'utf8').replace(/\r\n/g, '\n');
@@ -197,3 +200,46 @@ test('the card offers nothing that moves files while the game runs, Restore orig
   assert.ok(running > 0 && restore > 0 && running < restore, 'running is checked before Restore originals');
 });
 
+// ── a folder is not an exe ────────────────────────────────────────────────────────────────────
+
+test('Install refuses a folder recorded as the exe instead of installing into the folder above it', { skip: !onWindows }, async () => {
+  const { root, content } = xboxPackage('xbox-folder-exe');
+  const base = path.dirname(root);
+  const before = listing(root);
+  const { invoke } = loadMain();
+  const r = await invoke('game:install', { exePath: content, releaseFolder: fakeReleaseFolder(base), nrDllPath: fakeNrModel(base), proxyName: 'dxgi.dll' });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /folder/);
+  assert.deepEqual(listing(root), before, 'nothing written to the package root');
+});
+
+test('Edit will not save a folder as the game\'s exe', () => {
+  const r = readSrc('renderer', 'renderer.js');
+  const save = r.slice(r.indexOf("$('#btn-save-game').addEventListener"));
+  assert.match(save.slice(0, 1200), /if \(!\/\\\.exe\$\/i\.test\(exePath\)\) return toast/);
+});
+
+// ── Game Help never renames a Store package's files ─────────────────────────────────────────
+
+test('the Agility SDK fix is not offered on a Store install', () => {
+  const base = {
+    route: { route: 'feeder', feederDeployed: true, optiInstalled: true },
+    run: { ran: true, verdict: 'feed-agility-redist' },
+    agilityRedist: { exports: true, folder: 'D3D12' },
+    fixesTried: [],
+  };
+  const plain = gamehelp.diagnose({ ...base });
+  const store = gamehelp.diagnose({ ...base, storeInstall: true });
+  assert.equal(plain.fix && plain.fix.id, 'disable-agility-redist', 'offered on an ordinary install');
+  assert.notEqual(store.status, 'fix', 'but never on a Store one');
+});
+
+test('and the fix itself refuses a Store install even when asked directly', { skip: !onWindows }, async () => {
+  const { content, exe } = xboxPackage('xbox-agility');
+  const { invoke } = loadMain();
+  const r = await invoke('game:help-apply', { exePath: exe, fixId: 'disable-agility-redist' });
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.done, false);
+  assert.ok(fs.existsSync(path.join(content, 'D3D12', 'D3D12Core.dll')), 'D3D12\\ is where the package put it');
+  assert.ok(!fs.existsSync(path.join(content, 'D3D12.dlss5ui-off')));
+});

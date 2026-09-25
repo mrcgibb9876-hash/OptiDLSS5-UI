@@ -412,6 +412,7 @@ window.I18N.register('pt-BR', {
   "Searching...": "Buscando...",
   "No matches found.": "Nenhum resultado.",
   "Pick the game .exe first.": "Escolha o .exe do jogo primeiro.",
+  "Game .exe has to be the game's .exe file itself, not a folder. Use Browse, or pick one from the list under the field.": "O .exe do jogo precisa ser o próprio arquivo .exe, não uma pasta. Use Procurar ou escolha um da lista abaixo do campo.",
   "Give the game a name.": "Dê um nome ao jogo.",
   "GPU: {gpu}": "GPU: {gpu}",
   "-- Neural Rendering here goes through DLSS-NR-on-AMD (see a game's Edit dialog), not OptiScaler.": "-- o Neural Rendering aqui passa pelo DLSS-NR-on-AMD (veja a tela Editar de um jogo), não pelo OptiScaler.",

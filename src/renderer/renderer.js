@@ -5120,6 +5120,9 @@ $('#btn-save-game').addEventListener('click', async () => {
   const exePath = $('#game-exe').value.trim();
   const name = $('#game-name').value.trim();
   if (!exePath) return toast(t('Pick the game .exe first.'));
+  // A folder typed here used to be taken as the exe, and every install then went into the folder
+  // ABOVE it -- for an Xbox game, C:\XboxGames\<Game>\ instead of its Content\ (#93, #123).
+  if (!/\.exe$/i.test(exePath)) return toast(t('Game .exe has to be the game\'s .exe file itself, not a folder. Use Browse, or pick one from the list under the field.'));
   if (!name) return toast(t('Give the game a name.'));
 
   const launchMode = $('#game-launch-mode').value === 'injector' ? 'injector' : 'proxy';

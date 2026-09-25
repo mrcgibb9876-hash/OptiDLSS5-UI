@@ -463,8 +463,10 @@ function diagnose(ctx) {
     case 'feed-agility-redist':
       // A game-local Agility SDK folder failing every D3D12 create in the process. Moving it
       // aside is only possible when it is actually there; otherwise the redirect comes from
-      // somewhere this app cannot reach, and saying so is the honest answer.
-      return ctx.agilityRedist && ctx.agilityRedist.folder
+      // somewhere this app cannot reach, and saying so is the honest answer. Never on a Microsoft
+      // Store / Xbox install: that folder is the package's, and renaming a store file can stop the
+      // game starting from anywhere (#123) -- the store's own Verify and repair is the move there.
+      return ctx.agilityRedist && ctx.agilityRedist.folder && !ctx.storeInstall
         ? fix('feed-agility-redist', 'disable-agility-redist')
         : out('step', 'feed-agility-redist-elsewhere');
     // The neural model crashed in its first evaluate on the game's own D3D12 device and the Feeder

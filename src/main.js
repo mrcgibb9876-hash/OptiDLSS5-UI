@@ -3978,6 +3978,9 @@ ipcMain.handle('amdnr:runSetup', (_evt, exePath) => {
 ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath, proxyName, engine }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    // A folder recorded as the exe installs into the folder above it -- for an Xbox game the package
+    // root instead of Content\ (#93, #123). Refused rather than guessed: Edit says what to pick.
+    if (!fs.statSync(exePath).isFile()) throw new Error('The game\'s .exe is set to a folder, not the .exe file -- open Settings for this game and pick the .exe itself');
     // The 64-bit OptiScaler cannot load into a 32-bit game; those take legacy:installHost32.
     if ((await peBitness(exePath)) === 32) throw new Error('This is a 32-bit game: OptiScaler goes into the Feeder\'s 64-bit helper (the experimental 32-bit route), not beside the game');
     if (!releaseFolder || !fs.existsSync(releaseFolder)) throw new Error('OptiScaler release folder not set');
@@ -4917,6 +4920,7 @@ async function helpContext(exePath, detected, fixesTried = []) {
   const lumaMod = lumaModFor(exePath, effective);
   const route = recommendRoute(dir, exePath, effective, vendor || 'unknown', { lumaMod });
   const run = await runlog.analyzeRun(dir, { optiDir: optiScalerDirFor(dir) });
+  const agilityRisk = agilityRedistRisk(dir, effective);
   // This machine's own evidence (catalog.js learnFromRun): a run that proved or sank the installed
   // setup is recorded once, by its timestamp, and the route is scored again with it and the run.
   if (route.optiInstalled) {
@@ -4988,7 +4992,10 @@ async function helpContext(exePath, detected, fixesTried = []) {
     // The Agility SDK redirect that makes every D3D12 device in the process fail, the Feeder's
     // private one included (detect.js). Null unless the exe really carries those exports and no
     // D3D12Core.dll can be found for them.
-    agilityRedist: agilityRedistRisk(dir, effective),
+    agilityRedist: agilityRisk,
+    // A Microsoft Store / Xbox package: its files are the store's, never this app's to rename (#123).
+    // Only read when the one rule that needs it can fire, so a help pass costs no extra listing.
+    storeInstall: agilityRisk ? discover.isXboxInstall(dir) : false,
     // Which frame generator, if any, this app has configured for this game. Marker files, because
     // they are what the app writes when it sets one up -- cheap, and true whether or not the game
     // has been run since. Needed to spot a SECOND generator: NVIDIA Smooth Motion is frame
@@ -5159,6 +5166,10 @@ async function applyHelpFix(exePath, fixId) {
     // D3D12_ERROR_INVALID_REDIST. Reversible by name, and the game itself says whether it needed
     // the folder: if it refuses to start, the rename goes back.
     case 'disable-agility-redist': {
+      // Never on a Microsoft Store / Xbox install: that D3D12\ is a file of the package the Xbox app
+      // verifies, the game is built against it, and a package with it renamed may not start from
+      // anywhere, the Start menu included. This app only ever touches its own files there (#123).
+      if (discover.isXboxInstall(dir)) return { done: false, text: 'this is a Microsoft Store / Xbox install: its D3D12\\ folder belongs to the package, and this app does not rename the store\'s files. If the game will not start, use the Xbox app\'s Manage > Files > Verify and repair' };
       const src = path.join(dir, 'D3D12');
       const dest = path.join(dir, 'D3D12.dlss5ui-off');
       if (!fs.existsSync(src)) return { done: false, text: 'no D3D12\\ folder beside the exe -- something else in the process is redirecting Direct3D 12 (a launcher, a mod loader, or an absolute D3D12SDKPath), so verify the game\'s files through its launcher' };
