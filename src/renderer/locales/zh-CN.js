@@ -1743,4 +1743,12 @@ window.I18N.register("zh-CN", {
     "{name} 已关闭。下次启动游戏时不再加载。",
   "{name} is on. Start the game to use it; its settings are in the DLSS 5 panel and the pop-out.":
     "{name} 已开启。启动游戏即可使用；设置在 DLSS 5 面板和弹出面板中。",
+  "Close the game first: {name} can only be switched on or off while the game is not running.":
+    "请先关闭游戏：{name} 只能在游戏未运行时开启或关闭。",
+  "Some of {name}'s files could not be deleted, so they are still listed as installed. Close the game, and check your antivirus is not holding them, then try again.":
+    "{name} 的部分文件无法删除，因此仍显示为已安装。请关闭游戏，确认杀毒软件没有占用这些文件，然后重试。",
+  "This game already has your own ReShade, and it is the plain build, which never loads add-ons. Install ReShade with full add-on support over it yourself, or remove yours, then try again.":
+    "此游戏已有你自己安装的 ReShade，而且是不会加载任何附加组件的普通版。请自行在其上安装带完整附加组件支持的 ReShade，或移除你的版本，然后重试。",
+  "Sorry -- sending straight from the app is not set up on our side yet, so the report was not sent. GitHub has opened with it filled in: press Submit there.":
+    "抱歉 -- 我们这边还没有设置好从应用直接发送，所以报告没有发出。GitHub 已打开并填好了报告：请在那里点击 Submit。",
 });

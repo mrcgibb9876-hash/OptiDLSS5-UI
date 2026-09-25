@@ -4732,7 +4732,7 @@ ipcMain.handle('report:discard', (_evt, { id } = {}) => { preparedReports.delete
 ipcMain.handle('report:send', async (_evt, { id } = {}) => {
   try {
     const prepared = preparedReports.get(id);
-    if (!prepared) throw new Error('This report preview is no longer open -- press Send game failure again');
+    if (!prepared) throw new Error('This report preview is no longer open -- press Report issue again');
     const token = readReportToken();
     if (!token) return { ok: false, signedOut: true };
     const out = await ghreport.postReport({ token, prepared });
@@ -4740,7 +4740,7 @@ ipcMain.handle('report:send', async (_evt, { id } = {}) => {
     return { ok: true, ...out };
   } catch (error) {
     if (error && error.signedOut) { clearReportToken(); return { ok: false, signedOut: true }; }
-    return { ok: false, error: String(error && error.message ? error.message : error) };
+    return { ok: false, code: (error && error.code) || null, error: String(error && error.message ? error.message : error) };
   }
 });
 

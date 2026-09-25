@@ -1743,4 +1743,12 @@ window.I18N.register("ru", {
     "{name} выключен. Игра перестанет его загружать со следующего запуска.",
   "{name} is on. Start the game to use it; its settings are in the DLSS 5 panel and the pop-out.":
     "{name} включён. Запустите игру, чтобы им пользоваться; настройки — в панели DLSS 5 и во всплывающем окне.",
+  "Close the game first: {name} can only be switched on or off while the game is not running.":
+    "Сначала закройте игру: {name} можно включить или выключить, только когда игра не запущена.",
+  "Some of {name}'s files could not be deleted, so they are still listed as installed. Close the game, and check your antivirus is not holding them, then try again.":
+    "Некоторые файлы {name} не удалось удалить, поэтому они по-прежнему числятся установленными. Закройте игру, убедитесь, что антивирус их не удерживает, и попробуйте снова.",
+  "This game already has your own ReShade, and it is the plain build, which never loads add-ons. Install ReShade with full add-on support over it yourself, or remove yours, then try again.":
+    "В этой игре уже есть ваш собственный ReShade, причём обычная версия, которая не загружает дополнения. Установите поверх неё ReShade с полной поддержкой дополнений сами или удалите свой, затем попробуйте снова.",
+  "Sorry -- sending straight from the app is not set up on our side yet, so the report was not sent. GitHub has opened with it filled in: press Submit there.":
+    "Извините -- отправка прямо из приложения у нас пока не настроена, поэтому отчёт не отправлен. GitHub открылся с уже заполненным отчётом: нажмите там Submit.",
 });

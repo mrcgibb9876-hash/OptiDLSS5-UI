@@ -1150,6 +1150,11 @@ function addonBlockerText(kind, code) {
     case 'optifg-armed': return t('{name} can’t run beside frame generation on this game: switch frame generation off in Edit first, or to XeFG once DLSS 5 here is up to date.', { name });
     case 'no-mod': return t('RenoDX has no mod for this game or its engine yet.');
     case 'no-index': return t('Could not reach RenoDX’s list of mods. Check the connection and open the panel again.');
+    // From the main-process fixes (2026-09-25): Remove refuses while the game runs, keeps what it could
+    // not delete, and never takes over a plain ReShade the player put in themselves.
+    case 'game-running': return t('Close the game first: {name} can only be switched on or off while the game is not running.', { name });
+    case 'remove-failed': return t('Some of {name}\'s files could not be deleted, so they are still listed as installed. Close the game, and check your antivirus is not holding them, then try again.', { name });
+    case 'foreign-plain-reshade': return t('This game already has your own ReShade, and it is the plain build, which never loads add-ons. Install ReShade with full add-on support over it yourself, or remove yours, then try again.');
     default: return '';
   }
 }

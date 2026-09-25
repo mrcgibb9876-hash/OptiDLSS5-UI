@@ -1753,4 +1753,12 @@ window.I18N.register("fr", {
     "{name} est désactivé. Le jeu s’en passe au prochain lancement.",
   "{name} is on. Start the game to use it; its settings are in the DLSS 5 panel and the pop-out.":
     "{name} est activé. Lancez le jeu pour l’utiliser ; ses réglages sont dans le panneau DLSS 5 et la fenêtre détachée.",
+  "Close the game first: {name} can only be switched on or off while the game is not running.":
+    "Fermez d’abord le jeu : {name} ne peut être activé ou désactivé que lorsque le jeu n’est pas lancé.",
+  "Some of {name}'s files could not be deleted, so they are still listed as installed. Close the game, and check your antivirus is not holding them, then try again.":
+    "Certains fichiers de {name} n’ont pas pu être supprimés, ils restent donc indiqués comme installés. Fermez le jeu, vérifiez que votre antivirus ne les bloque pas, puis réessayez.",
+  "This game already has your own ReShade, and it is the plain build, which never loads add-ons. Install ReShade with full add-on support over it yourself, or remove yours, then try again.":
+    "Ce jeu a déjà votre propre ReShade, et c’est la version simple, qui ne charge jamais d’add-ons. Installez vous-même ReShade avec la prise en charge complète des add-ons par-dessus, ou retirez le vôtre, puis réessayez.",
+  "Sorry -- sending straight from the app is not set up on our side yet, so the report was not sent. GitHub has opened with it filled in: press Submit there.":
+    "Désolé -- l’envoi direct depuis l’app n’est pas encore configuré de notre côté, le rapport n’a donc pas été envoyé. GitHub s’est ouvert avec le rapport déjà rempli : appuyez sur Submit.",
 });

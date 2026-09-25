@@ -1093,6 +1093,11 @@ function addonMenuReason(kind, code) {
     case 'optifg-armed': return t('{name} can’t run beside frame generation on this game: switch frame generation off in Edit first, or to XeFG once DLSS 5 here is up to date.', { name });
     case 'no-mod': return t('RenoDX has no mod for this game or its engine yet.');
     case 'no-index': return t('Could not reach RenoDX’s list of mods. Check the connection and open the panel again.');
+    // From the main-process fixes (2026-09-25): Remove refuses while the game runs, keeps what it could
+    // not delete, and never takes over a plain ReShade the player put in themselves.
+    case 'game-running': return t('Close the game first: {name} can only be switched on or off while the game is not running.', { name });
+    case 'remove-failed': return t('Some of {name}\'s files could not be deleted, so they are still listed as installed. Close the game, and check your antivirus is not holding them, then try again.', { name });
+    case 'foreign-plain-reshade': return t('This game already has your own ReShade, and it is the plain build, which never loads add-ons. Install ReShade with full add-on support over it yourself, or remove yours, then try again.');
     default: return '';
   }
 }
@@ -2119,6 +2124,14 @@ async function sendGameFailure(game, diag, { setStatus, tried = [] } = {}) {
     setSendStatus(escapeHtml(t('Sending…')));
     const res = await window.api.reportSend(prepared.id);
     if (res.signedOut) { setSendStatus(escapeHtml(t('GitHub sign-in has expired -- press Send again to sign in.'))); return; }
+    // The GitHub App is not installed where reports go (ghreport.js app-not-installed): a maintainer
+    // problem, not the player's. Say so and hand them the browser form instead of a raw 403.
+    if (!res.ok && (res.code === 'app-not-installed' || /app-not-installed|must be installed on/i.test(String(res.error || '')))) {
+      const manual = withTried(await buildGameReport(game, diag, { manual: true }));
+      window.api.openExternal(`https://github.com/mrcgibb9876-hash/OptiDLSS5-UI-releases/issues/new?title=${encodeURIComponent(manual.title)}&body=${encodeURIComponent(manual.body)}`);
+      setSendStatus(escapeHtml(t('Sorry -- sending straight from the app is not set up on our side yet, so the report was not sent. GitHub has opened with it filled in: press Submit there.')));
+      return;
+    }
     if (!res.ok) { setSendStatus(escapeHtml(t('Could not send: {error}', { error: res.error }))); return; }
     if (res.cancelled) { setSendStatus(''); return; }
     // An id per send: the status can be on a card as well as in Game Help, and both can be on screen.
@@ -6358,6 +6371,9 @@ async function renderAddons(game = addonsGame) {
           'optifg-armed': t('{name} can’t run beside frame generation on this game: switch frame generation off in Edit first, or to XeFG once DLSS 5 here is up to date.', { name }),
           'bitness-32': t('{name} needs a 64-bit game. This one is 32-bit.', { name }),
           'vulkan-layer': t('{name} on a Vulkan game needs ReShade’s own setup run for this game first.', { name }),
+          'game-running': t('Close the game first: {name} can only be switched on or off while the game is not running.', { name }),
+          'remove-failed': t('Some of {name}\'s files could not be deleted, so they are still listed as installed. Close the game, and check your antivirus is not holding them, then try again.', { name }),
+          'foreign-plain-reshade': t('This game already has your own ReShade, and it is the plain build, which never loads add-ons. Install ReShade with full add-on support over it yourself, or remove yours, then try again.'),
         };
         $('#addons-status').textContent = (out && byCode[out.code]) || (out && out.error) || t('That did not work.');
       }

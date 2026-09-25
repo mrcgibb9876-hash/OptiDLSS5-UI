@@ -1743,4 +1743,12 @@ window.I18N.register("ko", {
     "{name}이(가) 꺼졌습니다. 다음 게임 시작부터 빠집니다.",
   "{name} is on. Start the game to use it; its settings are in the DLSS 5 panel and the pop-out.":
     "{name}이(가) 켜졌습니다. 게임을 시작해 사용하세요. 설정은 DLSS 5 패널과 팝아웃에 있습니다.",
+  "Close the game first: {name} can only be switched on or off while the game is not running.":
+    "먼저 게임을 종료하세요. {name}은(는) 게임이 실행 중이 아닐 때만 켜거나 끌 수 있습니다.",
+  "Some of {name}'s files could not be deleted, so they are still listed as installed. Close the game, and check your antivirus is not holding them, then try again.":
+    "{name}의 일부 파일을 삭제하지 못해 여전히 설치된 것으로 표시됩니다. 게임을 종료하고 백신 프로그램이 파일을 잡고 있지 않은지 확인한 뒤 다시 시도하세요.",
+  "This game already has your own ReShade, and it is the plain build, which never loads add-ons. Install ReShade with full add-on support over it yourself, or remove yours, then try again.":
+    "이 게임에는 이미 직접 설치한 ReShade가 있으며, 애드온을 전혀 불러오지 않는 일반 버전입니다. 그 위에 애드온 전체 지원 ReShade를 직접 설치하거나 기존 것을 제거한 뒤 다시 시도하세요.",
+  "Sorry -- sending straight from the app is not set up on our side yet, so the report was not sent. GitHub has opened with it filled in: press Submit there.":
+    "죄송합니다 -- 앱에서 바로 보내는 기능이 아직 저희 쪽에서 설정되지 않아 보고서를 보내지 못했습니다. 내용이 채워진 GitHub 페이지가 열렸으니 거기서 Submit을 누르세요.",
 });
