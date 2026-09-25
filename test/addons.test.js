@@ -704,3 +704,11 @@ test('only ReShade add-ons count as sharing ReShade with frame pacing, not shade
   assert.deepEqual(addons.installedAddonIds(dir), ['renodx']);
   assert.deepEqual(addons.installedAddonIds(scratchDir('addon-ids-none')), []);
 });
+
+test('detectGameCached is never called as though it were synchronous and took only the exe', () => {
+  // It takes (dir, exePath) and returns a promise. Called as detectGameCached(exePath) it handed back a
+  // pending promise, every field read off it was undefined, and RenoDX never matched a game by its
+  // engine -- The Blood of Dawnwalker read "Not for this game" with the Unreal mod right there (2026-09-25).
+  const main = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'main.js'), 'utf8');
+  assert.ok(!/detectGameCached\(exePath\)/.test(main), 'detectGameCached(exePath) is back in main.js');
+});

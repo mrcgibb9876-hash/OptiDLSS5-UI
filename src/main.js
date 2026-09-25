@@ -529,7 +529,7 @@ ipcMain.handle('addons:forGame', async (_evt, { exePath } = {}) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
-    const detected = detectGameCached(exePath) || {};
+    const detected = (await detectFor(gameDir(exePath), exePath).catch(() => null)) || {};
     const steam = library.steamManifestFor(exePath);
     const installed = new Set(addons.installedIds(dir));
     // Once, here: every row's blocker is derived from this rather than walking the folder again.
@@ -600,7 +600,7 @@ ipcMain.handle('addons:install', async (_evt, { exePath, id } = {}) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
-    const detected = detectGameCached(exePath) || {};
+    const detected = (await detectFor(gameDir(exePath), exePath).catch(() => null)) || {};
     const opts = { bitness: detected.bitness || null };
     if (id === 'renodx') {
       const steam = library.steamManifestFor(exePath);
@@ -1128,7 +1128,7 @@ ipcMain.handle('panel:addonToggles', async (_evt, { exePath } = {}) => {
     let hdrBlocker = blocker;
     if (!hdrInstalled && !hdrBlocker) {
       try {
-        const detected = detectGameCached(exePath) || {};
+        const detected = (await detectFor(gameDir(exePath), exePath).catch(() => null)) || {};
         const steam = library.steamManifestFor(exePath);
         const renodx = await renodxIndex();
         const match = addons.matchRenodx(renodx.index, {
@@ -3194,7 +3194,10 @@ function panelModeForGame(exePath) {
   const host32 = optiScalerDirFor(dir) !== dir;
   let overlayOff = false;
   try { overlayOff = panelroute.overlayMenuOff(fs.readFileSync(path.join(optiScalerDirFor(dir), 'OptiScaler.ini'), 'utf8')); } catch {}
-  const detected = detectGameCached(exePath) || {};
+  // Synchronous here, so the stored detection rather than a scan. detectGameCached takes (dir, exePath)
+  // and returns a promise; called with the exe alone it handed back a pending promise, and every
+  // field read off it was undefined (found 2026-09-25 through RenoDX never matching by engine).
+  const detected = storedDetectionFor(exePath) || {};
   return panelroute.panelModeFor({
     host32,
     api: effectiveDetection(dir, exePath, detected).api,
