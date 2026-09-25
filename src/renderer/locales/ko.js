@@ -1624,7 +1624,57 @@ window.I18N.register("ko", {
   "OptiScaler's own file is missing from the helper folder. This app put it there -- its install record lists host64\\winmm.dll -- and it is not on disk now, so something removed it after the install. That is almost always antivirus: a 64-bit winmm.dll appearing beside a game exe looks exactly like a DLL hijack. Everything else is fine, which is why the Feeder's own window opens and the DLSS 5 overlay is not in it. Add an exclusion for this game's folder -- Windows Security > Virus & threat protection > Manage settings > Exclusions -- and then press Install here again. Do the exclusion first: without it, Install just puts the file back for it to be taken again. Protection history may also offer Allow for the item, but a cloud detection (a name ending in !cl) is often deleted rather than held, so do not count on finding one.": "도우미 폴더에 OptiScaler 자체 파일이 없습니다. 이 앱이 그곳에 넣었고(설치 기록에 host64\\winmm.dll이 있습니다) 지금 디스크에는 없으므로, 설치 후에 무언가가 제거한 것입니다. 거의 항상 백신입니다. 게임 exe 옆의 64비트 winmm.dll은 DLL 하이재킹과 똑같아 보입니다. 나머지는 모두 정상이며, 그래서 Feeder 창은 열리지만 그 안에 DLSS 5 오버레이가 없습니다. 이 게임 폴더에 대한 제외 항목을 추가하세요 -- Windows 보안 > 바이러스 및 위협 방지 > 설정 관리 > 제외 -- 그런 다음 여기서 설치를 다시 누르세요. 제외를 먼저 하세요. 그렇지 않으면 설치는 파일을 다시 가져가도록 되돌려 놓을 뿐입니다. 보호 기록에서 해당 항목에 허용이 제공될 수도 있지만, 클라우드 탐지(!cl로 끝나는 이름)는 보관되기보다 삭제되는 경우가 많으니 있을 것이라고 기대하지 마세요.",
   "Windows Security > Exclusions: add this game's folder": "Windows 보안 > 제외: 이 게임 폴더 추가",
   "Protection history may also offer Allow -- but may show nothing": "보호 기록에 허용이 있을 수도, 아무것도 없을 수도 있습니다",
+  "The helper program is missing from the helper folder. This app put it there -- its install record lists host64\\dlss5-feed-host64.exe -- and it is not on disk now, so something removed it after the install. A 64-bit exe appearing beside a game is the same thing antivirus takes a 64-bit winmm.dll for. Without it there is no helper to start, so the game renders perfectly and DLSS 5 does nothing at all. Add an exclusion for this game's folder -- Windows Security > Virus & threat protection > Manage settings > Exclusions -- and then press Install here again. Do the exclusion first: without it, Install just puts the file back for it to be taken again.":
+    "도우미 폴더에 도우미 프로그램이 없습니다. 이 앱이 거기에 넣었고 -- 설치 기록에 host64\\dlss5-feed-host64.exe가 있습니다 -- 지금은 디스크에 없으므로 설치 후에 무언가가 지운 것입니다. 게임 옆에 놓인 64비트 exe는 백신이 64비트 winmm.dll을 의심하는 것과 똑같은 대상입니다. 이 파일이 없으면 시작할 도우미 자체가 없으므로 게임은 완벽하게 그려지고 DLSS 5는 아무 일도 하지 않습니다. 이 게임 폴더를 제외 목록에 추가한 뒤 -- Windows 보안 > 바이러스 및 위협 방지 > 설정 관리 > 제외 -- 여기서 설치를 다시 누르세요. 제외가 먼저입니다. 그렇지 않으면 설치는 파일을 다시 가져다 놓을 뿐이고 또 지워집니다.",
+  "The DLSS work for a 32-bit game runs in a second program, a 64-bit helper beside the game, and this run it went away -- so the game kept rendering normally and DLSS 5 stopped. The Feeder's own words for why: {why}. The helper writes its own log, host64\\dlss5-feed-host.log beside the game, and that names the reason; this app cannot see inside another program, so that file is the next thing to read rather than anything to guess at. Save the bundle to share -- it now carries that log -- or ask the AI.":
+    "32비트 게임의 DLSS 작업은 게임 옆의 64비트 도우미라는 별도 프로그램에서 실행되는데, 이번 실행에서 그 프로그램이 사라졌습니다. 그래서 게임은 정상적으로 계속 그려지고 DLSS 5만 멈췄습니다. Feeder가 밝힌 이유: {why}. 도우미는 게임 옆 host64\\dlss5-feed-host.log에 자체 로그를 기록하며 거기에 이유가 있습니다. 이 앱은 다른 프로그램 내부를 볼 수 없으므로 추측하기보다 그 파일을 읽는 것이 다음 단계입니다. 공유용 번들을 저장하거나(이제 그 로그가 포함됩니다) AI에게 물어보세요.",
+  "The 64-bit helper that does the DLSS work for this game quit as it started: {why}. That is the add-on and the helper not being the same Feeder build, or a file missing from host64\\ -- both of which Install rebuilds from one download. Press Install here again, then launch.":
+    "이 게임의 DLSS 작업을 맡는 64비트 도우미가 시작하자마자 종료되었습니다: {why}. 애드온과 도우미가 서로 다른 Feeder 빌드이거나 host64\\에 파일이 빠졌다는 뜻이며, 설치가 한 번의 다운로드로 두 가지를 모두 다시 구성합니다. 여기서 설치를 다시 누른 다음 실행하세요.",
+  "The 64-bit helper that does the DLSS work for this 32-bit game went away during the last run, so the feed stopped and the game carried on rendering by itself. host64\\dlss5-feed-host.log, beside the game, is its own account of why.":
+    "이 32비트 게임의 DLSS 작업을 맡는 64비트 도우미가 지난 실행 중에 사라져서 피드가 멈췄고 게임만 계속 그려졌습니다. 게임 옆의 host64\\dlss5-feed-host.log가 그 이유에 대한 도우미 자신의 기록입니다.",
+  "Open host64\\dlss5-feed-host.log beside the game -- it names the reason":
+    "게임 옆의 host64\\dlss5-feed-host.log를 여세요 -- 이유가 적혀 있습니다",
+  "Save the bundle to share: it carries that log":
+    "공유용 번들 저장: 그 로그가 들어 있습니다",
+  "Press Install (rebuilds the helper and the add-on together)":
+    "설치 누르기(도우미와 애드온을 함께 다시 구성)",
+  "The 64-bit helper went away":
+    "64비트 도우미가 사라짐",
+  "The 64-bit helper was removed from host64 -- check antivirus":
+    "64비트 도우미가 host64에서 제거됨 -- 백신 확인",
+  "The 64-bit helper went away -- its own log says why":
+    "64비트 도우미가 사라짐 -- 자체 로그에 이유가 있음",
+  "The 64-bit helper quit at startup -- Install rebuilds it":
+    "64비트 도우미가 시작 중 종료됨 -- 설치가 다시 구성함",
+  "the 64-bit helper went away this run -- host64\\dlss5-feed-host.log says why":
+    "이번 실행에서 64비트 도우미가 사라짐 -- host64\\dlss5-feed-host.log에 이유가 있음",
   "Adding frame pacing...": "프레임 페이싱 추가 중...",
   "Could not add frame pacing: {error}": "프레임 페이싱을 추가하지 못했습니다: {error}",
   "This is upstream ReLimiter, which the in-game panel cannot drive -- use ReLimiter's own overlay in the game, or the target below.": "이것은 원본 ReLimiter로, 게임 내 패널에서 조작할 수 없습니다. 게임 안에서 ReLimiter 자체 오버레이나 아래 목표값을 사용하세요.",
+  "Automatic ({name})":
+    "자동 ({name})",
+  "Automatic":
+    "자동",
+  "Set by hand to {name}.":
+    "직접 {name}(으)로 설정했습니다.",
+  "OptiScaler is currently installed as {installed} and moves on the next Install or Reconfigure.":
+    "OptiScaler는 현재 {installed}(으)로 설치되어 있으며 다음 설치 또는 재구성 때 옮겨집니다.",
+  "OptiScaler is installed as {installed}, chosen automatically.":
+    "OptiScaler가 자동으로 선택된 {installed}(으)로 설치되어 있습니다.",
+  "Could not set the proxy DLL name: {error}":
+    "프록시 DLL 이름을 설정할 수 없습니다: {error}",
+  "Moved OptiScaler from {from} to {to}.":
+    "OptiScaler를 {from}에서 {to}(으)로 옮겼습니다.",
+  "Did NOT move it: {why}.":
+    "옮기지 않았습니다: {why}.",
+  "OptiScaler will load as {name} for this game.":
+    "이 게임에서 OptiScaler가 {name}(으)로 로드됩니다.",
+  "Back to the automatic proxy DLL name.":
+    "자동 프록시 DLL 이름으로 되돌렸습니다.",
+  "Proxy DLL name":
+    "프록시 DLL 이름",
+  "OptiScaler is loaded by taking the name of a DLL the game already loads at start. The app picks that name itself and is right almost always -- change this only if you know which DLL your game loads, for instance because OptiScaler's own wiki page for it names one. Choosing a name moves the installed file to it straight away.":
+    "OptiScaler는 게임이 시작할 때 이미 로드하는 DLL의 이름을 가져와 로드됩니다. 앱이 그 이름을 스스로 고르며 거의 항상 맞습니다. 게임이 어떤 DLL을 로드하는지 알 때만 바꾸세요. 예를 들어 OptiScaler 위키의 해당 게임 문서에 이름이 적혀 있는 경우입니다. 이름을 고르면 설치된 파일이 즉시 그 이름으로 옮겨집니다.",
+  "A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.":
+    "이름이 틀려도 위험하지는 않고 아무 일도 하지 않을 뿐입니다. 게임이 그 파일을 절대 로드하지 않으므로 DLSS 5도 동작하지 않고 로그도 남지 않습니다. 되돌리려면 자동으로 다시 설정하세요.",
 });

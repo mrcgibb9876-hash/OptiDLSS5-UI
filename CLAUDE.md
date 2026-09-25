@@ -150,6 +150,32 @@ it still matters.
 Until there is an answer the app must not download it. Its licence forbids bundling and
 redistribution, so the manager only links to the release page and fetches the model file.
 
+## The proxy DLL name: one list, and a way out
+
+OptiScaler is loaded by taking the name of a DLL the game already loads at start. Three things
+decide it, in order: the user's choice (`.dlss5ui-proxy.json`, set in Edit > Advanced), then
+`PROXY_OVERRIDES` (keyed by exe, this app's own table), then the automatic answer -- `dxgi.dll` for
+Direct3D, and for a **Feeder** game on Vulkan, OpenGL or DX9 the first of `EARLY_PROXY_CANDIDATES`
+the exe actually imports.
+
+- **Every name the app can install under must be a name `detect.js` can read a folder back by.**
+  Those were two hand-kept lists and they had drifted: `dbghelp.dll`, `wininet.dll` and
+  `winhttp.dll` were installable and unreadable, so a game importing one of them got an OptiScaler
+  the app could no longer see -- folder read empty, route "not installed yet", Install writing a
+  second copy beside the first. `HOOK_DLLS` is now built from `EARLY_PROXY_CANDIDATES`; do not
+  re-introduce a second list. `DETECT_VERSION` went to 21 for it.
+- **Widening the scanned names is safe only because the scan is content-gated.** `HOOK_NEEDLES`
+  decides, not the file name, so a game's own genuine Microsoft `dbghelp.dll` -- plenty of games
+  ship one -- is read and passed over. Same rule as `isAddonReShadeDll` and `isReLimiterAddon`.
+- **Edit offers only those names, never free text.** A name the app cannot read back would let a
+  user reproduce the drift bug by hand, and a stored choice outside the list is ignored rather than
+  honoured.
+- **The 32-bit route has no proxy beside the exe** -- OptiScaler is `host64\winmm.dll`, loaded by
+  the helper -- so the row is hidden there and the handler refuses.
+- `nms.exe -> dbghelp.dll` is **documented, not measured** (OptiScaler's wiki, "early hooking"),
+  like `rdr2.exe` before it. Shipping an unmeasured entry is defensible only because the user can
+  now set the name back by hand; it was not before v2.13.10.
+
 ## Gotchas that have already cost time
 
 - **A wrapper can fail without crashing, and the rule table used to miss that.** Assassin's Creed II

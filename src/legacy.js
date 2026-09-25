@@ -140,6 +140,9 @@ function writeMarker(dir, marker) {
 // model is what it runs, the forwarder is what it calls -- this is the module itself.
 const HOST_OPTISCALER_DLL = 'winmm.dll';
 
+// The helper itself, the process the 32-bit add-on starts and hands frames to.
+const HOST_EXE = 'dlss5-feed-host64.exe';
+
 function status(dir) {
   const marker = readMarker(dir);
   const host = path.join(dir, HOST_DIR);
@@ -154,6 +157,15 @@ function status(dir) {
   // that something is removing, which is a loop rather than a fix. Named separately so Game Help can
   // say so (gamehelp 'host32-opti-dll-gone').
   const claimed = !!(marker && (marker.files || []).some((f) => String(f).toLowerCase() === `${HOST_DIR}/${HOST_OPTISCALER_DLL}`.toLowerCase()));
+  // The same shape, one file over, and worse: the helper EXE itself. Without winmm.dll the helper
+  // still runs and the feed works without a neural pass; without the exe there is no helper at all,
+  // the Feeder reports "the 64-bit host went away", and the game renders on as though nothing were
+  // installed. Two things make it worth telling apart from a plain incomplete install: a 64-bit exe
+  // appearing beside a game is the same antivirus bait winmm.dll is, and `feeder32` below goes false
+  // when it is gone -- so without this the route reads as "not installed yet" and Game Help offers
+  // Install, which writes the file straight back into whatever is removing it.
+  const hostExe = fs.existsSync(path.join(host, HOST_EXE));
+  const exeClaimed = !!(marker && (marker.files || []).some((f) => String(f).toLowerCase() === `${HOST_DIR}/${HOST_EXE}`.toLowerCase()));
   return {
     deployed: !!marker,
     host32: !!(marker && marker.host32),
@@ -161,7 +173,8 @@ function status(dir) {
     hostOptiScaler: optiDll && fs.existsSync(path.join(host, 'OptiScaler.ini')) && fs.existsSync(path.join(host, 'nvngx_dlssnr.dll')),
     hostOptiScalerDll: optiDll,
     hostOptiScalerDllGone: claimed && !optiDll,
-    feeder32: fs.existsSync(path.join(dir, 'dlss5-feed.addon32')) && fs.existsSync(path.join(host, 'dlss5-feed-host64.exe')),
+    feeder32: fs.existsSync(path.join(dir, 'dlss5-feed.addon32')) && hostExe,
+    hostExeGone: exeClaimed && !hostExe,
     marker,
   };
 }
