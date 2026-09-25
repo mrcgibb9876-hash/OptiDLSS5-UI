@@ -207,6 +207,15 @@ the exe actually imports.
 - `nms.exe -> dbghelp.dll` is **documented, not measured** (OptiScaler's wiki, "early hooking"),
   like `rdr2.exe` before it. Shipping an unmeasured entry is defensible only because the user can
   now set the name back by hand; it was not before v2.13.10.
+- **The add-ons picker reuses that same list.** `addons.RESHADE_NAMES` is `HOOK_DLLS` plus
+  `ReShade64.dll` / `ReShade32.dll` (the two names a non-proxying ReShade uses), because the picker
+  has to find a ReShade wherever it sits -- a test fails if a `HOOK_DLLS` name is not searched. It
+  identifies it by `relimiter.isReShadeProxy` (PE OriginalFilename), never by name, so OptiScaler in
+  the `dxgi.dll` slot does not pass. Deliberately **not** `relimiter.reshadeFileIn`, which only
+  recognises a proxy ReShade our own marker recorded and so would read a user's own ReShade as none
+  -- and that user is most of the RenoDX audience. `addons.installBlocker` then refuses
+  `no-reshade` for everything and `plain-reshade` for `kind: 'addon'` only, since a plain ReShade
+  runs `.fx` effects perfectly well and simply never loads an add-on.
 
 ## Gotchas that have already cost time
 

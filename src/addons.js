@@ -35,6 +35,7 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const { BAND } = require('./preset-order');
 const integrity = require('./integrity');
+const { HOOK_DLLS } = require('./detect');
 
 const ADDONS_MARKER = '.dlss5ui-addons.json';
 
@@ -164,6 +165,63 @@ function conflictsFor(dir, id) {
 }
 
 const byId = new Map(CATALOGUE.map((a) => [a.id, a]));
+
+// ---- is there a ReShade here at all? ----------------------------------------------------------
+//
+// The header above says every route this app installs puts ReShade in the game folder, and that is
+// true. The add-ons card is not a route: its button sits on every game card, including a game this
+// app has never installed anything into. Before this check, Install there placed a .addon64 beside
+// an exe with no ReShade to load it -- nothing failed, nothing loaded, and the row then read
+// "Remove" as though it had worked.
+//
+// Found by CONTENT, wherever it sits, and deliberately NOT through relimiter.reshadeFileIn(): that
+// recognises a proxy ReShade only when our own marker recorded it, so someone who installed ReShade
+// himself as dxgi.dll -- which is most of the people who want RenoDX -- would read as having none
+// and be refused the one thing he came for.
+//
+// HOOK_DLLS is the single proxy-name list (see the proxy note in CLAUDE.md; do not start a second
+// one), plus the two names a non-proxying ReShade uses. isReShadeProxy is the strict check: it reads
+// the PE OriginalFilename, so OptiScaler sitting in the dxgi.dll slot does not pass for ReShade
+// merely because OptiScaler.dll carries the string.
+const RESHADE_NAMES = [...new Set([...HOOK_DLLS, 'ReShade64.dll', 'ReShade32.dll'])];
+
+function reshadeIn(dir) {
+  // Required late: feeder reaches back into this module (installedTechniqueBands), so a top-level
+  // require here would close the loop.
+  const { isReShadeProxy } = require('./relimiter');
+  const { isAddonReShadeDll } = require('./feeder');
+
+  const found = [];
+  for (const name of RESHADE_NAMES) {
+    const file = path.join(dir, name);
+    if (!fs.existsSync(file) || !isReShadeProxy(file)) continue;
+    found.push({ file: name, addonBuild: isAddonReShadeDll(file) });
+  }
+  if (!found.length) return null;
+  // An Add-on build anywhere in the folder wins. It is the build that decides whether an add-on can
+  // load at all, and a plain ReShade64.dll lying beside it does not take that away.
+  return found.find((f) => f.addonBuild) || found[0];
+}
+
+// What stops this entry being installed here, or null. Two tiers, because the two shapes need
+// different things (see THE TWO SHAPES above):
+//
+//   'no-reshade'     Nothing to load either shape. Both are refused.
+//   'plain-reshade'  ReShade is here but it is the plain build, which carries the same version and
+//                    product name as the Add-on build and simply never loads an add-on (feeder.js's
+//                    issue-#53 note). Shader packs are fine -- they are effects, not add-ons -- so
+//                    only kind: 'addon' is refused.
+//
+// `rs` lets a caller that has already looked (the IPC handler builds the whole picker from one scan)
+// hand the answer in rather than making every row walk the folder again.
+function installBlocker(dir, id, rs) {
+  const spec = byId.get(id);
+  if (!spec) return null;
+  const found = rs !== undefined ? rs : reshadeIn(dir);
+  if (!found) return 'no-reshade';
+  if (spec.kind === 'addon' && !found.addonBuild) return 'plain-reshade';
+  return null;
+}
 
 // The list as the renderer sees it, so data only. An entry can carry a function (Lilium's bandFor),
 // and one function anywhere in an IPC reply makes Electron refuse the whole thing -- "An object
@@ -386,6 +444,18 @@ function destForPackFile(rel) {
 async function installAddon(dir, id, ctx, opts = {}) {
   const spec = byId.get(id);
   if (!spec) throw new Error(`Unknown add-on: ${id}`);
+
+  // Checked here and not only in the picker. A disabled button is a courtesy, not a gate: this is
+  // also reached from the IPC handler directly, and placing a file that can never load is the
+  // failure this whole check exists to stop -- before the swap below takes anything out.
+  const blocker = installBlocker(dir, id, opts.reshade);
+  if (blocker === 'no-reshade') {
+    throw Object.assign(new Error('This game folder has no ReShade, so there is nothing to load this -- install DLSS 5 or frame pacing here first, or put your own ReShade in'), { code: blocker });
+  }
+  if (blocker === 'plain-reshade') {
+    throw Object.assign(new Error('The ReShade in this folder is the plain build, which never loads an add-on -- the Add-on build is the one that can'), { code: blocker });
+  }
+
   const written = [];
 
   // Swap rather than refuse. Done before anything is fetched so a failed download cannot leave
@@ -503,5 +573,6 @@ module.exports = {
   readMarker, writeMarker, filesPlaced, installedIds,
   techniquesIn, installedTechniqueBands,
   packFiles, destForPackFile, installAddon, removeAddon,
+  RESHADE_NAMES, reshadeIn, installBlocker,
   EXCLUSIVE_GROUPS, conflictsFor,
 };

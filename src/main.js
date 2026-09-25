@@ -511,6 +511,8 @@ ipcMain.handle('addons:forGame', async (_evt, { exePath } = {}) => {
     const detected = detectGameCached(exePath) || {};
     const steam = library.steamManifestFor(exePath);
     const installed = new Set(addons.installedIds(dir));
+    // Once, here: every row's blocker is derived from this rather than walking the folder again.
+    const reshade = addons.reshadeIn(dir);
 
     let match = null;
     let indexError = null;
@@ -530,9 +532,18 @@ ipcMain.handle('addons:forGame', async (_evt, { exePath } = {}) => {
       // The neural pass being installed here is what decides whether the RenoDX row shows its
       // "untested together" line, so the renderer is told rather than guessing from the card.
       neuralRendering: !!(detected && detected.optiscaler) || fs.existsSync(path.join(dir, 'nvngx_dlssnr.dll')),
+      // Whether ReShade is here at all, and whether it is the build that can load an add-on. The
+      // card's button is on every game, so this is the one fact that decides whether any of these
+      // rows can do anything -- found by content rather than by our own marker, so a ReShade the
+      // user installed himself counts (addons.reshadeIn).
+      reshade,
       catalogue: addons.catalogue().map((a) => ({
         ...a,
         installed: installed.has(a.id),
+        // Why Install is refused here, or null. Per entry, because a plain ReShade stops an add-on
+        // and not a shader pack -- but from the ONE scan above, not a fresh walk of the folder per
+        // row. Never on an installed row: Remove must work whatever happened to ReShade since.
+        blocker: installed.has(a.id) ? null : addons.installBlocker(dir, a.id, reshade),
         // What pressing Install would swap out. The renderer says so up front rather than the
         // other row silently flipping to "Install" afterwards.
         replaces: addons.conflictsFor(dir, a.id),

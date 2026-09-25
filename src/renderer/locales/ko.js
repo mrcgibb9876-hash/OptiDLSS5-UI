@@ -1564,7 +1564,6 @@ window.I18N.register("ko", {
   "Removed. {count} files taken back out.": "제거했습니다. 파일 {count}개를 되돌렸습니다.",
   "Installed. {count} files placed, and the effect order was rewritten.": "설치했습니다. 파일 {count}개를 배치하고 효과 순서를 다시 썼습니다.",
   "That did not work.": "실패했습니다.",
-  "This game already has ReShade in its folder, so these go in beside it. Pick per game; each one says who made it and under what licence, and is checked against a known hash before anything is placed.": "이 게임 폴더에는 이미 ReShade가 있으므로 이것들은 그 옆에 들어갑니다. 게임마다 선택하세요. 각 항목은 제작자와 라이선스를 밝히며, 무엇이든 배치하기 전에 알려진 해시와 대조해 확인합니다.",
   "Installing this replaces {other} -- both are ways of getting an HDR signal and only one can run. You can swap back any time.": "이것을 설치하면 {other}을(를) 대체합니다 -- 둘 다 HDR 신호를 얻는 방법이며 하나만 동작할 수 있습니다. 언제든 다시 바꿀 수 있습니다.",
   "RenoDX already gives this game native HDR, so leave this pack's inverse tonemapper switched off in ReShade. Its analysis shaders and its final tone mapping are still worth having -- that is what keeps highlights inside what your display can show.": "RenoDX가 이미 이 게임에 네이티브 HDR을 제공하므로, 이 팩의 역 톤매퍼는 ReShade에서 꺼 두세요. 분석 셰이더와 최종 톤 매핑은 여전히 쓸모 있습니다 -- 그것이 하이라이트를 디스플레이가 표현할 수 있는 범위 안에 붙잡아 둡니다.",
   "in use here": "여기서 사용 중",
@@ -1677,4 +1676,14 @@ window.I18N.register("ko", {
     "OptiScaler는 게임이 시작할 때 이미 로드하는 DLL의 이름을 가져와 로드됩니다. 앱이 그 이름을 스스로 고르며 거의 항상 맞습니다. 게임이 어떤 DLL을 로드하는지 알 때만 바꾸세요. 예를 들어 OptiScaler 위키의 해당 게임 문서에 이름이 적혀 있는 경우입니다. 이름을 고르면 설치된 파일이 즉시 그 이름으로 옮겨집니다.",
   "A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.":
     "이름이 틀려도 위험하지는 않고 아무 일도 하지 않을 뿐입니다. 게임이 그 파일을 절대 로드하지 않으므로 DLSS 5도 동작하지 않고 로그도 남지 않습니다. 되돌리려면 자동으로 다시 설정하세요.",
+  "These go in beside the game's ReShade, so a game without one is refused here and each row says which part is missing. Pick per game; each one says who made it and under what licence, and is checked against a known hash before anything is placed.":
+    "이들은 게임의 ReShade 옆에 설치되므로, ReShade가 없는 게임은 여기서 거부되고 각 항목이 무엇이 빠졌는지 알려줍니다. 게임별로 선택하세요. 각 항목은 제작자와 라이선스를 밝히며, 무엇이든 설치하기 전에 알려진 해시와 대조해 확인합니다.",
+  "This game has no ReShade, so nothing here can load. Install DLSS 5 or frame pacing on this game and ReShade comes with it, or put your own copy in the folder.":
+    "이 게임에는 ReShade가 없어 여기 있는 어떤 것도 로드될 수 없습니다. 이 게임에 DLSS 5나 프레임 페이싱을 설치하면 ReShade가 함께 설치되며, 직접 받은 사본을 폴더에 넣어도 됩니다.",
+  "The ReShade here is the plain build, which never loads an add-on -- it carries the same version and name as the Add-on build, so this is not something you can see in the folder. The shader packs below still work.":
+    "여기 있는 ReShade는 애드온을 절대 로드하지 않는 일반 빌드입니다. 애드온 빌드와 버전과 이름이 같아서 폴더만 봐서는 알 수 없습니다. 아래의 셰이더 팩은 그대로 작동합니다.",
+  "Needs the Add-on build":
+    "애드온 빌드가 필요합니다",
+  "Needs ReShade":
+    "ReShade가 필요합니다",
 });

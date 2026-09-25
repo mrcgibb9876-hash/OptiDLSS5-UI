@@ -1565,7 +1565,6 @@ window.I18N.register('pt-BR', {
   "Removed. {count} files taken back out.": "Removido. {count} arquivos retirados.",
   "Installed. {count} files placed, and the effect order was rewritten.": "Instalado. {count} arquivos colocados, e a ordem dos efeitos foi reescrita.",
   "That did not work.": "Isso não funcionou.",
-  "This game already has ReShade in its folder, so these go in beside it. Pick per game; each one says who made it and under what licence, and is checked against a known hash before anything is placed.": "Este jogo já tem o ReShade na pasta, então estes vão ao lado. Escolha por jogo; cada um informa quem o fez e sob qual licença, e é conferido contra um hash conhecido antes de qualquer coisa ser colocada.",
   "Installing this replaces {other} -- both are ways of getting an HDR signal and only one can run. You can swap back any time.": "Instalar isto substitui {other} -- ambos são formas de obter um sinal HDR e só um pode funcionar. Você pode trocar de volta quando quiser.",
   "RenoDX already gives this game native HDR, so leave this pack's inverse tonemapper switched off in ReShade. Its analysis shaders and its final tone mapping are still worth having -- that is what keeps highlights inside what your display can show.": "O RenoDX já dá HDR nativo a este jogo, então deixe o tonemapper inverso deste pacote desligado no ReShade. Os shaders de análise e o tone mapping final continuam valendo a pena -- é o que mantém os realces dentro do que a sua tela consegue mostrar.",
   "in use here": "em uso aqui",
@@ -1678,4 +1677,14 @@ window.I18N.register('pt-BR', {
     "O OptiScaler é carregado assumindo o nome de uma DLL que o jogo já carrega ao iniciar. O app escolhe esse nome sozinho e acerta quase sempre -- mude isto só se você souber qual DLL o seu jogo carrega, por exemplo porque a página do wiki do OptiScaler para ele cita uma. Escolher um nome move o arquivo instalado para lá na hora.",
   "A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.":
     "Um nome errado não é perigoso, apenas inerte: o jogo nunca carrega esse arquivo, então o DLSS 5 não faz nada e nenhum log é escrito. Volte para Automático para desfazer.",
+  "These go in beside the game's ReShade, so a game without one is refused here and each row says which part is missing. Pick per game; each one says who made it and under what licence, and is checked against a known hash before anything is placed.":
+    "Estes ficam ao lado do ReShade do jogo, então um jogo sem ReShade é recusado aqui e cada linha diz o que está faltando. Escolha por jogo; cada um diz quem o fez e sob qual licença, e é verificado contra um hash conhecido antes de qualquer coisa ser colocada.",
+  "This game has no ReShade, so nothing here can load. Install DLSS 5 or frame pacing on this game and ReShade comes with it, or put your own copy in the folder.":
+    "Este jogo não tem ReShade, então nada aqui consegue carregar. Instale o DLSS 5 ou o ritmo de quadros neste jogo e o ReShade vem junto, ou coloque sua própria cópia na pasta.",
+  "The ReShade here is the plain build, which never loads an add-on -- it carries the same version and name as the Add-on build, so this is not something you can see in the folder. The shader packs below still work.":
+    "O ReShade aqui é a versão simples, que nunca carrega um add-on -- ela tem a mesma versão e o mesmo nome da versão com add-ons, então isso não dá para ver na pasta. Os pacotes de shaders abaixo continuam funcionando.",
+  "Needs the Add-on build":
+    "Precisa da versão com add-ons",
+  "Needs ReShade":
+    "Precisa do ReShade",
 });

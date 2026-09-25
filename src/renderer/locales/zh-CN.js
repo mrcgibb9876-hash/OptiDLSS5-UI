@@ -1564,7 +1564,6 @@ window.I18N.register("zh-CN", {
   "Removed. {count} files taken back out.": "已移除，取回 {count} 个文件。",
   "Installed. {count} files placed, and the effect order was rewritten.": "已安装，放置 {count} 个文件，并重写了效果顺序。",
   "That did not work.": "没有成功。",
-  "This game already has ReShade in its folder, so these go in beside it. Pick per game; each one says who made it and under what licence, and is checked against a known hash before anything is placed.": "这款游戏的文件夹里已经有 ReShade，因此这些会放在它旁边。可按游戏分别选择；每一项都会写明作者与许可证，并在放置任何文件之前与已知哈希比对。",
   "Installing this replaces {other} -- both are ways of getting an HDR signal and only one can run. You can swap back any time.": "安装它会替换 {other} —— 两者都是获得 HDR 信号的方式，只能有一个运行。你随时可以换回来。",
   "RenoDX already gives this game native HDR, so leave this pack's inverse tonemapper switched off in ReShade. Its analysis shaders and its final tone mapping are still worth having -- that is what keeps highlights inside what your display can show.": "RenoDX 已经让这款游戏输出原生 HDR，因此请在 ReShade 中关闭本包的反向色调映射。它的分析着色器和最终色调映射仍然值得保留 —— 那是把高光控制在显示器能呈现范围内的东西。",
   "in use here": "此处正在使用",
@@ -1677,4 +1676,14 @@ window.I18N.register("zh-CN", {
     "OptiScaler 借用游戏启动时本就会加载的某个 DLL 的名字来加载自己。这个名字由程序自行选择，几乎总是对的 —— 只有在你确实知道自己的游戏加载哪个 DLL 时才改它，例如 OptiScaler 维基中该游戏的页面点名了某一个。选定名称后，已安装的文件会立即移动过去。",
   "A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.":
     "名字选错并不危险，只是不起作用：游戏永远不会加载那个文件，所以 DLSS 5 什么都不做，也不会写日志。改回“自动”即可撤销。",
+  "These go in beside the game's ReShade, so a game without one is refused here and each row says which part is missing. Pick per game; each one says who made it and under what licence, and is checked against a known hash before anything is placed.":
+    "这些会装在游戏的 ReShade 旁边，因此没有 ReShade 的游戏会在这里被拒绝，每一行也会说明缺少什么。按游戏逐个选择；每一项都标明作者与授权，并在放入任何文件之前先比对已知哈希。",
+  "This game has no ReShade, so nothing here can load. Install DLSS 5 or frame pacing on this game and ReShade comes with it, or put your own copy in the folder.":
+    "这个游戏没有 ReShade，所以这里的任何东西都无法加载。为这个游戏安装 DLSS 5 或帧率平滑，ReShade 会一并装上，或者把你自己的副本放进文件夹。",
+  "The ReShade here is the plain build, which never loads an add-on -- it carries the same version and name as the Add-on build, so this is not something you can see in the folder. The shader packs below still work.":
+    "这里的 ReShade 是普通版本，永远不会加载附加组件——它与附加组件版本的版本号和名称完全相同，所以光看文件夹是看不出来的。下面的着色器包仍然可用。",
+  "Needs the Add-on build":
+    "需要附加组件版本",
+  "Needs ReShade":
+    "需要 ReShade",
 });

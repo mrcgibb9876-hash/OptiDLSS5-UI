@@ -1564,7 +1564,6 @@ window.I18N.register("ru", {
   "Removed. {count} files taken back out.": "Удалено. Файлов возвращено: {count}.",
   "Installed. {count} files placed, and the effect order was rewritten.": "Установлено. Размещено файлов: {count}, порядок эффектов переписан.",
   "That did not work.": "Не получилось.",
-  "This game already has ReShade in its folder, so these go in beside it. Pick per game; each one says who made it and under what licence, and is checked against a known hash before anything is placed.": "В папке этой игры уже есть ReShade, так что эти лягут рядом. Выбор для каждой игры отдельно; каждый пункт называет автора и лицензию и сверяется с известным хешем, прежде чем что-либо будет размещено.",
   "Installing this replaces {other} -- both are ways of getting an HDR signal and only one can run. You can swap back any time.": "Установка этого заменит {other} -- оба дают HDR-сигнал, и работать может только один. Вернуться обратно можно в любой момент.",
   "RenoDX already gives this game native HDR, so leave this pack's inverse tonemapper switched off in ReShade. Its analysis shaders and its final tone mapping are still worth having -- that is what keeps highlights inside what your display can show.": "RenoDX уже даёт этой игре нативный HDR, поэтому обратный тонмаппер из этого набора оставьте выключенным в ReShade. Его шейдеры анализа и финальное тональное отображение всё равно полезны -- именно они удерживают яркие участки в пределах возможностей дисплея.",
   "in use here": "используется здесь",
@@ -1677,4 +1676,14 @@ window.I18N.register("ru", {
     "OptiScaler загружается под именем DLL, которую игра и так загружает при старте. Приложение выбирает это имя само и почти всегда угадывает -- меняйте только если знаете, какую DLL загружает ваша игра, например потому что её называет страница вики OptiScaler для этой игры. При выборе имени установленный файл сразу переносится под него.",
   "A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.":
     "Неверное имя не опасно, просто бесполезно: игра никогда не загрузит этот файл, поэтому DLSS 5 ничего не делает и журнал не пишется. Чтобы отменить, верните значение «Автоматически».",
+  "These go in beside the game's ReShade, so a game without one is refused here and each row says which part is missing. Pick per game; each one says who made it and under what licence, and is checked against a known hash before anything is placed.":
+    "Они ставятся рядом с ReShade игры, поэтому игра без ReShade здесь получает отказ, и каждая строка говорит, чего не хватает. Выбирайте для каждой игры; каждый пункт указывает автора и лицензию и проверяется по известному хешу, прежде чем что-либо будет размещено.",
+  "This game has no ReShade, so nothing here can load. Install DLSS 5 or frame pacing on this game and ReShade comes with it, or put your own copy in the folder.":
+    "В этой игре нет ReShade, поэтому ничто здесь не сможет загрузиться. Установите для этой игры DLSS 5 или выравнивание кадров -- ReShade придёт вместе с ними -- либо положите свою копию в папку.",
+  "The ReShade here is the plain build, which never loads an add-on -- it carries the same version and name as the Add-on build, so this is not something you can see in the folder. The shader packs below still work.":
+    "ReShade здесь -- обычная сборка, которая никогда не загружает дополнения: у неё та же версия и то же имя, что и у сборки с поддержкой дополнений, так что по папке этого не видно. Наборы шейдеров ниже по-прежнему работают.",
+  "Needs the Add-on build":
+    "Нужна сборка с поддержкой дополнений",
+  "Needs ReShade":
+    "Нужен ReShade",
 });

@@ -206,6 +206,12 @@ function fakeCtx(bodies) {
   };
 }
 
+// These tests are about what installAddon PLACES, not about the ReShade gate above it, and the
+// scratch folders have no ReShade -- nor can they on Linux, where there is no notepad.exe to
+// rename. So they state the precondition instead of faking a file: HAS_RESHADE is the fact the
+// IPC handler passes in for real, from one folder scan (addons.reshadeIn).
+const HAS_RESHADE = { reshade: { file: 'ReShade64.dll', addonBuild: true } };
+
 test('installing a shader pack places it, reads its techniques, and records what it wrote', async () => {
   const dir = scratchDir('addons-install');
   const files = addons.packFiles(addons.addonById('renofx'));
@@ -213,7 +219,7 @@ test('installing a shader pack places it, reads its techniques, and records what
   for (const rel of files) bodies[rel] = `technique ${path.basename(rel, '.fx').replace(/[^A-Za-z0-9_]/g, '')} { }`;
   const ctx = fakeCtx(bodies);
 
-  const res = await addons.installAddon(dir, 'renofx', ctx);
+  const res = await addons.installAddon(dir, 'renofx', ctx, HAS_RESHADE);
 
   for (const rel of files) {
     assert.ok(fs.existsSync(path.join(dir, 'reshade-shaders', ...rel.split('/'))), `${rel} is in place`);
@@ -240,7 +246,7 @@ test('installing RenoDX writes the matched artifact and nothing else', async () 
   const match = addons.matchRenodx(INDEX, { steamAppid: 1091500, bitness: 64 });
   const ctx = fakeCtx({ 'renodx-cyberpunk2077.addon64': 'MZ fake addon' });
 
-  const res = await addons.installAddon(dir, 'renodx', ctx, { match });
+  const res = await addons.installAddon(dir, 'renodx', ctx, { match, ...HAS_RESHADE });
 
   assert.deepEqual(res.files, ['renodx-cyberpunk2077.addon64']);
   assert.ok(fs.existsSync(path.join(dir, 'renodx-cyberpunk2077.addon64')));
@@ -256,7 +262,7 @@ test('remove takes back exactly what was placed, and forgets the claim', async (
   const files = addons.packFiles(addons.addonById('renofx'));
   const bodies = {};
   for (const rel of files) bodies[rel] = 'technique T { }';
-  await addons.installAddon(dir, 'renofx', fakeCtx(bodies));
+  await addons.installAddon(dir, 'renofx', fakeCtx(bodies), HAS_RESHADE);
 
   // A file the app did NOT place, sitting in the same folder.
   const theirs = path.join(dir, 'reshade-shaders', 'Shaders', 'TheirOwn.fx');
@@ -305,13 +311,13 @@ test('installing the other HDR source swaps it -- no lockout, and nothing is fet
   });
   const match = addons.matchRenodx(INDEX, { steamAppid: 1091500, bitness: 64 });
 
-  await addons.installAddon(dir, 'renodx', ctx, { match });
+  await addons.installAddon(dir, 'renodx', ctx, { match, ...HAS_RESHADE });
   assert.deepEqual(addons.installedIds(dir), ['renodx']);
   // With RenoDX here, AutoHDR reports what it would replace -- so the UI can say so up front
   // rather than the other row silently flipping afterwards.
   assert.deepEqual(addons.conflictsFor(dir, 'lilium-autohdr'), ['renodx']);
 
-  const res = await addons.installAddon(dir, 'lilium-autohdr', ctx, { bitness: 64 });
+  const res = await addons.installAddon(dir, 'lilium-autohdr', ctx, { bitness: 64, ...HAS_RESHADE });
 
   assert.deepEqual(res.swappedOut, ['renodx'], 'the swap is reported, not silent');
   assert.deepEqual(addons.installedIds(dir), ['lilium-autohdr']);
@@ -319,7 +325,7 @@ test('installing the other HDR source swaps it -- no lockout, and nothing is fet
   assert.ok(fs.existsSync(path.join(dir, 'autohdr.addon64')));
 
   // And back again: this is a swap, not a one-way door.
-  const back = await addons.installAddon(dir, 'renodx', ctx, { match });
+  const back = await addons.installAddon(dir, 'renodx', ctx, { match, ...HAS_RESHADE });
   assert.deepEqual(back.swappedOut, ['lilium-autohdr']);
   assert.deepEqual(addons.installedIds(dir), ['renodx']);
 
@@ -343,7 +349,7 @@ test('a pack\'s per-technique bands survive into what the preset is sorted by', 
   const files = addons.packFiles(addons.addonById('lilium-hdr'));
   const bodies = {};
   for (const rel of files) bodies[rel] = /\.fx$/i.test(rel) ? `technique T_${path.basename(rel, '.fx')} { }` : 'x';
-  await addons.installAddon(dir, 'lilium-hdr', fakeCtx(bodies));
+  await addons.installAddon(dir, 'lilium-hdr', fakeCtx(bodies), HAS_RESHADE);
 
   const bands = addons.installedTechniqueBands(dir);
   const last = bands.find((b) => /tone_mapping\.fx$/i.test(b.technique) && !/inverse/i.test(b.technique));
@@ -410,4 +416,108 @@ test('switching refuses on a game the Feeder is not deployed to, and is a no-op 
   feeder.writeFeederDeployMarker(dir, { feederVersion: 'v1', mvProviderId: 'vort', mvFiles: ['Shaders/vort_Motion.fx'] });
   const res = await feeder.switchMvProvider(dir, 'vort', dir, { 'User-Agent': 'x' }, {});
   assert.equal(res.changed, false, 'pressing the one already in use costs nothing');
+});
+
+// ── ReShade has to actually be there ──────────────────────────────────────────────────────────
+//
+// The add-ons button is on every game card, including a game this app has never installed anything
+// into, so the module header's "every route already puts ReShade in the folder" does not hold at
+// this door. Without the gate, Install placed a .addon64 beside an exe with nothing to load it: no
+// error, no effect, and the row then read "Remove".
+
+// notepad.exe with its version resource renamed, the way relimiter.test.js does it -- the only
+// honest way to get a file isReShadeProxy accepts, since it reads the PE OriginalFilename.
+// Windows only, because that is where notepad.exe is; CI runs there.
+const NOTEPAD = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'notepad.exe');
+const canFakePe = process.platform === 'win32' && fs.existsSync(NOTEPAD);
+function fakeReShade(dir, name, { addonBuild = true } = {}) {
+  const buf = fs.readFileSync(NOTEPAD);
+  const at = buf.indexOf(Buffer.from('NOTEPAD.EXE', 'utf16le'));
+  Buffer.from('RESHADE.DLL', 'utf16le').copy(buf, at);
+  const pad = Buffer.alloc(2 * 1024 * 1024, 0);
+  // The export name is the whole difference between the two builds. Same version, same product
+  // name, so nothing else in the file tells them apart (feeder.js's issue-#53 note).
+  pad.write(addonBuild ? 'ReShade ReShadeRegisterAddon' : 'ReShade', 64, 'latin1');
+  fs.writeFileSync(path.join(dir, name), Buffer.concat([buf, pad]));
+}
+
+test('every proxy name the app can install under is a name ReShade is looked for under', () => {
+  const detect = require('../src/detect');
+  for (const name of detect.HOOK_DLLS) {
+    assert.ok(addons.RESHADE_NAMES.includes(name), `${name} is searched for a ReShade`);
+  }
+  // The two a non-proxying ReShade uses, which are not proxy names and so are not in HOOK_DLLS.
+  assert.ok(addons.RESHADE_NAMES.includes('ReShade64.dll'));
+  assert.ok(addons.RESHADE_NAMES.includes('ReShade32.dll'));
+});
+
+test('a folder with no ReShade blocks every entry, add-on and shader pack alike', () => {
+  const dir = scratchDir('addons-no-reshade');
+  assert.equal(addons.reshadeIn(dir), null);
+  for (const a of addons.catalogue()) {
+    assert.equal(addons.installBlocker(dir, a.id), 'no-reshade', `${a.id} is refused`);
+  }
+});
+
+test('installAddon refuses rather than placing a file nothing will load', async () => {
+  const dir = scratchDir('addons-refuse');
+  // The renderer disables the button, but this path is also reached straight from IPC, and the
+  // refusal has to land BEFORE the conflict swap takes the other HDR source out.
+  await assert.rejects(
+    () => addons.installAddon(dir, 'renodx', { fetchBuffer: async () => { throw new Error('must not fetch'); } }),
+    (e) => e.code === 'no-reshade',
+  );
+  assert.deepEqual(fs.readdirSync(dir), [], 'nothing was written, and no marker either');
+});
+
+test('an unknown id is still an unknown id, not a ReShade problem', async () => {
+  const dir = scratchDir('addons-unknown');
+  assert.equal(addons.installBlocker(dir, 'not-a-thing'), null);
+  await assert.rejects(() => addons.installAddon(dir, 'not-a-thing', {}), /Unknown add-on/);
+});
+
+test('ReShade the user installed himself counts, wherever he put it', { skip: !canFakePe }, () => {
+  // The case that made a marker-based check wrong: no route of ours was ever run here, so there is
+  // no .dlss5ui-relimiter.json to read -- relimiter.reshadeFileIn would look for ReShade64.dll and
+  // find nothing. This is most of the people who want RenoDX.
+  const dir = scratchDir('addons-own-reshade');
+  fakeReShade(dir, 'dxgi.dll');
+  const rs = addons.reshadeIn(dir);
+  assert.equal(rs.file, 'dxgi.dll');
+  assert.equal(rs.addonBuild, true);
+  assert.equal(addons.installBlocker(dir, 'renodx'), null, 'the add-on is allowed');
+  assert.equal(addons.installBlocker(dir, 'renofx'), null, 'so is the shader pack');
+});
+
+test('the plain build stops an add-on and leaves the shader packs alone', { skip: !canFakePe }, () => {
+  const dir = scratchDir('addons-plain-reshade');
+  fakeReShade(dir, 'ReShade64.dll', { addonBuild: false });
+  assert.equal(addons.reshadeIn(dir).addonBuild, false);
+  // RenoDX is an add-on: the plain build would never load it.
+  assert.equal(addons.installBlocker(dir, 'renodx'), 'plain-reshade');
+  // RenoFX and Lilium are .fx effects, which the plain build runs perfectly well. Refusing those
+  // too would take away the answer the RenoDX row points at when there is no mod for the game.
+  assert.equal(addons.installBlocker(dir, 'renofx'), null);
+  assert.equal(addons.installBlocker(dir, 'lilium-hdr'), null);
+});
+
+test('an Add-on build anywhere in the folder wins over a plain one beside it', { skip: !canFakePe }, () => {
+  const dir = scratchDir('addons-both-builds');
+  fakeReShade(dir, 'ReShade64.dll', { addonBuild: false });
+  fakeReShade(dir, 'dxgi.dll', { addonBuild: true });
+  const rs = addons.reshadeIn(dir);
+  assert.equal(rs.addonBuild, true, 'the build that can load an add-on is the one reported');
+  assert.equal(rs.file, 'dxgi.dll');
+  assert.equal(addons.installBlocker(dir, 'renodx'), null);
+});
+
+test('OptiScaler in a proxy slot is not mistaken for ReShade', { skip: !canFakePe }, () => {
+  // OptiScaler.dll carries the string "ReShade" (its LoadReshade) and is megabytes, so the loose
+  // feeder.isReShadeDll check would take it. This gate reads the version resource instead.
+  const dir = scratchDir('addons-optiscaler-only');
+  const opti = Buffer.alloc(2 * 1024 * 1024, 5);
+  opti.write('OptiScaler LoadReshade ReShade ReShadeRegisterAddon', 128, 'latin1');
+  fs.writeFileSync(path.join(dir, 'dxgi.dll'), opti);
+  assert.equal(addons.reshadeIn(dir), null, 'a game with only OptiScaler has no ReShade here');
+  assert.equal(addons.installBlocker(dir, 'renodx'), 'no-reshade');
 });

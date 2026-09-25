@@ -6215,11 +6215,21 @@ async function renderAddons() {
     if (a.id === 'lilium-hdr' && res.catalogue.find((x) => x.id === 'renodx' && x.installed)) {
       bits.push(`<div class="field-hint">${escapeHtml(t('RenoDX already gives this game native HDR, so leave this pack\'s inverse tonemapper switched off in ReShade. Its analysis shaders and its final tone mapping are still worth having -- that is what keeps highlights inside what your display can show.'))}</div>`);
     }
+    // Nothing here can load without ReShade, so say which of the two is wrong rather than offering a
+    // button that places a file into a folder that will ignore it. Never on an installed row: taking
+    // something back out does not need ReShade, and a Remove that refuses would trap the files.
+    if (a.blocker === 'no-reshade') {
+      bits.push(`<div class="field-hint status-bad">${escapeHtml(t('This game has no ReShade, so nothing here can load. Install DLSS 5 or frame pacing on this game and ReShade comes with it, or put your own copy in the folder.'))}</div>`);
+    } else if (a.blocker === 'plain-reshade') {
+      bits.push(`<div class="field-hint status-bad">${escapeHtml(t('The ReShade here is the plain build, which never loads an add-on -- it carries the same version and name as the Add-on build, so this is not something you can see in the folder. The shader packs below still work.'))}</div>`);
+    }
     bits.push(`<div class="field-hint">${escapeHtml(a.licence)} &middot; <a href="#" class="addon-home" data-url="${escapeHtml(a.homepage)}">${escapeHtml(t('project page'))}</a></div>`);
 
     const button = unavailable
       ? `<button class="btn btn-ghost" disabled>${escapeHtml(t('Not for this game'))}</button>`
-      : `<button class="btn ${a.installed ? 'btn-ghost btn-danger' : 'btn-primary'} addon-act" data-id="${escapeHtml(a.id)}" data-installed="${a.installed ? '1' : ''}">${escapeHtml(a.installed ? t('Remove') : t('Install'))}</button>`;
+      : a.blocker
+        ? `<button class="btn btn-ghost" disabled>${escapeHtml(a.blocker === 'plain-reshade' ? t('Needs the Add-on build') : t('Needs ReShade'))}</button>`
+        : `<button class="btn ${a.installed ? 'btn-ghost btn-danger' : 'btn-primary'} addon-act" data-id="${escapeHtml(a.id)}" data-installed="${a.installed ? '1' : ''}">${escapeHtml(a.installed ? t('Remove') : t('Install'))}</button>`;
 
     return `<div class="addon-row"><div class="addon-body">${bits.join('')}</div><div class="addon-action">${button}</div></div>`;
   });
