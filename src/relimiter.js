@@ -332,6 +332,8 @@ async function resolveAddonAsset(ghHeaders, { bitness = 64, fetchImpl, sources =
       return answer;
     } catch (e) {
       tried.push(`${src.repo}: ${(e && e.message) || e}`);
+      // ghapi.js throws this when the hour is spent and it has nothing remembered: a refusal, same as a 403.
+      if (e && e.code === 'github-rate-limit') refusedBy.push(src);
     }
   }
   for (const src of refusedBy) {

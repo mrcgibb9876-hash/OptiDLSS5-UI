@@ -62,6 +62,7 @@ const dfccfg = require('./dfccfg');
 const panelwindow = require('./panelwindow');
 const panelroute = require('./panelroute');
 const { netFetch } = require('./net');
+const ghapi = require('./ghapi');
 let electronAutoUpdater = null;
 try { ({ autoUpdater: electronAutoUpdater } = require('electron-updater')); } catch { electronAutoUpdater = null; }
 const ENGINE_KNOWN_GAMES = new Set(require('./engine-known-games.json').exeNames);
@@ -127,6 +128,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Before the first GitHub call below: API answers are remembered across launches and carry the Report
+  // issue sign-in when there is one, so a few restarts cannot spend the hourly 60 (ghapi.js).
+  ghapi.configure({ cacheFile: path.join(userDataDir(), 'github-api-cache.json'), token: () => readReportToken() });
   // Luma-Framework's per-game mods: the cached list now, a fresh one from GitHub in the background and daily.
   lumacatalog.load(lumaCatalogFile());
   refreshLumaCatalog();
@@ -134,8 +138,8 @@ app.whenReady().then(() => {
   catalog.configure({ localFile: () => path.join(userDataDir(), 'known-good.local.json') });
   setInterval(refreshLumaCatalog, 24 * 60 * 60 * 1000);
   createWindow();
-  // The Manager's own updater: checks its GitHub releases after launch and every few hours,
-  // downloads in the background, installs on quit; the renderer shows "Restart to update".
+  // The Manager's own updater: checks its GitHub releases after launch and every few hours; the
+  // renderer's banner offers Download and then Restart -- nothing is fetched or installed unasked.
   managerUpdate.setup({
     app,
     autoUpdater: electronAutoUpdater,

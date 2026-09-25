@@ -71,9 +71,16 @@ async function fetchThrough(chromium, direct, url, init) {
   }
 }
 
-function netFetch(url, init) {
+function rawFetch(url, init) {
   const chromium = chromiumNet();
   return fetchThrough(chromium ? (u, i) => chromium.fetch(u, i) : null, fetch, url, init);
+}
+
+// GitHub API reads are remembered and share one budget (ghapi.js); everything else goes straight out.
+function netFetch(url, init) {
+  const ghapi = require('./ghapi');
+  if (ghapi.handles(url, init)) return ghapi.githubGet(rawFetch, url, init);
+  return rawFetch(url, init);
 }
 
 module.exports = { netFetch, chromiumAvailable, fetchThrough };
