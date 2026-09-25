@@ -139,3 +139,16 @@ test('a saved reading of the folder is refreshed even when the exe half is curre
   // Nothing changed: nothing to hand back, so the renderer does not rewrite games.json every render.
   assert.equal(await invoke('game:detect-path-if-stale', { exePath: exe, stored: current }), null);
 });
+
+test('productName is on a fresh detection and filled in once on an older stored one', async () => {
+  const dir = scratchDir('cache-product');
+  const exe = fakeExe(dir);
+  const fresh = await detect.detectGameCached(dir, exe);
+  assert.ok('productName' in fresh, 'detectGame reports it (null when the exe has no version resource)');
+  const stored = { ...fresh };
+  delete stored.productName;
+  detect.invalidateDetection(dir);
+  const again = await detect.detectGameCached(dir, exe, { stored });
+  assert.ok('productName' in again, 'a stored answer from before the field gets it');
+  if (onWindows) assert.equal(detect.productNameOf(process.execPath), 'Node.js', 'read from the version resource');
+});

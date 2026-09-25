@@ -451,6 +451,10 @@ function peOriginalFilename(filePath) {
   return peVersionString(filePath, 'OriginalFilename');
 }
 
+function productNameOf(filePath) {
+  try { return peVersionString(filePath, 'ProductName'); } catch { return null; }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Generic API evidence
 
@@ -1642,6 +1646,9 @@ async function detectGame(dir, exePath) {
     runtimeLogMtime: logStat ? logStat.mtimeMs : null,
     // ... and what the exe itself looked like, so a game update expires this answer.
     exeStamp: exeStamp(exePath),
+    // The exe's ProductName (version resource). RenoDX UE-Extended keys its per-game settings on it
+    // after the file name (ueextended.js); the card tag reads it from here, never from the exe.
+    productName: productNameOf(exePath),
     detectVersion: DETECT_VERSION,
   };
 }
@@ -1775,6 +1782,9 @@ async function folderEvidence(dir, exePath) {
 async function detectFromStored(dir, exePath, stored) {
   const evidence = await folderEvidence(dir, exePath);
   let out = { ...stored, ...evidence };
+  // A detection stored before productName existed gets it once here (a version-resource read, not a
+  // scan); game:detect-path-if-stale hands it back so the renderer saves it.
+  if (stored.productName === undefined) out.productName = productNameOf(exePath);
   if (!(stored.bitness === 32 && evidence.translatedBy)) evidence.translatedBy = null;
   out.translatedBy = evidence.translatedBy;
   if (vulkanOverrideApplies({ vulkanWrapper: evidence.vulkanWrapper, bitness: out.bitness, api: out.api })) {
@@ -1920,4 +1930,4 @@ async function planForeignRemoval(dir, { ours = false } = {}) {
   return { found, del: [...del].sort(), restore, notes };
 }
 
-module.exports = { DETECT_VERSION, EARLY_PROXY_CANDIDATES, HOOK_DLLS, peBuildFacts, apiVetoes, exeStamp, openPeResources, RT_ICON, RT_GROUP_ICON, RT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, inspectAsiPlugins, inspectGraphicsDebuggers, antiCheatPresent, oldShaderCompiler, apiFromFileName, pickModern, vulkanOverrideApplies, foreignToolchains, planForeignRemoval };
+module.exports = { DETECT_VERSION, EARLY_PROXY_CANDIDATES, HOOK_DLLS, peBuildFacts, apiVetoes, exeStamp, openPeResources, RT_ICON, RT_GROUP_ICON, RT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, productNameOf, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, inspectAsiPlugins, inspectGraphicsDebuggers, antiCheatPresent, oldShaderCompiler, apiFromFileName, pickModern, vulkanOverrideApplies, foreignToolchains, planForeignRemoval };
