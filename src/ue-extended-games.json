@@ -1,0 +1,219 @@
+{
+  "source": {
+    "repo": "mrcgibb9876-hash/renodx",
+    "file": "src/games/ue-extended/addon.cpp",
+    "ref": "feat/ue-extended",
+    "commit": "61e53aa39a32ed453aa3305646885b65dd7e47eb"
+  },
+  "generated": "2026-09-25",
+  "count": 69,
+  "games": {
+    "Ace7Game.exe": {
+      "nativeHdr": false
+    },
+    "Alone in the Dark": {
+      "nativeHdr": true
+    },
+    "Astro-Win64-Shipping.exe": {
+      "nativeHdr": false
+    },
+    "Avowed": {
+      "nativeHdr": true
+    },
+    "Banishers: Ghosts of New Eden": {
+      "nativeHdr": false
+    },
+    "BeastOfReincarnation": {
+      "nativeHdr": true
+    },
+    "BLACKTAIL": {
+      "nativeHdr": false
+    },
+    "Borderlands3.exe": {
+      "nativeHdr": false
+    },
+    "Borderlands4.exe": {
+      "nativeHdr": true
+    },
+    "CodeVein2": {
+      "nativeHdr": true
+    },
+    "CRISIS CORE -FINAL FANTASY VII- REUNION": {
+      "nativeHdr": false
+    },
+    "Dawnwalker": {
+      "nativeHdr": true
+    },
+    "Delta": {
+      "nativeHdr": false
+    },
+    "Denshattack": {
+      "nativeHdr": false
+    },
+    "Dune: Awakening": {
+      "nativeHdr": false
+    },
+    "EM-Win64-Shipping.exe": {
+      "nativeHdr": false
+    },
+    "Eternal Strands": {
+      "nativeHdr": false
+    },
+    "Expedition 33": {
+      "nativeHdr": false
+    },
+    "FarFarWest-Win64-Shipping.exe": {
+      "nativeHdr": true
+    },
+    "Forgive Me Father": {
+      "nativeHdr": false
+    },
+    "Frostpunk2-Win64-Shipping.exe": {
+      "nativeHdr": false
+    },
+    "Ghostwire: Tokyo": {
+      "nativeHdr": true
+    },
+    "Gothic 1 Remake": {
+      "nativeHdr": true
+    },
+    "Hatred-Win64-Shipping.exe": {
+      "nativeHdr": false
+    },
+    "Hell is Us": {
+      "nativeHdr": true
+    },
+    "Hellblade2": {
+      "nativeHdr": true
+    },
+    "HTGame.exe": {
+      "nativeHdr": true
+    },
+    "InfinityNikki": {
+      "nativeHdr": false
+    },
+    "LEGOBatmanLotDK": {
+      "nativeHdr": true
+    },
+    "LegoHorizonAdventures-Win64-Shipping.exe": {
+      "nativeHdr": true
+    },
+    "Lies of P": {
+      "nativeHdr": true
+    },
+    "Life Is Strange: Double Exposure": {
+      "nativeHdr": true
+    },
+    "Life is Strange: Reunion": {
+      "nativeHdr": true
+    },
+    "Like a Dragon: Ishin!": {
+      "nativeHdr": false
+    },
+    "Lost Soul Aside": {
+      "nativeHdr": true
+    },
+    "Mafia: The Old Country": {
+      "nativeHdr": true
+    },
+    "Marvel Rivals": {
+      "nativeHdr": false
+    },
+    "Marvel's Midnight Suns": {
+      "nativeHdr": true
+    },
+    "MGSDelta-Win64-Shipping.exe": {
+      "nativeHdr": true
+    },
+    "Mistfall Hunter": {
+      "nativeHdr": true
+    },
+    "Mixtape": {
+      "nativeHdr": false
+    },
+    "MK12.exe": {
+      "nativeHdr": true
+    },
+    "Mortal Shell II": {
+      "nativeHdr": false
+    },
+    "NINJAGAIDEN2BLACK-Win64-Shipping.exe": {
+      "nativeHdr": true
+    },
+    "NTE": {
+      "nativeHdr": true
+    },
+    "P3R.exe": {
+      "nativeHdr": false
+    },
+    "Pal": {
+      "nativeHdr": false
+    },
+    "PenguinHotel-Win64-Shipping.exe": {
+      "nativeHdr": false
+    },
+    "Polaris-Win64-Shipping.exe": {
+      "nativeHdr": true
+    },
+    "Project_Plague": {
+      "nativeHdr": true
+    },
+    "Psychonauts2-WinGDK-Shipping.exe": {
+      "nativeHdr": false
+    },
+    "RainCodePlus-Win64-Shipping.exe": {
+      "nativeHdr": false
+    },
+    "Rebuilder-Win64-Shipping.exe": {
+      "nativeHdr": false
+    },
+    "Returnal": {
+      "nativeHdr": true
+    },
+    "Ruiner Game": {
+      "nativeHdr": false
+    },
+    "S.T.A.L.K.E.R. 2": {
+      "nativeHdr": true
+    },
+    "SILAS": {
+      "nativeHdr": false
+    },
+    "SILENT HILL f": {
+      "nativeHdr": true
+    },
+    "SonicRacingCrossWorlds": {
+      "nativeHdr": false
+    },
+    "SparkingZERO-Win64-Shipping.exe": {
+      "nativeHdr": false
+    },
+    "Stellar Blade": {
+      "nativeHdr": false
+    },
+    "Stellar Blade (Demo)": {
+      "nativeHdr": false
+    },
+    "Still Wakes The Deep": {
+      "nativeHdr": true
+    },
+    "SWZeroCompany": {
+      "nativeHdr": true
+    },
+    "The Adventures of Elliot_The Millennium Tales": {
+      "nativeHdr": false
+    },
+    "Tony Hawks(TM) Pro Skater(TM) 3 + 4": {
+      "nativeHdr": false
+    },
+    "Townfall": {
+      "nativeHdr": true
+    },
+    "Until Dawn": {
+      "nativeHdr": true
+    },
+    "Wuthering Waves": {
+      "nativeHdr": false
+    }
+  }
+}
