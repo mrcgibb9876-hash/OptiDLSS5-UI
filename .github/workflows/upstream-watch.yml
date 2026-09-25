@@ -1,0 +1,180 @@
+name: Upstream watch
+
+# Read-only watcher. Weekly (and on demand) it compares each upstream project against our fork of
+# it and keeps ONE open issue, "Upstream updates available" (label: upstream), listing what is new
+# and the safe way to take it. It never merges, pushes, builds or releases anything; the only thing
+# it writes is that issue in this repo. The issue is closed when every fork is up to date.
+#
+# Scheduled runs only fire from the default branch (master).
+
+on:
+  schedule:
+    - cron: "30 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: upstream-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compare upstreams and update the issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const TITLE = 'Upstream updates available';
+            const LABEL = 'upstream';
+            const SOURCES = [
+              {
+                name: 'OptiScaler_DLSSNR (engine)',
+                up: { owner: 'Dagherbou', repo: 'OptiScaler_DLSSNR', branch: 'dlss-neural-rendering' },
+                ours: { owner: 'mrcgibb9876-hash', repo: 'OptiScaler_DLSSNR', branch: 'dlss5-developer-controls-ui' },
+                procedure: [
+                  'Do **not** merge by hand into `dlss5-developer-controls-ui`.',
+                  'The engine\'s PR-only **Sync upstream** workflow (`sync-upstream.yml`) opens a PR "Upstream update: N new commits from Dagherbou" from an `upstream-sync/<date>` branch and dispatches **Build (No Signing)** on it. If no PR is open yet, run it: `gh workflow run sync-upstream.yml -R mrcgibb9876-hash/OptiScaler_DLSSNR`.',
+                  'Test the build (Cyberpunk FG, Dawnwalker RenoDX, a Vulkan game), then merge that PR.',
+                ],
+              },
+              {
+                name: 'RenoDX',
+                up: { owner: 'clshortfuse', repo: 'renodx', branch: 'main' },
+                ours: { owner: 'mrcgibb9876-hash', repo: 'renodx', branch: 'feat/host-api' },
+                procedure: [
+                  'Never press "Sync fork" and never overwrite the `snapshot` release by hand.',
+                  'The fork\'s weekly **upstream-refresh** workflow builds `upstream-refresh/<date>` (upstream main + our host-API commits) and publishes it to the **`upstream-refresh`** pre-release, with an issue in the fork. Run it now with `gh workflow run upstream-refresh.yml -R mrcgibb9876-hash/renodx`.',
+                  'Test that build, then promote it: `gh workflow run snapshot.yml -R mrcgibb9876-hash/renodx --ref upstream-refresh/<date>` (the app downloads `snapshot`).',
+                ],
+              },
+              {
+                name: 'ReLimiter',
+                up: { owner: 'RankFTW', repo: 'ReLimiter', branch: 'main' },
+                ours: { owner: 'mrcgibb9876-hash', repo: 'ReLimiter', branch: 'main' },
+                procedure: [
+                  'Review the upstream commits below.',
+                  'Merge upstream into a **branch** of the fork (not `main`): `git fetch upstream && git checkout -b upstream-merge/<date> origin/main && git merge upstream/main`, push the branch, build it and test pacing in the app.',
+                  'Only then merge that branch into the fork\'s `main` - **pushing to fork `main` publishes a release** (release.yml).',
+                ],
+              },
+            ];
+
+            const ref = (s) => `${s.owner}/${s.repo}:${s.branch}`;
+            const firstLine = (m) => m.split('\n')[0];
+
+            // Cross-fork compare works only inside one fork network. The engine fork is a standalone
+            // repo, so the fallback walks upstream's recent history and asks our repo whether each
+            // commit is already contained in our branch.
+            async function compare(src) {
+              const { up, ours } = src;
+              try {
+                const { data } = await github.rest.repos.compareCommitsWithBasehead({
+                  owner: ours.owner, repo: ours.repo,
+                  basehead: `${ours.branch}...${up.owner}:${up.repo}:${up.branch}`,
+                  per_page: 100,
+                });
+                const commits = data.commits.slice().reverse(); // newest first
+                return { ahead: data.ahead_by, commits, url: data.html_url };
+              } catch (e) {
+                if (e.status !== 404) throw e;
+              }
+
+              const { data: upCommits } = await github.rest.repos.listCommits({
+                owner: up.owner, repo: up.repo, sha: up.branch, per_page: 100,
+              });
+              const fresh = [];
+              let known = null;
+              for (const c of upCommits) {
+                let contained = false;
+                try {
+                  const { data } = await github.rest.repos.compareCommitsWithBasehead({
+                    owner: ours.owner, repo: ours.repo, basehead: `${ours.branch}...${c.sha}`, per_page: 1,
+                  });
+                  contained = data.ahead_by === 0;
+                } catch (e) {
+                  if (e.status !== 404 && e.status !== 422) throw e; // unknown sha = not in our repo
+                }
+                if (contained) { known = c.sha; break; }
+                fresh.push(c);
+              }
+              const ahead = fresh.length;
+              const url = known
+                ? `https://github.com/${up.owner}/${up.repo}/compare/${known.slice(0, 12)}...${up.branch}`
+                : `https://github.com/${up.owner}/${up.repo}/commits/${up.branch}`;
+              return { ahead, commits: fresh, url, capped: !known && upCommits.length === 100 };
+            }
+
+            const sections = [];
+            let anyNew = false, anyError = false;
+            for (const src of SOURCES) {
+              let r;
+              try {
+                r = await compare(src);
+              } catch (e) {
+                anyError = true;
+                core.warning(`${src.name}: ${e.message}`);
+                sections.push(`## ${src.name}\n\nCould not compare \`${ref(src.up)}\` with \`${ref(src.ours)}\`: ${e.message}\n`);
+                continue;
+              }
+              core.info(`${src.name}: ${r.ahead} new upstream commit(s)`);
+              if (r.ahead === 0) {
+                sections.push(`## ${src.name}\n\nUp to date: \`${ref(src.ours)}\` contains everything in \`${ref(src.up)}\`.\n`);
+                continue;
+              }
+              anyNew = true;
+              const list = r.commits.slice(0, 20).map(c =>
+                `- [\`${c.sha.slice(0, 8)}\`](${c.html_url}) ${firstLine(c.commit.message)}`).join('\n');
+              const more = r.ahead > 20 ? `\n- ...and ${r.ahead - 20} more` : '';
+              sections.push([
+                `## ${src.name}: ${r.ahead}${r.capped ? '+' : ''} new commit${r.ahead === 1 ? '' : 's'}`,
+                '',
+                `\`${ref(src.up)}\` has commits \`${ref(src.ours)}\` does not. [Compare](${r.url})`,
+                '',
+                list + more,
+                '',
+                '**Safe procedure**',
+                ...src.procedure.map((p, i) => `${i + 1}. ${p}`),
+                '',
+              ].join('\n'));
+            }
+
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              'Upstream projects we fork have new commits. **Nothing has been merged, built or released** - each one comes in only through the steps below, after testing.',
+              '',
+              ...sections,
+              `_Updated by [upstream-watch](${runUrl}) on ${new Date().toISOString().slice(0, 10)}. Closed automatically when every fork is up to date._`,
+            ].join('\n');
+
+            const { owner, repo } = context.repo;
+            try {
+              await github.rest.issues.getLabel({ owner, repo, name: LABEL });
+            } catch (e) {
+              if (e.status !== 404) throw e;
+              await github.rest.issues.createLabel({ owner, repo, name: LABEL, color: 'c5def5', description: 'Upstream project has new commits' });
+            }
+
+            const open = (await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: LABEL, per_page: 100 }))
+              .data.filter(i => !i.pull_request && i.title === TITLE);
+            const issue = open[0];
+
+            if (anyNew) {
+              if (issue) {
+                await github.rest.issues.update({ owner, repo, issue_number: issue.number, body });
+                core.notice(`Updated #${issue.number}`);
+              } else {
+                const { data } = await github.rest.issues.create({ owner, repo, title: TITLE, body, labels: [LABEL] });
+                core.notice(`Opened #${data.number}`);
+              }
+            } else if (!anyError && issue) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: issue.number, body: `All forks are up to date with their upstreams (${runUrl}). Closing.` });
+              await github.rest.issues.update({ owner, repo, issue_number: issue.number, state: 'closed', state_reason: 'completed' });
+              core.notice(`Closed #${issue.number}`);
+            } else {
+              core.notice(anyError ? 'Some comparisons failed; issue left as is.' : 'Everything is up to date.');
+            }
+            await core.summary.addRaw(body).write();
