@@ -26,7 +26,7 @@ const emulators = require('./emulators');
 const amdnr = require('./amdnr');
 const nrmodelonly = require('./nrmodelonly');
 const helpfix = require('./helpfix');
-const { detectGameCached, invalidateDetection, peOriginalFilename, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, antiCheatPresent, peImports, peBitness, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
+const { EARLY_PROXY_CANDIDATES, detectGameCached, invalidateDetection, peOriginalFilename, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, antiCheatPresent, peImports, peBitness, resolveUnrealShippingExe, foreignToolchains, planForeignRemoval } = require('./detect');
 const { openZip, findEntry, extractEntryTo } = require('./zip');
 const dlssnr = require('./dlssnr');
 const exeicon = require('./exeicon');
@@ -6762,7 +6762,9 @@ const DEFAULT_PROXY = 'dxgi.dll';
 // device pulled it in, too late for its loader hook to catch the Feeder's NGX module. The
 // Feeder's README says winmm.dll or version.dll ("a name the process imports at start"); the
 // exe's own import table says which of the candidates it actually imports.
-const EARLY_PROXY_CANDIDATES = ['winmm.dll', 'version.dll', 'dbghelp.dll', 'wininet.dll', 'winhttp.dll'];
+// Lives in detect.js, and is imported rather than repeated: every name the app can install under
+// has to be a name detect.js reads a folder by, and keeping one list is what makes that true.
+// (The two copies had drifted -- see the HOOK_DLLS note there.)
 // Games whose exe never loads a dxgi.dll from its own folder, measured one at a time. dxgi.dll works for
 // nearly every Direct3D game because the system's d3d11/d3d12 pull it in through the normal search order;
 // these load it some other way, so a dxgi.dll proxy sits there unused and OptiScaler never starts -- no
