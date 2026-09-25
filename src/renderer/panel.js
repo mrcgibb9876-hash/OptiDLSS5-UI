@@ -763,6 +763,10 @@ const HOSTED_COALESCE_MS = 150;
 
 document.addEventListener('pointerdown', (e) => { if (e.target.closest && e.target.closest('.p-hosted .p-slider')) hostedDragging = true; });
 document.addEventListener('pointerup', () => { hostedDragging = false; });
+// A slider let go outside the window never sends this document its pointerup, and the flag then held
+// every hosted redraw off for good. Leaving the window, or the pointer being taken away, ends the drag.
+document.addEventListener('pointercancel', () => { hostedDragging = false; });
+window.addEventListener('blur', () => { hostedDragging = false; });
 
 function forgetHosted() {
   if (hostedTimer !== null) { clearTimeout(hostedTimer); hostedTimer = null; flushHosted(); }
@@ -1133,7 +1137,9 @@ function optiFgCheckRow(host, on, text, tip, onClick) {
 // an add-on up when it starts, so turning one on here says exactly that. Where Install would be refused,
 // the switch is greyed with the reason, from the same checks the install runs.
 let addonToggles = null;      // { exe, pacing: {installed, blocker}, hdr: {installed, blocker} }
-let addonTogglesLoading = null;
+let addonTogglesLoading = null; // { exe, promise } of the read in flight
+let addonTogglesSeq = 0;        // only the newest read may write addonToggles
+const addonToggleBusy = new Set(); // `${exe}|${kind}` being installed or removed right now
 
 function addonBlockerText(kind, code) {
   const name = kind === 'pacing' ? t('Frame pacing') : 'RenoDX';
@@ -1148,23 +1154,27 @@ function addonBlockerText(kind, code) {
   }
 }
 
+// Keyed by game: a read in flight for the game before, or one started before an install (force), used to
+// be handed back as if it were this one, and the switch then showed the old answer.
 async function loadAddonToggles(force = false) {
   if (!current || !current.exePath) { addonToggles = null; return; }
   if (!force && addonToggles && addonToggles.exe === current.exePath) return;
-  if (addonTogglesLoading) return addonTogglesLoading;
   const exe = current.exePath;
-  addonTogglesLoading = (async () => {
+  if (!force && addonTogglesLoading && addonTogglesLoading.exe === exe) return addonTogglesLoading.promise;
+  const seq = ++addonTogglesSeq;
+  const promise = (async () => {
+    let next;
     try {
       const res = await window.api.panelAddonToggles(exe);
-      addonToggles = res && res.ok ? { exe, ...res } : { exe, error: (res && res.error) || '' };
+      next = res && res.ok ? { exe, ...res } : { exe, error: (res && res.error) || '' };
     } catch (e) {
-      addonToggles = { exe, error: String(e) };
-    } finally {
-      addonTogglesLoading = null;
+      next = { exe, error: String((e && e.message) || e) };
     }
+    if (seq === addonTogglesSeq) addonToggles = next;
   })();
-  await addonTogglesLoading;
-  if (current && current.exePath === exe) renderFields();
+  addonTogglesLoading = { exe, promise };
+  try { await promise; } finally { if (addonTogglesLoading && addonTogglesLoading.promise === promise) addonTogglesLoading = null; }
+  if (seq === addonTogglesSeq && current && current.exePath === exe) renderFields();
 }
 
 function renderHostedEnable(el, kind) {
@@ -1172,7 +1182,18 @@ function renderHostedEnable(el, kind) {
   if (!current || !current.exePath) return;
   if (!addonToggles || addonToggles.exe !== current.exePath) { loadAddonToggles(); return; }
   const s = addonToggles[kind];
-  if (!s) return;
+  if (!s) {
+    // A read that failed says so, rather than the switch just not being there.
+    if (addonToggles.error !== undefined) {
+      const why = document.createElement('div');
+      why.className = 'p-note';
+      why.textContent = `${t('Could not read this game.')}${addonToggles.error ? ' ' + addonToggles.error : ''}`;
+      el.appendChild(why);
+    }
+    return;
+  }
+  const exe = current.exePath;
+  const busyKey = `${exe}|${kind}`;
   const blocked = !s.installed && !!s.blocker;
   const label = kind === 'pacing' ? t('Frame pacing on this game') : t('HDR (RenoDX) on this game');
   optiFgCheckRow(el, s.installed, label,
@@ -1180,11 +1201,22 @@ function renderHostedEnable(el, kind) {
       ? t('On. Turning it off takes it out of the game folder; the game drops it the next time it starts.')
       : t('Off. Turning it on installs it into the game folder; the game picks it up the next time it starts.'),
     async () => {
-      if (blocked) return;
+      // One change at a time: a second click while the first install ran started it twice.
+      if (blocked || addonToggleBusy.has(busyKey)) return;
+      addonToggleBusy.add(busyKey);
+      const box = el.querySelector('.p-check');
+      if (box) box.disabled = true;
       setStatus(s.installed ? t('Removing…') : t('Fetching and placing…'));
-      const res = kind === 'pacing'
-        ? (s.installed ? await window.api.relimiterRemove(current.exePath) : await window.api.relimiterInstall(current.exePath))
-        : (s.installed ? await window.api.addonsRemove(current.exePath, 'renodx') : await window.api.addonsInstall(current.exePath, 'renodx'));
+      let res;
+      try {
+        res = kind === 'pacing'
+          ? (s.installed ? await window.api.relimiterRemove(exe) : await window.api.relimiterInstall(exe))
+          : (s.installed ? await window.api.addonsRemove(exe, 'renodx') : await window.api.addonsInstall(exe, 'renodx'));
+      } catch (e) {
+        res = { ok: false, error: String((e && e.message) || e) };
+      } finally {
+        addonToggleBusy.delete(busyKey);
+      }
       if (!res || !res.ok) {
         const why = (res && addonBlockerText(kind, res.code)) || (res && res.error) || t('unknown');
         setStatus(t('Could not save: {error}', { error: why }));
@@ -1196,6 +1228,10 @@ function renderHostedEnable(el, kind) {
       await loadAddonToggles(true);
     });
   const row = el.lastElementChild;
+  if (addonToggleBusy.has(busyKey) && row) {
+    const box = row.querySelector('.p-check');
+    if (box) box.disabled = true;
+  }
   if (blocked && row) {
     row.classList.add('is-off');
     const box = row.querySelector('.p-check');
