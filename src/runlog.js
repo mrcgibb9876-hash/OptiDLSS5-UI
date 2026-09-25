@@ -320,9 +320,11 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   const ngx = await ngxLog(dir);
 
   const runtime = await optiScalerRuntimeApi(optiDir);
-  // The native Vulkan pass (DlssNrFeature_Vk.cpp) writes no Dispatch line and no heartbeat: its proof of
-  // running is "DLSS-NR Vulkan: running natively at WxH". Without it every native-Vulkan run read as
-  // init-no-feature -- No Man's Sky, #132, whose log showed the pass up at 2560x1440 for ten minutes.
+  // The native Vulkan pass (DlssNrFeature_Vk.cpp) writes no Dispatch line, and engines before
+  // fix/vulkan-nr-live-settings (c6286c19) no heartbeat either: their only proof of running is
+  // "DLSS-NR Vulkan: running natively at WxH". Without it every native-Vulkan run read as init-no-feature --
+  // No Man's Sky, #132, whose log showed the pass up at 2560x1440 for ten minutes. Newer engines also write
+  // the D3D12-format heartbeat (", native Vulkan" after the "|"), which nrFrames below picks up.
   const nrDispatch = count(opti, /DlssNr_(?:Dx12|Vk)::Dispatch DLSS-NR (?:running|composition)|DLSS-NR Vulkan: running natively at/g);
   const nrComposition = count(opti, /DLSS-NR composition:/g);
   // "CreateFeature1 ... Creating new DLSS upscaler" is how the current engine words it; the older
