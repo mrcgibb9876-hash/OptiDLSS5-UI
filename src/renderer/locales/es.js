@@ -1692,4 +1692,8 @@ window.I18N.register("es", {
     "Este juego sí tiene su propia mod, y RenoDX la marca como sustituida por la del motor completo, así que aquí se instala la del motor.",
   "Matched on the engine, not on this game. RenoDX rates it \"{compat}\" for the engine, but nobody here has run it on this title -- if the picture looks wrong, take it back off.":
     "Coincidencia por motor, no por este juego. RenoDX la califica como \"{compat}\" para el motor, pero nadie aquí la ha probado en este título: si la imagen se ve mal, quítala.",
+  "From our build, which is the one the in-game DLSS 5 panel can show these settings on -- look for the HDR page in the overlay.":
+    "De nuestra compilación, que es la que permite al panel de DLSS 5 mostrar estos ajustes en el juego: busca la página HDR en el overlay.",
+  "From RenoDX's own release. It works, but only through its own overlay: the DLSS 5 panel can only show these settings on our build.":
+    "De la propia versión de RenoDX. Funciona, pero solo a través de su propio overlay: el panel de DLSS 5 solo puede mostrar estos ajustes con nuestra compilación.",
 });

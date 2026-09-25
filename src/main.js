@@ -490,15 +490,32 @@ const addonCtx = () => ({
   },
 });
 
-// RenoDX's games-index.json, memoised for the session. It is ~260 KB and the picker asks for it
-// every time a card is opened, so re-fetching per card would be a download per click; and it is
-// an ordinary release asset, so it is digest-checked like the add-ons themselves.
+// RenoDX's games-index.json AND the release it came from, memoised together for the session.
+//
+// Together, because the two cannot be mixed: each release's index names its own artifact files, so
+// reading one source's index and then fetching the other's asset would ask for a filename that
+// release may not have (addons.RENODX_SOURCES says the same thing from the other end).
+//
+// Memoised because it is ~260 KB and the picker asks for it every time a card is opened, so
+// re-fetching per card would be a download per click. It is an ordinary release asset, so it is
+// digest-checked like the add-ons themselves -- integrity.releaseAssetDigest reads owner, repo, tag
+// and name straight off the download URL, which is why a second source needs no pin of its own.
 let renodxIndexMemo = null;
 async function renodxIndex() {
   if (renodxIndexMemo) return renodxIndexMemo;
-  const buf = await addonCtx().fetchBuffer(addons.renodxIndexUrl());
-  renodxIndexMemo = JSON.parse(buf.toString('utf8'));
-  return renodxIndexMemo;
+  const tried = [];
+  for (const source of addons.RENODX_SOURCES) {
+    try {
+      const buf = await addonCtx().fetchBuffer(addons.renodxIndexUrl(source));
+      renodxIndexMemo = { index: JSON.parse(buf.toString('utf8')), source };
+      return renodxIndexMemo;
+    } catch (error) {
+      // A fork that has published no release yet answers 404 here. That is the ordinary case, not a
+      // failure, so it is recorded and the next source is tried.
+      tried.push(`${source.repo}: ${(error && error.message) || error}`);
+    }
+  }
+  throw new Error(`No RenoDX index could be fetched (${tried.join('; ')})`);
 }
 
 // The catalogue as this game sees it: what is installed here, and which RenoDX add-on (if any)
@@ -516,8 +533,13 @@ ipcMain.handle('addons:forGame', async (_evt, { exePath } = {}) => {
 
     let match = null;
     let indexError = null;
+    // Which release the match came from. Reported because with two sources it decides whether the
+    // engine's in-game HDR page can appear at all, and "the tab is missing" is otherwise a mystery.
+    let renodxSource = null;
     try {
-      match = addons.matchRenodx(await renodxIndex(), {
+      const renodx = await renodxIndex();
+      renodxSource = renodx.source;
+      match = addons.matchRenodx(renodx.index, {
         steamAppid: steam ? steam.appid : null,
         title: (steam && steam.name) || path.basename(dir),
         bitness: detected.bitness || null,
@@ -552,6 +574,7 @@ ipcMain.handle('addons:forGame', async (_evt, { exePath } = {}) => {
         replaces: addons.conflictsFor(dir, a.id),
       })),
       renodx: match,
+      renodxSource,
       indexError,
       // The motion-vector providers, shown in this same list. They are not add-ons in the
       // catalogue's sense -- the Feeder picks exactly one and the deploy owns it -- but this is
@@ -577,7 +600,10 @@ ipcMain.handle('addons:install', async (_evt, { exePath, id } = {}) => {
     const opts = { bitness: detected.bitness || null };
     if (id === 'renodx') {
       const steam = library.steamManifestFor(exePath);
-      opts.match = addons.matchRenodx(await renodxIndex(), {
+      const renodx = await renodxIndex();
+      // The asset comes from the release the index came from, never the other one.
+      opts.source = renodx.source;
+      opts.match = addons.matchRenodx(renodx.index, {
         steamAppid: steam ? steam.appid : null,
         title: (steam && steam.name) || path.basename(dir),
         bitness: detected.bitness || null,

@@ -1692,4 +1692,8 @@ window.I18N.register("de", {
     "Dieses Spiel hat durchaus seine eigene Mod, und RenoDX markiert sie als durch die Engine-weite ersetzt -- daher wird hier die Engine-weite installiert.",
   "Matched on the engine, not on this game. RenoDX rates it \"{compat}\" for the engine, but nobody here has run it on this title -- if the picture looks wrong, take it back off.":
     "Anhand der Engine zugeordnet, nicht anhand dieses Spiels. RenoDX bewertet sie für die Engine als \"{compat}\", aber hier hat sie niemand mit diesem Titel ausprobiert -- wenn das Bild falsch aussieht, nimm sie wieder ab.",
+  "From our build, which is the one the in-game DLSS 5 panel can show these settings on -- look for the HDR page in the overlay.":
+    "Aus unserem Build -- das ist der, auf dem das DLSS-5-Panel im Spiel diese Einstellungen zeigen kann; suche im Overlay nach der HDR-Seite.",
+  "From RenoDX's own release. It works, but only through its own overlay: the DLSS 5 panel can only show these settings on our build.":
+    "Aus RenoDX' eigener Veröffentlichung. Das funktioniert, aber nur über dessen eigenes Overlay: Das DLSS-5-Panel kann diese Einstellungen nur mit unserem Build zeigen.",
 });

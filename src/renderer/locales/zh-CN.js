@@ -1692,4 +1692,8 @@ window.I18N.register("zh-CN", {
     "这个游戏确实有自己的模组，但 RenoDX 标记它已被引擎通用模组取代——所以这里安装的是引擎通用模组。",
   "Matched on the engine, not on this game. RenoDX rates it \"{compat}\" for the engine, but nobody here has run it on this title -- if the picture looks wrong, take it back off.":
     "这是按引擎匹配的，不是按这个游戏匹配的。RenoDX 对该引擎的评级是“{compat}”，但这里没有人在这个游戏上实际试过——如果画面看起来不对，就把它卸下来。",
+  "From our build, which is the one the in-game DLSS 5 panel can show these settings on -- look for the HDR page in the overlay.":
+    "来自我们的构建——只有这个构建能让游戏内的 DLSS 5 面板显示这些设置，请在叠加层中查找 HDR 页面。",
+  "From RenoDX's own release. It works, but only through its own overlay: the DLSS 5 panel can only show these settings on our build.":
+    "来自 RenoDX 自己的发布版。它可以正常工作，但只能通过它自己的叠加层：DLSS 5 面板只能在我们的构建上显示这些设置。",
 });

@@ -6214,6 +6214,13 @@ async function renderAddons() {
     if (a.warnWithNeuralRendering && res.neuralRendering) {
       bits.push(`<div class="field-hint status-warn">${escapeHtml(t('This and DLSS 5 both change the final picture, and the two have not been tested together here. Worth trying; if colours look wrong, take this back off first.'))}</div>`);
     }
+    // Which of the two releases this came from. It is the difference between the in-game HDR page
+    // appearing and not, so it is said plainly rather than left to be discovered.
+    if (a.id === 'renodx' && match && res.renodxSource) {
+      bits.push(res.renodxSource.hostApi
+        ? `<div class="field-hint">${escapeHtml(t('From our build, which is the one the in-game DLSS 5 panel can show these settings on -- look for the HDR page in the overlay.'))}</div>`
+        : `<div class="field-hint">${escapeHtml(t('From RenoDX\'s own release. It works, but only through its own overlay: the DLSS 5 panel can only show these settings on our build.'))}</div>`);
+    }
     if (a.wants && a.wants.length && !res.catalogue.find((x) => a.wants.includes(x.id) && x.installed)) {
       bits.push(`<div class="field-hint status-warn">${escapeHtml(t('Needs an inverse tonemapper to do anything -- install the Lilium HDR shaders too.'))}</div>`);
     }

@@ -52,6 +52,26 @@ const RENODX_REPO = 'clshortfuse/renodx';
 const RENODX_TAG = 'snapshot';
 const RENODX_INDEX_ASSET = 'games-index.json';
 
+// Two sources, the same shape relimiter.js uses and for the same reason.
+//
+// Our fork first: only its build exports RenoDxGetHostApi, and without that export the engine's
+// in-game HDR page stays hidden (DlssNr_RenoDx.cpp finds nothing to drive). Upstream second, so
+// RenoDX still installs and works from its own overlay when the fork has published nothing -- a
+// missing fork release answers 404, which is an ordinary "try the next one", not a failure.
+//
+// THE INDEX AND THE ARTIFACT MUST COME FROM THE SAME SOURCE. Each release carries its own
+// games-index.json naming its own artifact files, so reading upstream's index and then fetching our
+// fork's asset (or the reverse) would ask for a filename that release may not have. resolveSource
+// picks one and everything downstream is told which.
+//
+// Integrity needs no extra work here: the download URL names owner, repo, tag and asset, and
+// integrity.releaseAssetDigest derives GitHub's own published digest from it, so whichever source
+// wins, what arrives is checked against that source's published hash.
+const RENODX_SOURCES = [
+  { repo: 'mrcgibb9876-hash/renodx', tag: 'snapshot', hostApi: true },
+  { repo: RENODX_REPO, tag: RENODX_TAG, hostApi: false },
+];
+
 const CATALOGUE = [
   {
     id: 'renodx',
@@ -393,8 +413,8 @@ function releaseAssetUrl(name, { repo = RENODX_REPO, tag = RENODX_TAG } = {}) {
   return `https://github.com/${repo}/releases/download/${tag}/${name}`;
 }
 
-function renodxIndexUrl() {
-  return releaseAssetUrl(RENODX_INDEX_ASSET);
+function renodxIndexUrl(source) {
+  return releaseAssetUrl(RENODX_INDEX_ASSET, source || undefined);
 }
 
 // ---- what is installed here ------------------------------------------------------------------
@@ -582,7 +602,9 @@ async function installAddon(dir, id, ctx, opts = {}) {
 async function resolveAddonAsset(spec, ctx, opts) {
   if (spec.id === 'renodx') {
     if (!opts.match) throw new Error('renodx: no per-game match was passed');
-    return { url: releaseAssetUrl(opts.match.artifact, spec.release), name: opts.match.artifact };
+    // opts.source is the release the caller read the index from. Falling back to spec.release keeps
+    // a caller that passes no source working against upstream, which is where it used to look.
+    return { url: releaseAssetUrl(opts.match.artifact, opts.source || spec.release), name: opts.match.artifact };
   }
   const release = await ctx.resolveRelease(spec.source.repo, spec.source.tag || null);
   const want = opts.bitness === 32 ? /\.addon32$/i : /\.addon64$/i;
@@ -625,7 +647,7 @@ async function removeAddon(dir, id) {
 
 module.exports = {
   ADDONS_MARKER,
-  RENODX_REPO, RENODX_TAG, RENODX_INDEX_ASSET,
+  RENODX_REPO, RENODX_TAG, RENODX_INDEX_ASSET, RENODX_SOURCES,
   catalogue, addonById,
   titleKey, indexRenodx, pickArtifact, matchRenodx,
   ENGINE_GENERIC_MODS, engineGenericMod,

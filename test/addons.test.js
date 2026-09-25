@@ -642,3 +642,57 @@ test('the engine map only claims engines the index really has a generic for', ()
     assert.equal(addons.ENGINE_GENERIC_MODS[id], undefined, `${id} has no generic mod`);
   }
 });
+
+// ── two sources for RenoDX ─────────────────────────────────────────────────────────────────────
+//
+// Our fork first, because only its build exports RenoDxGetHostApi and without that the engine's
+// in-game HDR page stays hidden. Upstream second, so RenoDX still installs when the fork has
+// published nothing. Same shape as relimiter.RELEASE_SOURCES.
+
+test('the fork is tried before upstream, and only it claims the host API', () => {
+  assert.equal(addons.RENODX_SOURCES.length, 2);
+  assert.equal(addons.RENODX_SOURCES[0].repo, 'mrcgibb9876-hash/renodx');
+  assert.equal(addons.RENODX_SOURCES[0].hostApi, true);
+  assert.equal(addons.RENODX_SOURCES[1].repo, addons.RENODX_REPO);
+  assert.equal(addons.RENODX_SOURCES[1].hostApi, false, 'upstream cannot drive the panel');
+  // Both on the rolling tag, so neither is a pin: what keeps them honest is the digest, which
+  // integrity derives from the download URL -- hence a per-source tag and no per-source hash.
+  for (const s of addons.RENODX_SOURCES) assert.equal(s.tag, 'snapshot');
+});
+
+test('the index URL follows the source it is asked for', () => {
+  const [fork, upstream] = addons.RENODX_SOURCES;
+  assert.equal(addons.renodxIndexUrl(fork),
+    'https://github.com/mrcgibb9876-hash/renodx/releases/download/snapshot/games-index.json');
+  assert.equal(addons.renodxIndexUrl(upstream), addons.renodxIndexUrl(),
+    'no source means upstream, which is where this used to look');
+});
+
+test('the artifact comes from the release the index came from, never the other one', async () => {
+  // The failure this prevents: each release carries its own index naming its own files, so reading
+  // one source's index and fetching the other's asset asks for a name that release may not have.
+  const dir = scratchDir('addons-source-pairing');
+  const match = { artifact: 'renodx-unrealengine.addon64', modId: 'unrealengine', title: 'Unreal Engine' };
+  const asked = [];
+  const ctx = { fetchBuffer: async (url) => { asked.push(url); return Buffer.from('x'); } };
+
+  await addons.installAddon(dir, 'renodx', ctx, {
+    match, ...HAS_RESHADE, source: addons.RENODX_SOURCES[0],
+  });
+  assert.match(asked[0], /^https:\/\/github\.com\/mrcgibb9876-hash\/renodx\/releases\/download\/snapshot\//);
+
+  asked.length = 0;
+  const dir2 = scratchDir('addons-source-pairing-upstream');
+  await addons.installAddon(dir2, 'renodx', ctx, {
+    match, ...HAS_RESHADE, source: addons.RENODX_SOURCES[1],
+  });
+  assert.match(asked[0], /^https:\/\/github\.com\/clshortfuse\/renodx\/releases\/download\/snapshot\//);
+});
+
+test('no source still installs from upstream, so an old caller is not broken', async () => {
+  const dir = scratchDir('addons-source-default');
+  const asked = [];
+  await addons.installAddon(dir, 'renodx', { fetchBuffer: async (u) => { asked.push(u); return Buffer.from('x'); } },
+    { match: { artifact: 'renodx-cp2077.addon64', modId: 'cp2077' }, ...HAS_RESHADE });
+  assert.match(asked[0], /clshortfuse\/renodx/);
+});

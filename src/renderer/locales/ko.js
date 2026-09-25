@@ -1692,4 +1692,8 @@ window.I18N.register("ko", {
     "이 게임에는 전용 모드가 있지만, RenoDX가 이를 엔진 전체용 모드로 대체되었다고 표시하고 있어 여기서는 엔진 전체용 모드를 설치합니다.",
   "Matched on the engine, not on this game. RenoDX rates it \"{compat}\" for the engine, but nobody here has run it on this title -- if the picture looks wrong, take it back off.":
     "이 게임이 아니라 엔진을 기준으로 찾은 결과입니다. RenoDX는 해당 엔진에 대해 \"{compat}\"으로 평가하지만, 이 타이틀에서 실제로 시험해 본 사람은 없습니다. 화면이 이상해 보이면 다시 제거하세요.",
+  "From our build, which is the one the in-game DLSS 5 panel can show these settings on -- look for the HDR page in the overlay.":
+    "우리 빌드에서 가져왔습니다. 게임 내 DLSS 5 패널이 이 설정을 보여줄 수 있는 것은 이 빌드뿐입니다. 오버레이에서 HDR 페이지를 찾아보세요.",
+  "From RenoDX's own release. It works, but only through its own overlay: the DLSS 5 panel can only show these settings on our build.":
+    "RenoDX 자체 릴리스에서 가져왔습니다. 작동은 하지만 RenoDX 자체 오버레이를 통해서만 가능합니다. DLSS 5 패널은 우리 빌드에서만 이 설정을 보여줄 수 있습니다.",
 });
