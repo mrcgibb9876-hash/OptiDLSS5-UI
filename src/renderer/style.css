@@ -416,6 +416,7 @@ body {
 /* The primary grows, Launch keeps its label, the overflow is a glyph -- so three buttons still
    read as "the thing to do, and the two others". */
 .card-actions .btn-card-primary { flex: 2 1 auto; font-weight: 600; }
+.card-actions .btn-card-launch { color: var(--accent); font-weight: 700; }
 .card-actions .btn-card-menu { flex: 0 0 auto; min-width: 0; padding: 7px 11px; }
 /* The primary when the card is asking to be fixed: the same amber as the chip and the row. */
 .btn-attention { background: #d9a441; color: #191200; border-color: #d9a441; }

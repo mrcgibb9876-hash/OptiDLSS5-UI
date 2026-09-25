@@ -1126,6 +1126,87 @@ function optiFgCheckRow(host, on, text, tip, onClick) {
   host.appendChild(row);
 }
 
+// ── Frame pacing / RenoDX on and off (the hook at the top of each hosted page) ────────────────────
+//
+// Listed always, off until asked for (2026-09-25). The switch is what is INSTALLED in the game folder,
+// read by the app (main.js panel:addonToggles), not what the running game reports: the game only picks
+// an add-on up when it starts, so turning one on here says exactly that. Where Install would be refused,
+// the switch is greyed with the reason, from the same checks the install runs.
+let addonToggles = null;      // { exe, pacing: {installed, blocker}, hdr: {installed, blocker} }
+let addonTogglesLoading = null;
+
+function addonBlockerText(kind, code) {
+  const name = kind === 'pacing' ? t('Frame pacing') : 'RenoDX';
+  switch (code) {
+    case 'bitness-32': return t('{name} needs a 64-bit game. This one is 32-bit.', { name });
+    case 'vulkan-layer': return t('{name} on a Vulkan game needs ReShade’s own setup run for this game first.', { name });
+    case 'reshade-dlss-crash': return t('{name} needs a newer DLSS 5 engine on this game: update DLSS 5 here first.', { name });
+    case 'optifg-armed': return t('{name} can’t run beside frame generation on this game: switch frame generation off in Edit first, or to XeFG once DLSS 5 here is up to date.', { name });
+    case 'no-mod': return t('RenoDX has no mod for this game or its engine yet.');
+    case 'no-index': return t('Could not reach RenoDX’s list of mods. Check the connection and open the panel again.');
+    default: return '';
+  }
+}
+
+async function loadAddonToggles(force = false) {
+  if (!current || !current.exePath) { addonToggles = null; return; }
+  if (!force && addonToggles && addonToggles.exe === current.exePath) return;
+  if (addonTogglesLoading) return addonTogglesLoading;
+  const exe = current.exePath;
+  addonTogglesLoading = (async () => {
+    try {
+      const res = await window.api.panelAddonToggles(exe);
+      addonToggles = res && res.ok ? { exe, ...res } : { exe, error: (res && res.error) || '' };
+    } catch (e) {
+      addonToggles = { exe, error: String(e) };
+    } finally {
+      addonTogglesLoading = null;
+    }
+  })();
+  await addonTogglesLoading;
+  if (current && current.exePath === exe) renderFields();
+}
+
+function renderHostedEnable(el, kind) {
+  el.innerHTML = '';
+  if (!current || !current.exePath) return;
+  if (!addonToggles || addonToggles.exe !== current.exePath) { loadAddonToggles(); return; }
+  const s = addonToggles[kind];
+  if (!s) return;
+  const blocked = !s.installed && !!s.blocker;
+  const label = kind === 'pacing' ? t('Frame pacing on this game') : t('HDR (RenoDX) on this game');
+  optiFgCheckRow(el, s.installed, label,
+    s.installed
+      ? t('On. Turning it off takes it out of the game folder; the game drops it the next time it starts.')
+      : t('Off. Turning it on installs it into the game folder; the game picks it up the next time it starts.'),
+    async () => {
+      if (blocked) return;
+      setStatus(s.installed ? t('Removing…') : t('Fetching and placing…'));
+      const res = kind === 'pacing'
+        ? (s.installed ? await window.api.relimiterRemove(current.exePath) : await window.api.relimiterInstall(current.exePath))
+        : (s.installed ? await window.api.addonsRemove(current.exePath, 'renodx') : await window.api.addonsInstall(current.exePath, 'renodx'));
+      if (!res || !res.ok) {
+        const why = (res && addonBlockerText(kind, res.code)) || (res && res.error) || t('unknown');
+        setStatus(t('Could not save: {error}', { error: why }));
+      } else {
+        setStatus(s.installed
+          ? t('Turned off. The game drops it the next time it starts.')
+          : t('Turned on. Start the game again to use it; its settings then appear below.'), true);
+      }
+      await loadAddonToggles(true);
+    });
+  const row = el.lastElementChild;
+  if (blocked && row) {
+    row.classList.add('is-off');
+    const box = row.querySelector('.p-check');
+    if (box) box.disabled = true;
+    const why = document.createElement('div');
+    why.className = 'p-note';
+    why.textContent = addonBlockerText(kind, s.blocker);
+    el.appendChild(why);
+  }
+}
+
 function renderOptiFg(host) {
   const s = optiFgState;
   const note = document.createElement('div');

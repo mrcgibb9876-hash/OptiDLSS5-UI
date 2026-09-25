@@ -65,6 +65,7 @@ contextBridge.exposeInMainWorld('api', {
   relimiterSetTarget: (exePath, fps) => ipcRenderer.invoke('relimiter:set-target', { exePath, fps }),
   relimiterInstall: (exePath) => ipcRenderer.invoke('relimiter:install', exePath),
   relimiterRemove:(exePath) => ipcRenderer.invoke('relimiter:remove', exePath),
+  panelAddonToggles: (exePath) => ipcRenderer.invoke('panel:addonToggles', { exePath }),
   losslessDetect: () => ipcRenderer.invoke('lossless:detect'),
   losslessEligibility: (exePath) => ipcRenderer.invoke('lossless:eligibility', exePath),
   losslessReadSettings: () => ipcRenderer.invoke('lossless:readSettings'),

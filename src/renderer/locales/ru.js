@@ -1780,4 +1780,20 @@ window.I18N.register("ru", {
     "Выравнивание кадров не установлено для этой игры -- включите его на карточке в приложении или во всплывающей панели; оно заработает при следующем запуске игры.",
   "HDR (RenoDX) is not installed on this game -- turn it on from the app's card or the pop-out; it takes effect the next time the game starts.":
     "HDR (RenoDX) не установлен для этой игры -- включите его на карточке в приложении или во всплывающей панели; он заработает при следующем запуске игры.",
+  "RenoDX has no mod for this game or its engine yet.":
+    "У RenoDX пока нет мода для этой игры или её движка.",
+  "Could not reach RenoDX’s list of mods. Check the connection and open the panel again.":
+    "Не удалось получить список модов RenoDX. Проверьте подключение и откройте панель снова.",
+  "Frame pacing on this game":
+    "Стабилизация кадров в этой игре",
+  "HDR (RenoDX) on this game":
+    "HDR (RenoDX) в этой игре",
+  "On. Turning it off takes it out of the game folder; the game drops it the next time it starts.":
+    "Включено. Выключение уберёт его из папки игры; игра перестанет его загружать со следующего запуска.",
+  "Off. Turning it on installs it into the game folder; the game picks it up the next time it starts.":
+    "Выключено. Включение установит его в папку игры; игра загрузит его при следующем запуске.",
+  "Turned off. The game drops it the next time it starts.":
+    "Выключено. Игра перестанет его загружать со следующего запуска.",
+  "Turned on. Start the game again to use it; its settings then appear below.":
+    "Включено. Перезапустите игру, чтобы им пользоваться; его настройки появятся ниже.",
 });

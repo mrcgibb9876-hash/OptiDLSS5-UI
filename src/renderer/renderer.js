@@ -312,7 +312,8 @@ function refreshCardState(card) {
   // implementation of Install, Tune and Launch and one place their confirmations live.
   const delegate = (sel) => () => card.querySelector(sel)?.click();
   let text = t('Launch');
-  let cls = 'btn btn-card-primary';
+  // Launch reads green (2026-09-25); every other primary below sets its own class.
+  let cls = 'btn btn-card-primary btn-card-launch';
   let onClick = delegate('.btn-launch');
   let hideLaunch = true;
 
@@ -344,6 +345,7 @@ function refreshCardState(card) {
     onClick = delegate('.btn-install');
   }
 
+  if (text !== t('Launch')) cls = cls.replace(' btn-card-launch', '');
   primary.className = cls;
   primary.textContent = text;
   primary.onclick = onClick;

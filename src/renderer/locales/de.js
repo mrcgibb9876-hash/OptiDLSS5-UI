@@ -1780,4 +1780,20 @@ window.I18N.register("de", {
     "Frame-Pacing ist für dieses Spiel nicht installiert -- schalte es auf der Karte in der App oder im Pop-out-Panel ein; es wirkt ab dem nächsten Spielstart.",
   "HDR (RenoDX) is not installed on this game -- turn it on from the app's card or the pop-out; it takes effect the next time the game starts.":
     "HDR (RenoDX) ist für dieses Spiel nicht installiert -- schalte es auf der Karte in der App oder im Pop-out-Panel ein; es wirkt ab dem nächsten Spielstart.",
+  "RenoDX has no mod for this game or its engine yet.":
+    "RenoDX hat noch keinen Mod für dieses Spiel oder seine Engine.",
+  "Could not reach RenoDX’s list of mods. Check the connection and open the panel again.":
+    "RenoDX’ Mod-Liste war nicht erreichbar. Prüfe die Verbindung und öffne das Panel erneut.",
+  "Frame pacing on this game":
+    "Frame-Pacing in diesem Spiel",
+  "HDR (RenoDX) on this game":
+    "HDR (RenoDX) in diesem Spiel",
+  "On. Turning it off takes it out of the game folder; the game drops it the next time it starts.":
+    "An. Ausschalten nimmt es aus dem Spielordner; das Spiel lässt es beim nächsten Start weg.",
+  "Off. Turning it on installs it into the game folder; the game picks it up the next time it starts.":
+    "Aus. Einschalten installiert es in den Spielordner; das Spiel lädt es beim nächsten Start.",
+  "Turned off. The game drops it the next time it starts.":
+    "Ausgeschaltet. Das Spiel lässt es beim nächsten Start weg.",
+  "Turned on. Start the game again to use it; its settings then appear below.":
+    "Eingeschaltet. Starte das Spiel neu, um es zu nutzen; seine Einstellungen erscheinen dann unten.",
 });

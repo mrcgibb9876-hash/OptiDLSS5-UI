@@ -1790,4 +1790,20 @@ window.I18N.register("fr", {
     "La cadence des images n'est pas installée sur ce jeu -- activez-la depuis la carte de l'application ou le panneau détaché ; elle prend effet au prochain lancement du jeu.",
   "HDR (RenoDX) is not installed on this game -- turn it on from the app's card or the pop-out; it takes effect the next time the game starts.":
     "Le HDR (RenoDX) n'est pas installé sur ce jeu -- activez-le depuis la carte de l'application ou le panneau détaché ; il prend effet au prochain lancement du jeu.",
+  "RenoDX has no mod for this game or its engine yet.":
+    "RenoDX n’a pas encore de mod pour ce jeu ni pour son moteur.",
+  "Could not reach RenoDX’s list of mods. Check the connection and open the panel again.":
+    "Impossible d’atteindre la liste des mods RenoDX. Vérifiez la connexion et rouvrez le panneau.",
+  "Frame pacing on this game":
+    "Régulation des images dans ce jeu",
+  "HDR (RenoDX) on this game":
+    "HDR (RenoDX) dans ce jeu",
+  "On. Turning it off takes it out of the game folder; the game drops it the next time it starts.":
+    "Activé. Le désactiver le retire du dossier du jeu ; le jeu s’en passe au prochain lancement.",
+  "Off. Turning it on installs it into the game folder; the game picks it up the next time it starts.":
+    "Désactivé. L’activer l’installe dans le dossier du jeu ; le jeu le charge au prochain lancement.",
+  "Turned off. The game drops it the next time it starts.":
+    "Désactivé. Le jeu s’en passe au prochain lancement.",
+  "Turned on. Start the game again to use it; its settings then appear below.":
+    "Activé. Relancez le jeu pour l’utiliser ; ses réglages apparaîtront ci-dessous.",
 });

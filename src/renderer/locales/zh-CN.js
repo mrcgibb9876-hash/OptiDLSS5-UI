@@ -1780,4 +1780,20 @@ window.I18N.register("zh-CN", {
     "此游戏未安装帧率节奏——请在应用的卡片或弹出面板中开启；下次启动游戏时生效。",
   "HDR (RenoDX) is not installed on this game -- turn it on from the app's card or the pop-out; it takes effect the next time the game starts.":
     "此游戏未安装 HDR（RenoDX）——请在应用的卡片或弹出面板中开启；下次启动游戏时生效。",
+  "RenoDX has no mod for this game or its engine yet.":
+    "RenoDX 暂时没有适用于此游戏或其引擎的模组。",
+  "Could not reach RenoDX’s list of mods. Check the connection and open the panel again.":
+    "无法获取 RenoDX 的模组列表。请检查网络后重新打开面板。",
+  "Frame pacing on this game":
+    "此游戏的帧节奏",
+  "HDR (RenoDX) on this game":
+    "此游戏的 HDR (RenoDX)",
+  "On. Turning it off takes it out of the game folder; the game drops it the next time it starts.":
+    "已开启。关闭会将其从游戏文件夹移除；下次启动游戏时不再加载。",
+  "Off. Turning it on installs it into the game folder; the game picks it up the next time it starts.":
+    "已关闭。开启会将其安装到游戏文件夹；下次启动游戏时加载。",
+  "Turned off. The game drops it the next time it starts.":
+    "已关闭。下次启动游戏时不再加载。",
+  "Turned on. Start the game again to use it; its settings then appear below.":
+    "已开启。请重新启动游戏来使用；其设置随后会显示在下方。",
 });

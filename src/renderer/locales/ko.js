@@ -1780,4 +1780,20 @@ window.I18N.register("ko", {
     "이 게임에는 프레임 페이싱이 설치되어 있지 않습니다 -- 앱의 카드나 팝아웃 패널에서 켜세요. 다음에 게임을 시작할 때 적용됩니다.",
   "HDR (RenoDX) is not installed on this game -- turn it on from the app's card or the pop-out; it takes effect the next time the game starts.":
     "이 게임에는 HDR(RenoDX)이 설치되어 있지 않습니다 -- 앱의 카드나 팝아웃 패널에서 켜세요. 다음에 게임을 시작할 때 적용됩니다.",
+  "RenoDX has no mod for this game or its engine yet.":
+    "RenoDX에 아직 이 게임이나 엔진용 모드가 없습니다.",
+  "Could not reach RenoDX’s list of mods. Check the connection and open the panel again.":
+    "RenoDX 모드 목록에 연결하지 못했습니다. 연결을 확인하고 패널을 다시 여세요.",
+  "Frame pacing on this game":
+    "이 게임의 프레임 페이싱",
+  "HDR (RenoDX) on this game":
+    "이 게임의 HDR (RenoDX)",
+  "On. Turning it off takes it out of the game folder; the game drops it the next time it starts.":
+    "켜짐. 끄면 게임 폴더에서 제거되며, 다음 게임 시작부터 빠집니다.",
+  "Off. Turning it on installs it into the game folder; the game picks it up the next time it starts.":
+    "꺼짐. 켜면 게임 폴더에 설치되며, 다음 게임 시작 때 불러옵니다.",
+  "Turned off. The game drops it the next time it starts.":
+    "껐습니다. 다음 게임 시작부터 빠집니다.",
+  "Turned on. Start the game again to use it; its settings then appear below.":
+    "켰습니다. 게임을 다시 시작해 사용하세요. 그러면 아래에 설정이 나타납니다.",
 });

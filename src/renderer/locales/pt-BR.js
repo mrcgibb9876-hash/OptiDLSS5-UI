@@ -1781,4 +1781,20 @@ window.I18N.register('pt-BR', {
     "O ritmo de quadros não está instalado neste jogo -- ative-o pelo cartão do app ou pelo painel destacável; ele passa a valer na próxima vez que o jogo iniciar.",
   "HDR (RenoDX) is not installed on this game -- turn it on from the app's card or the pop-out; it takes effect the next time the game starts.":
     "O HDR (RenoDX) não está instalado neste jogo -- ative-o pelo cartão do app ou pelo painel destacável; ele passa a valer na próxima vez que o jogo iniciar.",
+  "RenoDX has no mod for this game or its engine yet.":
+    "O RenoDX ainda não tem um mod para este jogo nem para o motor dele.",
+  "Could not reach RenoDX’s list of mods. Check the connection and open the panel again.":
+    "Não foi possível acessar a lista de mods do RenoDX. Verifique a conexão e abra o painel de novo.",
+  "Frame pacing on this game":
+    "Ritmo de quadros neste jogo",
+  "HDR (RenoDX) on this game":
+    "HDR (RenoDX) neste jogo",
+  "On. Turning it off takes it out of the game folder; the game drops it the next time it starts.":
+    "Ligado. Desligar remove da pasta do jogo; o jogo deixa de usar na próxima vez que abrir.",
+  "Off. Turning it on installs it into the game folder; the game picks it up the next time it starts.":
+    "Desligado. Ligar instala na pasta do jogo; o jogo carrega na próxima vez que abrir.",
+  "Turned off. The game drops it the next time it starts.":
+    "Desligado. O jogo deixa de usar na próxima vez que abrir.",
+  "Turned on. Start the game again to use it; its settings then appear below.":
+    "Ligado. Abra o jogo de novo para usar; as configurações aparecem abaixo.",
 });

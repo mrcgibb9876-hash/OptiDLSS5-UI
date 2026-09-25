@@ -1096,6 +1096,56 @@ ipcMain.handle('relimiter:install', async (_evt, exePath) => {
   }
 });
 
+// The pop-out's on/off switches for frame pacing and RenoDX (panel.js renderHostedEnable): what is
+// installed in the folder, and -- where it is not -- whether Install would be refused and why. The same
+// checks as relimiter:install / addons:install run through ensureReShadeAddonHost, asked without doing
+// anything, so a switch is greyed with the real reason rather than failing when pressed. `code` values
+// are the ones those installs throw; 'no-mod' is RenoDX having nothing for this game or its engine.
+async function reshadeAddonBlocker(dir, exePath) {
+  if ((await peBitness(exePath)) === 32) return 'bitness-32';
+  const api = (await resolveApi(dir, exePath)) || 'dx12';
+  if (!relimiter.isAutomatic(api)) return 'vulkan-layer';
+  const optiHere = fs.existsSync(path.join(dir, 'OptiScaler.ini')) && !!(await findActiveOptiScalerFile(dir));
+  if (optiHere && !isFeederGame(dir)) {
+    const b = await pacingBesideUpscalerBlocker(dir);
+    if (b) return b.code;
+  }
+  return null;
+}
+
+ipcMain.handle('panel:addonToggles', async (_evt, { exePath } = {}) => {
+  try {
+    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
+    const dir = gameDir(exePath);
+    const blocker = await reshadeAddonBlocker(dir, exePath);
+    const hdrInstalled = addons.installedIds(dir).includes('renodx');
+    let hdrBlocker = blocker;
+    if (!hdrInstalled && !hdrBlocker) {
+      try {
+        const detected = detectGameCached(exePath) || {};
+        const steam = library.steamManifestFor(exePath);
+        const renodx = await renodxIndex();
+        const match = addons.matchRenodx(renodx.index, {
+          steamAppid: steam ? steam.appid : null,
+          title: (steam && steam.name) || path.basename(dir),
+          bitness: detected.bitness || null,
+          engineId: detected.engineId || null,
+        });
+        if (!match) hdrBlocker = 'no-mod';
+      } catch {
+        hdrBlocker = 'no-index';
+      }
+    }
+    return {
+      ok: true,
+      pacing: { installed: relimiter.deployed(dir), blocker },
+      hdr: { installed: hdrInstalled, blocker: hdrBlocker },
+    };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+});
+
 ipcMain.handle('relimiter:remove', async (_evt, exePath) => {
   try {
     const dir = gameDir(exePath);
