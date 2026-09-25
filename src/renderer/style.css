@@ -198,6 +198,8 @@ body {
 .game-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  /* Rows the same height too; the icon row under the buttons (.card-icons) fills what used to be a gap. */
+  grid-auto-rows: 1fr;
   gap: 20px;
   padding: 24px;
 }
@@ -264,6 +266,11 @@ body {
 .card-banner-wrap {
   position: relative;
   aspect-ratio: 460 / 215;
+  /* overflow + no flex growth hold the banner shape: without them a tall picture (a square exe icon)
+     stretched this box past its ratio, that card became the tallest, and with equal rows
+     (grid-auto-rows) every card in the grid inherited the gap (2026-09-25). */
+  overflow: hidden;
+  flex: none;
   background: linear-gradient(160deg, #23262e, #181a1f);
 }
 .card-banner {
@@ -346,6 +353,10 @@ body {
   cursor: default;
 }
 .card-warn.hidden { display: none; }
+/* The DLSS 5 / Chicken pill and the anti-cheat triangle, in a row under Launch rather than over the art
+   (2026-09-25). Same look, laid out in the flow instead of pinned to the banner's corner. */
+.card-icons { display: flex; align-items: center; gap: 8px; min-height: 34px; }
+.card-icons .card-mark, .card-icons .card-warn { position: static; box-shadow: none; }
 .card-mark.hidden { display: none; }
 .badge-installed { background: rgba(var(--accent-rgb),0.85); color: var(--on-accent); }
 .badge-partial { background: rgba(217,164,65,0.9); color: #0c0e0f; }
