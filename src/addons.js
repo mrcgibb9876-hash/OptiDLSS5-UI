@@ -61,8 +61,9 @@ const CATALOGUE = [
     licence: 'MIT -- Copyright (c) 2025 Carlos Lopez Jr.',
     homepage: 'https://github.com/clshortfuse/renodx',
     summary: 'A bespoke HDR and tone-mapping mod for this specific game, written against its own '
-      + 'shaders. Where one exists it is the best-looking option there is; there is no generic '
-      + 'version of it.',
+      + 'shaders. Where one exists it is the best-looking option there is. Where one does not, '
+      + 'RenoDX may still have a mod for the whole engine -- an Unreal game usually does -- and '
+      + 'this row offers that instead, saying so.',
     // Offered alongside DLSS 5 rather than instead of it, and the picker says once that the pair
     // is untested here. Both touch the final picture -- RenoDX rewrites the game's tone mapping,
     // the neural pass denoises what the game drew -- and nobody on this side has a GPU to watch
@@ -284,10 +285,65 @@ function pickArtifact(mod, bitness) {
     || null;
 }
 
+// Upstream's engine-wide mods, keyed by our own detect.engineId.
+//
+// RenoDX is per-game by nature -- 271 add-ons, each compiled against one game's shader hashes --
+// and there is no universal build: src/games/generic exists in its source with an empty
+// custom_shaders list and publishes no artifact at all. But the project has started shipping
+// ENGINE-wide mods (support: 'generic', category: 'engine'), and it is moving towards them: eight
+// per-game entries now carry a note reading "Superseded by Generic <engine> mod".
+//
+// The catch is how the index carries them. They are ordinary mods attached to games, so
+// renodx-unrealengine.addon64 is listed against exactly ONE game (Ace Combat 7) even though it is
+// the same binary for every Unreal title. An index lookup therefore finds it for almost nobody.
+// Matching on the engine instead is what takes RenoDX from "the 239 games in the index" to "any
+// Unreal game", which is most of a modern library.
+//
+// Unity is in the map because the index marks unityengine generic too -- but it has no artifact
+// today, and engineGenericMod refuses a mod it cannot actually download, so Unity games simply keep
+// saying "no mod for this game" until upstream publishes one. Nothing to change here when it does.
+const ENGINE_GENERIC_MODS = { unreal: 'unrealengine', unity: 'unityengine' };
+
+// The engine-wide mod for this engine, found wherever the index happens to hang it, or null.
+// Requires an artifact for the bitness asked for: offering a download that does not exist is worse
+// than offering nothing, and unityengine is exactly that case today.
+function engineGenericMod(index, engineId, bitness) {
+  const wanted = ENGINE_GENERIC_MODS[engineId];
+  if (!wanted) return null;
+  for (const game of (index && index.games) || []) {
+    for (const mod of game.mods || []) {
+      if (mod.id !== wanted || mod.support !== 'generic') continue;
+      if (!pickArtifact(mod, bitness)) continue;
+      return mod;
+    }
+  }
+  return null;
+}
+
+function describeMatch(mod, { gameId, gameTitle, bitness, how }) {
+  const artifact = pickArtifact(mod, bitness);
+  if (!artifact) return null;
+  return {
+    gameId,
+    gameTitle,
+    modId: mod.id,
+    title: mod.title || gameTitle,
+    status: mod.status || 'unknown',
+    compatibility: mod.compatibility || 'unknown',
+    summary: mod.summary || '',
+    maintainers: mod.maintainers || [],
+    notes: mod.notes || [],
+    artifact: artifact.name,
+    arch: artifact.arch,
+    size: artifact.size || null,
+    how,
+  };
+}
+
 // The RenoDX add-on for a game, or null. `how` says what the match rested on so the caller can be
 // honest about it: 'steam-appid' is an identifier match, 'title' is a name match that could be
 // the wrong game with a similar name.
-function matchRenodx(index, { steamAppid = null, title = null, bitness = null } = {}) {
+function matchRenodx(index, { steamAppid = null, title = null, bitness = null, engineId = null } = {}) {
   const { byAppid, byTitle } = indexRenodx(index);
   let entry = null;
   let how = null;
@@ -301,30 +357,33 @@ function matchRenodx(index, { steamAppid = null, title = null, bitness = null } 
       how = 'title';
     }
   }
-  if (!entry) return null;
+
+  // No bespoke mod for this game. Its engine may still have one, and for an Unreal game it usually
+  // does -- 'engine' is a weaker claim than an appid and the caller is told so through `how`.
+  const generic = engineGenericMod(index, engineId, bitness);
+  if (!entry) {
+    return generic
+      ? describeMatch(generic, { gameId: null, gameTitle: title || null, bitness, how: 'engine' })
+      : null;
+  }
 
   // Several mods can target one game (a bespoke one and a generic fallback, or an Archive
   // variant). Prefer the one whose status is furthest along rather than the first in the file:
   // the index lists them in build order, which says nothing about which to install.
   const rank = (m) => (m.status === 'stable' ? 0 : m.status === 'beta' ? 1 : 2);
   const mod = [...entry.mods].sort((a, b) => rank(a) - rank(b))[0];
-  const artifact = pickArtifact(mod, bitness);
-  if (!artifact) return null;
-  return {
-    gameId: entry.id,
-    gameTitle: entry.title,
-    modId: mod.id,
-    title: mod.title || entry.title,
-    status: mod.status || 'unknown',
-    compatibility: mod.compatibility || 'unknown',
-    summary: mod.summary || '',
-    maintainers: mod.maintainers || [],
-    notes: mod.notes || [],
-    artifact: artifact.name,
-    arch: artifact.arch,
-    size: artifact.size || null,
-    how,
-  };
+
+  // Upstream's own verdict, not ours: eight entries say "Superseded by Generic <engine> mod", so
+  // installing the bespoke one there would knowingly place the worse of the two. Taken only when
+  // the replacement is really downloadable -- five of those eight point at unityengine, which has
+  // no artifact, and dropping a working per-game mod for a file that does not exist would be a
+  // regression dressed up as an upgrade.
+  if (generic && (mod.notes || []).some((n) => /supersed/i.test(n))) {
+    const swap = describeMatch(generic, { gameId: entry.id, gameTitle: entry.title, bitness, how: 'engine-supersedes' });
+    if (swap) return swap;
+  }
+
+  return describeMatch(mod, { gameId: entry.id, gameTitle: entry.title, bitness, how });
 }
 
 // The download URL for one of the pinned release's assets. Built from the tag rather than read
@@ -569,6 +628,7 @@ module.exports = {
   RENODX_REPO, RENODX_TAG, RENODX_INDEX_ASSET,
   catalogue, addonById,
   titleKey, indexRenodx, pickArtifact, matchRenodx,
+  ENGINE_GENERIC_MODS, engineGenericMod,
   releaseAssetUrl, renodxIndexUrl,
   readMarker, writeMarker, filesPlaced, installedIds,
   techniquesIn, installedTechniqueBands,

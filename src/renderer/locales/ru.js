@@ -1686,4 +1686,10 @@ window.I18N.register("ru", {
     "Нужна сборка с поддержкой дополнений",
   "Needs ReShade":
     "Нужен ReShade",
+  "No mod is built for this game, but RenoDX has one for its whole engine: {title}, maintained by {who}.":
+    "Для этой игры мода не собрано, но у RenoDX есть мод для всего её движка: {title}, поддерживает {who}.",
+  "This game does have its own mod, and RenoDX marks it superseded by the engine-wide one -- so the engine-wide one is what installs here.":
+    "У этой игры есть и собственный мод, но RenoDX помечает его как заменённый модом для всего движка -- поэтому здесь ставится мод для движка.",
+  "Matched on the engine, not on this game. RenoDX rates it \"{compat}\" for the engine, but nobody here has run it on this title -- if the picture looks wrong, take it back off.":
+    "Сопоставлено по движку, а не по самой игре. RenoDX оценивает его для движка как \"{compat}\", но именно на этой игре его здесь никто не проверял: если картинка выглядит неправильно, снимите его.",
 });

@@ -1687,4 +1687,10 @@ window.I18N.register('pt-BR', {
     "Precisa da versão com add-ons",
   "Needs ReShade":
     "Precisa do ReShade",
+  "No mod is built for this game, but RenoDX has one for its whole engine: {title}, maintained by {who}.":
+    "Não há mod feito para este jogo, mas o RenoDX tem uma para todo o motor dele: {title}, mantida por {who}.",
+  "This game does have its own mod, and RenoDX marks it superseded by the engine-wide one -- so the engine-wide one is what installs here.":
+    "Este jogo tem a sua própria mod, e o RenoDX a marca como substituída pela do motor -- então é a do motor que é instalada aqui.",
+  "Matched on the engine, not on this game. RenoDX rates it \"{compat}\" for the engine, but nobody here has run it on this title -- if the picture looks wrong, take it back off.":
+    "Correspondência pelo motor, não por este jogo. O RenoDX a classifica como \"{compat}\" para o motor, mas ninguém aqui a testou neste título: se a imagem parecer errada, remova-a.",
 });

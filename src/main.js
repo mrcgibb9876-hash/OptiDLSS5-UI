@@ -521,6 +521,9 @@ ipcMain.handle('addons:forGame', async (_evt, { exePath } = {}) => {
         steamAppid: steam ? steam.appid : null,
         title: (steam && steam.name) || path.basename(dir),
         bitness: detected.bitness || null,
+        // Lets an Unreal game with no bespoke mod still get the engine-wide one. Already on the
+        // cached detection (the same field lumaue.js reads), so this costs no extra folder work.
+        engineId: detected.engineId || null,
       });
     } catch (error) {
       indexError = String(error && error.message ? error.message : error);
@@ -578,6 +581,9 @@ ipcMain.handle('addons:install', async (_evt, { exePath, id } = {}) => {
         steamAppid: steam ? steam.appid : null,
         title: (steam && steam.name) || path.basename(dir),
         bitness: detected.bitness || null,
+        // Lets an Unreal game with no bespoke mod still get the engine-wide one. Already on the
+        // cached detection (the same field lumaue.js reads), so this costs no extra folder work.
+        engineId: detected.engineId || null,
       });
       if (!opts.match) throw new Error('No RenoDX mod is built for this game');
     }

@@ -207,6 +207,39 @@ the exe actually imports.
 - `nms.exe -> dbghelp.dll` is **documented, not measured** (OptiScaler's wiki, "early hooking"),
   like `rdr2.exe` before it. Shipping an unmeasured entry is defensible only because the user can
   now set the name back by hand; it was not before v2.13.10.
+## RenoDX reaches a whole engine, not just the games in the index
+
+RenoDX is per-game by nature -- 271 add-ons in `src/games/`, each compiled against one game's shader
+hashes -- and there is **no universal build**: `src/games/generic` exists in its source with an empty
+`custom_shaders` list and publishes no artifact at all. So "available for every game" is not a switch
+anyone can throw.
+
+But the project ships **engine-wide** mods (`support: 'generic'`, `category: 'engine'`) and is moving
+towards them: eight per-game entries now carry a note reading "Superseded by Generic <engine> mod".
+The catch is how `games-index.json` carries them -- as ordinary mods hung off a game, so
+`renodx-unrealengine.addon64` is listed against **exactly one game** (Ace Combat 7) though it is the
+same binary for every Unreal title. An index lookup finds it for almost nobody.
+
+`matchRenodx` therefore takes `engineId` (from `detect`'s own cached `engineId`, the field
+`lumaue.js` reads, so it costs no extra folder work) and falls back to `engineGenericMod`:
+
+- A bespoke mod always wins. The fallback is a fallback, and `how` says which happened
+  (`steam-appid` / `title` / `engine` / `engine-supersedes`) so the row can be honest about it.
+- **A generic with no artifact is never offered.** `unityengine` is marked generic in the index today
+  and carries no artifact, so Unity games correctly still read as having nothing. Nothing to change
+  here when upstream publishes one.
+- **Upstream's "superseded" note moves the install** -- but only when the replacement is really
+  downloadable. Five of those eight notes point at `unityengine`, and dropping a working per-game mod
+  for a file that does not exist is a regression dressed up as an upgrade.
+- **Bitness still decides.** The engine-wide mod builds x64 only, so a 32-bit Unreal game is refused
+  rather than handed a DLL it can never load.
+
+Two field-name traps in that index, both of which cost a wrong answer while reading it: the artifact
+list is `artifacts` (an array on the mod), **not** `deploy.artifact`, which does not exist on any of
+the 249 mods; and the API for `clshortfuse/renodx` is blocked by the egress proxy in these sessions
+while the release *download* URL works, so read the index with `curl` on
+`releases/download/snapshot/games-index.json` rather than through the GitHub API.
+
 - **The add-ons picker reuses that same list.** `addons.RESHADE_NAMES` is `HOOK_DLLS` plus
   `ReShade64.dll` / `ReShade32.dll` (the two names a non-proxying ReShade uses), because the picker
   has to find a ReShade wherever it sits -- a test fails if a `HOOK_DLLS` name is not searched. It

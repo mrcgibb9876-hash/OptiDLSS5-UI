@@ -521,3 +521,124 @@ test('OptiScaler in a proxy slot is not mistaken for ReShade', { skip: !canFakeP
   assert.equal(addons.reshadeIn(dir), null, 'a game with only OptiScaler has no ReShade here');
   assert.equal(addons.installBlocker(dir, 'renodx'), 'no-reshade');
 });
+
+// ── the engine-wide fallback ───────────────────────────────────────────────────────────────────
+//
+// RenoDX is per-game by nature and publishes no universal build, but it does publish ENGINE-wide
+// mods -- and the index hangs renodx-unrealengine.addon64 off exactly ONE game (Ace Combat 7) even
+// though it is the same binary for every Unreal title. Matching on the engine is what takes the
+// offer from "the games in the index" to "any Unreal game".
+
+// Shaped exactly like the published games-index.json, including the two things that caught me out
+// when reading the real one: the artifact list is `artifacts` (not deploy.artifact), and the
+// engine-wide mod is an ordinary member of some game's `mods`.
+function indexWithEngineMods() {
+  const unreal = {
+    id: 'unrealengine', title: 'Unreal Engine', category: 'engine', support: 'generic',
+    compatibility: 'working', maintainers: ['ShortFuse'], notes: [],
+    artifacts: [{ name: 'renodx-unrealengine.addon64', arch: 'x64', size: 28734976 }],
+  };
+  // Marked generic by the index and carrying no artifact at all -- unityengine's real state today.
+  const unity = {
+    id: 'unityengine', title: 'Unity Engine', category: 'engine', support: 'generic',
+    compatibility: 'working', maintainers: ['ShortFuse'], notes: [], artifacts: [],
+  };
+  return {
+    games: [
+      {
+        id: 'ace-combat-7', title: 'Ace Combat 7', deploy: { steam_appid: 502500 },
+        mods: [
+          {
+            id: 'acecombat7', title: 'Ace Combat 7', category: 'game', status: 'stable',
+            notes: ['Superseded by Generic Unreal Engine mod'],
+            artifacts: [{ name: 'renodx-acecombat7.addon64', arch: 'x64' }],
+          },
+          unreal,
+        ],
+      },
+      {
+        id: 'death-s-door', title: "Death's Door", deploy: { steam_appid: 894020 },
+        mods: [
+          {
+            id: 'deathsdoor', title: "Death's Door", category: 'game', status: 'stable',
+            notes: ['Superseded by Generic Unity mod'],
+            artifacts: [{ name: 'renodx-deathsdoor.addon64', arch: 'x64' }],
+          },
+          unity,
+        ],
+      },
+      {
+        id: 'cyberpunk-2077', title: 'Cyberpunk 2077', deploy: { steam_appid: 1091500 },
+        mods: [{ id: 'cp2077', title: 'Cyberpunk 2077', category: 'game', status: 'stable', notes: [], artifacts: [{ name: 'renodx-cp2077.addon64', arch: 'x64' }] }],
+      },
+    ],
+  };
+}
+
+test('an Unreal game with no mod of its own is offered the engine-wide one', () => {
+  const idx = indexWithEngineMods();
+  const m = addons.matchRenodx(idx, { title: 'Some Unlisted UE5 Game', engineId: 'unreal', bitness: 64 });
+  assert.equal(m.artifact, 'renodx-unrealengine.addon64');
+  assert.equal(m.how, 'engine', 'the caller can tell this was not a match on the game');
+  assert.equal(m.gameId, null, 'because the index does not list this game at all');
+  assert.equal(m.compatibility, 'working', "upstream's rating travels with it, to be quoted not claimed");
+});
+
+test('without an engine there is no fallback, so nothing about the old behaviour changes', () => {
+  const idx = indexWithEngineMods();
+  assert.equal(addons.matchRenodx(idx, { title: 'Some Unlisted UE5 Game', bitness: 64 }), null);
+  assert.equal(addons.matchRenodx(idx, { title: 'Some Unlisted UE5 Game', engineId: 're', bitness: 64 }), null);
+});
+
+test('a generic mod with no artifact is not offered at all', () => {
+  // unityengine is marked generic in the real index and has no artifact. Offering a download that
+  // does not exist is worse than saying "no mod for this game".
+  const idx = indexWithEngineMods();
+  assert.equal(addons.engineGenericMod(idx, 'unity', 64), null, 'no usable Unity mod');
+  // And the Unreal one, which does have an artifact, is found.
+  assert.equal(addons.engineGenericMod(idx, 'unreal', 64).id, 'unrealengine');
+  // A Unity game therefore still reads as having nothing, exactly as before.
+  assert.equal(addons.matchRenodx(idx, { title: 'Unlisted Unity Game', engineId: 'unity', bitness: 64 }), null);
+});
+
+test('the engine-wide mod is only offered for a bitness it actually ships', () => {
+  const idx = indexWithEngineMods();
+  // It builds x64 only, and a 32-bit game takes its own bitness -- handing it a 64-bit DLL would
+  // put a file in the folder that can never load, which is the whole failure the gate above stops.
+  assert.equal(addons.matchRenodx(idx, { title: 'Unlisted UE 32', engineId: 'unreal', bitness: 32 }), null);
+});
+
+test("upstream's own 'superseded' note moves the install to the engine-wide mod", () => {
+  const idx = indexWithEngineMods();
+  const m = addons.matchRenodx(idx, { steamAppid: 502500, engineId: 'unreal', bitness: 64 });
+  assert.equal(m.artifact, 'renodx-unrealengine.addon64', 'not the bespoke acecombat7 one');
+  assert.equal(m.how, 'engine-supersedes');
+  assert.equal(m.gameId, 'ace-combat-7', 'the game IS in the index here, unlike the plain engine case');
+});
+
+test('a superseding mod that cannot be downloaded never displaces a working one', () => {
+  // Five of the eight real "superseded" notes point at unityengine, which has no artifact. Dropping
+  // a working per-game mod for a file that does not exist is a regression dressed up as an upgrade.
+  const idx = indexWithEngineMods();
+  const m = addons.matchRenodx(idx, { steamAppid: 894020, engineId: 'unity', bitness: 64 });
+  assert.equal(m.artifact, 'renodx-deathsdoor.addon64');
+  assert.equal(m.how, 'steam-appid');
+});
+
+test('a bespoke mod with no superseded note is still what installs', () => {
+  const idx = indexWithEngineMods();
+  // Even on an Unreal game: a mod written against this game's shaders beats one written against the
+  // engine, which is why the fallback is a fallback.
+  const m = addons.matchRenodx(idx, { steamAppid: 1091500, engineId: 'unreal', bitness: 64 });
+  assert.equal(m.artifact, 'renodx-cp2077.addon64');
+  assert.equal(m.how, 'steam-appid');
+});
+
+test('the engine map only claims engines the index really has a generic for', () => {
+  assert.equal(addons.ENGINE_GENERIC_MODS.unreal, 'unrealengine');
+  assert.equal(addons.ENGINE_GENERIC_MODS.unity, 'unityengine');
+  // detect.js's other engine ids must not silently resolve to something.
+  for (const id of ['re', 'red', 'cryengine', 'godot', 'anvil', 'emulator', null, undefined]) {
+    assert.equal(addons.ENGINE_GENERIC_MODS[id], undefined, `${id} has no generic mod`);
+  }
+});

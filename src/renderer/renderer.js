@@ -6185,13 +6185,25 @@ async function renderAddons() {
     bits.push(`<div class="field-hint">${escapeHtml(a.summary)}</div>`);
 
     if (perGame && match) {
-      bits.push(`<div class="field-hint">${escapeHtml(t('For this game: {title} ({status}), maintained by {who}.', {
-        title: match.title, status: match.status, who: (match.maintainers || []).join(', ') || t('the RenoDX project'),
-      }))}</div>`);
-      // How the match was made, because the two are not the same claim. An appid came from Steam;
-      // a title match is this app deciding two names are the same game, and it can be wrong.
-      if (match.how === 'title') {
-        bits.push(`<div class="field-hint status-warn">${escapeHtml(t('Matched by name, not by a Steam ID -- check the title above is really this game before installing.'))}</div>`);
+      const who = (match.maintainers || []).join(', ') || t('the RenoDX project');
+      // An engine-wide mod is a different offer from a bespoke one and must not be dressed up as
+      // the same thing: it was written for the engine, not for this game, and no bespoke mod exists.
+      const byEngine = match.how === 'engine' || match.how === 'engine-supersedes';
+      if (byEngine) {
+        bits.push(`<div class="field-hint">${escapeHtml(t('No mod is built for this game, but RenoDX has one for its whole engine: {title}, maintained by {who}.', { title: match.title, who }))}</div>`);
+        if (match.how === 'engine-supersedes') {
+          bits.push(`<div class="field-hint">${escapeHtml(t('This game does have its own mod, and RenoDX marks it superseded by the engine-wide one -- so the engine-wide one is what installs here.'))}</div>`);
+        }
+        bits.push(`<div class="field-hint status-warn">${escapeHtml(t('Matched on the engine, not on this game. RenoDX rates it "{compat}" for the engine, but nobody here has run it on this title -- if the picture looks wrong, take it back off.', { compat: match.compatibility }))}</div>`);
+      } else {
+        bits.push(`<div class="field-hint">${escapeHtml(t('For this game: {title} ({status}), maintained by {who}.', {
+          title: match.title, status: match.status, who,
+        }))}</div>`);
+        // How the match was made, because the two are not the same claim. An appid came from Steam;
+        // a title match is this app deciding two names are the same game, and it can be wrong.
+        if (match.how === 'title') {
+          bits.push(`<div class="field-hint status-warn">${escapeHtml(t('Matched by name, not by a Steam ID -- check the title above is really this game before installing.'))}</div>`);
+        }
       }
     }
     if (unavailable) {

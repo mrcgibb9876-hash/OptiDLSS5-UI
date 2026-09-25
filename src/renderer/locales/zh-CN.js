@@ -1686,4 +1686,10 @@ window.I18N.register("zh-CN", {
     "需要附加组件版本",
   "Needs ReShade":
     "需要 ReShade",
+  "No mod is built for this game, but RenoDX has one for its whole engine: {title}, maintained by {who}.":
+    "没有为这个游戏专门制作的模组，但 RenoDX 有一个适用于它整个引擎的模组：{title}，由 {who} 维护。",
+  "This game does have its own mod, and RenoDX marks it superseded by the engine-wide one -- so the engine-wide one is what installs here.":
+    "这个游戏确实有自己的模组，但 RenoDX 标记它已被引擎通用模组取代——所以这里安装的是引擎通用模组。",
+  "Matched on the engine, not on this game. RenoDX rates it \"{compat}\" for the engine, but nobody here has run it on this title -- if the picture looks wrong, take it back off.":
+    "这是按引擎匹配的，不是按这个游戏匹配的。RenoDX 对该引擎的评级是“{compat}”，但这里没有人在这个游戏上实际试过——如果画面看起来不对，就把它卸下来。",
 });

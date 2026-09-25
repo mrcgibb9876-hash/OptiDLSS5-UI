@@ -1686,4 +1686,10 @@ window.I18N.register("ko", {
     "애드온 빌드가 필요합니다",
   "Needs ReShade":
     "ReShade가 필요합니다",
+  "No mod is built for this game, but RenoDX has one for its whole engine: {title}, maintained by {who}.":
+    "이 게임을 위해 따로 만든 모드는 없지만, RenoDX에는 이 게임의 엔진 전체를 위한 모드가 있습니다: {title}, 관리자 {who}.",
+  "This game does have its own mod, and RenoDX marks it superseded by the engine-wide one -- so the engine-wide one is what installs here.":
+    "이 게임에는 전용 모드가 있지만, RenoDX가 이를 엔진 전체용 모드로 대체되었다고 표시하고 있어 여기서는 엔진 전체용 모드를 설치합니다.",
+  "Matched on the engine, not on this game. RenoDX rates it \"{compat}\" for the engine, but nobody here has run it on this title -- if the picture looks wrong, take it back off.":
+    "이 게임이 아니라 엔진을 기준으로 찾은 결과입니다. RenoDX는 해당 엔진에 대해 \"{compat}\"으로 평가하지만, 이 타이틀에서 실제로 시험해 본 사람은 없습니다. 화면이 이상해 보이면 다시 제거하세요.",
 });
