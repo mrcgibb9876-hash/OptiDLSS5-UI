@@ -101,7 +101,7 @@ test('this machine\'s runs are learned once each, and a local success outranks a
 
 // ── digests ──────────────────────────────────────────────────────────────────────────────────────
 test('a digest reads back into the facts reportDigest wrote', () => {
-  const run = { ran: true, verdict: 'nr-ran', at: '2026-09-18T12:00:00Z', runtimeApi: 'dx11', nrDispatch: 4800, fps: 44, cleanExit: true };
+  const run = { ran: true, verdict: 'nr-ran', at: '2026-09-18T12:00:00Z', runtimeApi: 'dx11', nrFrames: 4800, nrDispatch: 12, fps: 44, cleanExit: true };
   const digest = runlog.reportDigest(run, {
     detected: { api: 'dx11', bitness: 64, engine: 'Unreal Engine 3' },
     route: { route: 'feeder' },
@@ -345,4 +345,13 @@ test('the catalog never overrides a choice made by hand', () => {
   assert.equal(r.route, 'feeder');
   assert.equal(r.catalogDefault, false);
   assert.equal(r.knownGood.badge.kind, 'issue', 'and the card says the Feeder is a known dead end here');
+});
+
+// An engine with no heartbeat has no frame count, and the digest says "ran" instead of turning a
+// log-line count into one. That still reads back as the pass having run.
+test('a digest with no frame count still reads back as the neural pass having run', () => {
+  const run = { ran: true, verdict: 'shutdown-fault', at: '2026-09-18T12:00:00Z', nrFrames: 0, nrDispatch: 1 };
+  const f = parseDigest(`**Game:** NMS\n**Exe:** NMS.exe\n\n${runlog.reportDigest(run, { route: { route: 'optiscaler' } })}`);
+  assert.equal(f.neuralPasses, null, 'no number claimed');
+  assert.equal(f.neuralRan, true);
 });

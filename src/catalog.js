@@ -356,7 +356,7 @@ function validateEntry(e) {
 function entryFromDigest(facts, { source, date = null } = {}) {
   if (!facts || !facts.exe || !facts.route || !ROUTES.has(facts.route)) return null;
   const worked = facts.verdict === 'nr-ran'
-    || (facts.verdict === 'shutdown-fault' && (facts.neuralPasses || 0) > 0);
+    || (facts.verdict === 'shutdown-fault' && ((facts.neuralPasses || 0) > 0 || !!facts.neuralRan));
   const why = DEAD_END_VERDICTS[facts.verdict];
   if (!worked && !why) return null;
   const onWrapper = facts.route === 'feeder' || facts.route === 'feeder32';

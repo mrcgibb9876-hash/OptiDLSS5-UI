@@ -66,6 +66,9 @@ function parseDigest(text) {
     runtimeApi: firstWord(runtimeLine),
     bitness: num(one('bitness')),
     neuralPasses: num(one('neural passes')),
+    // "neural passes: ran (this engine logs no frame count)": the pass ran, and there is no number to
+    // read (runlog.reportDigest will not turn a log-line count into one). Worth as much as a count > 0.
+    neuralRan: (num(one('neural passes')) || 0) > 0 || /^ran\b/i.test(one('neural passes') || ''),
     fps: num(one('fps')),
     neuralMs: costMs,
     modelMs,
