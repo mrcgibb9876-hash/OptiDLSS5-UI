@@ -206,6 +206,22 @@ jobs:
         Copy-Item engine\OptiScaler_DLSSNR.zip "dist\OptiScaler_DLSSNR-$tag.zip"
         Write-Output "dist\OptiScaler_DLSSNR-$tag.zip"
 
+    # A build from any branch but master, or one marked pre-release, is the owner's own test build and
+    # must not reach the public (asked 2026-09-25): no releases-repo copy (every app's updater and every
+    # visitor reads that), no Discord card, and here only as a DRAFT -- a draft is visible to the repo's
+    # collaborators alone and creates no public tag, and the updater never sees one. Publish it by hand
+    # from the Releases page if it is ever meant to go further.
+    - name: Decide whether this build is private
+      id: vis
+      shell: pwsh
+      env:
+        REF_NAME: ${{ github.ref_name }}
+        PRERELEASE: ${{ inputs.prerelease }}
+      run: |
+        $private = ($env:REF_NAME -ne 'master') -or ($env:PRERELEASE -eq 'true')
+        "private=$($private.ToString().ToLower())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+        if ($private) { "🔒 Private build ($env:REF_NAME): draft release in this repo only, no public copy, no Discord." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+
     # Published to the PUBLIC releases repo, not this one. This repo is private, and a private repo's
     # releases are private too: the app's updater (package.json publish) and Check for Updates
     # (main.js MANAGER_REPO) read that repo. The job's own GITHUB_TOKEN cannot write to another repo,
@@ -213,6 +229,7 @@ jobs:
     # mrcgibb9876-hash/OptiDLSS5-UI-releases only. Without it this fails, loudly, rather than publish
     # somewhere nobody's app looks.
     - name: Check the releases repo token is set
+      if: steps.vis.outputs.private != 'true'
       shell: pwsh
       env:
         RELEASES_REPO_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
@@ -223,6 +240,7 @@ jobs:
         }
 
     - name: Publish
+      if: steps.vis.outputs.private != 'true'
       uses: softprops/action-gh-release@v2
       with:
         repository: mrcgibb9876-hash/OptiDLSS5-UI-releases
@@ -266,6 +284,7 @@ jobs:
     - name: Publish here too (hand-over for older installs)
       uses: softprops/action-gh-release@v2
       with:
+        draft: ${{ steps.vis.outputs.private == 'true' }}
         tag_name: ${{ inputs.tag }}
         name: ${{ steps.title.outputs.title }}
         prerelease: ${{ inputs.prerelease }}
@@ -311,7 +330,7 @@ jobs:
     # posts for exactly the build that must not announce. The PowerShell below already guards against
     # the same thing with `-eq 'true'`.
     - name: Announce on Discord
-      if: ${{ inputs.prerelease != true && inputs.prerelease != 'true' }}
+      if: ${{ inputs.prerelease != true && inputs.prerelease != 'true' && steps.vis.outputs.private != 'true' }}
       shell: pwsh
       continue-on-error: true
       env:
