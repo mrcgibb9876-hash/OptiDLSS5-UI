@@ -98,7 +98,7 @@ function setStatus(text, accent) {
 function dependencyMet(field) {
   const d = field.dependsOn;
   if (!d) return true;
-  // { all: [...] }: every condition, e.g. Adaptive resolution's "Frame rate" needs it on AND aimed at fps.
+  // { all: [...] }: every condition, e.g. Enlargement's "Pre-SR and Pre-RR both on".
   if (Array.isArray(d.all)) return d.all.every((c) => dependencyMet({ dependsOn: c }));
   // { any: [...] }: one condition is enough, e.g. Enlargement matters whenever the model runs small.
   if (Array.isArray(d.any)) return d.any.some((c) => dependencyMet({ dependsOn: c }));
@@ -635,7 +635,7 @@ document.addEventListener('visibilitychange', () => {
 // ── Live ────────────────────────────────────────────────────────────────────────────────────────
 //
 // What the in-game panel shows from inside the process -- fps, VRAM, whether the pass is running,
-// Adaptive resolution's state, frame generation's -- read from OptiScaler.live.json, which the engine
+// frame generation's state -- read from OptiScaler.live.json, which the engine
 // writes about twice a second only while this panel asks (main.js panel:live). Half a second here
 // matches the writer; the log timing above stays as the fallback for an engine that never answers.
 const LIVE_POLL_MS = 500;
@@ -692,21 +692,6 @@ async function refreshLive() {
   await refreshHosted();
 }
 
-// The status line Adaptive resolution shows under its rows in the in-game panel, in the same words.
-function autoScaleText(a, shownFps) {
-  if (!a || !a.on) return null;
-  if (a.state === 'settling' || a.scale === null) return t('Adaptive resolution: waiting for the pass to run');
-  const scale = Math.round(a.scale * 100);
-  if (a.state === 'short') return t('At {scale}% and still short of {fps} fps - the rest of the frame is the game\'s, not DLSS 5\'s.', { scale, fps: a.fps });
-  if (a.mode === 1) return t('Holding the pass under {ms} ms - model at {scale}%', { ms: Number(a.ms).toFixed(1), scale });
-  if (a.mode === 0) return t('Holding the pass to {share}% of the frame - model at {scale}%', { share: a.share, scale });
-  // "Holding" only when it is: below the target and not at the floor, the controller is still stepping down.
-  if (shownFps > 0 && shownFps < a.fps * 0.95) {
-    return t('Heading for {fps} fps - now {now}, model at {scale}%', { fps: a.fps, now: Math.round(shownFps), scale });
-  }
-  return t('Holding {fps} fps - model at {scale}%', { fps: a.fps, scale });
-}
-
 function renderLive(l) {
   const box = $('#p-timing');
   box.hidden = false;
@@ -736,8 +721,6 @@ function renderLive(l) {
   else if (!nr.running) sub.push(t('DLSS 5 on, waiting for the game'));
   else if (nr.modelMs !== null && nr.modelMs !== undefined) sub.push(t('DLSS 5 running, model {ms} ms', { ms: Number(nr.modelMs).toFixed(2) }));
   else sub.push(t('DLSS 5 running'));
-  const adaptive = autoScaleText(l.autoScale, r && r.shown > 0 ? r.shown : (l.fps || 0));
-  if (adaptive) sub.push(adaptive);
   $('#p-timing-sub').textContent = sub.join('  ·  ');
 }
 

@@ -51,7 +51,7 @@ test('every field is described well enough to build a control from', () => {
       if (f.default !== null) assert.ok(f.default >= f.min && f.default <= f.max, `${f.key} default is outside its own range`);
     }
     // A dependency has to name a field that exists, or a control greys itself out forever.
-    // { all: [...] } names several (Adaptive resolution's targets need it on AND the matching mode); { any: [...] }
+    // { all: [...] } names several (Enlargement's Pre-SR and Pre-RR clause); { any: [...] }
     // too (Enlargement matters whenever the model runs small, whichever setting made it).
     if (f.dependsOn) {
       // The groups nest, and both evaluators (panel.js, renderer.js) recurse, so this walk does too:
@@ -511,4 +511,14 @@ test('the Guide section carries the read-only Motion row, and it is not an ini s
   assert.match(panel, /if \(section\.motion\) renderMotion\(host\)/);
   assert.match(panel, /window\.api\.panelMotion/);
   assert.match(panel, /window\.api\.addonsSetMvProvider/, 'the fault comes with the fix, not just the name');
+});
+
+test('AutoScale is gone from the engine, so from every field, page and dependency here', () => {
+  assert.ok(!dlssnr.FIELDS.some((f) => /^AutoScale/.test(f.key)), 'no AutoScale* field');
+  const text = JSON.stringify(dlssnr.FIELDS.map((f) => f.dependsOn || null)) + JSON.stringify(dlssnr.PAGES);
+  assert.doesNotMatch(text, /AutoScale/);
+  // The fixed model resolution stays, and is never greyed.
+  const ws = dlssnr.FIELDS.find((f) => f.key === 'WorkingScale');
+  assert.ok(ws, 'WorkingScale is still a field');
+  assert.equal(ws.dependsOn || null, null);
 });

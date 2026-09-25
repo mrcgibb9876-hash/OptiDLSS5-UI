@@ -146,53 +146,6 @@ test('an add-on our marker claims but that is gone from disk is told apart from 
   assert.equal(relimiter.status(scratchDir('rl-never'), { api: 'dx12' }).addonGone, false);
 });
 
-// ── The one thing that must not run alongside it ──
-//
-// [DlssNr] AutoScale with AutoScaleMode 2 ("Aim at: Frame rate") moves the NR MODEL's working
-// resolution until the game reaches a target frame rate. ReLimiter HOLDS the frame rate at a target by
-// sleeping. Both aim at fps, and together they degrade rather than merely duplicate: ReLimiter caps the
-// game, our loop reads a frame rate short of its own target, sheds model resolution to close a gap the
-// limiter will never allow to close, and keeps shedding. Detail lost, nothing gained.
-//
-// The engine's own help for that row already says the mechanism without knowing the cause: "Frame rate
-// ... the only one that can fall short -- if the game itself cannot reach the number, the panel says
-// so." Under a limiter it can never reach the number.
-
-test('only frame-rate mode conflicts -- the cost-budget modes are safe beside a limiter', () => {
-  // The conflict.
-  const c = relimiter.nrConflict({ autoScale: true, autoScaleMode: relimiter.NR_FPS_TARGET_MODE });
-  assert.ok(c, 'AutoScale aiming at a frame rate conflicts');
-  assert.equal(c.setting, 'AutoScale');
-  assert.match(c.why, /frame rate/);
-
-  // Modes 0 and 1 bound what the PASS may spend -- a share of the frame, or a flat millisecond budget.
-  // Neither targets frames per second, so neither fights a frame limiter. Disabling all of AutoScale
-  // would remove a feature that works perfectly well here.
-  assert.equal(relimiter.nrConflict({ autoScale: true, autoScaleMode: 0 }), null, 'share-of-frame is safe');
-  assert.equal(relimiter.nrConflict({ autoScale: true, autoScaleMode: 1 }), null, 'milliseconds is safe');
-
-  // AutoScale off is no conflict whatever the mode says, because the mode is then inert.
-  assert.equal(relimiter.nrConflict({ autoScale: false, autoScaleMode: 2 }), null);
-  assert.equal(relimiter.nrConflict({}), null);
-  assert.equal(relimiter.nrConflict(), null);
-
-  // Values read from an ini are strings, which is how they will actually arrive.
-  assert.ok(relimiter.nrConflict({ autoScale: 'true', autoScaleMode: '2' }), 'string values from the ini');
-  assert.equal(relimiter.nrConflict({ autoScale: 'false', autoScaleMode: '2' }), null);
-});
-
-test('ours is the setting that gives way, and only that one', () => {
-  // The user deployed a frame pacer to pace frames, so ReLimiter keeps its target and AutoScale goes
-  // off. Nothing of ReLimiter's is touched -- reaching into another tool's config to win an argument
-  // it does not know it is having would be worse than the conflict.
-  assert.deepEqual(relimiter.NR_CONFLICT_EDITS, [{ section: 'DlssNr', key: 'AutoScale', value: 'false' }]);
-  const touched = relimiter.NR_CONFLICT_EDITS.map((e) => e.section);
-  assert.ok(!touched.includes('ReLimiter'), "ReLimiter's own settings are not ours to rewrite");
-  // AutoScaleFps is deliberately left alone: the number the user chose is still their number, and it
-  // comes back meaning what it meant if they turn AutoScale on again after removing ReLimiter.
-  assert.ok(!relimiter.NR_CONFLICT_EDITS.some((e) => e.key === 'AutoScaleFps'));
-});
-
 // A real PE whose version resource names it ReShade: notepad.exe with its OriginalFilename
 // rewritten in place (NOTEPAD.EXE and RESHADE.DLL are the same length), padded past ReShade's size
 // floor and carrying the add-on export's name. Windows only, because that is where notepad.exe is.

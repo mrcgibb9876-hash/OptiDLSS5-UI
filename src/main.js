@@ -7203,18 +7203,6 @@ async function autoConfigureGame(dir, exePath) {
   // it must never narrow OptiScaler into NR-only mode. A user who turns on frame pacing and silently
   // loses their upscaler has been handed a worse app.
   const relimiterHere = relimiter.deployed(dir);
-  // ReLimiter and [DlssNr] AutoScale in frame-rate mode both aim at a frame rate, and together the
-  // model sheds resolution chasing a gap the limiter will never let close (see relimiter.js). Ours is
-  // the one that gives way: the user deployed a frame pacer to pace frames. Applied through
-  // patchIniValues so it lands in `forced` and the app SAYS it changed a setting -- one that turns
-  // itself off in silence is a bug report waiting to happen.
-  if (relimiterHere) {
-    const conflict = relimiter.nrConflict({
-      autoScale: readIniKey(iniPath, 'DlssNr', 'AutoScale'),
-      autoScaleMode: readIniKey(iniPath, 'DlssNr', 'AutoScaleMode'),
-    });
-    if (conflict) forced = [...forced, ...patchIniValues(iniPath, relimiter.NR_CONFLICT_EDITS)];
-  }
   // Frame pacing on a non-Feeder game needs the same: OptiScaler leaves LoadReshade off by default, so
   // without this the ReShade64.dll placed for ReLimiter would never load. relimiter:install and
   // dropBlockedPacing keep pacing off the games where it would crash or see no frames.

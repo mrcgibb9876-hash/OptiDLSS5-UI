@@ -498,46 +498,6 @@ function targetFpsEdits(fps) {
   return [{ section: INI_SECTION, key: 'target_fps', value: String(clamped) }];
 }
 
-// ── The one thing that must not run alongside it ──
-//
-// [DlssNr] AutoScale with AutoScaleMode = 2 ("Aim at: Frame rate") is a closed loop that moves the NR
-// MODEL's working resolution up and down until the game reaches a target frame rate. ReLimiter is a
-// closed loop that HOLDS the frame rate at a target by sleeping. Both aim at frames per second, and
-// together they are not merely redundant, they degrade:
-//
-//   ReLimiter caps the game at its target. Our loop reads the resulting frame rate, finds it short of
-//   OUR target, and sheds model resolution to close a gap ReLimiter will never allow to close. It
-//   keeps shedding. The picture loses model detail for no frame-rate gain whatsoever.
-//
-// The engine's own help for that row says as much without knowing why: "Frame rate ... the only one
-// that can fall short -- the pass can give back what it costs and no more, so if the game itself
-// cannot reach the number, the panel says so." Under a frame limiter it can never reach the number.
-//
-// WHICH IS WHY THIS IS NARROW. AutoScaleMode 0 ("Share of the frame") and 1 ("Milliseconds") are cost
-// budgets on the pass itself, not frame-rate targets: they bound what the pass may spend, which is
-// orthogonal to a limiter and perfectly safe beside it. Turning all of AutoScale off would remove a
-// feature that works. Only mode 2 conflicts, so only mode 2 is refused.
-const NR_FPS_TARGET_MODE = 2;
-
-// Given the current [DlssNr] values, is there a conflict? Values in, answer out -- the ini reading
-// belongs to the caller (main.js owns readIniKey/patchIniValues), which also keeps this testable
-// without a file.
-function nrConflict({ autoScale, autoScaleMode } = {}) {
-  const on = autoScale === true || autoScale === 'true';
-  const mode = Number(autoScaleMode);
-  if (!on || mode !== NR_FPS_TARGET_MODE) return null;
-  return {
-    setting: 'AutoScale',
-    mode: NR_FPS_TARGET_MODE,
-    why: 'both aim at a frame rate: ReLimiter holds it, Adjust-it-for-me chases it, and the model loses resolution to a gap that can never close',
-  };
-}
-
-// What to write to resolve it. Ours goes off, not ReLimiter's target: the user deployed a frame pacer
-// to pace frames, so it is the one that should be doing the frame-rate work. Reported as an applied
-// edit rather than done silently -- a setting that turns itself off without saying so is a bug report.
-const NR_CONFLICT_EDITS = [{ section: 'DlssNr', key: 'AutoScale', value: 'false' }];
-
 module.exports = {
   ADDON_64, ADDON_32, MARKER,
   addonName, isReLimiterAddon, reshadeModeFor, isAutomatic,
@@ -545,6 +505,5 @@ module.exports = {
   marker, deployed, status, missing, deploy, remove,
   isReShadeProxy, chickenReShade, placedReShade, ownsReShade, writeMarker, standaloneProxyName, reshadeFileIn, userProxyReShade, promoteToStandalone, demoteStandaloneReShade,
   RELEASE_SOURCES, addonAssetFromRelease, resolveAddonAsset, configureReShadeIni,
-  NR_FPS_TARGET_MODE, nrConflict, NR_CONFLICT_EDITS,
   INI_NAME, INI_SECTION, iniPath, targetFpsEdits, TARGET_FPS_MIN, TARGET_FPS_MAX,
 };

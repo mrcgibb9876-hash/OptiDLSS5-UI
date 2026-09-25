@@ -81,7 +81,7 @@ const FIELDS = [
   // it with the model at render resolution -- the cost without the smearing -- and the label says so.
   { key: 'RunBeforeRR', type: 'bool', default: false, group: 'Speed vs quality', label: "Ray Reconstruction at render cost",
     dependsOn: { key: 'RunBeforeSR', is: true },
-    help: "For games with Ray Reconstruction: the pass costs what it would before Ray Reconstruction, without the damage. It runs after Ray Reconstruction, on its clean frame, with the model at the game's render resolution instead of the output's. Ray Reconstruction's own input is never touched, so nothing is smeared, and the model never sees ray-tracing noise. Model resolution and Adaptive resolution then count from the render resolution. Needs Before Super Resolution on." },
+    help: "For games with Ray Reconstruction: the pass costs what it would before Ray Reconstruction, without the damage. It runs after Ray Reconstruction, on its clean frame, with the model at the game's render resolution instead of the output's. Ray Reconstruction's own input is never touched, so nothing is smeared, and the model never sees ray-tracing noise. Model resolution then counts from the render resolution. Needs Before Super Resolution on." },
   // Enlargement: under the render-cost toggle, which is what makes the model run small (moved from Cost).
   // Two modes, as the engine has: Classic and Matched residual. It briefly had four on the v2.2.0
   // release line -- Edge-aware and a Full-size look default -- and that line is not the one v2.2.3
@@ -90,31 +90,11 @@ const FIELDS = [
   // than as a mode, and Full-size look wrote a 3 the engine simply treats as Matched residual while
   // this panel claimed it was doing something else.
   { key: 'Transfer', type: 'enum', default: 1, options: [[0, 'Classic'], [1, 'Matched residual']], group: 'Speed vs quality',
-    label: "Enlargement", dependsOn: { any: [{ key: 'WorkingScale', below: 1 }, { key: 'AutoScale', is: true },
+    label: "Enlargement", dependsOn: { any: [{ key: 'WorkingScale', below: 1 },
       { all: [{ key: 'RunBeforeSR', is: true }, { key: 'RunBeforeRR', is: true }] }] },
     help: "How the model's work is brought back up when it ran below the frame's size.\n\nClassic composes the model's small picture directly against the full-size frame. Those two disagree by the shrink's blur as well as by the model's edit, and the composition cannot tell them apart.\n\nGreyed out at 100%, where there is nothing to enlarge." },
-  // Adaptive resolution (engine v2.1: DlssNr_Menu.cpp DrawAutoScale, DlssNrBudget.h). Labels, ranges and
-  // help are the in-game panel's own; its help is hard-wrapped there and reflowed here, like every other
-  // help text in this file. AutoScalePrebuild is not a panel row in the engine either, so it is not here.
-  { key: 'AutoScale', type: 'bool', default: false, group: 'Speed vs quality', label: 'Adjust it for me',
-    help: "Moves Model resolution up and down while you play, so the pass costs what you asked it to cost instead of what one number chosen before the game started happens to cost in this scene.\n\nIt only ever changes the MODEL's resolution. The frame is never reduced, so this cannot soften the picture the way a dynamic render resolution does -- the most it can cost is some of the model's own detail.\n\nIt steps between four settings a few seconds apart at most, because each change rebuilds the model and rebuilding it every frame would be slower than doing nothing." },
-  { key: 'AutoScaleMode', type: 'enum', default: 2, options: [[0, 'Share of the frame'], [1, 'Milliseconds'], [2, 'Frame rate']],
-    group: 'Speed vs quality', label: 'Aim at', dependsOn: { key: 'AutoScale', is: true },
-    help: "Frame rate: aim at a number of frames per second. The one most people want, and the only one that can fall short -- the pass can give back what it costs and no more, so if the game itself cannot reach the number, the panel says so.\n\nMilliseconds: hold the pass under a flat time. Exactly what the cost line above measures, with no arithmetic in between.\n\nShare of the frame: let the pass take at most a percentage of each frame. This one looks after itself as the frame rate moves - 15% is 2.5 ms at 60 fps and 1.25 at 120." },
-  { key: 'AutoScaleFps', type: 'int', default: 60, min: 30, max: 240, step: 1, group: 'Speed vs quality', label: 'Frame rate',
-    dependsOn: { all: [{ key: 'AutoScale', is: true }, { key: 'AutoScaleMode', is: 2 }] },
-    help: "The frame rate to aim at. Applied live - there is nothing to rebuild for a change of target, only for a change of model resolution it leads to." },
-  { key: 'AutoScaleMs', type: 'float', default: 2.0, min: 0.5, max: 10, step: 0.1, group: 'Speed vs quality', label: "Time budget per frame",
-    dependsOn: { all: [{ key: 'AutoScale', is: true }, { key: 'AutoScaleMode', is: 1 }] },
-    help: "The most the pass may cost, in milliseconds. Compare it with the cost shown at the top of this panel, which is the same measurement." },
-  { key: 'AutoScaleShare', type: 'int', default: 15, min: 2, max: 50, step: 1, group: 'Speed vs quality', label: 'Share of the frame',
-    dependsOn: { all: [{ key: 'AutoScale', is: true }, { key: 'AutoScaleMode', is: 0 }] },
-    help: "How much of each frame the pass may take." },
-  { key: 'AutoScaleFloor', type: 'float', default: 0.55, min: 0.55, max: 1, step: 0.01, percent: true, group: 'Speed vs quality',
-    label: 'Never go below', dependsOn: { key: 'AutoScale', is: true },
-    help: "The lowest model resolution this may choose. Raise it to keep more of the model's detail and let the frame rate give way instead.\n\nIt stops here because this is where the trade changes character: above it the model is simply working on a smaller picture, and below it fine detail - hair, foliage, thin edges - starts to break down rather than soften." },
-  // Model passes right under Adaptive resolution, as in the in-game panel (2026-09-19): the two things that
-  // decide what the pass costs, together.
+  // Model passes near the top of Cost, as in the in-game panel (2026-09-19): with Model resolution, the two
+  // things that decide what the pass costs.
   { key: 'Passes', type: 'int', default: 1, min: 1, max: 3, group: 'Speed vs quality',
     label: 'Model passes', help: "How many times the model runs before its answer is composed. Each extra layer is fed the previous layer's output and keeps its own temporal history.\n\nThe base frame stays untouched and the composition happens once at the end, so colour and transfer strength do not compound -- but the model is being asked to enhance its own output, which is outside what it was trained on.\n\nCost is very nearly linear: the model is almost the whole expense of the pass and every layer pays it again. Three is the ceiling because later layers converge while still costing full price." },
   // [DlssNr] PassRate. The engine has had this since the stacked passes did (DlssNr_Dx12.cpp, the
@@ -146,11 +126,10 @@ const FIELDS = [
   { key: 'Pass3Style', type: 'enum', default: null, options: STYLES, group: 'Speed vs quality', label: 'Pass 3 style',
     dependsOn: { key: 'Passes', atLeast: 3 }, help: "Left on default, pass 3 uses the style above." },
   // Model resolution beside Model passes, as in the in-game panel (2026-09-20): those two are what the pass
-  // costs, and the per cent was being hunted for down in Cost. Greyed while Adaptive resolution drives it,
-  // again as the panel does -- the value moving is what the controller is doing, and a hand-set number would
-  // be overwritten at its next step anyway.
+  // costs, and the per cent was being hunted for down in Cost. A fixed setting, never greyed: the engine's
+  // adaptive model resolution (AutoScale) that used to drive it is gone.
   { key: 'WorkingScale', type: 'float', default: 1.0, min: 0.25, max: 2, step: 0.01, percent: true,
-    group: 'Speed vs quality', label: 'Model resolution', dependsOn: { key: 'AutoScale', is: false },
+    group: 'Speed vs quality', label: 'Model resolution',
     help: "What fraction of the frame the model works at. Cost falls with the square of this, so half resolution is roughly a quarter of the time. Below 100 the frame itself is never reduced -- only the model's own contribution is computed small and enlarged. Applied when the handle is let go, not while it is moving." },
   { key: 'ScalingDownscaler', type: 'enum', default: 4, options: DOWNSCALERS, group: 'Speed vs quality',
     label: "Downscale filter", dependsOn: { key: 'WorkingScale', above: 1 },
@@ -399,8 +378,7 @@ const PAGES = [
     { caption: 'Models', keys: ['Preset', 'Style', 'Intensity', 'Pass2Preset', 'Pass2Style', 'Pass3Preset', 'Pass3Style'] },
   ] },
   { page: 'Cost', sections: [
-    { caption: 'Cost', keys: ['Passes', 'PassRate', 'ChainedHistory', 'WorkingScale', 'AutoScale', 'AutoScaleMode',
-                              'AutoScaleFps', 'AutoScaleMs', 'AutoScaleShare', 'AutoScaleFloor', 'ScalingDownscaler'] },
+    { caption: 'Cost', keys: ['Passes', 'PassRate', 'ChainedHistory', 'WorkingScale', 'ScalingDownscaler'] },
   ] },
   { page: 'Image', sections: [
     // No caption on the first block, as in the engine: the page button above already says Image, and
