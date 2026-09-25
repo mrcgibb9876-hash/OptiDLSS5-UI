@@ -320,13 +320,13 @@ function diagnose(ctx) {
       // The 32-bit route's one surprise, and it only bites once everything works: OptiScaler is
       // not in the game's process at all -- NVIDIA ships no 32-bit NGX, so the Feeder's add-on
       // hands each frame to a 64-bit helper beside the game and the neural pass happens there
-      // (legacy.js). Alt+Home on the game window therefore reaches nothing, and the sequence that
+      // (legacy.js). The panel key on the game window therefore reaches nothing, and the sequence that
       // does reach it was written only in the route chip's tooltip. A user with a working feed on
       // Castlevania: Lords of Shadow tried Insert and Alt+Tab and concluded the menu was missing
       // (2026-09-14) -- which is a fair reading of an app that never said otherwise.
       // Under DXVK nothing holds the game borderless any more -- that was dgVoodoo.conf's job
       // (legacy.js DG_WINDOWED) -- and the 32-bit add-on starts its helper with no window when the
-      // game is exclusive fullscreen at that moment, so the Alt+Home panel has nothing to show. The
+      // game is exclusive fullscreen at that moment, so the in-game panel has nothing to show. The
       // add-on logs it; a working feed with no panel is worth saying out loud, since it reads as
       // "the panel is broken".
       if (route.route === 'feeder32' && dxvk32 && dxvk32.feedExclusive) {

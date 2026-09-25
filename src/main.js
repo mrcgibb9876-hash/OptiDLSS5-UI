@@ -2576,7 +2576,7 @@ function gameDir(exePath) {
 // Same shape as the Lossless marker: game:install copies the release ini over the folder
 // wholesale, and a multiplier can be picked before OptiScaler is installed, so the source of
 // truth is a per-game marker beside the exe that autoConfigureGame re-applies. No marker means
-// "don't touch" -- a value set live from the Alt+Home panel is then left alone.
+// "don't touch" -- a value set live from the in-game panel is then left alone.
 const FRAMEGEN_MARKER = '.dlss5ui-framegen.json';
 
 // The value of one key in one section of an ini, as written (trimmed), or null when absent.
@@ -3139,7 +3139,7 @@ ipcMain.handle('dlssnr:set', (_evt, { exePath, values } = {}) => {
 
 // The break-away DLSS 5 panel. Same settings as the Edit dialog's DLSS 5 tab and the in-game panel,
 // in a small always-on-top window of this app's own, opened by a global hotkey. It exists because
-// the in-game panel depends on the game cooperating: some games swallow Alt+Home, and a 32-bit game
+// the in-game panel depends on the game cooperating: some games swallow its key, and a 32-bit game
 // only ever shows a mirror of the 64-bit helper's panel. This one needs nothing from the game.
 // See src/panelwindow.js for why it cannot beat exclusive fullscreen.
 function panelEnabled(settings) {
@@ -6654,7 +6654,7 @@ async function autoConfigureGame(dir, exePath) {
   // it decides that by asking whether it is running in the 32-bit route's helper. On an OpenGL or
   // Vulkan game that misses this case: OptiScaler is in the game's own process, so it answers "the
   // panel is right there on a keypress" -- but there is no DXGI swapchain for it to draw on, the
-  // menu never initialises, and Alt+Home does nothing. The ini is the only way in, and it was the
+  // menu never initialises, and Insert does nothing in the game. The ini is the only way in, and it was the
   // one route where the engine had stopped reading it.
   //
   // Tomb Raider I-III Remastered, 2026-09-16: "Live settings reload: off (this game can open the
@@ -6962,7 +6962,7 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
       // DG_WINDOWED): an exclusive-fullscreen game can freeze the moment the helper starts.
       let dgWindowed = false;
       try { dgWindowed = legacy.ensureDgVoodooWindowed(dir, { vendor: gpuVendor }); } catch {}
-      // Installs from before the deploy gave the in-game panel its Alt+Home key (legacy.js ensureCastKey).
+      // Installs from before the deploy gave the in-game panel its key (legacy.js ensureCastKey).
       try { legacy.ensureCastKey(dir); } catch {}
       // The Feeder follows its releases here too. A locked file (the game running) is thrown, so the
       // sync fails and the renderer retries once the game closes.

@@ -100,8 +100,8 @@ const ROUTE_TEXT = {
   // until engine v1.0.34: the helper's own log said "menu is visible but no input was received ... focused: no"
   // (Metal Gear Rising: Revengeance, 2026-09-15). That was our OptiInput discarding the messages the Feeder posts
   // because the helper's window is never focused. With that fixed, and with the deploy now writing the Feeder's
-  // cast_key and opening the panel in the helper on startup (engine v1.0.35), Alt+Home is all it takes -- the same
-  // key as every other route. Verified on Alien: Isolation, 2026-09-16.
+  // cast_key and opening the panel in the helper on startup (engine v1.0.35), one key is all it takes -- the same
+  // key as every other route (Alt+Home then, Insert since engine v2.2.7). Verified on Alien: Isolation, 2026-09-16.
   host32Panel:
     'Press Insert in the game for the DLSS 5 panel, the same as any other game. It is drawn by the helper and shown over the game, and its controls take clicks there.',
   host32Lead:
@@ -321,7 +321,7 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
   // is gone until Install puts it back (route-explain.js).
   const nrModelOnly = !optiInstalled && !!nrmodelonly.readMarker(dir);
   // Which engine build this game is on, for one question only: does that build draw a panel inside
-  // the game? wilsjo2's Pre-SR fork does not, so Alt+Home is a dead key there and the explanation has
+  // the game? wilsjo2's Pre-SR fork does not, so there is nothing for Insert to open in it and the explanation has
   // to say the break-away panel instead (route-explain.js). Read from the game's own marker, so it
   // follows the build actually installed here rather than the default; with no marker it is ours.
   const engineMarker = engines.readEngineMarker(dir);

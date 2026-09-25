@@ -25,7 +25,7 @@ test('the explanation follows the route that was actually picked, API and all', 
   const r = route.recommendRoute(vk, vkExe, { api: 'vulkan', apis: ['vulkan'] }, 'nvidia');
   assert.equal(r.explain.key, 'feeder-vulkan');
   assert.match(r.explain.limits, /Smooth Motion/);
-  assert.match(r.explain.panel, /Alt\+Home/);
+  assert.match(r.explain.panel, /Insert/);
 
   const dx = scratchDir('explain-dx11');
   const dxExe = fakeExe(dx, 'Foo.exe');
@@ -44,17 +44,22 @@ test('RE Engine\'s Present route says there are no motion vectors, so fast motio
   assert.equal(r.route, 'reframework-pd');
   assert.equal(r.explain.key, 'present');
   assert.match(r.explain.limits, /no motion vectors/);
+  // REFramework owns Insert on RE Engine, so its panel line alone names Alt+Home; the other Present
+  // games (Elden Ring, Armored Core VI, Nightreign) say Insert like everything else.
+  assert.match(r.explain.panel, /Press Alt\+Home/);
+  assert.match(r.explain.panel, /REFramework keeps Insert/);
+  assert.match(explain.explainRoute({ route: 'present' }).panel, /Press Insert/);
   assert.match(r.explain.limits, /ghost/);
 });
 
-test('a 32-bit game gets the helper explanation, Alt+Home, and the layer choices', () => {
+test('a 32-bit game gets the helper explanation, Insert, and the layer choices', () => {
   const dir = scratchDir('explain-32');
   const exe = fakeExe(dir, 'Old.exe');
   const r = route.recommendRoute(dir, exe, { api: 'dx9', apis: ['dx9'], bitness: 32, legacyApis: ['dx9'] }, 'nvidia');
   assert.equal(r.route, 'feeder32');
   assert.equal(r.explain.key, 'feeder32');
   assert.match(r.explain.does, /64-bit helper/);
-  assert.match(r.explain.panel, /Alt\+Home/);
+  assert.match(r.explain.panel, /Insert/);
   assert.ok(r.layerExplain && r.layerExplain.dgvoodoo && r.layerExplain.dxvk && r.layerExplain.native);
 });
 
@@ -123,8 +128,8 @@ test('every locale translates every route explanation, keeping its placeholders'
 // Assassin's Creed Black Flag Resynced, 2026-09-19: "the in-game menu used to open and now it does not".
 // Game Help's model-only route had taken OptiScaler out of the game (the trade it states), but route.js
 // goes on recommending `optiscaler` for a game that ships its own DLSS -- so the card kept showing that
-// route's "Press Alt+Home for the DLSS 5 panel" line for a game with no OptiScaler left in it.
-test('a game left on the model-only route says the panel is gone, not "press Alt+Home"', () => {
+// route's "Press Insert for the DLSS 5 panel" line for a game with no OptiScaler left in it.
+test('a game left on the model-only route says the panel is gone, not "press Insert"', () => {
   const dir = scratchDir('explain-model-only');
   const exe = fakeExe(dir, 'acblackflag.exe');
   write(dir, 'nvngx_dlss.dll', 'the game\'s own DLSS');
@@ -133,7 +138,7 @@ test('a game left on the model-only route says the panel is gone, not "press Alt
   const before = route.recommendRoute(dir, exe, det, 'nvidia');
   assert.equal(before.route, 'optiscaler');
   assert.equal(before.explain.key, 'optiscaler');
-  assert.match(before.explain.panel, /Press Alt\+Home/);
+  assert.match(before.explain.panel, /Press Insert/);
 
   // What the route leaves behind: the model, and the marker recording that we placed it.
   write(dir, 'nvngx_dlssnr.dll', 'the model');
@@ -142,21 +147,21 @@ test('a game left on the model-only route says the panel is gone, not "press Alt
   assert.equal(after.route, 'optiscaler', 'the route the game could have is unchanged');
   assert.equal(after.explain.key, 'nr-model-only');
   assert.match(after.explain.panel, /No panel on this route/);
-  assert.doesNotMatch(after.explain.panel, /Press Alt\+Home/);
+  assert.doesNotMatch(after.explain.panel, /Press Insert/);
   assert.match(after.explain.does, /loads the Neural Rendering model by itself/);
 });
 
 // The second engine build came back on 2026-09-19 (engines.js presr, wilsjo2's Pre-SR fork). It draws
-// no panel inside the game, so a game on it must not be told to press Alt+Home -- the break-away panel
+// no panel inside the game, so a game on it must not be told to press Insert -- the break-away panel
 // is the whole answer there. Same failure this file already guards for the model-only route.
-test('a game on an engine build with no in-game panel is pointed at Alt+Shift+Home only', () => {
+test('a game on an engine build with no in-game panel is pointed at the pop-out only', () => {
   const dir = scratchDir('explain-presr');
   const exe = fakeExe(dir, 'FakeGame.exe');
   write(dir, 'nvngx_dlss.dll', 'the game\'s own DLSS');
   const det = { api: 'dx12', apis: ['dx12'], bitness: 64 };
 
   const ours = route.recommendRoute(dir, exe, det, 'nvidia');
-  assert.match(ours.explain.panel, /Press Alt\+Home/, 'our build draws one');
+  assert.match(ours.explain.panel, /Press Insert/, 'our build draws one');
 
   write(dir, engines.ENGINE_MARKER, JSON.stringify({ engine: 'presr' }));
   const presr = route.recommendRoute(dir, exe, det, 'nvidia');
@@ -166,9 +171,9 @@ test('a game on an engine build with no in-game panel is pointed at Alt+Shift+Ho
 
   // A marker naming a build that does draw one, and a marker naming nothing we ship, both get ours.
   write(dir, engines.ENGINE_MARKER, JSON.stringify({ engine: 'dlssnr' }));
-  assert.match(route.recommendRoute(dir, exe, det, 'nvidia').explain.panel, /Press Alt\+Home/);
+  assert.match(route.recommendRoute(dir, exe, det, 'nvidia').explain.panel, /Press Insert/);
   write(dir, engines.ENGINE_MARKER, JSON.stringify({ engine: 'nonsense' }));
-  assert.match(route.recommendRoute(dir, exe, det, 'nvidia').explain.panel, /Press Alt\+Home/);
+  assert.match(route.recommendRoute(dir, exe, det, 'nvidia').explain.panel, /Press Insert/);
 });
 
 // The model-only route has no OptiScaler in the game at all, so the build it once used is irrelevant:

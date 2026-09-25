@@ -1,6 +1,22 @@
 // 简体中文. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("zh-CN", {
+  "Press Insert in the game for the DLSS 5 panel. Run the game windowed or borderless: Windows will not draw it over exclusive fullscreen.":
+    "在游戏中按 Insert 打开 DLSS 5 面板。请以窗口或无边框模式运行游戏：Windows 不会在独占全屏上绘制它。",
+  "No panel on this route: DLSS 5 is not in the game, so Insert does nothing. Press Install to put DLSS 5 and the panel back.":
+    "此路线没有面板：DLSS 5 不在游戏中，因此 Insert 没有任何作用。按“安装”可以把 DLSS 5 和面板装回来。",
+  "Press Insert in the game for the DLSS 5 panel. The helper draws it over the game, and it takes clicks there.":
+    "在游戏中按 Insert 打开 DLSS 5 面板。它由辅助程序绘制在游戏上方，并可在那里点击。",
+  "An emulator hands DLSS 5 its whole window, so the model works at your display resolution whatever internal resolution is set in the emulator -- at 4K that is four times the work of 1080p. Pick the resolution the model should work at instead; the picture stays at display size and only the model's own work is done smaller and enlarged. Match it to the emulator's internal resolution for the best cost/quality. The same value is the Model resolution slider in the in-game panel (Insert).":
+    "模拟器会把整个窗口交给 DLSS 5，所以无论模拟器中设置的内部分辨率是多少，模型都以你的显示分辨率工作 -- 在 4K 下这是 1080p 的四倍工作量。请改为选择模型工作的分辨率；画面保持显示尺寸，只有模型自身的工作以较小尺寸完成再放大。将其设为模拟器的内部分辨率可获得最佳成本/画质。同一数值即游戏内面板（Insert）中的模型分辨率滑块。",
+  "Overrides the build chosen in Settings, for this game only. The Pre-SR Multipass fork can run Neural Rendering before DLSS upscaling, which is faster at the same output resolution, but <strong>it draws no panel inside the game: Insert opens the pop-out panel instead, and that is the way to change these settings while the game runs.</strong> Takes effect when you press Install on this game.":
+    "仅对此游戏覆盖在设置中选择的版本。Pre-SR Multipass 分支可以在 DLSS 放大之前运行 Neural Rendering，在相同输出分辨率下更快，但<strong>它不会在游戏内绘制面板：按 Insert 会改为打开弹出式面板，游戏运行时通过它修改这些设置。</strong>在此游戏上按“安装”后生效。",
+  "Which OptiScaler fork goes into a game. OptiScaler_DLSSNR is this project's own and ships inside this app; it draws the DLSS 5 panel in the game on Insert. The Pre-SR Multipass fork (wilsjo2) is fetched from its own releases and can run Neural Rendering before DLSS upscaling, which is faster at the same output resolution. <strong>The Pre-SR fork draws no panel inside the game, so Insert opens the pop-out panel above instead, which changes the same settings while the game runs.</strong> A game keeps the build it was installed with; press Install on its card to move that game to this one.":
+    "决定把哪个 OptiScaler 分支装进游戏。OptiScaler_DLSSNR 是本项目自己的分支，随本应用一起提供，按 Insert 会在游戏内绘制 DLSS 5 面板。Pre-SR Multipass 分支（wilsjo2）从它自己的发布页下载，可以在 DLSS 放大之前运行 Neural Rendering，在相同输出分辨率下更快。<strong>Pre-SR 分支不会在游戏内绘制任何面板，因此按 Insert 会改为打开上面的弹出式面板，它可以在游戏运行时修改同样的设置。</strong>游戏会保留安装时使用的版本；在游戏卡片上按“安装”即可把该游戏切换到这里选择的版本。",
+  "NOTE: could not set up the proxy DLL -- {error} Close the game and press Install again.":
+    "注意：无法设置代理 DLL -- {error} 请关闭游戏后再次按“安装”。",
+  "Press Alt+Home in the game for the DLSS 5 panel: on this engine REFramework keeps Insert for its own menu. Run the game windowed or borderless: Windows will not draw it over exclusive fullscreen.":
+    "在游戏中按 Alt+Home 打开 DLSS 5 面板：在这个引擎上，Insert 留给 REFramework 自己的菜单。请以窗口或无边框模式运行游戏：Windows 不会在独占全屏上绘制它。",
   "User":
     "自定义",
   "DLSS was created and Neural Rendering is on, yet the pass never ran. This is not a known case. Report it with Report issue on the card (it sends the logs), or ask the AI.":
@@ -260,7 +276,6 @@ window.I18N.register("zh-CN", {
   "Native DLSS detected -- used the \"DLSS 5 only\" profile (Neural Rendering on the game’s own DLSS, upscaler/frame-gen untouched).": "检测到原生 DLSS -- 已使用“仅 DLSS 5”配置（在游戏自己的 DLSS 上叠加神经渲染，超采样器/帧生成不改动）。",
   "Hooked it up as {proxy}{backup}.": "已作为 {proxy}{backup} 接入。",
   "(backed up the original as {file})": "（原始文件已备份为 {file}）",
-  "NOTE: could not set up the proxy DLL -- {error} Use \"Run Setup\" to do it by hand.": "注意：无法设置代理 DLL -- {error} 请使用“运行安装”手动完成。",
   "Applied the RE Engine hotfix ({keys}).": "已应用 RE Engine 热修复（{keys}）。",
   "Installed REFramework (required for OptiScaler on RE Engine).": "已安装 REFramework（RE Engine 上的 OptiScaler 需要它）。",
   "REFramework already present.": "REFramework 已存在。",
@@ -673,7 +688,6 @@ window.I18N.register("zh-CN", {
   "{engine}: latest release {tag} — not installed yet.": "{engine}：最新发布 {tag} — 尚未安装。",
   "Downloading {engine} {tag}…": "正在下载 {engine} {tag}…",
   "Settings default ({engine})": "设置中的默认值（{engine}）",
-  "{engine} (Alt+Home panel)": "{engine}（Alt+Home 面板）",
   "Installed with {installed}; press Install on the card to switch it to {engine}.": "已用 {installed} 安装；在卡片上按“安装”即可切换到 {engine}。",
   "Installed with {engine}.": "已用 {engine} 安装。",
   "Applied on Install.": "安装时应用。",
@@ -684,10 +698,7 @@ window.I18N.register("zh-CN", {
   "Saved -- applied on Install.": "已保存 -- 安装时应用。",
   "Applied to OptiScaler.ini ({keys}). Takes effect on the next launch.": "已写入 OptiScaler.ini（{keys}）。下次启动生效。",
   "already set": "已是该值",
-  "Two builds of the DLSS Neural Rendering engine are available, and both can run Neural Rendering before DLSS upscaling. OptiScaler_DLSSNR is this project's own, with the Alt+Home DLSS 5 panel. The PreSR-Multipass fork (wilsjo2) keeps more games on that faster path -- games whose colour image is padded inside a larger texture, where OptiScaler_DLSSNR falls back to after upscaling -- and adds experimental options; it has no Alt+Home panel (use OptiScaler's Insert menu). Changing this on an installed game takes effect when you press Install on its card.": "DLSS 神经渲染引擎有两种构建可选，两者都能在 DLSS 超分之前运行神经渲染。OptiScaler_DLSSNR 是本项目自己的构建，带 Alt+Home DLSS 5 面板。PreSR-Multipass 分支（wilsjo2）能让更多游戏走这条更快的路径 -- 颜色图像带填充地放在更大纹理里的游戏，OptiScaler_DLSSNR 会退回到超分之后 -- 并提供实验性选项；它没有 Alt+Home 面板（请用 OptiScaler 的 Insert 菜单）。对已安装的游戏，在其卡片上按“安装”后生效。",
   "Run NR before DLSS upscaling: the model works on the DLSS input (1920x1080 in 4K Performance) instead of the full output frame, which is where the speed-up comes from. Games using Ray Reconstruction still run it after upscaling. Passes run the model more than once with separate settings each; every extra pass costs more. Written to OptiScaler.ini on Apply and on Install; after that the in-game menu can change it too.": "在 DLSS 超分之前运行 NR：模型处理的是 DLSS 输入（4K 性能模式下为 1920x1080）而不是完整输出帧，速度提升即来源于此。使用光线重建的游戏仍在超分之后运行。多遍会以各自的设置多次运行模型；每多一遍开销都更大。在“应用”和安装时写入 OptiScaler.ini；之后游戏内菜单也可以更改。",
-  "Both builds can run Neural Rendering before DLSS upscaling. OptiScaler_DLSSNR is this project's own fork, with the Alt+Home DLSS 5 panel. OptiScaler-DLSSNR-PreSR-Multipass (wilsjo2) keeps games with a padded colour image on that faster path too, and adds experimental options, but has no Alt+Home panel. Fetched from its GitHub releases when first chosen and kept current the same way. Any game can override this in Edit.": "两种构建都能在 DLSS 超分之前运行神经渲染。OptiScaler_DLSSNR 是本项目自己的分支，带 Alt+Home DLSS 5 面板。OptiScaler-DLSSNR-PreSR-Multipass（wilsjo2）让颜色图像带填充的游戏也走这条更快的路径，并提供实验性选项，但没有 Alt+Home 面板。首次选择时从其 GitHub 发布获取，并以同样方式保持最新。任何游戏都可在“编辑”中覆盖此项。",
-  "{engine} (wider Pre-SR coverage, no Alt+Home panel)": "{engine}（Pre-SR 覆盖更广，无 Alt+Home 面板）",
   "One more file for Resident Evil": "Resident Evil 还需要一个文件",
   "Resident Evil 2, 3, 4, 7 and Village have no DLSS of their own. REFramework makes the DLSS call instead, through PureDark's free Upscaler Base Plugin (PDPerfPlugin.dll). It is PureDark's work and only available from Nexus Mods, so this app cannot download it for you -- but you only get it once: this app then puts it in every one of these games, now and when you install more.": "Resident Evil 2、3、4、7 和 Village 没有自带 DLSS。改由 REFramework 通过 PureDark 的免费 Upscaler Base Plugin（PDPerfPlugin.dll）发起 DLSS 调用。它是 PureDark 的作品，只在 Nexus Mods 提供，所以本应用无法替你下载 -- 但只需下载一次：之后应用会把它放进这些游戏中的每一个，现在以及以后安装时都会。",
   "Open the Nexus Mods page and download the main file (a free Nexus account is needed).": "打开 Nexus Mods 页面并下载主文件（需要一个免费的 Nexus 账号）。",
@@ -716,7 +727,6 @@ window.I18N.register("zh-CN", {
   "dgVoodoo2 could not be set up: {error}": "无法设置 dgVoodoo2：{error}",
   "Install stopped: this game's DirectX 8/9 route needs dgVoodoo2.": "安装已停止：此游戏的 DirectX 8/9 路径需要 dgVoodoo2。",
   "Installing the experimental 32-bit route (Feeder, its 64-bit helper, OptiScaler)…": "正在安装实验性 32 位路径（Feeder、其 64 位辅助程序、OptiScaler）…",
-  "Installed the experimental 32-bit route. In the game: Home opens ReShade -> Add-ons -> DLSS 5 Feed -> \"Show the DLSS 5 panel in-game\", then Alt+Home.": "已安装实验性 32 位路径。在游戏中：按 Home 打开 ReShade -> Add-ons -> DLSS 5 Feed -> “Show the DLSS 5 panel in-game”，然后按 Alt+Home。",
   "This DirectX 9 game needs dgVoodoo2 in front of it before the DLSS5 Feeder can work. Install puts it there.": "此 DirectX 9 游戏需要先在前面放置 dgVoodoo2，DLSS5 Feeder 才能工作。安装会把它放好。",
   "dgVoodoo2 not in place yet": "尚未放置 dgVoodoo2",
   "DLSS 5 + Feeder (32-bit)": "DLSS 5 + Feeder（32 位）",
@@ -1156,7 +1166,6 @@ window.I18N.register("zh-CN", {
   "Dismiss": "关闭",
   "The window this game runs in, written straight into its OptiScaler.ini. It applies the next time the game starts. The in-game panel saves the whole file whenever you change something in it, so if you have it open, close it before changing anything here.": "此游戏运行时所用的窗口，直接写入其 OptiScaler.ini。下次启动游戏时生效。游戏内面板在你更改其中任何内容时都会保存整个文件，所以如果它开着，请先关闭再在这里做更改。",
   "<strong>This game runs the 32-bit route</strong>, so these are read from and written to host64\\OptiScaler.ini -- the copy the helper process actually loads.": "<strong>此游戏走 32 位路线</strong>，所以这些值从 host64\\OptiScaler.ini 读取并写入其中 -- 这是辅助进程实际加载的副本。",
-  "An emulator hands DLSS 5 its whole window, so the model works at your display resolution whatever internal resolution is set in the emulator -- at 4K that is four times the work of 1080p. Pick the resolution the model should work at instead; the picture stays at display size and only the model's own work is done smaller and enlarged. Match it to the emulator's internal resolution for the best cost/quality. The same value is the Model resolution slider in the in-game panel (Alt+Shift+Home).": "模拟器会把整个窗口交给 DLSS 5，所以无论模拟器中设置的内部分辨率是多少，模型都以你的显示分辨率工作 -- 在 4K 下这是 1080p 的四倍工作量。请改为选择模型工作的分辨率；画面保持显示尺寸，只有模型自身的工作以较小尺寸完成再放大。将其设为模拟器的内部分辨率可获得最佳成本/画质。同一数值即游戏内面板（Alt+Shift+Home）中的模型分辨率滑块。",
   "Reset to default": "恢复默认",
   "Neural pass": "神经处理",
   "Translation layer": "转换层",
@@ -1166,7 +1175,6 @@ window.I18N.register("zh-CN", {
   // How this route works (route-explain.js).
   "Panel": "面板",
   "Saving…": "正在保存…",
-  "Overrides the build chosen in Settings, for this game only. The Pre-SR Multipass fork can run Neural Rendering before DLSS upscaling, which is faster at the same output resolution, but <strong>it draws no panel inside the game: Insert does nothing on it, and the pop-out panel (Alt+Shift+Home) is the way to change these settings while the game runs.</strong> Takes effect when you press Install on this game.": "仅对此游戏覆盖在设置中选择的版本。Pre-SR Multipass 分支可以在 DLSS 放大之前运行 Neural Rendering，在相同输出分辨率下更快，但<strong>它不会在游戏内绘制面板：Insert 在它上面没有任何作用，要在游戏运行时修改这些设置需使用弹出式面板（Alt+Shift+Home）。</strong>在此游戏上按“安装”后生效。",
   "This laptop has an NVIDIA GPU and integrated graphics, and Windows has no graphics preference set for {exe}. It can start on the integrated GPU, where DLSS does not exist. Setting it to High performance makes Windows run it on the NVIDIA GPU.": "这台笔记本同时有 NVIDIA GPU 和集成显卡，而 Windows 没有为 {exe} 设置图形首选项。游戏可能在集成显卡上启动，而那里没有 DLSS。设为“高性能”可让 Windows 在 NVIDIA GPU 上运行它。",
   "RivaTuner Statistics Server is running. It hooks the same Present call as OptiScaler and ReShade, and the two stacks together are a known source of crashes at start. Close it, or give {exe} a profile in RTSS with Application detection level set to None.": "RivaTuner Statistics Server 正在运行。它挂钩的 Present 调用与 OptiScaler 和 ReShade 相同，两套同时存在是启动时崩溃的已知原因。请关闭它，或在 RTSS 中为 {exe} 建立配置文件并把 Application detection level 设为 None。",
   "MSI Afterburner is running. Its on-screen display goes through RivaTuner Statistics Server -- if the game crashes at start, close both and try again.": "MSI Afterburner 正在运行。它的屏幕显示通过 RivaTuner Statistics Server -- 如果游戏启动时崩溃，请关闭两者后再试。",
@@ -1191,12 +1199,8 @@ window.I18N.register("zh-CN", {
   "No in-game panel on this build: press {hotkey} for the pop-out panel instead.": "此版本没有游戏内面板：请按 {hotkey} 打开弹出式面板。",
   "Could not fetch {engine}: {error}": "无法下载 {engine}：{error}",
   "OptiScaler build": "OptiScaler 版本",
-  "Which OptiScaler fork goes into a game. OptiScaler_DLSSNR is this project's own and ships inside this app; it draws the DLSS 5 panel in the game on Insert. The Pre-SR Multipass fork (wilsjo2) is fetched from its own releases and can run Neural Rendering before DLSS upscaling, which is faster at the same output resolution. <strong>The Pre-SR fork draws no panel inside the game, so Insert does nothing on it — use the pop-out panel above (Alt+Shift+Home), which changes the same settings while the game runs.</strong> A game keeps the build it was installed with; press Install on its card to move that game to this one.": "决定把哪个 OptiScaler 分支装进游戏。OptiScaler_DLSSNR 是本项目自己的分支，随本应用一起提供，按 Insert 会在游戏内绘制 DLSS 5 面板。Pre-SR Multipass 分支（wilsjo2）从它自己的发布页下载，可以在 DLSS 放大之前运行 Neural Rendering，在相同输出分辨率下更快。<strong>Pre-SR 分支不会在游戏内绘制任何面板，因此 Insert 在它上面没有任何作用 —— 请使用上面的弹出式面板（Alt+Shift+Home），它可以在游戏运行时修改同样的设置。</strong>游戏会保留安装时使用的版本；在游戏卡片上按“安装”即可把该游戏切换到这里选择的版本。",
-  "This engine build draws no panel inside the game, so Alt+Home does nothing on it. Press Alt+Shift+Home for this app's own panel window: it edits the same settings live and needs nothing from the game.": "此引擎版本不会在游戏内绘制面板，因此 Alt+Home 没有任何作用。请按 Alt+Shift+Home 打开本应用自己的面板窗口：它可以实时修改同样的设置，并且不需要游戏配合。",
-  "Press Alt+Home in the game for the DLSS 5 panel. Run the game windowed or borderless: Windows will not draw it over exclusive fullscreen.": "在游戏中按 Alt+Home 打开 DLSS 5 面板。请以窗口或无边框模式运行游戏：Windows 不会在独占全屏上绘制它。",
   "The game's own DLSS loads the Neural Rendering model by itself. Nothing this app installs is in the game's loader.": "游戏自带的 DLSS 会自行加载 Neural Rendering 模型。本应用安装的任何东西都不在游戏的加载器中。",
   "Turn DLSS on in the game's own settings. Frame Generation is the game's own. Game Help offers this route for a game that will not start with DLSS 5 installed in it.": "在游戏自身的设置中开启 DLSS。Frame Generation 由游戏自己提供。Game Help 会为装了 DLSS 5 就无法启动的游戏提供此路线。",
-  "No panel on this route: DLSS 5 is not in the game, so Alt+Home does nothing. Press Install to put DLSS 5 and the panel back.": "此路线没有面板：DLSS 5 不在游戏中，因此 Alt+Home 没有任何作用。按“安装”可以把 DLSS 5 和面板装回来。",
   "Uses the game's own DLSS, with DLSS 5 added on top of it.": "使用游戏自带的 DLSS。DLSS 5 在其之上加入 DLSS 5。",
   "Turn DLSS on in the game's own settings, or there is nothing to add to. Frame Generation is the game's own.": "请在游戏自己的设置中打开 DLSS，否则没有可叠加的对象。帧生成使用游戏自带的。",
   "The game has no DLSS, so the DLSS5 Feeder makes a DLSS call from ReShade's depth and estimated motion vectors.": "游戏没有 DLSS，因此 DLSS5 Feeder 用 ReShade 的深度和估算的运动矢量生成一次 DLSS 调用。",
@@ -1205,13 +1209,11 @@ window.I18N.register("zh-CN", {
   "The motion vectors are estimated, so fast motion ghosts more. On OpenGL, ReShade goes in as the game's opengl32.dll.": "运动矢量是估算的，所以快速运动时拖影更多。在 OpenGL 上，ReShade 以游戏的 opengl32.dll 形式加入。",
   "Experimental. A 32-bit game cannot run DLSS itself, so each frame goes to a 64-bit helper beside the game, where DLSS 5 runs.": "实验性。32 位游戏无法自己运行 DLSS，因此每一帧都会送到游戏旁边的 64 位辅助程序，由 DLSS 5 在那里运行 DLSS 5。",
   "Not yet confirmed on many games. The helper needs the game windowed or borderless to show anything.": "目前只在少数游戏上确认过。辅助程序需要游戏处于窗口或无边框模式才能显示内容。",
-  "Press Alt+Home in the game for the DLSS 5 panel. The helper draws it over the game, and it takes clicks there.": "在游戏中按 Alt+Home 打开 DLSS 5 面板。它由辅助程序绘制在游戏上方，并可在那里点击。",
   "Experimental. dgVoodoo2 turns DirectX 9 into DirectX 11, then the DLSS5 Feeder and DLSS 5 work as on any DX11 game.": "实验性。dgVoodoo2 把 DirectX 9 转成 DirectX 11，之后 DLSS5 Feeder 和 DLSS 5 的工作方式与任何 DX11 游戏相同。",
   "If dgVoodoo2 crashes the game, this route is not for it yet. Motion vectors are estimated, so fast motion ghosts more.": "如果 dgVoodoo2 导致游戏崩溃，这条路线暂时不适合它。运动矢量是估算的，所以快速运动时拖影更多。",
   "Experimental. The DLSS5 Feeder makes a DLSS call inside {name}, for every game it runs.": "实验性。DLSS5 Feeder 在 {name} 内为它运行的每个游戏生成 DLSS 调用。",
   "Set the emulator's renderer first. ReShade often cannot see a console game's depth inside an emulator, which leaves DLSS 5 little to work with.": "请先设置模拟器的渲染器。ReShade 在模拟器中常常看不到主机游戏的深度，这会让 DLSS 5 可用的信息很少。",
   "DLSS 5 cannot draw its panel over OpenGL. Use the emulator's Direct3D or Vulkan renderer if it has one.": "DLSS 5 无法在 OpenGL 上绘制任何东西。如果模拟器有 Direct3D 或 Vulkan 渲染器，请改用它。",
-  "There is no in-game panel on OpenGL: OptiScaler cannot draw over it. Press Alt+Shift+Home for this app's own panel window instead -- it needs nothing from the emulator and changes the same settings, live.": "在 OpenGL 下没有游戏内面板：OptiScaler 无法在其上绘制。请按 Alt+Shift+Home 打开本应用自己的面板窗口 -- 它不需要模拟器配合，并且可以实时修改同样的设置。",
   "DLSS 5 runs at the end of each frame, on top of the game's own anti-aliasing. It finds the depth itself: no Feeder, nothing to download.": "DLSS 5 在每一帧的最后运行，叠加在游戏自带的抗锯齿之上。DLSS 5 会自己找到深度：不需要 Feeder，也不用下载任何东西。",
   "There are no motion vectors on this route, so fast motion may ghost. Menus have no depth: load a save to see it work.": "这条路线没有运动矢量，所以快速运动时可能出现拖影。菜单没有深度：请读取存档后查看效果。",
   "A Luma-Framework mod adds real DLSS to the game, with its own motion vectors, and DLSS 5 goes on top.": "Luma-Framework 模组为游戏加入使用其自身运动矢量的真正 DLSS，DLSS 5 再在其上加入 DLSS 5。",

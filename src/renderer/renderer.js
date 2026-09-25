@@ -896,8 +896,8 @@ async function applyRecommendation(game, card, backends, generation = renderGene
         title: t('Expect nothing on screen in the game: no OptiScaler splash when it loads, and no menu on any key. A 32-bit game cannot run DLSS in its own process, so the neural pass runs in the 64-bit helper beside the game -- and OptiScaler runs there with it, in a process with no window to draw on. Press "Show the DLSS 5 panel in-game" in the add-on first; Insert then opens OptiScaler\'s menu inside it. Needs windowed or borderless. Game Help spells it out.'),
       }
     // With the pop-out panel switched off (or its hotkey taken by another program) naming that
-    // hotkey sent people to a key that did nothing (review of 2026-09-18); Alt+Home is then the
-    // only way in, so the card says just that.
+    // hotkey sent people to a key that did nothing (review of 2026-09-18); the in-game Insert is then
+    // the only way in, so the card says just that.
     : route.optiInstalled && !popoutHotkeyUsable()
       ? {
           text: t('Press Insert in the game for the DLSS 5 panel'),
@@ -2479,7 +2479,7 @@ async function installGame(game) {
     const proxyCreatedNote = res.proxy && res.proxy.created
       ? ' ' + t('Hooked it up as {proxy}{backup}.', { proxy: res.proxy.proxy, backup: res.proxy.backedUp ? ' ' + t('(backed up the original as {file})', { file: res.proxy.backedUp }) : '' })
       : res.proxyError
-        ? ' ' + t('NOTE: could not set up the proxy DLL -- {error} Use "Run Setup" to do it by hand.', { error: res.proxyError })
+        ? ' ' + t('NOTE: could not set up the proxy DLL -- {error} Close the game and press Install again.', { error: res.proxyError })
         : '';
 
     // Worth naming rather than folding into a count: two of these are settings that crash the game
@@ -2961,7 +2961,7 @@ function showNumber(field, value) {
 }
 
 // The whole [DlssNr] table used to be laid out here, a second copy of the in-game panel that a
-// player could set a value in while the panel had the same file open. Alt+Shift+Home is the panel,
+// player could set a value in while the panel had the same file open. Insert opens the panel,
 // live, over the frame it changes -- so only the Window group survives here, because the window a
 // game opens in is decided before there is a frame to see.
 //
@@ -5240,7 +5240,7 @@ $('#settings-feeder-prerelease').addEventListener('change', async (e) => {
 });
 
 // Which build a game gets on its next Install. Says what is on disk for the chosen build, and repeats
-// the thing a user most needs to know about the Pre-SR fork: Alt+Home draws nothing there.
+// the thing a user most needs to know about the Pre-SR fork: it draws nothing in the game.
 function showEngineChoiceState() {
   const el = $('#settings-engine-status');
   if (!el) return;
@@ -5557,8 +5557,8 @@ function compareTags(a, b) {
 // files. A game may name its own build (game.engine, from its .dlss5ui-engine.json marker); otherwise
 // it follows settings.engine.
 //
-// The Pre-SR build draws no panel inside the game, so Alt+Home does nothing on it -- the break-away
-// panel (Alt+Shift+Home) is what reaches its settings, because that one edits the ini instead of
+// The Pre-SR build draws no panel inside the game, so there Insert opens the break-away panel
+// instead (panelroute.js) -- that is what reaches its settings, because it edits the ini instead of
 // drawing. engines.js carries the fact as `panel`, and route-explain.js says it on the card.
 const ENGINE_LABELS = {
   dlssnr: 'OptiScaler_DLSSNR',

@@ -1,7 +1,7 @@
 // The break-away DLSS 5 panel: a small always-on-top window of this app's own, opened by a global
 // hotkey, that edits the running game's OptiScaler.ini directly.
 //
-// Why this exists at all. The in-game panel (Alt+Home) is drawn by OptiScaler inside the game, so it
+// Why this exists at all. The in-game panel (Insert) is drawn by OptiScaler inside the game, so it
 // inherits every way a game can refuse an overlay: a game that swallows the hotkey, one whose window
 // OptiScaler never subclassed, an anti-cheat that blocks the hook. On a 32-bit game it is worse --
 // NVIDIA ships no 32-bit NGX, so the panel lives in the 64-bit helper and the game only shows a

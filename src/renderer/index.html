@@ -98,7 +98,7 @@
       </details>
 
       <!-- The game's window, at the top, because it is set before a launch and seen immediately.
-           The DLSS 5 model's own controls are no longer here: Alt+Shift+Home opens the in-game
+           The DLSS 5 model's own controls are no longer here: Insert opens the in-game
            panel, live, over the frame they change -- and two places to set one value is how the
            two drift apart. These keys come from the same [DlssNr] section all the same
            (src/dlssnr.js, group "Display"), because that is where the engine reads them. -->
@@ -109,7 +109,7 @@
           <p class="field-hint hidden" id="game-display-helper-note" data-i18n><strong>This game runs the 32-bit route</strong>, so these are read from and written to host64\OptiScaler.ini -- the copy the helper process actually loads.</p>
           <div id="game-dlssnr-emulator" class="field-subblock hidden">
             <label class="field-label" data-i18n>Emulator: DLSS 5 resolution</label>
-            <p class="field-hint" data-i18n>An emulator hands DLSS 5 its whole window, so the model works at your display resolution whatever internal resolution is set in the emulator -- at 4K that is four times the work of 1080p. Pick the resolution the model should work at instead; the picture stays at display size and only the model's own work is done smaller and enlarged. Match it to the emulator's internal resolution for the best cost/quality. The same value is the Model resolution slider in the in-game panel (Alt+Shift+Home).</p>
+            <p class="field-hint" data-i18n>An emulator hands DLSS 5 its whole window, so the model works at your display resolution whatever internal resolution is set in the emulator -- at 4K that is four times the work of 1080p. Pick the resolution the model should work at instead; the picture stays at display size and only the model's own work is done smaller and enlarged. Match it to the emulator's internal resolution for the best cost/quality. The same value is the Model resolution slider in the in-game panel (Insert).</p>
             <div class="field-row">
               <select id="game-dlssnr-emulator-res"></select>
             </div>
@@ -130,7 +130,7 @@
              model's own controls had when they were here. -->
         <div id="game-engine-section" class="advanced-only hidden">
           <label class="field-label" data-i18n>OptiScaler build for this game</label>
-          <p class="field-hint" data-i18n>Overrides the build chosen in Settings, for this game only. The Pre-SR Multipass fork can run Neural Rendering before DLSS upscaling, which is faster at the same output resolution, but <strong>it draws no panel inside the game: Insert does nothing on it, and the pop-out panel (Alt+Shift+Home) is the way to change these settings while the game runs.</strong> Takes effect when you press Install on this game.</p>
+          <p class="field-hint" data-i18n>Overrides the build chosen in Settings, for this game only. The Pre-SR Multipass fork can run Neural Rendering before DLSS upscaling, which is faster at the same output resolution, but <strong>it draws no panel inside the game: Insert opens the pop-out panel instead, and that is the way to change these settings while the game runs.</strong> Takes effect when you press Install on this game.</p>
           <div class="field-row">
             <select id="game-engine-select">
               <option value="dlssnr">OptiScaler_DLSSNR</option>
@@ -617,7 +617,7 @@
         <div id="clean-folder-status" class="status-line" style="margin-top: 4px;"></div>
 
         <label class="field-label" data-i18n>OptiScaler build</label>
-        <p class="field-hint" data-i18n>Which OptiScaler fork goes into a game. OptiScaler_DLSSNR is this project's own and ships inside this app; it draws the DLSS 5 panel in the game on Insert. The Pre-SR Multipass fork (wilsjo2) is fetched from its own releases and can run Neural Rendering before DLSS upscaling, which is faster at the same output resolution. <strong>The Pre-SR fork draws no panel inside the game, so Insert does nothing on it — use the pop-out panel above (Alt+Shift+Home), which changes the same settings while the game runs.</strong> A game keeps the build it was installed with; press Install on its card to move that game to this one.</p>
+        <p class="field-hint" data-i18n>Which OptiScaler fork goes into a game. OptiScaler_DLSSNR is this project's own and ships inside this app; it draws the DLSS 5 panel in the game on Insert. The Pre-SR Multipass fork (wilsjo2) is fetched from its own releases and can run Neural Rendering before DLSS upscaling, which is faster at the same output resolution. <strong>The Pre-SR fork draws no panel inside the game, so Insert opens the pop-out panel above instead, which changes the same settings while the game runs.</strong> A game keeps the build it was installed with; press Install on its card to move that game to this one.</p>
         <div class="field-row">
           <select id="settings-engine">
             <option value="dlssnr">OptiScaler_DLSSNR</option>

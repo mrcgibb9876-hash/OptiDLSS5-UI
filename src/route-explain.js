@@ -1,14 +1,16 @@
 // A short, plain-language explanation for each install route: what it does, what it cannot do, and
 // how to reach the DLSS 5 panel. route.js's `reason` is the full argument for a route, written for the
-// hover text; this is the three-line version the card and Edit show under "How this route works".
+// hover text; this is the short version Edit shows under the route line.
 //
 // All of the words live here, as fixed English templates, so the renderer can translate them with
 // t() (the English text is the key) and nothing about a route's explanation is scattered through the
 // UI. The one part that varies ({name}, an emulator) is filled from `vars`.
 //
 // Every claim is one the app already relies on elsewhere, with where it comes from:
-//   - Alt+Home opens the DLSS 5 panel on every route, 32-bit included (route.js ROUTE_TEXT.host32Panel,
-//     verified on Alien: Isolation 2026-09-16), and needs the game windowed or borderless (renderer.js).
+//   - Insert opens the DLSS 5 panel on every route, 32-bit included (route.js ROUTE_TEXT.host32Panel;
+//     the engine's key since v2.2.7, the Feeder's cast key since feeder.js CAST_KEY_INSERT), and needs the
+//     game windowed or borderless (renderer.js). RE Engine is the one exception: REFramework owns Insert
+//     there, so the panel stays on Alt+Home (main.js RE_ENGINE_HOTFIX, panelroute.js) -- PANEL_RE_ENGINE.
 //   - Feeder motion vectors are estimated, so fast motion ghosts more (index.html, Feeder section);
 //     OptiScaler's own Frame Generation is blocked while the Feeder is loaded, so it is Lossless Scaling.
 //   - The Present route (RE Engine, Elden Ring, Armored Core VI, Nightreign) runs DLSS 5 over the game's
@@ -17,12 +19,12 @@
 //   - DXVK on a 32-bit game needs ReShade's machine-wide 32-bit Vulkan layer (index.html, layer section);
 //     Assassin's Creed II draws black under dgVoodoo2 and runs under DXVK (CLAUDE.md).
 //   - Game Help's model-only route (nrmodelonly.js) takes OptiScaler out of the game's loader entirely,
-//     so Alt+Home reaches nothing there. The words are applyHelpFix's own dialog for it (main.js), which
+//     so Insert reaches nothing there. The words are applyHelpFix's own dialog for it (main.js), which
 //     states the same trade before the route is taken. It is keyed off the state rather than the route id
 //     because route.js keeps recommending `optiscaler` for a game that ships its own DLSS: without this
-//     entry the card showed that route's "Press Alt+Home" line on a game with no OptiScaler in it.
+//     entry the card showed that route's "Press Insert" line on a game with no OptiScaler in it.
 
-// This module says what the ROUTE offers; whether the break-away panel (Alt+Shift+Home) can be
+// This module says what the ROUTE offers; whether the break-away panel (the pop-out) can be
 // offered as well is a fact about the machine, not the route -- it can be switched off in Settings, and
 // Windows can refuse its hotkey to another program that already holds it. So `popout` below says
 // whether that panel is the fallback or the only answer, and the renderer, which knows through
@@ -31,7 +33,9 @@
 //   'fallback' the route draws its own panel in the game; the break-away one is the backup
 //   'only'     nothing is drawn in the game, but OptiScaler is there, so its ini can still be edited
 //   null       no panel of either kind: nothing of ours is in the game to draw one or take a setting
-const PANEL = 'Press Alt+Home in the game for the DLSS 5 panel. Run the game windowed or borderless: Windows will not draw it over exclusive fullscreen.';
+const PANEL = 'Press Insert in the game for the DLSS 5 panel. Run the game windowed or borderless: Windows will not draw it over exclusive fullscreen.';
+// RE Engine (the 'reframework-pd' id of the Present route): REFramework's own menu is on Insert there.
+const PANEL_RE_ENGINE = 'Press Alt+Home in the game for the DLSS 5 panel: on this engine REFramework keeps Insert for its own menu. Run the game windowed or borderless: Windows will not draw it over exclusive fullscreen.';
 
 const ROUTES = {
   optiscaler: {
@@ -42,7 +46,7 @@ const ROUTES = {
   'nr-model-only': {
     does: 'The game\'s own DLSS loads the Neural Rendering model by itself. Nothing this app installs is in the game\'s loader.',
     limits: 'Turn DLSS on in the game\'s own settings. Frame Generation is the game\'s own. Game Help offers this route for a game that will not start with DLSS 5 installed in it.',
-    panel: 'No panel on this route: DLSS 5 is not in the game, so Alt+Home does nothing. Press Install to put DLSS 5 and the panel back.',
+    panel: 'No panel on this route: DLSS 5 is not in the game, so Insert does nothing. Press Install to put DLSS 5 and the panel back.',
     popout: null,
   },
   feeder: {
@@ -63,7 +67,7 @@ const ROUTES = {
   feeder32: {
     does: 'Experimental. A 32-bit game cannot run DLSS itself, so each frame goes to a 64-bit helper beside the game, where DLSS 5 runs.',
     limits: 'Not yet confirmed on many games. The helper needs the game windowed or borderless to show anything.',
-    panel: 'Press Alt+Home in the game for the DLSS 5 panel. The helper draws it over the game, and it takes clicks there.',
+    panel: 'Press Insert in the game for the DLSS 5 panel. The helper draws it over the game, and it takes clicks there.',
   },
   dx9: {
     does: 'Experimental. dgVoodoo2 turns DirectX 9 into DirectX 11, then the DLSS5 Feeder and DLSS 5 work as on any DX11 game.',
@@ -144,7 +148,7 @@ function explainRoute(route, api = null) {
   // away and leaves the break-away panel as the only way in. The model-only route keeps its own words:
   // nothing of ours is in that game whatever the build, so neither panel can reach it.
   const buildDrawsNothing = route.enginePanel === false && key !== 'nr-model-only';
-  const panel = buildDrawsNothing ? null : e.panel;
+  const panel = buildDrawsNothing ? null : (route.route === 'reframework-pd' && e.panel === PANEL ? PANEL_RE_ENGINE : e.panel);
   // Default: a route that draws its own panel offers the break-away one as a fallback; a route that
   // draws none offers nothing, unless its entry says OptiScaler is still there to be configured.
   const popout = e.popout !== undefined ? e.popout : (panel ? 'fallback' : (buildDrawsNothing ? 'only' : null));
@@ -157,7 +161,7 @@ function explainLayer(layer) {
 
 // Every English string this module can hand the renderer, for the translation tests.
 function allStrings() {
-  const out = new Set([PANEL]);
+  const out = new Set([PANEL, PANEL_RE_ENGINE]);
   for (const e of Object.values(ROUTES)) for (const s of [e.does, e.limits, e.panel]) if (s) out.add(s);
   for (const s of Object.values(LAYERS)) out.add(s);
   return [...out];

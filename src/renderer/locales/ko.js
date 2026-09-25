@@ -1,6 +1,22 @@
 // 한국어. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("ko", {
+  "Press Insert in the game for the DLSS 5 panel. Run the game windowed or borderless: Windows will not draw it over exclusive fullscreen.":
+    "게임에서 Insert을 누르면 DLSS 5 패널이 열립니다. 게임을 창 모드나 테두리 없는 창으로 실행하세요. Windows는 전용 전체 화면 위에는 패널을 그리지 않습니다.",
+  "No panel on this route: DLSS 5 is not in the game, so Insert does nothing. Press Install to put DLSS 5 and the panel back.":
+    "이 경로에는 패널이 없습니다: DLSS 5가 게임에 없으므로 Insert은 아무 동작도 하지 않습니다. 설치를 누르면 DLSS 5와 패널이 돌아옵니다.",
+  "Press Insert in the game for the DLSS 5 panel. The helper draws it over the game, and it takes clicks there.":
+    "게임에서 Insert을 누르면 DLSS 5 패널이 열립니다. 도우미가 게임 위에 그리며, 그곳에서 클릭할 수 있습니다.",
+  "An emulator hands DLSS 5 its whole window, so the model works at your display resolution whatever internal resolution is set in the emulator -- at 4K that is four times the work of 1080p. Pick the resolution the model should work at instead; the picture stays at display size and only the model's own work is done smaller and enlarged. Match it to the emulator's internal resolution for the best cost/quality. The same value is the Model resolution slider in the in-game panel (Insert).":
+    "에뮬레이터는 창 전체를 DLSS 5에 넘기므로, 에뮬레이터의 내부 해상도가 무엇이든 모델은 화면 해상도로 작업합니다 -- 4K에서는 1080p의 네 배 작업입니다. 대신 모델이 작업할 해상도를 고르세요. 화면은 디스플레이 크기 그대로이고 모델 자체의 작업만 작게 한 뒤 확대합니다. 비용 대비 품질을 가장 좋게 하려면 에뮬레이터의 내부 해상도에 맞추세요. 같은 값이 게임 내 패널(Insert)의 모델 해상도 슬라이더입니다.",
+  "Overrides the build chosen in Settings, for this game only. The Pre-SR Multipass fork can run Neural Rendering before DLSS upscaling, which is faster at the same output resolution, but <strong>it draws no panel inside the game: Insert opens the pop-out panel instead, and that is the way to change these settings while the game runs.</strong> Takes effect when you press Install on this game.":
+    "이 게임에만 적용되도록 설정에서 선택한 빌드를 덮어씁니다. Pre-SR Multipass 포크는 DLSS 업스케일링 전에 Neural Rendering을 실행할 수 있어 같은 출력 해상도에서 더 빠르지만, <strong>게임 안에 패널을 그리지 않습니다: 대신 Insert가 팝아웃 패널을 열며, 게임 실행 중에는 그 패널로 이 설정을 바꿉니다.</strong> 이 게임에서 설치를 누를 때 적용됩니다.",
+  "Which OptiScaler fork goes into a game. OptiScaler_DLSSNR is this project's own and ships inside this app; it draws the DLSS 5 panel in the game on Insert. The Pre-SR Multipass fork (wilsjo2) is fetched from its own releases and can run Neural Rendering before DLSS upscaling, which is faster at the same output resolution. <strong>The Pre-SR fork draws no panel inside the game, so Insert opens the pop-out panel above instead, which changes the same settings while the game runs.</strong> A game keeps the build it was installed with; press Install on its card to move that game to this one.":
+    "게임에 어떤 OptiScaler 포크를 넣을지 정합니다. OptiScaler_DLSSNR은 이 프로젝트 자체의 포크이며 이 앱에 포함되어 있고, Insert으로 게임 안에 DLSS 5 패널을 그립니다. Pre-SR Multipass 포크(wilsjo2)는 자체 릴리스에서 받아오며 DLSS 업스케일링 전에 Neural Rendering을 실행할 수 있어 같은 출력 해상도에서 더 빠릅니다. <strong>Pre-SR 포크는 게임 안에 패널을 그리지 않으므로, 대신 Insert가 위의 팝아웃 패널을 엽니다. 게임 실행 중에도 같은 설정을 바꿉니다.</strong> 게임은 설치할 때 사용한 빌드를 유지합니다. 해당 게임을 이 빌드로 옮기려면 카드에서 설치를 누르세요.",
+  "NOTE: could not set up the proxy DLL -- {error} Close the game and press Install again.":
+    "참고: 프록시 DLL을 설정하지 못했습니다 -- {error} 게임을 닫고 설치를 다시 누르세요.",
+  "Press Alt+Home in the game for the DLSS 5 panel: on this engine REFramework keeps Insert for its own menu. Run the game windowed or borderless: Windows will not draw it over exclusive fullscreen.":
+    "게임에서 Alt+Home을 누르면 DLSS 5 패널이 열립니다. 이 엔진에서는 REFramework가 자체 메뉴에 Insert를 사용합니다. 게임을 창 모드나 테두리 없는 창으로 실행하세요. Windows는 전용 전체 화면 위에는 패널을 그리지 않습니다.",
   "User":
     "사용자",
   "DLSS was created and Neural Rendering is on, yet the pass never ran. This is not a known case. Report it with Report issue on the card (it sends the logs), or ask the AI.":
@@ -260,7 +276,6 @@ window.I18N.register("ko", {
   "Native DLSS detected -- used the \"DLSS 5 only\" profile (Neural Rendering on the game’s own DLSS, upscaler/frame-gen untouched).": "네이티브 DLSS 감지 -- \"DLSS 5 전용\" 프로필을 사용했습니다(게임 자체 DLSS 위에 Neural Rendering, 업스케일러/프레임 생성은 그대로).",
   "Hooked it up as {proxy}{backup}.": "{proxy}{backup}(으)로 연결했습니다.",
   "(backed up the original as {file})": "(원본은 {file}(으)로 백업)",
-  "NOTE: could not set up the proxy DLL -- {error} Use \"Run Setup\" to do it by hand.": "참고: 프록시 DLL을 설정하지 못했습니다 -- {error} \"설치 실행\"으로 직접 설정하세요.",
   "Applied the RE Engine hotfix ({keys}).": "RE Engine 핫픽스를 적용했습니다({keys}).",
   "Installed REFramework (required for OptiScaler on RE Engine).": "REFramework를 설치했습니다(RE Engine에서 OptiScaler에 필요).",
   "REFramework already present.": "REFramework가 이미 있습니다.",
@@ -673,7 +688,6 @@ window.I18N.register("ko", {
   "{engine}: latest release {tag} — not installed yet.": "{engine}: 최신 릴리스 {tag} — 아직 설치되지 않음.",
   "Downloading {engine} {tag}…": "{engine} {tag} 다운로드 중…",
   "Settings default ({engine})": "설정 기본값({engine})",
-  "{engine} (Alt+Home panel)": "{engine}(Alt+Home 패널)",
   "Installed with {installed}; press Install on the card to switch it to {engine}.": "{installed}(으)로 설치됨. 카드에서 설치를 눌러 {engine}(으)로 바꾸세요.",
   "Installed with {engine}.": "{engine}(으)로 설치됨.",
   "Applied on Install.": "설치 시 적용됩니다.",
@@ -684,10 +698,7 @@ window.I18N.register("ko", {
   "Saved -- applied on Install.": "저장됨 -- 설치 시 적용됩니다.",
   "Applied to OptiScaler.ini ({keys}). Takes effect on the next launch.": "OptiScaler.ini에 적용됨({keys}). 다음 실행부터 적용됩니다.",
   "already set": "이미 설정됨",
-  "Two builds of the DLSS Neural Rendering engine are available, and both can run Neural Rendering before DLSS upscaling. OptiScaler_DLSSNR is this project's own, with the Alt+Home DLSS 5 panel. The PreSR-Multipass fork (wilsjo2) keeps more games on that faster path -- games whose colour image is padded inside a larger texture, where OptiScaler_DLSSNR falls back to after upscaling -- and adds experimental options; it has no Alt+Home panel (use OptiScaler's Insert menu). Changing this on an installed game takes effect when you press Install on its card.": "DLSS 뉴럴 렌더링 엔진은 두 가지 빌드가 있으며, 둘 다 DLSS 업스케일링 전에 뉴럴 렌더링을 실행할 수 있습니다. OptiScaler_DLSSNR은 이 프로젝트 자체 빌드로 Alt+Home DLSS 5 패널이 있습니다. PreSR-Multipass 포크(wilsjo2)는 더 많은 게임을 이 빠른 경로에 유지합니다. 색상 이미지가 더 큰 텍스처 안에 여백과 함께 들어 있는 게임에서 OptiScaler_DLSSNR은 업스케일링 후로 되돌아가지만 이 포크는 그렇지 않으며, 실험적 옵션도 있습니다. Alt+Home 패널은 없습니다(OptiScaler의 Insert 메뉴 사용). 설치된 게임에서는 카드의 설치를 누르면 적용됩니다.",
   "Run NR before DLSS upscaling: the model works on the DLSS input (1920x1080 in 4K Performance) instead of the full output frame, which is where the speed-up comes from. Games using Ray Reconstruction still run it after upscaling. Passes run the model more than once with separate settings each; every extra pass costs more. Written to OptiScaler.ini on Apply and on Install; after that the in-game menu can change it too.": "DLSS 업스케일링 전에 NR 실행: 모델이 전체 출력 프레임 대신 DLSS 입력(4K 성능 모드에서 1920x1080)에서 동작하며, 여기서 속도 이득이 나옵니다. 레이 리컨스트럭션을 쓰는 게임은 여전히 업스케일링 후에 실행합니다. 패스는 각각 별도 설정으로 모델을 여러 번 실행하며, 패스가 늘수록 비용이 커집니다. 적용과 설치 시 OptiScaler.ini에 기록되며, 이후에는 게임 내 메뉴에서도 바꿀 수 있습니다.",
-  "Both builds can run Neural Rendering before DLSS upscaling. OptiScaler_DLSSNR is this project's own fork, with the Alt+Home DLSS 5 panel. OptiScaler-DLSSNR-PreSR-Multipass (wilsjo2) keeps games with a padded colour image on that faster path too, and adds experimental options, but has no Alt+Home panel. Fetched from its GitHub releases when first chosen and kept current the same way. Any game can override this in Edit.": "두 빌드 모두 DLSS 업스케일링 전에 뉴럴 렌더링을 실행할 수 있습니다. OptiScaler_DLSSNR은 이 프로젝트 자체 포크로 Alt+Home DLSS 5 패널이 있습니다. OptiScaler-DLSSNR-PreSR-Multipass(wilsjo2)는 색상 이미지에 여백이 있는 게임도 이 빠른 경로에 유지하고 실험적 옵션을 제공하지만 Alt+Home 패널은 없습니다. 처음 선택할 때 GitHub 릴리스에서 받아오고 같은 방식으로 최신 상태를 유지합니다. 각 게임은 편집에서 이를 재정의할 수 있습니다.",
-  "{engine} (wider Pre-SR coverage, no Alt+Home panel)": "{engine}(더 넓은 Pre-SR 적용, Alt+Home 패널 없음)",
   "One more file for Resident Evil": "Resident Evil에 필요한 파일 하나 더",
   "Resident Evil 2, 3, 4, 7 and Village have no DLSS of their own. REFramework makes the DLSS call instead, through PureDark's free Upscaler Base Plugin (PDPerfPlugin.dll). It is PureDark's work and only available from Nexus Mods, so this app cannot download it for you -- but you only get it once: this app then puts it in every one of these games, now and when you install more.": "Resident Evil 2, 3, 4, 7, Village에는 자체 DLSS가 없습니다. 대신 REFramework가 PureDark의 무료 Upscaler Base Plugin(PDPerfPlugin.dll)을 통해 DLSS 호출을 만듭니다. PureDark의 작업물이며 Nexus Mods에서만 받을 수 있어 이 앱이 대신 내려받을 수는 없습니다 -- 하지만 한 번만 받으면 됩니다: 이후 앱이 이 게임들 모두에, 지금과 앞으로 설치할 때 넣어 줍니다.",
   "Open the Nexus Mods page and download the main file (a free Nexus account is needed).": "Nexus Mods 페이지를 열고 메인 파일을 내려받으세요(무료 Nexus 계정이 필요합니다).",
@@ -716,7 +727,6 @@ window.I18N.register("ko", {
   "dgVoodoo2 could not be set up: {error}": "dgVoodoo2를 설정하지 못했습니다: {error}",
   "Install stopped: this game's DirectX 8/9 route needs dgVoodoo2.": "설치 중단: 이 게임의 DirectX 8/9 경로에는 dgVoodoo2가 필요합니다.",
   "Installing the experimental 32-bit route (Feeder, its 64-bit helper, OptiScaler)…": "실험적 32비트 경로를 설치하는 중(Feeder, 64비트 도우미, OptiScaler)…",
-  "Installed the experimental 32-bit route. In the game: Home opens ReShade -> Add-ons -> DLSS 5 Feed -> \"Show the DLSS 5 panel in-game\", then Alt+Home.": "실험적 32비트 경로를 설치했습니다. 게임에서: Home으로 ReShade 열기 -> Add-ons -> DLSS 5 Feed -> \"Show the DLSS 5 panel in-game\", 그다음 Alt+Home.",
   "This DirectX 9 game needs dgVoodoo2 in front of it before the DLSS5 Feeder can work. Install puts it there.": "이 DirectX 9 게임은 DLSS5 Feeder가 작동하기 전에 앞에 dgVoodoo2가 있어야 합니다. 설치가 넣어 줍니다.",
   "dgVoodoo2 not in place yet": "dgVoodoo2가 아직 없음",
   "DLSS 5 + Feeder (32-bit)": "DLSS 5 + Feeder(32비트)",
@@ -1156,7 +1166,6 @@ window.I18N.register("ko", {
   "Dismiss": "닫기",
   "The window this game runs in, written straight into its OptiScaler.ini. It applies the next time the game starts. The in-game panel saves the whole file whenever you change something in it, so if you have it open, close it before changing anything here.": "이 게임이 실행되는 창으로, 게임의 OptiScaler.ini에 바로 기록됩니다. 다음에 게임을 시작할 때 적용됩니다. 게임 내 패널은 무언가를 바꿀 때마다 파일 전체를 저장하므로, 열려 있다면 여기서 바꾸기 전에 닫으세요.",
   "<strong>This game runs the 32-bit route</strong>, so these are read from and written to host64\\OptiScaler.ini -- the copy the helper process actually loads.": "<strong>이 게임은 32비트 경로로 실행됩니다</strong>. 그래서 이 값들은 host64\\OptiScaler.ini에서 읽고 씁니다 -- 도우미 프로세스가 실제로 로드하는 사본입니다.",
-  "An emulator hands DLSS 5 its whole window, so the model works at your display resolution whatever internal resolution is set in the emulator -- at 4K that is four times the work of 1080p. Pick the resolution the model should work at instead; the picture stays at display size and only the model's own work is done smaller and enlarged. Match it to the emulator's internal resolution for the best cost/quality. The same value is the Model resolution slider in the in-game panel (Alt+Shift+Home).": "에뮬레이터는 창 전체를 DLSS 5에 넘기므로, 에뮬레이터의 내부 해상도가 무엇이든 모델은 화면 해상도로 작업합니다 -- 4K에서는 1080p의 네 배 작업입니다. 대신 모델이 작업할 해상도를 고르세요. 화면은 디스플레이 크기 그대로이고 모델 자체의 작업만 작게 한 뒤 확대합니다. 비용 대비 품질을 가장 좋게 하려면 에뮬레이터의 내부 해상도에 맞추세요. 같은 값이 게임 내 패널(Alt+Shift+Home)의 모델 해상도 슬라이더입니다.",
   "Reset to default": "기본값으로 재설정",
   "Neural pass": "신경망 패스",
   "Translation layer": "변환 레이어",
@@ -1166,7 +1175,6 @@ window.I18N.register("ko", {
   // How this route works (route-explain.js).
   "Panel": "패널",
   "Saving…": "저장 중…",
-  "Overrides the build chosen in Settings, for this game only. The Pre-SR Multipass fork can run Neural Rendering before DLSS upscaling, which is faster at the same output resolution, but <strong>it draws no panel inside the game: Insert does nothing on it, and the pop-out panel (Alt+Shift+Home) is the way to change these settings while the game runs.</strong> Takes effect when you press Install on this game.": "이 게임에만 적용되도록 설정에서 선택한 빌드를 덮어씁니다. Pre-SR Multipass 포크는 DLSS 업스케일링 전에 Neural Rendering을 실행할 수 있어 같은 출력 해상도에서 더 빠르지만, <strong>게임 안에 패널을 그리지 않습니다: Insert은 아무 동작도 하지 않으며, 게임 실행 중에 이 설정을 바꾸는 방법은 팝아웃 패널(Alt+Shift+Home)입니다.</strong> 이 게임에서 설치를 누를 때 적용됩니다.",
   "This laptop has an NVIDIA GPU and integrated graphics, and Windows has no graphics preference set for {exe}. It can start on the integrated GPU, where DLSS does not exist. Setting it to High performance makes Windows run it on the NVIDIA GPU.": "이 노트북에는 NVIDIA GPU와 내장 그래픽이 함께 있고, Windows에 {exe}에 대한 그래픽 기본 설정이 없습니다. 게임이 내장 GPU에서 실행될 수 있으며, 거기에는 DLSS가 없습니다. \"고성능\"으로 설정하면 Windows가 NVIDIA GPU에서 실행합니다.",
   "RivaTuner Statistics Server is running. It hooks the same Present call as OptiScaler and ReShade, and the two stacks together are a known source of crashes at start. Close it, or give {exe} a profile in RTSS with Application detection level set to None.": "RivaTuner Statistics Server가 실행 중입니다. OptiScaler와 ReShade와 같은 Present 호출을 후킹하며, 두 스택이 함께 있으면 시작 시 충돌하는 원인으로 알려져 있습니다. 종료하거나, RTSS에서 {exe} 프로필을 만들고 Application detection level을 None으로 설정하세요.",
   "MSI Afterburner is running. Its on-screen display goes through RivaTuner Statistics Server -- if the game crashes at start, close both and try again.": "MSI Afterburner가 실행 중입니다. 화면 표시는 RivaTuner Statistics Server를 거칩니다 -- 게임이 시작 시 충돌하면 둘 다 종료하고 다시 시도하세요.",
@@ -1191,12 +1199,8 @@ window.I18N.register("ko", {
   "No in-game panel on this build: press {hotkey} for the pop-out panel instead.": "이 빌드에는 게임 내 패널이 없습니다: 대신 {hotkey}을 눌러 팝아웃 패널을 여세요.",
   "Could not fetch {engine}: {error}": "{engine}을(를) 받아올 수 없습니다: {error}",
   "OptiScaler build": "OptiScaler 빌드",
-  "Which OptiScaler fork goes into a game. OptiScaler_DLSSNR is this project's own and ships inside this app; it draws the DLSS 5 panel in the game on Insert. The Pre-SR Multipass fork (wilsjo2) is fetched from its own releases and can run Neural Rendering before DLSS upscaling, which is faster at the same output resolution. <strong>The Pre-SR fork draws no panel inside the game, so Insert does nothing on it — use the pop-out panel above (Alt+Shift+Home), which changes the same settings while the game runs.</strong> A game keeps the build it was installed with; press Install on its card to move that game to this one.": "게임에 어떤 OptiScaler 포크를 넣을지 정합니다. OptiScaler_DLSSNR은 이 프로젝트 자체의 포크이며 이 앱에 포함되어 있고, Insert으로 게임 안에 DLSS 5 패널을 그립니다. Pre-SR Multipass 포크(wilsjo2)는 자체 릴리스에서 받아오며 DLSS 업스케일링 전에 Neural Rendering을 실행할 수 있어 같은 출력 해상도에서 더 빠릅니다. <strong>Pre-SR 포크는 게임 안에 패널을 전혀 그리지 않으므로 Insert이 아무 동작도 하지 않습니다 — 위의 팝아웃 패널(Alt+Shift+Home)을 사용하세요. 게임이 실행 중에도 같은 설정을 바꿉니다.</strong> 게임은 설치할 때 사용한 빌드를 유지합니다. 해당 게임을 이 빌드로 옮기려면 카드에서 설치를 누르세요.",
-  "This engine build draws no panel inside the game, so Alt+Home does nothing on it. Press Alt+Shift+Home for this app's own panel window: it edits the same settings live and needs nothing from the game.": "이 엔진 빌드는 게임 안에 패널을 그리지 않으므로 Alt+Home이 아무 동작도 하지 않습니다. Alt+Shift+Home을 눌러 이 앱 자체의 패널 창을 여세요. 같은 설정을 실시간으로 바꾸며 게임에서 아무것도 필요하지 않습니다.",
-  "Press Alt+Home in the game for the DLSS 5 panel. Run the game windowed or borderless: Windows will not draw it over exclusive fullscreen.": "게임에서 Alt+Home을 누르면 DLSS 5 패널이 열립니다. 게임을 창 모드나 테두리 없는 창으로 실행하세요. Windows는 전용 전체 화면 위에는 패널을 그리지 않습니다.",
   "The game's own DLSS loads the Neural Rendering model by itself. Nothing this app installs is in the game's loader.": "게임의 자체 DLSS가 Neural Rendering 모델을 직접 불러옵니다. 이 앱이 설치하는 것은 게임의 로더에 전혀 들어가지 않습니다.",
   "Turn DLSS on in the game's own settings. Frame Generation is the game's own. Game Help offers this route for a game that will not start with DLSS 5 installed in it.": "게임 자체 설정에서 DLSS를 켜세요. Frame Generation은 게임 자체 기능입니다. Game Help는 DLSS 5가 들어 있으면 실행되지 않는 게임에 이 경로를 제안합니다.",
-  "No panel on this route: DLSS 5 is not in the game, so Alt+Home does nothing. Press Install to put DLSS 5 and the panel back.": "이 경로에는 패널이 없습니다: DLSS 5가 게임에 없으므로 Alt+Home은 아무 동작도 하지 않습니다. 설치를 누르면 DLSS 5와 패널이 돌아옵니다.",
   "Uses the game's own DLSS, with DLSS 5 added on top of it.": "게임 자체의 DLSS를 사용합니다. DLSS 5가 그 위에 DLSS 5를 더합니다.",
   "Turn DLSS on in the game's own settings, or there is nothing to add to. Frame Generation is the game's own.": "게임 자체 설정에서 DLSS를 켜세요. 그렇지 않으면 더할 대상이 없습니다. 프레임 생성은 게임 자체의 것입니다.",
   "The game has no DLSS, so the DLSS5 Feeder makes a DLSS call from ReShade's depth and estimated motion vectors.": "게임에 DLSS가 없어서 DLSS5 Feeder가 ReShade의 깊이와 추정 모션 벡터로 DLSS 호출을 만듭니다.",
@@ -1205,13 +1209,11 @@ window.I18N.register("ko", {
   "The motion vectors are estimated, so fast motion ghosts more. On OpenGL, ReShade goes in as the game's opengl32.dll.": "모션 벡터가 추정값이라 빠른 움직임에서 잔상이 더 생깁니다. OpenGL에서는 ReShade가 게임의 opengl32.dll로 들어갑니다.",
   "Experimental. A 32-bit game cannot run DLSS itself, so each frame goes to a 64-bit helper beside the game, where DLSS 5 runs.": "실험적 기능. 32비트 게임은 DLSS를 직접 실행할 수 없어서, 각 프레임이 게임 옆의 64비트 도우미로 전달되고 DLSS 5가 그곳에서 DLSS 5를 실행합니다.",
   "Not yet confirmed on many games. The helper needs the game windowed or borderless to show anything.": "아직 확인된 게임이 적습니다. 도우미가 무언가를 보여 주려면 게임이 창 모드나 테두리 없는 창이어야 합니다.",
-  "Press Alt+Home in the game for the DLSS 5 panel. The helper draws it over the game, and it takes clicks there.": "게임에서 Alt+Home을 누르면 DLSS 5 패널이 열립니다. 도우미가 게임 위에 그리며, 그곳에서 클릭할 수 있습니다.",
   "Experimental. dgVoodoo2 turns DirectX 9 into DirectX 11, then the DLSS5 Feeder and DLSS 5 work as on any DX11 game.": "실험적 기능. dgVoodoo2가 DirectX 9를 DirectX 11로 바꾸고, 그다음 DLSS5 Feeder와 DLSS 5가 일반 DX11 게임처럼 작동합니다.",
   "If dgVoodoo2 crashes the game, this route is not for it yet. Motion vectors are estimated, so fast motion ghosts more.": "dgVoodoo2 때문에 게임이 충돌하면 이 경로는 아직 그 게임에 맞지 않습니다. 모션 벡터가 추정값이라 빠른 움직임에서 잔상이 더 생깁니다.",
   "Experimental. The DLSS5 Feeder makes a DLSS call inside {name}, for every game it runs.": "실험적 기능. DLSS5 Feeder가 {name} 안에서 실행하는 모든 게임에 대해 DLSS 호출을 만듭니다.",
   "Set the emulator's renderer first. ReShade often cannot see a console game's depth inside an emulator, which leaves DLSS 5 little to work with.": "먼저 에뮬레이터의 렌더러를 설정하세요. 에뮬레이터 안에서는 ReShade가 콘솔 게임의 깊이를 보지 못하는 경우가 많아 DLSS 5가 활용할 정보가 적습니다.",
   "DLSS 5 cannot draw its panel over OpenGL. Use the emulator's Direct3D or Vulkan renderer if it has one.": "DLSS 5는 OpenGL 위에 아무것도 그릴 수 없습니다. 에뮬레이터에 Direct3D나 Vulkan 렌더러가 있다면 그것을 사용하세요.",
-  "There is no in-game panel on OpenGL: OptiScaler cannot draw over it. Press Alt+Shift+Home for this app's own panel window instead -- it needs nothing from the emulator and changes the same settings, live.": "OpenGL에서는 게임 내 패널이 없습니다: OptiScaler가 그 위에 그릴 수 없기 때문입니다. 대신 Alt+Shift+Home을 눌러 이 앱 자체의 패널 창을 여세요 -- 에뮬레이터에서 아무것도 필요하지 않으며 같은 설정을 실시간으로 바꿉니다.",
   "DLSS 5 runs at the end of each frame, on top of the game's own anti-aliasing. It finds the depth itself: no Feeder, nothing to download.": "DLSS 5가 각 프레임의 마지막에 게임 자체 안티에일리어싱 위에서 실행됩니다. DLSS 5가 깊이를 직접 찾습니다. Feeder도, 받을 파일도 없습니다.",
   "There are no motion vectors on this route, so fast motion may ghost. Menus have no depth: load a save to see it work.": "이 경로에는 모션 벡터가 없어 빠른 움직임에서 잔상이 생길 수 있습니다. 메뉴에는 깊이가 없으니 세이브를 불러와서 확인하세요.",
   "A Luma-Framework mod adds real DLSS to the game, with its own motion vectors, and DLSS 5 goes on top.": "Luma-Framework 모드가 게임 자체 모션 벡터로 실제 DLSS를 추가하고, DLSS 5가 그 위에 DLSS 5를 더합니다.",
