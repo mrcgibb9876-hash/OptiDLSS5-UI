@@ -290,23 +290,15 @@ function refreshCardState(card) {
   chip.className = `card-badge ${tone}`;
   chip.textContent = label;
 
-  // One row, and while the game is up it says the one thing worth saying then: how to reach the
-  // panel. A problem still outranks it -- there is no point naming a hotkey for a pass that is
-  // not running.
-  const problemEl = card.querySelector('.card-problem');
+  // No text row on the card (2026-09-25): the mark, the ⚠ and the status chip are the signals, and what
+  // to DO about a problem is the primary button below (Fix it, What to try next, Restore originals...).
+  // The words that row used to carry become the button's hover text, so nothing is lost -- and every
+  // card is the same height, which a row on some cards and not others kept breaking.
   const shown = issue ? { bad: true, text: launchIssueText(issue, (card._game && card._game.name) || '') }
     : (state.problem && state.problem.bad) ? state.problem
     : running && state.panelHint ? { bad: false, text: state.panelHint.text, title: state.panelHint.title }
     : state.problem;
-  if (problemEl) {
-    problemEl.classList.toggle('hidden', !shown);
-    problemEl.classList.toggle('card-problem-bad', !!(shown && shown.bad));
-    if (shown) {
-      const textEl = problemEl.querySelector('.card-problem-text');
-      textEl.textContent = shown.text;
-      textEl.title = shown.title || shown.text;
-    }
-  }
+  card.querySelector('.card-problem')?.classList.add('hidden');
 
   // The primary delegates to a real button rather than duplicating its work, so there is still one
   // implementation of Install, Tune and Launch and one place their confirmations live.
@@ -348,6 +340,7 @@ function refreshCardState(card) {
   if (text !== t('Launch')) cls = cls.replace(' btn-card-launch', '');
   primary.className = cls;
   primary.textContent = text;
+  primary.title = shown ? (shown.title || shown.text || '') : '';
   primary.onclick = onClick;
   if (launch) launch.classList.toggle('hidden', hideLaunch);
 }
@@ -477,7 +470,7 @@ async function renderGrid() {
         <span class="card-warn hidden" aria-label="Anti-cheat">&#9888;</span>
       </div>
       <div class="card-body">
-        <div class="card-title">${escapeHtml(game.name)}</div>
+        <div class="card-title" title="${escapeHtml(game.name)}">${escapeHtml(game.name)}</div>
         <div class="card-path card-recommend hidden"></div>
         <div class="card-problem hidden"><span class="card-problem-text"></span></div>
         <div class="card-actions">
