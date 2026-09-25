@@ -1,6 +1,8 @@
 // 简体中文. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("zh-CN", {
+  "User":
+    "自定义",
   "DLSS was created and Neural Rendering is on, yet the pass never ran. This is not a known case. Report it with Report issue on the card (it sends the logs), or ask the AI.":
     "DLSS 已创建且 Neural Rendering 已开启，但该过程从未运行。这不是已知情况。请用卡片上的“报告问题”提交（会附带日志），或询问 AI。",
   "DLSS initialised but no feature was ever created. This is not a known case. Report it with Report issue on the card (it sends the logs), or ask the AI.":

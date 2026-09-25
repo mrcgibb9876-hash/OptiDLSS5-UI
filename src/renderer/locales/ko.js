@@ -1,6 +1,8 @@
 // 한국어. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("ko", {
+  "User":
+    "사용자",
   "DLSS was created and Neural Rendering is on, yet the pass never ran. This is not a known case. Report it with Report issue on the card (it sends the logs), or ask the AI.":
     "DLSS가 생성되고 Neural Rendering도 켜져 있는데 패스가 실행되지 않았습니다. 알려진 사례가 아닙니다. 카드의 '문제 보고'로 보고하거나(로그가 함께 전송됩니다) AI에게 물어보세요.",
   "DLSS initialised but no feature was ever created. This is not a known case. Report it with Report issue on the card (it sends the logs), or ask the AI.":

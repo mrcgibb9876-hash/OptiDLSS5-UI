@@ -364,6 +364,30 @@ body {
 .card-icons .card-mark img { width: 18px; height: 18px; }
 .card-icons .card-mark .card-mark-icon { font-size: 15px; }
 .card-icons .card-warn { width: 24px; height: 24px; font-size: 15px; }
+/* One line, always: a wrapped row would make this card taller than its neighbours. The pill and the
+   triangle keep their size; the store tag is the part that gives way, with an ellipsis. */
+.card-icons { flex-wrap: nowrap; min-width: 0; }
+.card-icons .card-mark, .card-icons .card-warn { flex-shrink: 0; }
+/* Where the game came from: muted and outlined, so the DLSS 5 pill stays the thing the eye lands on. */
+.card-store {
+  /* inline-block, not flex: text-overflow only ellipses a block's own line. */
+  display: inline-block;
+  height: 22px;
+  line-height: 20px;
+  padding: 0 8px;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: default;
+}
 .card-mark.hidden { display: none; }
 .badge-installed { background: rgba(var(--accent-rgb),0.85); color: var(--on-accent); }
 .badge-partial { background: rgba(217,164,65,0.9); color: #0c0e0f; }

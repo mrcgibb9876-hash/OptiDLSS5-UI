@@ -3534,8 +3534,8 @@ ipcMain.handle('panel:live-stop', async (_evt, exePath) => {
 
 app.on('will-quit', () => { for (const dir of [...liveTouched.keys()]) stopLive(dir); });
 
-// The store a game came from (library.storeFor), for the grid's filter. A game does not move between
-// stores, so it is worked out once per exe per session: the grid asks for every card on every render.
+// The store a game came from (library.storeFor), for the store tag on its card. A game does not move
+// between stores, so it is worked out once per exe per session: the grid asks for every card on every render.
 const storeCache = new Map();
 function storeOf(exePath) {
   const key = String(exePath).toLowerCase();

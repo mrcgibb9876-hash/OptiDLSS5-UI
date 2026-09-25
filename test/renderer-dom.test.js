@@ -202,3 +202,23 @@ test('both update paths sweep every engine build in use, not just the default', 
   assert.match(check, /engineLabel\(engineRes\.engine\)/, 'the result lines do not name the build');
 });
 
+
+test('the card shows where the game came from, read from status.store', () => {
+  // Asked for 2026-09-25: Steam, GOG, Xbox, Epic, EA, Ubisoft, or "User" for a folder of the player's
+  // own. From the game:status answer renderGrid already has -- no extra IPC per card.
+  const tpl = js.slice(js.indexOf('card.innerHTML = `'), js.indexOf('setBannerWithFallback(game, card.querySelector'));
+  const icons = tpl.slice(tpl.indexOf('<div class="card-icons">'), tpl.indexOf('</div>', tpl.indexOf('<div class="card-icons">')));
+  assert.match(icons, /\$\{storeTag\(status\)\}/, 'the store tag sits in the icon row, beside the pill and the triangle');
+  const src = js.slice(js.indexOf('const STORE_LABELS'), js.indexOf('const API_LABEL'));
+  const vm = require('node:vm');
+  const ctx = { t: (s) => `T(${s})`, escapeHtml: (s) => String(s) };
+  vm.runInNewContext(`${src}; this.storeTag = storeTag;`, ctx);
+  const label = (status) => (/>([^<]*)</.exec(ctx.storeTag(status)) || [])[1];
+  for (const [id, name] of [['steam', 'Steam'], ['gog', 'GOG'], ['xbox', 'Xbox'], ['epic', 'Epic'], ['ea', 'EA'], ['ubisoft', 'Ubisoft']]) {
+    assert.strictEqual(label({ store: id }), name, id);
+  }
+  assert.strictEqual(label({ store: 'other' }), 'T(User)', 'a folder of the player\'s own is "User", translated');
+  assert.strictEqual(label({}), 'T(User)', 'no store answer reads as the player\'s own too');
+  assert.strictEqual(ctx.storeTag({ exeMissing: true }), '', 'a missing exe has no install to read a store from');
+  assert.match(ctx.storeTag({ store: 'steam' }), /class="card-store"/);
+});

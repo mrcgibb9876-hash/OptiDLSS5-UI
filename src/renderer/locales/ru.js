@@ -1,6 +1,8 @@
 // Русский. English text is the key -- see i18n.js. Anything missing here shows in English.
 // Placeholders in braces must be kept exactly as in the key.
 window.I18N.register("ru", {
+  "User":
+    "Свой",
   "DLSS was created and Neural Rendering is on, yet the pass never ran. This is not a known case. Report it with Report issue on the card (it sends the logs), or ask the AI.":
     "DLSS создан, Neural Rendering включён, но проход так и не выполнился. Это неизвестный случай. Сообщите через «Сообщить о проблеме» на карточке (журналы отправятся вместе с отчётом) или спросите ИИ.",
   "DLSS initialised but no feature was ever created. This is not a known case. Report it with Report issue on the card (it sends the logs), or ask the AI.":

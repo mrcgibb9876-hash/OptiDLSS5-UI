@@ -471,6 +471,7 @@ async function renderGrid() {
         <div class="card-icons">
           <span class="card-mark hidden"></span>
           <span class="card-warn hidden" aria-label="Anti-cheat">&#9888;</span>
+          ${storeTag(status)}
         </div>
         <div class="card-actions">
           <button class="btn btn-primary btn-card-primary"></button>
@@ -924,6 +925,16 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   // The route is only known now, and the poll may already have decided this card was running.
   if (runningGames.has(game.exePath)) applyRunningState(card, true);
 }
+// Where the game came from (main.js game:status -> library.storeFor), as a small neutral pill in the
+// card's icon row. Store names are proper nouns and stay as they are; a game added from a folder that
+// belongs to no store is the player's own. Nothing when the exe is gone: there is no install to read.
+const STORE_LABELS = { steam: 'Steam', epic: 'Epic', gog: 'GOG', xbox: 'Xbox', ea: 'EA', ubisoft: 'Ubisoft' };
+function storeTag(status) {
+  if (!status || status.exeMissing) return '';
+  const label = STORE_LABELS[status.store] || t('User');
+  return `<span class="card-store" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`;
+}
+
 const API_LABEL = { dx12: 'DX12', dx11: 'DX11', vulkan: 'Vulkan', opengl: 'OpenGL', dx10: 'DX10', dx9: 'DX9', dx8: 'DX8' };
 
 // Remove, with the exact list first: Remove never surprises anyone with what it took. The card's own
