@@ -157,6 +157,9 @@ contextBridge.exposeInMainWorld('api', {
   panelMotion: (exePath) => ipcRenderer.invoke('panel:motion', exePath),
   panelLive: (exePath) => ipcRenderer.invoke('panel:live', exePath),
   panelLiveStop: (exePath) => ipcRenderer.invoke('panel:live-stop', exePath),
+  // Pacing (ReLimiter) and HDR (RenoDX) through the running game -- see main.js panel:hosted.
+  panelHosted: (exePath) => ipcRenderer.invoke('panel:hosted', exePath),
+  panelHostedSet: (exePath, { pacing, hdr } = {}) => ipcRenderer.invoke('panel:hosted-set', { exePath, pacing, hdr }),
   panelClose: () => ipcRenderer.invoke('panel:close'),
   panelResetLayout: () => ipcRenderer.invoke('panel:reset-layout'),
   panelOpen: () => ipcRenderer.invoke('panel:open'),

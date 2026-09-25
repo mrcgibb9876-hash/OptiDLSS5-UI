@@ -427,6 +427,13 @@ const PAGES = [
     // for a 32-bit game and can only be set from out here.
     { caption: 'Window', keys: ['ForceBorderless', 'BorderlessWidth', 'BorderlessHeight'] },
   ] },
+  // The in-game panel's last two pages, always listed and greyed with the reason while their add-on is
+  // not in the game: ReLimiter's frame pacing and RenoDX's HDR. Neither is an ini of ours -- nor can it be one, because neither
+  // add-on re-reads its own ini while running and ReLimiter rewrites relimiter.ini on exit -- so the
+  // rows are not listed here. The engine publishes what the add-on itself describes (its host API,
+  // OptiScaler.hosted.json) and the renderer draws that, the way Frame Generation draws itself.
+  { page: 'Pacing', sections: [{ caption: 'Frame pacing', hosted: 'pacing', keys: [] }] },
+  { page: 'HDR', sections: [{ caption: 'HDR and tone mapping', hosted: 'hdr', keys: [] }] },
 ];
 
 // key -> the page it sits on, so a field can carry its page without the layout being written twice.
@@ -569,4 +576,125 @@ function writeSettings(iniPath, values) {
   return { ok: true, written };
 }
 
-module.exports = { FIELDS, GROUPS, PAGES, HEADER_KEYS, SECTION, readSettings, writeSettings, parseValue, formatValue, isAuto };
+// ── The hosted pages: ReLimiter and RenoDX, through the running game ──────────────────────────
+//
+// Pacing and HDR belong to two ReShade add-ons, not to OptiScaler.ini, and neither can be changed from
+// a file while the game runs: they read their ini once at start, and ReLimiter writes its own back on
+// exit, over whatever this app put there. The only live way in is each add-on's host API, callable
+// only from inside the game. So the engine (DlssNr_Hosted.cpp, engine feat/popout-hosted-pages) does
+// the calling and two files carry it, beside OptiScaler.live.json and under the same request:
+//
+//   OptiScaler.hosted.json      the engine's: {v:1, pid, at, ack, pacing:{available, reason, version,
+//                               settings:[...]}, hdr:{available, reason, module, addon, settings:[...]}}.
+//                               Written at least once a second while the request is live.
+//   OptiScaler.hosted.set.json  ours: {seq, pid, pacing:{key:value}, hdr:{key:value}}. Applied once per
+//                               new seq, only by the process whose pid it names, then acked.
+//
+// Everything below is pure, so the rules -- what counts as a live answer, and how a command is built
+// so nothing a user changed is lost between two writes -- are tested without a game.
+const HOSTED_FILE = 'OptiScaler.hosted.json';
+const HOSTED_SET_FILE = 'OptiScaler.hosted.set.json';
+// The engine writes at least every second; three missed writes and the game has stopped, or the writer has.
+const HOSTED_STALE_MS = 3000;
+const HOSTED_KINDS = ['pacing', 'hdr'];
+const HOSTED_TYPES = {
+  pacing: new Set(['bool', 'int', 'float', 'double', 'enum']),
+  hdr: new Set(['bool', 'int', 'float', 'combo']),
+};
+
+const isStr = (v) => typeof v === 'string';
+const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+
+// One setting as the engine described it, checked rather than trusted: a row the renderer cannot draw
+// honestly (a slider with no range, a choice list that does not include the value) is dropped, which is
+// exactly what the in-game page does with the same setting.
+function hostedSetting(kind, s) {
+  if (!s || typeof s !== 'object' || !isStr(s.key) || !s.key || !HOSTED_TYPES[kind].has(s.type)) return null;
+  // ReLimiter groups; RenoDX has sections. Either is the caption the row sits under.
+  const caption = kind === 'pacing' ? s.group : s.section;
+  const out = {
+    key: s.key,
+    label: isStr(s.label) && s.label ? s.label : s.key,
+    caption: isStr(caption) ? caption : '',
+    tooltip: isStr(s.tooltip) ? s.tooltip : '',
+    type: s.type,
+    enabled: s.enabled !== false,
+  };
+  if (s.type === 'bool') {
+    if (typeof s.value !== 'boolean') return null;
+    out.value = s.value;
+  } else if (s.type === 'enum') {
+    if (!Array.isArray(s.choices) || !s.choices.every(isStr) || !s.choices.length || !isStr(s.value)) return null;
+    out.choices = s.choices;
+    out.value = s.value;
+  } else if (s.type === 'combo') {
+    if (!Array.isArray(s.labels) || !s.labels.every(isStr) || !s.labels.length) return null;
+    if (!Number.isInteger(s.value) || s.value < 0 || s.value >= s.labels.length) return null;
+    out.labels = s.labels;
+    out.value = s.value;
+  } else {
+    if (!isNum(s.min) || !isNum(s.max) || s.min >= s.max || !isNum(s.value)) return null;
+    out.min = s.min;
+    out.max = s.max;
+    out.value = s.value;
+    // ReLimiter's "0 means automatic" settings: the range is what applies ABOVE zero.
+    if (isStr(s.zeroLabel) && s.zeroLabel) out.zeroLabel = s.zeroLabel;
+  }
+  return out;
+}
+
+// The engine's answer, or why it is not one. `now` is passed in so the staleness rule is testable.
+function checkHosted(raw, now, staleMs = HOSTED_STALE_MS) {
+  if (!raw || typeof raw !== 'object' || raw.v !== 1 || !isNum(raw.at) || !isNum(raw.pid)) {
+    return { ok: false, reason: 'unknown-format' };
+  }
+  if (now - raw.at > staleMs) return { ok: false, reason: 'stale', at: raw.at };
+  const hosted = { pid: raw.pid, at: raw.at, ack: isNum(raw.ack) && raw.ack >= 0 ? Math.floor(raw.ack) : 0 };
+  for (const kind of HOSTED_KINDS) {
+    const src = raw[kind] && typeof raw[kind] === 'object' ? raw[kind] : {};
+    const settings = (Array.isArray(src.settings) ? src.settings : []).map((s) => hostedSetting(kind, s)).filter(Boolean);
+    const available = src.available === true && settings.length > 0;
+    hosted[kind] = {
+      // Available and with something to show. The page is listed either way; without this it is greyed
+      // and says why.
+      available,
+      // Why not, as the engine's code (not-loaded / no-api / api-version), or 'empty' for an add-on
+      // that is there but has nothing the panel can draw. null while available.
+      reason: available ? null : src.available === true ? 'empty' : (isStr(src.reason) && src.reason ? src.reason : 'not-loaded'),
+      settings,
+    };
+    if (kind === 'pacing') hosted[kind].version = isStr(src.version) ? src.version : '';
+    if (kind === 'hdr') {
+      hosted[kind].module = isStr(src.module) ? src.module : '';
+      hosted[kind].addon = isStr(src.addon) ? src.addon : '';
+    }
+  }
+  return { ok: true, hosted };
+}
+
+// The next command file, from what was sent before (`state`, ours), what the engine has acknowledged
+// (`hosted`, checked above) and the new changes ({pacing:{key:value}, hdr:{...}}).
+//
+// A command carries every change the engine has NOT yet acked, not just the newest -- the file is
+// replaced, not appended to, so two changes a quarter-second apart would otherwise lose the first if
+// the engine read only the second. Once ack reaches our last seq everything before it has landed and
+// the slate is clean. seq starts past the engine's ack, so a restarted app never sends a seq the game
+// has already applied (and would ignore); a new game process (a different pid) starts over entirely.
+function nextHostedCommand(state, hosted, changes) {
+  const pid = hosted.pid;
+  const ack = hosted.ack || 0;
+  const prev = state && state.pid === pid ? state : { pid, seq: 0, pending: { pacing: {}, hdr: {} } };
+  const allLanded = prev.seq <= ack;
+  const pending = {};
+  for (const kind of HOSTED_KINDS) {
+    pending[kind] = allLanded ? {} : { ...(prev.pending[kind] || {}) };
+    for (const [key, value] of Object.entries((changes && changes[kind]) || {})) {
+      if (typeof value === 'boolean' || isNum(value) || isStr(value)) pending[kind][key] = value;
+    }
+  }
+  const seq = Math.max(prev.seq, ack) + 1;
+  return { state: { pid, seq, pending }, command: { seq, pid, pacing: pending.pacing, hdr: pending.hdr } };
+}
+
+module.exports = { FIELDS, GROUPS, PAGES, HEADER_KEYS, SECTION, readSettings, writeSettings, parseValue, formatValue, isAuto,
+                   HOSTED_FILE, HOSTED_SET_FILE, HOSTED_STALE_MS, HOSTED_KINDS, checkHosted, nextHostedCommand };

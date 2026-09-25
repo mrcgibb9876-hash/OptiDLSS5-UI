@@ -1749,4 +1749,36 @@ window.I18N.register('pt-BR', {
     "Baixar atualização",
   "Manager v{version} is available -- press Download update in the banner at the top.":
     "O Manager v{version} está disponível -- pressione Baixar atualização no aviso no topo.",
+  "Pacing":
+    "Ritmo",
+  "HDR":
+    "HDR",
+  "HDR and tone mapping":
+    "HDR e mapeamento de tons",
+  "ReLimiter holds the frame rate steady for a G-Sync or VRR display rather than making more frames. These are its own settings, changed live in the running game.":
+    "O ReLimiter mantém a taxa de quadros estável para uma tela G-Sync ou VRR em vez de gerar mais quadros. Estas são as configurações dele, alteradas ao vivo no jogo em execução.",
+  "RenoDX replaces this game's tone mapping to give it real HDR. What appears here is whatever this game's mod offers, changed live in the running game.":
+    "O RenoDX substitui o mapeamento de tons deste jogo para dar a ele HDR de verdade. O que aparece aqui é o que o mod deste jogo oferece, alterado ao vivo no jogo em execução.",
+  "The game did not answer, so nothing was changed. Is it still running?":
+    "O jogo não respondeu, então nada foi alterado. Ele ainda está em execução?",
+  "Sent to the running game.":
+    "Enviado ao jogo em execução.",
+  "This game's DLSS 5 engine is too old to show these settings here. Update DLSS 5 from the app.":
+    "O motor DLSS 5 deste jogo é antigo demais para mostrar estas configurações aqui. Atualize o DLSS 5 pelo app.",
+  "The game is not running. These settings can be changed here while it runs.":
+    "O jogo não está em execução. Estas configurações podem ser alteradas aqui enquanto ele roda.",
+  "ReLimiter is running, but this build of it cannot be driven from this panel -- its own overlay still works. Adding frame pacing again from the app installs one that can.":
+    "O ReLimiter está em execução, mas esta versão dele não pode ser controlada por este painel -- a sobreposição dele continua funcionando. Adicionar o ritmo de quadros de novo pelo app instala uma que pode.",
+  "RenoDX is running, but this build of it cannot be driven from this panel -- its own overlay still works.":
+    "O RenoDX está em execução, mas esta versão dele não pode ser controlada por este painel -- a sobreposição dele continua funcionando.",
+  "ReLimiter is running, but it speaks a different version of the panel's interface than this DLSS 5 engine. Update DLSS 5 or frame pacing from the app.":
+    "O ReLimiter está em execução, mas usa uma versão da interface do painel diferente da deste motor DLSS 5. Atualize o DLSS 5 ou o ritmo de quadros pelo app.",
+  "RenoDX is running, but it speaks a different version of the panel's interface than this DLSS 5 engine. Update DLSS 5 or RenoDX from the app.":
+    "O RenoDX está em execução, mas usa uma versão da interface do painel diferente da deste motor DLSS 5. Atualize o DLSS 5 ou o RenoDX pelo app.",
+  "The add-on is running but offers no settings this panel can show.":
+    "O complemento está em execução, mas não oferece configurações que este painel possa mostrar.",
+  "Frame pacing is not installed on this game -- turn it on from the app's card or the pop-out; it takes effect the next time the game starts.":
+    "O ritmo de quadros não está instalado neste jogo -- ative-o pelo cartão do app ou pelo painel destacável; ele passa a valer na próxima vez que o jogo iniciar.",
+  "HDR (RenoDX) is not installed on this game -- turn it on from the app's card or the pop-out; it takes effect the next time the game starts.":
+    "O HDR (RenoDX) não está instalado neste jogo -- ative-o pelo cartão do app ou pelo painel destacável; ele passa a valer na próxima vez que o jogo iniciar.",
 });
