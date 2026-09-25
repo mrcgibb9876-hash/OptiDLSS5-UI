@@ -740,8 +740,7 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   // The chip line (engine, API, route, Experimental, Verified, Known good, Proven route/layer) is gone:
   // asked for 2026-09-25 as clutter. The card keeps three signals -- the DLSS 5 / Chicken mark on the
   // art, the status chip (Working, Needs attention...) and the one problem row -- and the detail that
-  // used to sit in the chips (and the card's "How this route works", also removed) is in Settings and
-// Game Help.
+  // used to sit in the chips (and the route text, removed from the card and Settings) is in Game Help.
   line.classList.add('hidden');
 
 
@@ -2713,7 +2712,6 @@ async function openGameModal(game, opts = {}) {
   $('#steam-results').innerHTML = '';
   updateBannerPreview();
   gameModal.classList.remove('hidden');
-  await loadRouteStatus(game);
   await loadEngineSection(game);
   await loadLayerSection(game);
   await loadApiSection(game);
@@ -3220,7 +3218,6 @@ $('#game-engine-select').addEventListener('change', async (e) => {
   game.engine = id;
   window.api.saveGames(games);
   await loadEngineSection(game);
-  await loadRouteStatus(game);
   await renderGrid();
 });
 
@@ -3271,7 +3268,6 @@ $('#game-layer-select').addEventListener('change', async (e) => {
   $('#game-layer-status').textContent = t('Applying…');
   await applyLayerSwap(game, id);
   // A cancelled confirm leaves the layer as it was, so the select is re-read rather than trusted.
-  await loadRouteStatus(game);
   await loadLayerSection(game);
 });
 
@@ -3345,7 +3341,6 @@ $('#game-proxy-select').addEventListener('change', async (e) => {
     toast((proxy ? t('OptiScaler will load as {name} for this game.', { name: proxy }) : t('Back to the automatic proxy DLL name.')) + moved);
   }
   await loadProxySection(game);
-  await loadRouteStatus(game);
 });
 
 // The per-game graphics API choice -- see game:setApiOverride in main.js for what it drives.
@@ -3418,7 +3413,6 @@ $('#game-api-select').addEventListener('change', async (e) => {
     toast((api ? t('This game is now treated as {api}.', { api: API_LABEL[api] }) : t('Back to the detected graphics API.')) + applied);
   }
   // Every section below the choice depends on it.
-  await loadRouteStatus(game);
   await loadApiSection(game);
   await loadProxySection(game);
   await loadInjectorSection(game);
@@ -3452,40 +3446,6 @@ function popoutPanelSentence(popout) {
     : '';
 }
 
-// A route's short explanation (route-explain.js) as three labelled lines: English templates from
-// main, translated here. '' when the route has none.
-function routeExplainHtml(explain) {
-  if (!explain || !explain.does) return '';
-  const panel = [explain.panel ? t(explain.panel, explain.vars || undefined) : '', popoutPanelSentence(explain.popout)]
-    .filter(Boolean).join(' ');
-  const rows = [[t('What it does'), t(explain.does, explain.vars || undefined)], [t('Limits'), explain.limits ? t(explain.limits, explain.vars || undefined) : ''], [t('Panel'), panel]];
-  return rows.filter(([, text]) => text)
-    .map(([label, text]) => `<div class="route-explain-row"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(text)}</div>`)
-    .join('');
-}
-
-// The same route the card tags, spelled out: which stack this game gets and what is still to do.
-async function loadRouteStatus(game) {
-  const el = $('#game-route-status');
-  const explainEl = $('#game-route-explain');
-  if (!game || !game.exePath) {
-    el.classList.add('hidden');
-    explainEl.classList.add('hidden');
-    return;
-  }
-  const route = await window.api.gameRoute(game.exePath, game.detectedPath);
-  const explainHtml = routeExplainHtml(route.explain);
-  explainEl.innerHTML = explainHtml;
-  explainEl.classList.toggle('hidden', !explainHtml);
-  el.classList.remove('hidden');
-  el.className = `status-line ${route.route === 'unsupported' ? 'status-bad' : route.complete ? 'status-ok' : ''}`.trim();
-  const progress = route.complete ? t('All set.') : route.nextStep ? t('Next: {step}.', { step: t(route.nextStep) }) : '';
-  // One line; the route's full reasoning is the hover text.
-  const proven = !!(route.knownGood && route.knownGood.proven);
-  const tag = proven ? ` ${t('(known good)')}` : route.unproven || route.experimental ? ` ${t('(Experimental)')}` : '';
-  el.textContent = `${t('Recommended: {label}.', { label: t(route.label) })}${tag} ${progress}`.trim();
-  el.title = t(route.reason, route.reasonVars);
-}
 
 // Turns a "blind install" into an informed one: says whether OptiScaler_DLSSNR's own engine has
 // a compiled-in compatibility entry for this exe (see engine-known-games.json's own header for
@@ -4299,7 +4259,6 @@ $('#btn-feeder-remove').addEventListener('click', async () => {
     toast(t('Could not remove the DLSS5 Feeder: {error}', { error: res.error }));
   }
   // Everything that keyed off "Feeder game" changes with it: the route tag, OptiFG, Lossless.
-  await loadRouteStatus(game);
   await loadFeederSection(game);
   await loadOptiFgSection(game);
   await loadDlssNrSection(game);
@@ -4899,7 +4858,6 @@ $('#btn-lumaue-remove').addEventListener('click', async () => {
   $('#game-lumaue-status').textContent = t('Removing Luma UE…');
   const res = await window.api.lumaUeRemove(game.exePath);
   toast(res.ok ? t('Luma UE removed ({list}).', { list: res.removed.join(', ') }) : t('Could not remove Luma UE: {error}', { error: res.error }));
-  await loadRouteStatus(game);
   await loadFeederSection(game);
   await loadLumaUeSection(game);
   await loadLosslessSection(game);
@@ -4933,7 +4891,6 @@ $('#btn-lumaue-deploy').addEventListener('click', async () => {
     toast(t('Could not deploy Luma UE: {error}', { error: error.message }));
   }
   // The Feeder section, the route tag and Lossless all keyed off "Feeder game" -- refresh them.
-  await loadRouteStatus(game);
   await loadFeederSection(game);
   await loadLumaUeSection(game);
   await loadLosslessSection(game);

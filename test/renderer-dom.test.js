@@ -175,13 +175,3 @@ test('both update paths sweep every engine build in use, not just the default', 
   assert.match(check, /engineLabel\(engineRes\.engine\)/, 'the result lines do not name the build');
 });
 
-// The break-away panel's sentence lives here, not in route-explain.js, precisely so it can be withheld:
-// the pop-out panel can be switched off in Settings and Windows can refuse its hotkey. The Panel row
-// must therefore ask, not paste the route's text and hope.
-test('the card\'s Panel row asks whether the pop-out panel can actually be offered', () => {
-  const fn = js.slice(js.indexOf('function routeExplainHtml('), js.indexOf('async function loadRouteStatus('));
-  assert.ok(fn.length > 0, 'could not find routeExplainHtml');
-  assert.match(fn, /popoutPanelSentence\(explain\.popout\)/, 'the Panel row does not consult the pop-out state');
-  const sentence = js.slice(js.indexOf('function popoutPanelSentence('), js.indexOf('function routeExplainHtml('));
-  assert.match(sentence, /popoutHotkeyUsable\(\)/, 'popoutPanelSentence names the hotkey unconditionally');
-});
