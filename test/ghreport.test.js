@@ -81,3 +81,37 @@ test('the bundle\'s files can be gathered without writing a zip', async () => {
   assert.ok(names.includes('OptiScaler.log') && names.includes('dlss5-feed.log') && names.includes('folder-listing.txt') && names.includes('app-view.json'));
   assert.ok(files.find((f) => f.name === 'app-view.json').text.includes('"appVersion": "x"'));
 });
+
+// An issue POST that fails after the gist was made used to leave the gist behind, one per retry; and
+// the App not being installed on the releases repo came back as GitHub's own "Resource not accessible
+// by integration", which names nothing anyone can act on.
+test('a failed issue takes its gist back and names the missing App install', async () => {
+  const calls = [];
+  const fetchImpl = async (url, opts) => {
+    calls.push(`${opts.method} ${url}`);
+    if (opts.method === 'POST' && url.endsWith('/gists')) return { ok: true, status: 201, json: async () => ({ id: 'g123', html_url: 'https://gist.github.com/g123' }) };
+    if (opts.method === 'POST' && url.endsWith('/issues')) return { ok: false, status: 403, json: async () => ({ message: 'Resource not accessible by integration' }) };
+    if (opts.method === 'DELETE') return { ok: true, status: 204, json: async () => { throw new Error('no body'); } };
+    throw new Error('unexpected ' + url);
+  };
+  await assert.rejects(
+    gh.sendReport({ token: 'ghu_x', title: 't', body: 'b', files: [{ name: 'a.log', text: 'x' }], fetchImpl }),
+    (e) => e.code === 'app-not-installed' && e.message.includes(gh.REPO),
+  );
+  assert.deepEqual(calls, [
+    'POST https://api.github.com/gists',
+    `POST https://api.github.com/repos/${gh.REPO}/issues`,
+    'DELETE https://api.github.com/gists/g123',
+  ]);
+
+  // Any other failure is passed through as it was, and the gist still goes.
+  calls.length = 0;
+  const other = async (url, opts) => {
+    calls.push(`${opts.method} ${url}`);
+    if (url.endsWith('/gists')) return { ok: true, status: 201, json: async () => ({ id: 'g9', html_url: 'x' }) };
+    if (url.endsWith('/issues')) return { ok: false, status: 500, json: async () => ({ message: 'boom' }) };
+    return { ok: true, status: 204, json: async () => ({}) };
+  };
+  await assert.rejects(gh.sendReport({ token: 'ghu_x', title: 't', body: 'b', files: [{ name: 'a.log', text: 'x' }], fetchImpl: other }), /500 boom/);
+  assert.ok(calls.includes('DELETE https://api.github.com/gists/g9'));
+});

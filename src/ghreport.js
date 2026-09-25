@@ -18,7 +18,10 @@
 //     Repository permissions > Issues: Read and write
 //     Account permissions > Gists: Read and write
 //     Where can this GitHub App be installed: Only on this account
-//   then Install App > only the OptiDLSS5-UI repository, and put the Client ID (Iv23...) in CLIENT_ID below.
+//   then Install App > only the OptiDLSS5-UI-releases repository (REPO below: the public one, where the
+//   issues live -- the source repo is private), and put the Client ID (Iv23...) in CLIENT_ID below.
+//   Installed on the wrong repository, the issue POST answers 403 "Resource not accessible by
+//   integration"; postReport turns that into a sentence naming this step.
 //
 // Privacy: the issue and the gist are public on GitHub. The files are the support bundle's (logs, inis,
 // the game folder's listing, the app's own view of the game); the Windows user name is replaced wherever
@@ -120,8 +123,26 @@ async function gh(token, method, url, body, fetchImpl) {
   });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401) { const e = new Error('GitHub sign-in is no longer valid'); e.signedOut = true; throw e; }
-  if (!res.ok) throw new Error(`GitHub ${method} ${url}: ${res.status} ${data.message || ''}`.trim());
+  if (!res.ok) {
+    const e = new Error(`GitHub ${method} ${url}: ${res.status} ${data.message || ''}`.trim());
+    e.status = res.status;
+    e.ghMessage = data.message || '';
+    throw e;
+  }
   return data;
+}
+
+// A user token of a GitHub App can only touch the repositories the App is INSTALLED on. When it is
+// not installed on REPO, GitHub answers the issue POST with 403 "Resource not accessible by
+// integration" -- which says nothing to a player and not much to the maintainer either.
+function explainIssueError(e) {
+  if (e && e.status === 403 && /not accessible by integration/i.test(e.ghMessage || e.message || '')) {
+    const out = new Error(`GitHub refused to open the issue: the reports GitHub App is not installed on ${REPO}. The maintainer has to install it there (GitHub > Settings > Developer settings > GitHub Apps > Install App).`);
+    out.code = 'app-not-installed';
+    out.cause = e;
+    return out;
+  }
+  return e;
 }
 
 const LOGS_PLACEHOLDER = '**Logs:** (link to the log gist, added when sent)';
@@ -164,7 +185,17 @@ async function postReport({ token, prepared, fetchImpl = netFetch }) {
     ? await gh(token, 'POST', '/gists', { description: `OptiDLSS5-UI game failure: ${prepared.title}`, public: false, files: gistFiles }, fetchImpl)
     : null;
   const body = gist ? prepared.body.replace(LOGS_PLACEHOLDER, `**Logs:** ${gist.html_url}`) : prepared.body;
-  const issue = await gh(token, 'POST', `/repos/${REPO}/issues`, { title: prepared.title, body }, fetchImpl);
+  let issue;
+  try {
+    issue = await gh(token, 'POST', `/repos/${REPO}/issues`, { title: prepared.title, body }, fetchImpl);
+  } catch (e) {
+    // The gist exists only to be linked from this issue. Left behind, every retry of a failing send
+    // would add another orphan to the player's account -- so it goes, best effort.
+    if (gist && gist.id) {
+      try { await gh(token, 'DELETE', `/gists/${gist.id}`, null, fetchImpl); } catch {}
+    }
+    throw explainIssueError(e);
+  }
   return {
     issueUrl: issue.html_url, issueNumber: issue.number, gistUrl: gist ? gist.html_url : null,
     sent: prepared.files.map((f) => f.name), cut: prepared.files.filter((f) => f.cut).map((f) => f.name),
