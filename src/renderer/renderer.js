@@ -837,7 +837,9 @@ async function applyRecommendation(game, card, backends, generation = renderGene
     claim({ bad: false, text: words, title: helpWords(diag) });
   }
 
-  if (diag && diag.ok && ['fix', 'step', 'unavailable', 'unknown'].includes(diag.status)) {
+  // 'dfc-here' is Game Help saying Chicken runs the pass in this folder: the card's 🍗 pill already says
+  // that, so it is not a line of text on the card (2026-09-25). Game Help itself still shows it.
+  if (diag && diag.ok && diag.code !== 'dfc-here' && ['fix', 'step', 'unavailable', 'unknown'].includes(diag.status)) {
     const bad = diag.status === 'unavailable' || diag.status === 'unknown';
     let action;
     if (diag.status === 'fix') {
