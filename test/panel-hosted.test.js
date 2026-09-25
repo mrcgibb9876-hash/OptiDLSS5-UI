@@ -201,3 +201,10 @@ test('the wiring: main answers both channels, preload bridges them, the panel dr
   assert.ok(body.indexOf('sendHosted(') > 0, 'set-target sends through the hosted channel');
   assert.ok(body.indexOf('sendHosted(') < body.indexOf('patchIniValues('), 'and falls back to the ini only after');
 });
+
+test('RenoDX active: the pop-out hides Brightness, Contrast and both Auto rows and says why', () => {
+  const panel = fs.readFileSync(path.join(REPO, 'src', 'renderer', 'panel.js'), 'utf8');
+  assert.match(panel, /const TONE_TRIM_KEYS = \['Brightness', 'Contrast', 'AutoBrightness', 'AutoContrast'\];/);
+  assert.match(panel, /lastLive\.renodxActive === true/);
+  assert.match(panel, /t\('Brightness and contrast are handled by RenoDX in this game\.'\)/);
+});

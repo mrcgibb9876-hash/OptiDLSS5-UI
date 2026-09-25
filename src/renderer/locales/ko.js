@@ -1777,4 +1777,6 @@ window.I18N.register("ko", {
     "{file}에서 언리얼 HDR을 켰고, 게임이 유지하도록 이제 읽기 전용입니다.",
   "Unreal's HDR could not be switched on in Engine.ini here -- turn HDR on in the game's own settings.":
     "여기서는 Engine.ini에서 언리얼 HDR을 켤 수 없었습니다. 게임 자체 설정에서 HDR을 켜세요.",
+  "Brightness and contrast are handled by RenoDX in this game.":
+    "이 게임에서는 밝기와 대비를 RenoDX가 처리합니다.",
 });

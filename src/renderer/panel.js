@@ -478,9 +478,23 @@ function renderFields() {
     // An add-on's own settings, as the running game reports them -- not ini keys, so drawn from there.
     if (section.hosted) renderHosted(host, section.hosted);
 
+    let toneNote = false;
     for (const key of section.keys) {
       const field = fields.find((f) => f.key === key);
-      if (field) host.appendChild(fieldRow(field));
+      if (!field) continue;
+      // RenoDX owns this game's tone mapping: the engine sends the tone trim as identity and the in-game
+      // panel hides it, so here too -- one line in its place instead of four rows that do nothing.
+      if (renodxActive() && TONE_TRIM_KEYS.includes(key)) {
+        if (!toneNote) {
+          const note = document.createElement('div');
+          note.className = 'p-note p-tone-renodx';
+          note.textContent = t('Brightness and contrast are handled by RenoDX in this game.');
+          host.appendChild(note);
+          toneNote = true;
+        }
+        continue;
+      }
+      host.appendChild(fieldRow(field));
     }
 
     // Frame Generation is the game's own DLSS-G rather than a list of ini rows, so it draws itself.
@@ -668,6 +682,13 @@ function renderAutoTone() {
   }
 }
 
+// Brightness, Contrast and their Auto switches: hidden while RenoDX runs (OptiScaler.live.json
+// renodxActive), as the in-game panel hides them.
+const TONE_TRIM_KEYS = ['Brightness', 'Contrast', 'AutoBrightness', 'AutoContrast'];
+function renodxActive() {
+  return !!(lastLive && lastLive.renodxActive === true);
+}
+
 function stopLive() {
   if (liveFor) window.api.panelLiveStop(liveFor).catch(() => {});
   liveFor = null;
@@ -683,7 +704,10 @@ async function refreshLive() {
   if (!current || current.exePath !== exePath || liveTimer === null) return;
   liveFor = exePath;
   const had = !!lastLive;
+  const wasRenodx = renodxActive();
   lastLive = res && res.ok ? res.live : null;
+  // RenoDX came or went: the tone rows appear or give way to the note.
+  if (renodxActive() !== wasRenodx && !hostedDragging) renderFields();
   if (lastLive) renderLive(lastLive);
   else if (had) refreshTiming();
   renderBadge();

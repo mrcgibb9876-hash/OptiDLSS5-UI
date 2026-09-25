@@ -1778,4 +1778,6 @@ window.I18N.register('pt-BR', {
     "O HDR do Unreal foi ligado em {file}, agora somente leitura para o jogo mantê-lo.",
   "Unreal's HDR could not be switched on in Engine.ini here -- turn HDR on in the game's own settings.":
     "Não foi possível ligar o HDR do Unreal no Engine.ini aqui -- ligue o HDR nas configurações do próprio jogo.",
+  "Brightness and contrast are handled by RenoDX in this game.":
+    "Neste jogo, o brilho e o contraste são controlados pelo RenoDX.",
 });

@@ -1777,4 +1777,6 @@ window.I18N.register("zh-CN", {
     "已在 {file} 中开启虚幻 HDR，该文件现为只读，游戏会保留它。",
   "Unreal's HDR could not be switched on in Engine.ini here -- turn HDR on in the game's own settings.":
     "此处无法在 Engine.ini 中开启虚幻 HDR——请在游戏自身的设置中开启 HDR。",
+  "Brightness and contrast are handled by RenoDX in this game.":
+    "在这款游戏中，亮度和对比度由 RenoDX 处理。",
 });
