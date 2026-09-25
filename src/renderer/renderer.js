@@ -1765,23 +1765,15 @@ function renderHelp(diag) {
   pdBtn.textContent = t('I downloaded it -- set it up');
   const run = diag.run;
   $('#help-lastrun').textContent = run && run.ran ? t('Last run: {when} -- {verdict}', { when: new Date(run.at).toLocaleString(), verdict: describeRun(run) }) : t('Last run: none recorded');
-  // One big button that does the next right thing; the rest sits behind More.
+  // The fix when there is one, or AI help when nothing fits. Launching, reporting and the other layers
+  // moved onto the card (2026-09-25): it watches the launch and climbs DXVK -> Chicken -> report itself.
   const apply = $('#help-apply');
-  const launch = $('#help-launch');
   const ai = $('#help-ai');
   apply.classList.toggle('hidden', diag.status !== 'fix');
   if (diag.fix) apply.textContent = t('Fix it') + ' -- ' + helpFixLabel(diag.fix.id);
-  launch.classList.toggle('hidden', !(diag.status === 'needs-run' || diag.status === 'step' || diag.status === 'ok'));
-  launch.classList.toggle('btn-launch', diag.status !== 'fix');
   ai.classList.toggle('hidden', diag.status !== 'unknown');
   ai.textContent = settings.anthropicApiKey ? t('Ask AI') : t('Set up AI help…');
   ai.classList.toggle('btn-primary', diag.status === 'unknown');
-  // Anything short of "working" can be sent as it stands: the player should never have to judge
-  // whether their problem is a known one first.
-  $('#help-send').classList.toggle('hidden', diag.status === 'ok');
-  $('#help-send-status').classList.add('hidden');
-  $('#help-more').classList.remove('hidden');
-  $('#help-more-row').classList.add('hidden');
   $('#help-ai-out').classList.add('hidden');
 }
 
@@ -1840,71 +1832,13 @@ async function openHelp(game) {
   $('#help-status').textContent = '';
   $('#help-ai-out').classList.add('hidden');
   $('#help-ai-out').textContent = '';
-  // Hidden until this game's route says otherwise: they are only set after two awaits below, and
-  // until then they still showed the previous game's answer (review of 2026-09-18).
-  $('#help-native').classList.add('hidden');
-  $('#help-dxvk').classList.add('hidden');
   helpModal.classList.remove('hidden');
   const diag = await refreshHelp();
   // Closed, or reopened on another game, while that ran: what follows belongs to that one now.
   if (helpGame !== game) return;
   helpLastRunAt = diag && diag.run && diag.run.at ? diag.run.at : null;
 
-  // The model-only route, reachable by hand as well as when a verdict offers it. A game that dies
-  // on startup writes no log at all, so there is no verdict to hang it off -- and that is exactly
-  // the case this route exists for, so it cannot only be offered by the rule table.
-  // Two routes that are worth choosing, not only worth being offered after a failure.
-  try {
-    const r = await window.api.gameRoute(game.exePath, game.detectedPath || null);
-    // Same race: without this a slow route lookup for game A lit its buttons on game B's dialog.
-    if (helpGame !== game) return;
-    $('#help-native').classList.toggle('hidden', !(r && r.shipsDlss && r.optiInstalled));
-    // The DXVK swap was reachable only from a 'wrapper-crash' verdict: the game had to crash INSIDE
-    // the dgVoodoo2 DLL this app deployed, and be classified as that. A game that merely renders
-    // wrong under dgVoodoo2, or that has not been run yet, could never ask for the other layer --
-    // Assassin's Creed II is the case that found it.
-    //
-    // Where dgVoodoo2 is the plan (a DirectX 8/9 game) DXVK is offered in its place; on a 32-bit
-    // DirectX 10/11 game, in place of the game's own Direct3D (layerSwapFor). The second was refused
-    // until the swap learned to park the helper route's ReShade dxgi.dll first (2026-09-18) -- before
-    // that it placed d3d11.dll, refused dxgi.dll and called that success (review of 2.2.3). Once DXVK
-    // is in, the same button offers the way back, so the swap is never one-way.
-    const layerSwap = layerSwapFor(r);
-    const swapId = layerSwap ? layerSwap.id : 'swap-to-dxvk';
-    const btn = $('#help-dxvk');
-    btn.dataset.fix = swapId;
-    btn.textContent = layerSwap && layerSwap.native ? layerSwap.label : helpFixLabel(swapId);
-    if (btn.dataset.tipDxvk === undefined) btn.dataset.tipDxvk = btn.dataset.tip || '';
-    btn.dataset.tip = swapId === 'swap-to-dgvoodoo'
-      ? t('Puts dgVoodoo2 back in place of DXVK, handing back whatever DXVK displaced. On a 32-bit game the game-folder ReShade returns with it; ReShade\'s Vulkan layer stays installed on the PC.')
-      : swapId === 'swap-to-native'
-        ? t('Takes DXVK back out, handing back whatever it displaced, and returns the game-folder ReShade (dxgi.dll) so the game runs on its own Direct3D again. ReShade\'s Vulkan layer stays installed on the PC.')
-        : layerSwap && layerSwap.native
-          ? t('Runs this game\'s Direct3D 10/11 on Vulkan through DXVK (d3d10core.dll, d3d11.dll, dxgi.dll beside the exe) instead of natively. The game-folder ReShade is set aside and ReShade\'s 32-bit Vulkan layer set up in its place, which asks for administrator permission and is installed for the whole PC. Anything DXVK displaces is backed up, so it can be undone.')
-          : btn.dataset.tipDxvk;
-    btn.classList.toggle('hidden', !layerSwap);
-  } catch {
-    if (helpGame !== game) return;
-    $('#help-native').classList.add('hidden');
-    $('#help-dxvk').classList.add('hidden');
-  }
 }
-
-$('#help-dxvk').addEventListener('click', () => {
-  const fixId = $('#help-dxvk').dataset.fix;
-  const id = fixId === 'swap-to-dgvoodoo' || fixId === 'swap-to-native' ? fixId : 'swap-to-dxvk';
-  applyHelpFix(helpGame, { fix: { id }, run: helpDiag && helpDiag.run }, { modal: true });
-});
-
-$('#help-native').addEventListener('click', () => {
-  // A synthetic diagnosis: the fix is the same one the rule table hands out, and applyHelpFix only
-  // ever reads fix.id and the run it was judged against.
-  applyHelpFix(helpGame, { fix: { id: 'nr-model-only' }, run: helpDiag && helpDiag.run }, { modal: true });
-});
-
-$('#help-more').addEventListener('click', () => {
-  $('#help-more-row').classList.toggle('hidden');
-});
 
 function closeHelp() { stopHelpPoll(); helpModal.classList.add('hidden'); helpGame = null; }
 
@@ -1963,57 +1897,7 @@ async function applyHelpFix(game, diag, { modal = true } = {}) {
 
 $('#help-apply').addEventListener('click', () => applyHelpFix(helpGame, helpDiag, { modal: true }));
 
-$('#help-launch').addEventListener('click', async () => {
-  if (!helpGame) return;
-  const res = await window.api.launchGame(helpGame.exePath, helpGame.launcher);
-  if (!res.ok) { toast(t('Could not launch {name}: {error}', { name: helpGame.name, error: res.error })); return; }
-  $('#help-waiting').classList.remove('hidden');
-  $('#help-waiting').textContent = t('Launched. Reach gameplay, play a minute, quit -- this checks the new log by itself.');
-  stopHelpPoll();
-  const started = Date.now();
-  // run.at is OptiScaler.log's mtime, which moves from the moment the game starts writing it.
-  // A changed stamp alone would judge a half-written log seconds after launch ("nothing called
-  // DLSS"), so the run counts once it is over: the log records a clean exit or a recognised
-  // crash, or its stamp has stood still for a few polls after changing.
-  const CRASHED = ['ue-crash', 'shutdown-fault', 'duplicate-dlss', 'wrapper-crash'];
-  let seenAt = null;
-  let stableTicks = 0;
-  helpPoll = setInterval(async () => {
-    if (!helpGame) return stopHelpPoll();
-    const diag = await window.api.gameHelp(helpGame.exePath, helpGame.detectedPath || null, helpFixesTried);
-    const run = diag && diag.ok && diag.run && diag.run.ran ? diag.run : null;
-    const at = run && run.at ? run.at : null;
-    if (at && at !== helpLastRunAt) {
-      stableTicks = at === seenAt ? stableTicks + 1 : 0;
-      seenAt = at;
-      const proc = await window.api.gameRunning(helpGame.exePath);
-      const stopped = proc && proc.running === false;
-      const finished = run.cleanExit || CRASHED.includes(run.verdict) || (stopped && stableTicks >= 1) || stableTicks >= 6;
-      if (finished) {
-        helpLastRunAt = at;
-        stopHelpPoll();
-        renderHelp(diag);
-        renderGrid();
-        toast(t('New run checked: {verdict}', { verdict: describeRun(diag.run) }));
-        return;
-      }
-      $('#help-waiting').textContent = t('The game is running. Reach gameplay, play a minute, quit -- the log is checked when it stops.');
-    }
-    if (Date.now() - started > 20 * 60 * 1000) stopHelpPoll();
-  }, 8000);
-});
-
-$('#help-bundle').addEventListener('click', async () => {
-  if (!helpGame) return;
-  const game = helpGame;
-  const res = await window.api.supportBundle(game.exePath, game.detectedPath || null);
-  if (!res.ok) { toast(t('Could not save the support bundle: {error}', { error: res.error })); return; }
-  if (res.cancelled) return;
-  toast(t('Support bundle saved: {path} ({count} files). Last run: {verdict}', { path: res.zipPath, count: res.files.length, verdict: describeRun(res.run) }));
-  window.api.openPath(res.zipPath);
-});
-
-// The issue's title and body, for both "Send game failure" and the manual "Report on GitHub".
+// The issue's title and body, for the card's Report issue (and its browser fallback).
 async function buildGameReport(game, diag, { manual = false } = {}) {
   const run = diag.run;
   // The Manager's own version and the engine's, named apart: this line used to print the engine tag
@@ -2042,22 +1926,10 @@ async function buildGameReport(game, diag, { manual = false } = {}) {
   return { title, body };
 }
 
-$('#help-report').addEventListener('click', async () => {
-  if (!helpGame || !helpDiag) return;
-  const { title, body } = await buildGameReport(helpGame, helpDiag, { manual: true });
-  window.api.openExternal(`https://github.com/mrcgibb9876-hash/OptiDLSS5-UI-releases/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`);
-});
-
 // ── Send game failure ─────────────────────────────────────────────────────────
 // One button: signs in to GitHub the first time (a code to type on GitHub's own page), then posts the
 // issue with the logs attached (main.js report:send, ghreport.js). Before the GitHub app is registered
 // (no client ID in this build) it falls back to the two manual steps, done for the player in one go.
-function setSendStatus(html) {
-  const el = $('#help-send-status');
-  el.innerHTML = html;
-  el.classList.toggle('hidden', !html);
-}
-
 // The report exactly as main.js report:prepare will post it (redacted, cut); resolves true on Send.
 // Shown as plain text: nothing from a log is ever put into the page as HTML.
 function previewReport(prepared) {
@@ -2101,18 +1973,7 @@ window.api.onReportSignIn((result) => {
   if (reportSignInWaiter) { reportSignInWaiter(result); reportSignInWaiter = null; }
 });
 
-$('#help-send').addEventListener('click', async () => {
-  if (!helpGame || !helpDiag) return;
-  const btn = $('#help-send');
-  btn.disabled = true;
-  try {
-    await sendGameFailure(helpGame, helpDiag, { setStatus: setSendStatus });
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-// The whole send, from Game Help's button and from the card's "Report issue" once every other rung is
+// The whole send, from the card's "Report issue" once every other rung is
 // tried. setStatus takes HTML (already escaped here) for wherever the progress is shown. `tried` names
 // what the card's ladder already tried, so the report says it rather than the maintainer asking.
 async function sendGameFailure(game, diag, { setStatus, tried = [] } = {}) {
@@ -5996,7 +5857,6 @@ $('#btn-clean-folder').addEventListener('click', async () => {
 // downloads in the background and asks for a restart through its banner).
 const DISCORD_INVITE = 'https://discord.gg/HFZTDdSNmJ';
 $('#btn-discord').addEventListener('click', () => window.api.openExternal(DISCORD_INVITE));
-$('#help-discord').addEventListener('click', () => window.api.openExternal(DISCORD_INVITE));
 
 // Beside Discord in the top bar. main.js allowlists this URL the same way it does the other two it
 // is willing to open -- openExternal refuses anything not on that list.

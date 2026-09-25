@@ -139,19 +139,12 @@ test('the pop-out hotkey is only named when the pop-out panel can answer it', ()
   }
 });
 
-test('Game Help does not apply one game\'s route lookup to another game\'s dialog', () => {
-  // 2026-09-18: openHelp awaited gameRoute and then toggled the Run without OptiScaler / Try DXVK
-  // buttons with no check that the dialog was still on the same game.
-  const body = js.slice(js.indexOf('async function openHelp(game)'), js.indexOf("$('#help-dxvk').addEventListener"));
-  assert.ok(body.length > 0, 'could not find openHelp');
-  const routeAt = body.indexOf('await window.api.gameRoute(');
-  assert.ok(routeAt > 0);
-  assert.ok(body.slice(routeAt, routeAt + 300).includes('if (helpGame !== game) return;'), 'no helpGame check after gameRoute');
-  const firstAwait = body.indexOf('await ');
-  const hideNative = body.indexOf("$('#help-native').classList.add('hidden')");
-  const hideDxvk = body.indexOf("$('#help-dxvk').classList.add('hidden')");
-  assert.ok(hideNative > 0 && hideNative < firstAwait, 'Run without OptiScaler is not hidden before the first await');
-  assert.ok(hideDxvk > 0 && hideDxvk < firstAwait, 'Try DXVK is not hidden before the first await');
+test('Game Help keeps only the fix, AI help and Close', () => {
+  // 2026-09-25: launching, sending, the bundle and the other layers moved onto the card itself.
+  for (const id of ['help-launch', 'help-send', 'help-more', 'help-bundle', 'help-report', 'help-dxvk', 'help-native']) {
+    assert.ok(!html.includes(`id="${id}"`), `#${id} is back in Game Help`);
+  }
+  assert.match(html, /id="help-close"/);
 });
 
 test('the card\'s Fix it cannot run the same fix twice at once', () => {

@@ -453,7 +453,7 @@ test('the route names DXVK\'s step on a DirectX 10/11 game, chosen or placed', (
 
 // ── The renderer: the three entry points know the DirectX 10/11 side ──────────────────────────────
 
-test('the card menu, Edit and Game Help offer DXVK against native Direct3D on a DirectX 10/11 game', () => {
+test('the card menu and Edit offer DXVK against native Direct3D on a DirectX 10/11 game', () => {
   const js = fs.readFileSync(path.join(REPO, 'src', 'renderer', 'renderer.js'), 'utf8');
   const html = fs.readFileSync(path.join(REPO, 'src', 'renderer', 'index.html'), 'utf8');
   const rule = js.slice(js.indexOf('function layerSwapFor'), js.indexOf('async function applyLayerSwap'));
@@ -467,7 +467,6 @@ test('the card menu, Edit and Game Help offer DXVK against native Direct3D on a 
   const edit = js.slice(js.indexOf('async function loadLayerSection'));
   assert.match(edit.slice(0, 1500), /\['native', t\('\{d3d\} \(native\)'/, 'Edit\'s choice reads "Direct3D 11 (native)"');
   assert.match(js, /e\.target\.value === 'native' \? 'swap-to-native'/);
-  assert.match(js, /fixId === 'swap-to-dgvoodoo' \|\| fixId === 'swap-to-native'/, 'Game Help\'s button can go back to native');
   assert.match(js, /case 'swap-to-native': return t\('Use native Direct3D 11'\)/);
   for (const code of ['dxvk-no-dlss-native', 'dxvk-crash-native']) {
     assert.ok(js.split(`case '${code}'`).length - 1 >= 3, `${code} has words, steps and a short line`);

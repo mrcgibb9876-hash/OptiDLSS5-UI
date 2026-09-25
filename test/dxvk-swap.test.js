@@ -564,7 +564,7 @@ test('Remove on a helper-route game under DXVK: DXVK, the parked proxy and the a
 
 // ── The three entry points share one swap ──────────────────────────────────────────────────────────
 
-test('the card menu, Edit and Game Help all start the same main-process swap', () => {
+test('the card menu and Edit start the same main-process swap', () => {
   const root = path.join(REPO, 'src', 'renderer');
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const js = fs.readFileSync(path.join(root, 'renderer.js'), 'utf8');
@@ -586,8 +586,8 @@ test('the card menu, Edit and Game Help all start the same main-process swap', (
   assert.match(helper, /window\.api\.gameHelpApply\(game\.exePath, id\)/);
   assert.match(helper, /renderGrid\(\)/, 'and the card is refreshed afterwards');
 
-  // Game Help's More-row button follows the same rule for which way the swap goes.
-  assert.match(js, /const layerSwap = layerSwapFor\(r\);/);
+  // The swap's direction rule, shared by the card menu, Edit and the failure ladder (Game Help's own
+  // button left with its More row, 2026-09-25).
   const rule = js.slice(js.indexOf('function layerSwapFor'), js.indexOf('async function applyLayerSwap'));
   assert.match(rule, /route\.legacy\.dgVoodoo/, 'offered where dgVoodoo2 is the plan');
   assert.match(rule, /swap-to-dgvoodoo/);
