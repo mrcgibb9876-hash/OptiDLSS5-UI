@@ -25,7 +25,20 @@ const state = {
   version: null,
   percent: 0,
   error: null,
+  // The build a check found, kept apart from `version` so nothing that goes wrong afterwards can lose
+  // it: a background check that failed while the banner offered Download, or a download that failed
+  // half-way, used to replace the whole state with phase 'error' -- and with it the one thing the
+  // banner needed to offer the update again.
+  availableVersion: null,
+  // What the last failure was: 'check' or 'download'. A failed download is phase 'error' with this
+  // set to 'download' and `version` kept, which is what lets the renderer offer Retry (download()
+  // accepts exactly that state). null when the last thing did not fail.
+  failed: null,
 };
+
+// What the updater is doing right now, so its 'error' event -- which electron-updater raises for a
+// failed check and a failed download alike -- can be told apart.
+let activity = null;
 
 let updater = null;
 let notify = () => {};
@@ -40,6 +53,8 @@ function set(patch) {
 function setup({ app, autoUpdater, onChange }) {
   notify = onChange || notify;
   state.currentVersion = app.getVersion();
+  Object.assign(state, { phase: 'idle', version: null, availableVersion: null, percent: 0, error: null, failed: null });
+  activity = null;
   if (!autoUpdater) { set({ supported: false, reason: 'electron-updater is not available in this build' }); return state; }
   if (!app.isPackaged) { set({ supported: false, reason: 'running from source' }); return state; }
   if (PORTABLE) { set({ supported: false, reason: 'the portable build cannot replace itself -- use the installer build for automatic updates' }); return state; }
@@ -52,12 +67,14 @@ function setup({ app, autoUpdater, onChange }) {
   updater.allowDowngrade = false;
   updater.logger = null;
 
-  updater.on('checking-for-update', () => set({ phase: 'checking', error: null }));
-  updater.on('update-available', (info) => set({ phase: 'available', version: info && info.version, percent: 0 }));
-  updater.on('update-not-available', (info) => set({ phase: 'up-to-date', version: info && info.version }));
+  // A background check while Download is on offer leaves the offer up: the banner blinking to
+  // "checking" and back every six hours is noise, and a failed re-check must not take it down at all.
+  updater.on('checking-for-update', () => { if (state.phase !== 'available') set({ phase: 'checking', error: null }); });
+  updater.on('update-available', (info) => set({ phase: 'available', version: info && info.version, availableVersion: info && info.version, percent: 0, error: null, failed: null }));
+  updater.on('update-not-available', (info) => set({ phase: 'up-to-date', version: info && info.version, availableVersion: null, error: null, failed: null }));
   updater.on('download-progress', (p) => set({ phase: 'downloading', percent: Math.round((p && p.percent) || 0) }));
-  updater.on('update-downloaded', (info) => set({ phase: 'downloaded', version: info && info.version, percent: 100 }));
-  updater.on('error', (err) => set({ phase: 'error', error: String(err && err.message ? err.message : err) }));
+  updater.on('update-downloaded', (info) => set({ phase: 'downloaded', version: info && info.version, percent: 100, error: null, failed: null }));
+  updater.on('error', (err) => fail(err));
 
   set({ supported: true, reason: null });
   setTimeout(check, FIRST_CHECK_MS).unref();
@@ -65,25 +82,55 @@ function setup({ app, autoUpdater, onChange }) {
   return state;
 }
 
+// One place for both failure paths: the 'error' event and the rejected promise. electron-updater
+// usually raises both for one failure, so running this twice must give the same state.
+//   a check that fails while an update is already known keeps phase 'available' and its version --
+//            the offer is still good, only the re-check failed (`error` says why). Otherwise 'error'.
+//   a download that fails is phase 'error' with `version` and `availableVersion` kept and
+//            failed: 'download', so the banner can offer Retry rather than start over.
+function fail(err) {
+  const error = String(err && err.message ? err.message : err);
+  const during = activity || (state.phase === 'downloading' ? 'download' : 'check');
+  if (during === 'download') {
+    set({ phase: 'error', error, failed: 'download', version: state.availableVersion || state.version, percent: 0 });
+  } else if (state.availableVersion) {
+    set({ phase: 'available', version: state.availableVersion, error, failed: 'check' });
+  } else {
+    set({ phase: 'error', error, failed: 'check' });
+  }
+}
+
 async function check() {
   if (!updater) return { ...state };
   if (state.phase === 'downloading' || state.phase === 'downloaded') return { ...state };
+  activity = 'check';
   try {
     await updater.checkForUpdates();
   } catch (err) {
-    set({ phase: 'error', error: String(err && err.message ? err.message : err) });
+    fail(err);
+  } finally {
+    activity = null;
   }
   return { ...state };
 }
 
-// Fetch the build check() found, when the player presses Download. Progress arrives through the events.
+// Whether download() may run: an update on offer, or a download that failed (Retry).
+function canDownload() {
+  return state.phase === 'available' || (state.phase === 'error' && state.failed === 'download' && !!state.availableVersion);
+}
+
+// Fetch the build check() found, when the player presses Download -- or Retry after a failed
+// download. Progress arrives through the events.
 async function download() {
-  if (!updater || state.phase !== 'available') return { ...state };
+  if (!updater || !canDownload()) return { ...state };
+  activity = 'download';
   try {
-    set({ phase: 'downloading', percent: 0 });
+    set({ phase: 'downloading', percent: 0, error: null, failed: null, version: state.availableVersion || state.version });
     await updater.downloadUpdate();
   } catch (err) {
-    set({ phase: 'error', error: String(err && err.message ? err.message : err) });
+    fail(err);
+  } finally {
+    activity = null;
   }
   return { ...state };
 }
@@ -99,4 +146,4 @@ function snapshot() {
   return { ...state };
 }
 
-module.exports = { setup, check, download, restart, snapshot, CHECK_EVERY_MS };
+module.exports = { setup, check, download, canDownload, restart, snapshot, CHECK_EVERY_MS };
