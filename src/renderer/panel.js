@@ -947,14 +947,24 @@ function renderHosted(host, kind) {
       if (autoOn) continue;
     }
 
-    // Typed, not dragged, for every ReLimiter number and RenoDX's whole numbers: a frame-rate cap has
-    // to land on 72 or 141 exactly, which a track from 30 to 1000 cannot do. RenoDX's floats (peak
-    // brightness, saturation) are looked at while they move, so they keep the slider.
-    const typed = kind === 'pacing' ? s.type !== 'bool' && s.type !== 'enum' : s.type === 'int';
+    // Typed, not dragged, for ReLimiter's numbers: a frame-rate cap has to land on 72 or 141 exactly,
+    // which a track from 30 to 1000 cannot do. Every RenoDX number is judged by eye while it moves,
+    // so all of them keep the slider.
+    const typed = kind === 'pacing' && s.type !== 'bool' && s.type !== 'enum';
     const set = (_k, v) => hostedApply(kind, s, hostedValue(s, v));
     wrap.appendChild(typed ? hostedNumberRow(hostedField(kind, s), s, set) : fieldRow(hostedField(kind, s), set));
   }
   host.appendChild(wrap);
+
+  // The add-on's own defaults, which only it knows: offered only when the engine says the loaded
+  // add-on can reset (RenoDX host API `reset_settings`). The command is the reserved key `$reset`.
+  if (h.canReset) {
+    const reset = document.createElement('button');
+    reset.className = 'p-small p-hosted-reset';
+    reset.textContent = t('Reset all to default');
+    reset.addEventListener('click', () => hostedApply(kind, { key: '$reset' }, true));
+    host.appendChild(reset);
+  }
 }
 
 // A typed number: the Edit dialog's frame-rate box (renderer.js relimiterTypedFps) and the in-game
