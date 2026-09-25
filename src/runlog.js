@@ -320,9 +320,14 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   const ngx = await ngxLog(dir);
 
   const runtime = await optiScalerRuntimeApi(optiDir);
-  const nrDispatch = count(opti, /DlssNr_(?:Dx12|Vk)::Dispatch DLSS-NR (?:running|composition)/g);
+  // The native Vulkan pass (DlssNrFeature_Vk.cpp) writes no Dispatch line and no heartbeat: its proof of
+  // running is "DLSS-NR Vulkan: running natively at WxH". Without it every native-Vulkan run read as
+  // init-no-feature -- No Man's Sky, #132, whose log showed the pass up at 2560x1440 for ten minutes.
+  const nrDispatch = count(opti, /DlssNr_(?:Dx12|Vk)::Dispatch DLSS-NR (?:running|composition)|DLSS-NR Vulkan: running natively at/g);
   const nrComposition = count(opti, /DLSS-NR composition:/g);
-  const dlssCreated = count(opti, /NVSDK_NGX_D3D1[12]_CreateFeature Creating new DLSS feature|NVSDK_NGX_VULKAN_CreateFeature Creating new DLSS feature|TryCreateOptiFeature Creating OptiScaler feature/g);
+  // "CreateFeature1 ... Creating new DLSS upscaler" is how the current engine words it; the older
+  // "CreateFeature ... Creating new DLSS feature" stays for logs from older engines.
+  const dlssCreated = count(opti, /NVSDK_NGX_(?:D3D1[12]|VULKAN)_CreateFeature1? Creating new DLSS (?:feature|upscaler)|TryCreateOptiFeature Creating OptiScaler feature/g);
   const dlssInit = /NVSDK_NGX_(?:D3D1[12]|VULKAN)_Init/.test(opti);
   const d3d11NativeFeature = /DLSSFeatureDx11::InitInternal/.test(opti);
   // OptiScaler's own load-time check, one line into the log: no nvngx_dlss.dll beside the exe, so
