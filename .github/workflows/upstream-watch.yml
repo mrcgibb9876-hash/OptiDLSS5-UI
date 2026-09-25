@@ -61,6 +61,24 @@ jobs:
                   'Only then merge that branch into the fork\'s `main` - **pushing to fork `main` publishes a release** (release.yml).',
                 ],
               },
+              {
+                // Not a fork branch comparison: UE-Extended was imported into our RenoDX fork as one
+                // folder, taken verbatim from marat569/renodx main at e468fb4b (recorded in the fork's
+                // commit 61e53aa3). So this lists the upstream commits touching that folder since then.
+                name: 'RenoDX UE-Extended (marat569)',
+                kind: 'path',
+                up: { owner: 'marat569', repo: 'renodx', branch: 'main' },
+                ours: { owner: 'mrcgibb9876-hash', repo: 'renodx', branch: 'feat/ue-extended' },
+                path: 'src/games/ue-extended',
+                importedAt: 'e468fb4b7e3aac59eb1b93b2ba6118dde757755e',
+                procedure: [
+                  'Review the commits below (each touches `src/games/ue-extended`).',
+                  'Copy the folder from `marat569/renodx` into a **branch** of our RenoDX fork (never `snapshot` directly), and record the new upstream commit in the commit message the way `61e53aa3` records `e468fb4b`.',
+                  'Build it to the `test-ue-extended` pre-release and test it in the app with the dev-only override (`OPTIDLSS5_UE_EXTENDED_TEST=1`, or `"renodxUeExtendedTest": true` in settings.json) - Dawnwalker with DLSS-G + ReLimiter at least.',
+                  'Regenerate the app\'s table: `node tools/gen-ue-extended-table.js --ref <branch>` (writes `src/ue-extended-games.json`), and update `importedAt` in this workflow.',
+                  'Only then promote the fork build to `snapshot`.',
+                ],
+              },
             ];
 
             const ref = (s) => `${s.owner}/${s.repo}:${s.branch}`;
@@ -69,7 +87,33 @@ jobs:
             // Cross-fork compare works only inside one fork network. The engine fork is a standalone
             // repo, so the fallback walks upstream's recent history and asks our repo whether each
             // commit is already contained in our branch.
+            // A watched folder: upstream commits that touch `src.path` and are not already contained in
+            // the commit we imported it from. listCommits by path from the import's date, then each one
+            // compared against the import (status "behind"/"identical" = already had).
+            async function comparePath(src) {
+              const { up, path, importedAt } = src;
+              const { data: base } = await github.rest.repos.getCommit({ owner: up.owner, repo: up.repo, ref: importedAt });
+              const since = base.commit.committer.date;
+              const { data: touched } = await github.rest.repos.listCommits({
+                owner: up.owner, repo: up.repo, sha: up.branch, path, since, per_page: 100,
+              });
+              const commits = [];
+              for (const c of touched) {
+                if (c.sha === importedAt) continue;
+                const { data } = await github.rest.repos.compareCommitsWithBasehead({
+                  owner: up.owner, repo: up.repo, basehead: `${importedAt}...${c.sha}`, per_page: 1,
+                });
+                if (data.status === 'ahead' || data.status === 'diverged') commits.push(c);
+              }
+              return {
+                ahead: commits.length,
+                commits,
+                url: `https://github.com/${up.owner}/${up.repo}/commits/${up.branch}/${path}`,
+              };
+            }
+
             async function compare(src) {
+              if (src.kind === 'path') return comparePath(src);
               const { up, ours } = src;
               try {
                 const { data } = await github.rest.repos.compareCommitsWithBasehead({
