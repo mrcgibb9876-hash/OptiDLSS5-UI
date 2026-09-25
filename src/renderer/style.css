@@ -441,7 +441,17 @@ body {
 }
 
 /* The overflow. Everything that is not the one next step, stacked under the actions row. */
+/* Drawn OVER the card, from its top to just above the buttons, rather than in its flow: in the flow it
+   made the card taller, and with every row the same height (grid-auto-rows) every card in the grid
+   grew with it (2026-09-25). It scrolls if the card is shorter than the menu. */
 .card-menu {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 8px;
+  bottom: 60px;
+  z-index: 5;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -449,7 +459,9 @@ body {
   border-radius: 8px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
 }
+.card-face-front { position: relative; }
 .card-menu .btn { width: 100%; text-align: left; font-size: 12px; padding: 6px 8px; }
 
 .card-actions {
