@@ -596,7 +596,92 @@ ipcMain.handle('addons:forGame', async (_evt, { exePath } = {}) => {
   }
 });
 
-ipcMain.handle('addons:install', async (_evt, { exePath, id } = {}) => {
+// ── One change at a time per game folder ──
+//
+// Frame pacing, RenoDX and the Chicken swap all read-modify-write the same few things in a game
+// folder: ReShade64.dll or its proxy, pacing's marker (.dlss5ui-relimiter.json) and the add-ons
+// marker. Two of them in flight at once -- a double click, or the pop-out's switches pressed while the
+// card's own Install runs -- could both find "no ReShade", both deploy one, and the second marker
+// write drop the first one's record of what it placed. So these handlers queue per folder: a second
+// press waits for the first to finish, then sees the folder as the first left it. Different games do
+// not wait on each other.
+const folderQueues = new Map();
+
+function folderKey(exePath) {
+  if (!exePath) return '';
+  try { return path.resolve(gameDir(exePath)).toLowerCase(); } catch { return path.resolve(path.dirname(String(exePath))).toLowerCase(); }
+}
+
+function inFolderQueue(key, fn) {
+  const prev = folderQueues.get(key) || Promise.resolve();
+  const run = prev.then(fn, fn);
+  const tail = run.then(() => {}, () => {});
+  folderQueues.set(key, tail);
+  tail.then(() => { if (folderQueues.get(key) === tail) folderQueues.delete(key); });
+  return run;
+}
+
+// Wraps an ipcMain handler whose payload is the exe path itself or { exePath }.
+function perFolder(handler) {
+  return (evt, arg) => {
+    const exePath = arg && typeof arg === 'object' ? arg.exePath : arg;
+    return inFolderQueue(folderKey(exePath), () => handler(evt, arg));
+  };
+}
+
+// Whether this game is running right now, from one process listing (the same one games:running
+// reads). null when tasklist cannot say -- which is not a reason to refuse anything.
+async function gameRunningNow(exePath) {
+  let running;
+  try { running = await runningImageSet(); } catch { return null; }
+  const names = new Set([path.basename(exePath)]);
+  try { names.add(path.basename(launchTarget(exePath))); } catch {}
+  try { names.add(path.basename(watchedExeFor(exePath))); } catch {}
+  return [...names].some((n) => running.has(n.toLowerCase()));
+}
+
+// Removing a ReShade add-on while the game runs cannot work: the .addon64 and ReShade itself are
+// mapped into the process and Windows will not delete them. It used to half-work instead -- RenoDX's
+// marker entry dropped with the file still loaded, then pacing's Remove throwing on the loaded
+// ReShade64.dll after its own marker was already gone -- and report success. Refused up front now,
+// with nothing touched.
+async function refuseWhileRunning(exePath, what) {
+  if (await gameRunningNow(exePath)) {
+    throw Object.assign(new Error(`${what} can’t be removed while the game is running: Windows will not delete files a running game has loaded. Close the game, then try again.`), { code: 'game-running' });
+  }
+}
+
+// Whether frame pacing or a ReShade add-on this app installed (RenoDX) still loads the ReShade here.
+function reshadeAddonsHere(dir) {
+  return relimiter.deployed(dir) || addons.installedAddonIds(dir).length > 0;
+}
+
+// Whether a whole stack that brings (or is) its own ReShade is here: the Feeder, Luma UE or Chicken.
+// A ReShade64.dll pacing once recorded as placed belongs to that stack while it is here, so pacing's
+// or RenoDX's Remove must not take it.
+function reshadeStackHere(dir) {
+  return feeder.feederDeployed(dir) || lumaue.lumaUeDeployed(dir) || !!dfc.dfcPresent(dir);
+}
+
+// After the Feeder or Luma UE came out with keepReShade because pacing or RenoDX still needed it: that
+// ReShade64.dll was this app's, and is theirs now. Recorded as pacing's (reshadePlaced), so the last
+// of them out takes it rather than leave it hooking the game with nothing on it.
+function handReShadeToAddons(dir) {
+  if (!reshadeAddonsHere(dir) || reshadeStackHere(dir)) return false;
+  if (!relimiter.isReShadeProxy(path.join(dir, 'ReShade64.dll')) || relimiter.ownsReShade(dir)) return false;
+  relimiter.writeMarker(dir, { reshadePlaced: true });
+  return true;
+}
+
+// A ReShade this call placed for an add-on, taken back out when the add-on then could not be placed:
+// a failed install must not leave ReShade hooking the game for nothing. Only when nothing else here
+// uses it -- a pacing or RenoDX already installed keeps it.
+function undoPlacedReShade(dir, host) {
+  if (!host || !host.placed || reshadeAddonsHere(dir) || reshadeStackHere(dir)) return [];
+  try { return relimiter.remove(dir, { withPlacedReShade: true }); } catch { return []; }
+}
+
+ipcMain.handle('addons:install', perFolder(async (_evt, { exePath, id } = {}) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
@@ -630,10 +715,20 @@ ipcMain.handle('addons:install', async (_evt, { exePath, id } = {}) => {
       if (!relimiter.isAutomatic(api)) {
         throw Object.assign(new Error('ReShade on Vulkan needs its own setup run for this game first'), { code: 'vulkan-layer' });
       }
-      host = await ensureReShadeAddonHost(dir, api, { addon: id });
+      // The refusals first, touching nothing; ReShade itself goes in only once the add-on has been
+      // fetched (installAddon calls prepareHost after its download), so a failed download or a
+      // missing build leaves the folder as it was.
+      const plan = await reshadeAddonHostPlan(dir, api);
+      opts.prepareHost = async () => { host = await ensureReShadeAddonHost(dir, api, { addon: id, plan }); return host; };
     }
 
-    const res = await addons.installAddon(dir, id, addonCtx(), opts);
+    let res;
+    try {
+      res = await addons.installAddon(dir, id, addonCtx(), opts);
+    } catch (e) {
+      undoPlacedReShade(dir, host);
+      throw e;
+    }
     // A pack that brought techniques changes the run order, so the preset is re-sorted now rather
     // than at the next Feeder deploy -- which might never come.
     reorderPresetFor(dir);
@@ -652,7 +747,7 @@ ipcMain.handle('addons:install', async (_evt, { exePath, id } = {}) => {
     // The code lets the renderer word the shared refusals for this add-on rather than for frame pacing.
     return { ok: false, code: (error && error.code) || null, error: String(error && error.message ? error.message : error) };
   }
-});
+}));
 
 // Swap the motion-vector provider on a game the Feeder is already on, in one press. The whole
 // point of offering five is that nobody can tell you which looks best on YOUR game -- that is
@@ -677,19 +772,26 @@ ipcMain.handle('addons:setMvProvider', async (_evt, { exePath, mvProviderId, lic
   }
 });
 
-ipcMain.handle('addons:remove', async (_evt, { exePath, id } = {}) => {
+ipcMain.handle('addons:remove', perFolder(async (_evt, { exePath, id } = {}) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
+    const spec = addons.addonById(id);
+    // A shader pack's .fx files are read at load, not held; an add-on is a loaded DLL.
+    if (spec && spec.kind === 'addon' && addons.installedIds(dir).includes(id)) await refuseWhileRunning(exePath, spec.displayName || id);
     const res = await addons.removeAddon(dir, id);
     reorderPresetFor(dir);
+    // Anything Windows would not delete is still installed, still in the marker, and said so -- and
+    // the ReShade under it stays, since the add-on is still loading through it.
+    if (res.failed && res.failed.length) {
+      return { ok: false, code: 'remove-failed', ...res, error: `Could not remove ${saferemove.describeFailures(res.failed)} -- close the game and try again` };
+    }
     // The last ReShade add-on out takes the ReShade this app placed for it (ensureReShadeAddonHost
     // recorded it in pacing's marker), unless frame pacing still uses it. The Feeder's, Luma's,
     // Chicken's or the user's own ReShade was never recorded as placed, so it is never touched.
-    const spec = addons.addonById(id);
     if (spec && spec.kind === 'addon' && !addons.installedAddonIds(dir).length && !relimiter.deployed(dir) && relimiter.ownsReShade(dir)) {
       // Something deployed since may have come to rely on that same file, so it stays for them.
-      const sharedNow = feeder.feederDeployed(dir) || lumaue.lumaUeDeployed(dir) || !!dfc.dfcPresent(dir);
+      const sharedNow = reshadeStackHere(dir);
       res.removed = [...res.removed, ...relimiter.remove(dir, sharedNow ? { keepReShade: true } : { withPlacedReShade: true })];
       if (!sharedNow && fs.existsSync(path.join(optiScalerDirFor(dir), 'OptiScaler.ini'))) {
         try { patchIniValues(path.join(optiScalerDirFor(dir), 'OptiScaler.ini'), [{ section: 'Plugins', key: 'LoadReshade', value: 'auto' }]); } catch {}
@@ -697,9 +799,9 @@ ipcMain.handle('addons:remove', async (_evt, { exePath, id } = {}) => {
     }
     return { ok: true, ...res };
   } catch (error) {
-    return { ok: false, error: String(error && error.message ? error.message : error) };
+    return { ok: false, code: (error && error.code) || null, error: String(error && error.message ? error.message : error) };
   }
-});
+}));
 
 // Re-sort this game's preset after the set of installed add-ons changed. Only touches a preset
 // that already exists: a game with no ReShade here has nothing to order, and writing one would
@@ -1013,9 +1115,18 @@ async function dropBlockedPacing(dir, feederGame = isFeederGame(dir)) {
   const addonIds = addons.installedAddonIds(dir);
   if (feederGame || (!relimiter.deployed(dir) && !addonIds.length) || !(await pacingBesideUpscalerBlocker(dir))) return null;
   const removed = [];
-  for (const id of addonIds) removed.push(...(await addons.removeAddon(dir, id)).removed);
-  removed.push(...relimiter.remove(dir, { withPlacedReShade: true }));
-  if (!lumaue.lumaUeDeployed(dir)) {
+  let stuck = false;
+  for (const id of addonIds) {
+    const r = await addons.removeAddon(dir, id);
+    removed.push(...r.removed);
+    if (r.failed && r.failed.length) stuck = true;
+  }
+  // The ReShade stays when an add-on could not be taken out (it is still loading through it), and when
+  // a stack that owns a ReShade is here: Luma UE's deploy overwrites the ReShade64.dll pacing recorded
+  // as placed, and withPlacedReShade then deleted LUMA's ReShade.
+  const keepReShade = stuck || reshadeStackHere(dir);
+  removed.push(...relimiter.remove(dir, keepReShade ? { keepReShade: true } : { withPlacedReShade: true }));
+  if (!lumaue.lumaUeDeployed(dir) && !stuck) {
     try { patchIniValues(path.join(optiScalerDirFor(dir), 'OptiScaler.ini'), [{ section: 'Plugins', key: 'LoadReshade', value: 'auto' }]); } catch {}
   }
   return removed;
@@ -1043,29 +1154,62 @@ async function dropBlockedPacing(dir, feederGame = isFeederGame(dir)) {
 // listing this add-on under DisabledAddons. The CALLER still has to run autoConfigureGame when
 // OptiScaler is here -- that is what writes [Plugins] LoadReshade=true, without which OptiScaler
 // never loads the ReShade64.dll beside it and the add-on is inert.
-async function ensureReShadeAddonHost(dir, api, { addon = 'relimiter' } = {}) {
+//
+//   foreign-plain-reshade  the PLAYER's own ReShade already sits in a proxy slot (dxgi.dll, d3d11.dll
+//                       ...) and it is the plain build, which never loads an add-on. Refused rather
+//                       than replaced: overwriting someone's ReShade with ours means Remove would then
+//                       either delete a file that was theirs or leave ours behind claiming to be theirs,
+//                       and putting a second ReShade beside it is two ReShades in one process. Installing
+//                       ReShade's own Add-on build over theirs is one step for them and keeps it theirs.
+//
+// The checks are reshadeAddonHostPlan and touch nothing, so a caller can make them before it downloads
+// anything and hand the answer in as `plan`.
+async function reshadeAddonHostPlan(dir, api) {
   const optiHere = fs.existsSync(path.join(dir, 'OptiScaler.ini')) && !!(await findActiveOptiScalerFile(dir));
   if (optiHere && !isFeederGame(dir)) {
     const blocker = await pacingBesideUpscalerBlocker(dir);
     if (blocker) throw Object.assign(new Error(blocker.message), { code: blocker.code });
   }
+  const chicken = relimiter.chickenReShade(dir);
+  // A ReShade the player put in a proxy slot, found by content under every hook name -- our marker
+  // knows nothing of it (relimiter.userProxyReShade has the history).
+  const foreign = chicken ? null : relimiter.userProxyReShade(dir);
+  if (foreign && !foreign.addonBuild) {
+    throw Object.assign(new Error(`The ReShade already in this game folder (${foreign.file}) is its plain build, which never loads add-ons. Install ReShade's own "with full add-on support" build over it, then try again -- this app does not replace a ReShade it did not put there.`), { code: 'foreign-plain-reshade', file: foreign.file });
+  }
+  return { optiHere, chicken, foreign };
+}
+
+// Returns { optiHere, standalone, placed, foreign }: placed is true only when THIS call put ReShade in
+// a folder that had none, which is what undoPlacedReShade takes back if the add-on then fails.
+async function ensureReShadeAddonHost(dir, api, { addon = 'relimiter', plan = null } = {}) {
+  const { optiHere, chicken, foreign } = plan || await reshadeAddonHostPlan(dir, api);
+  // The player's own Add-on-build ReShade: used where it is, nothing placed, nothing recorded as ours.
+  if (foreign) {
+    relimiter.configureReShadeIni(dir, { addon });
+    return { optiHere, standalone: false, placed: false, foreign: foreign.file };
+  }
   // Chicken: its ReShade is already the proxy, so the add-on simply joins it (relimiter.chickenReShade).
-  const standalone = !optiHere && !relimiter.chickenReShade(dir) && relimiter.reshadeModeFor(api) === 'local';
+  const standalone = !optiHere && !chicken && relimiter.reshadeModeFor(api) === 'local';
 
   // DLSS 5 arrived after an earlier standalone install and something skipped the hand-back.
   if (optiHere && relimiter.status(dir, { api }).standalone) relimiter.demoteStandaloneReShade(dir);
   const before = relimiter.status(dir, { api });
+  const oursBefore = relimiter.placedReShade(dir);
+  let placedNow = false;
   if (!before.reshade || !before.reshadeIsAddonBuild) {
     await ensureReShadeSetupOrAsk();
     // A plain build standing in our standalone proxy slot is replaced there, not beside it.
     if (before.standalone) relimiter.demoteStandaloneReShade(dir);
     const placed = await feeder.deployReShade(dir, feederCacheDir(), GITHUB_HEADERS, { api, force: before.reshade && !before.reshadeIsAddonBuild });
     // Recorded so Chicken's swap knows this ReShade64.dll is the app's to take over.
-    if (placed && placed.deployed && placed.file === 'ReShade64.dll' && !before.reshade) relimiter.writeMarker(dir, { reshadePlaced: true });
+    placedNow = !!(placed && placed.deployed && placed.file === 'ReShade64.dll' && !before.reshade);
+    if (placedNow) relimiter.writeMarker(dir, { reshadePlaced: true });
   }
-  if (standalone && !relimiter.status(dir, { api }).standalone) relimiter.promoteToStandalone(dir, api);
+  // Recorded as ours in the proxy slot only when it was ours as ReShade64.dll (relimiter.js).
+  if (standalone && !relimiter.status(dir, { api }).standalone) relimiter.promoteToStandalone(dir, api, { placed: placedNow || oursBefore });
   relimiter.configureReShadeIni(dir, { addon });
-  return { optiHere, standalone };
+  return { optiHere, standalone, placed: placedNow, foreign: null };
 }
 
 // Add frame pacing to ANY game -- Feeder or not, DLSS 5 installed or not: ReShade (the add-on build)
@@ -1075,7 +1219,7 @@ async function ensureReShadeAddonHost(dir, api, { addon = 'relimiter' } = {}) {
 //   no OptiScaler     nothing would load ReShade64.dll, so ReShade becomes the game's own proxy
 //                     (relimiter.promoteToStandalone). Installing DLSS 5 later moves it back.
 //   OpenGL            ReShade is opengl32.dll either way.
-ipcMain.handle('relimiter:install', async (_evt, exePath) => {
+ipcMain.handle('relimiter:install', perFolder(async (_evt, exePath) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw Object.assign(new Error('Game .exe not found'), { code: 'no-exe' });
     const dir = gameDir(exePath);
@@ -1084,23 +1228,40 @@ ipcMain.handle('relimiter:install', async (_evt, exePath) => {
     if ((await peBitness(exePath)) === 32) throw Object.assign(new Error('32-bit games are not supported for frame pacing yet'), { code: 'bitness-32' });
     const api = (await resolveApi(dir, exePath)) || 'dx12';
     if (!relimiter.isAutomatic(api)) throw Object.assign(new Error('Vulkan needs ReShade’s own setup first'), { code: 'vulkan-layer' });
-    const { optiHere, standalone } = await ensureReShadeAddonHost(dir, api, { addon: 'relimiter' });
+    // Every refusal before anything is fetched or placed.
+    const plan = await reshadeAddonHostPlan(dir, api);
 
+    // The add-on is resolved and in the cache BEFORE the game folder is touched: ReShade used to go in
+    // first, so an offline press, a rate-limited GitHub or a bad download left ReShade hooking the game
+    // with no pacing on it.
     // memoFile: the last answer per source, used when GitHub's hourly API allowance is spent (relimiter.js).
-    await fsp.mkdir(path.join(feederCacheDir(), 'relimiter'), { recursive: true }).catch(() => {});
-    const asset = await relimiter.resolveAddonAsset(GITHUB_HEADERS, { fetchImpl: netFetch, memoFile: path.join(feederCacheDir(), 'relimiter', 'resolved.json') });
+    const cacheDir = path.join(feederCacheDir(), 'relimiter');
+    await fsp.mkdir(cacheDir, { recursive: true }).catch(() => {});
+    const asset = await relimiter.resolveAddonAsset(GITHUB_HEADERS, { fetchImpl: netFetch, memoFile: path.join(cacheDir, 'resolved.json') });
     // Cached under its source and tag, so the fork's build and upstream's of the same name never
     // stand in for each other.
     const cacheName = `relimiter-${asset.repo.split('/')[0]}-${asset.tag || 'latest'}-${asset.name}`.replace(/[^\w.-]/g, '_');
-    const file = await feeder.downloadToCache(asset.url, path.join(feederCacheDir(), 'relimiter'), cacheName, GITHUB_HEADERS, { sha256: asset.digest });
-    relimiter.deploy(dir, file, { version: asset.tag });
+    // The unverified fallback (GitHub's /releases/latest/download link, no digest) is never served from
+    // the cache: with no hash to check it against, downloadToCache would hand back whatever sat under
+    // that name forever -- 'latest' frozen at the first build ever fetched while rate-limited.
+    if (asset.unverified) await fsp.rm(path.join(cacheDir, cacheName), { force: true }).catch(() => {});
+    const file = await feeder.downloadToCache(asset.url, cacheDir, cacheName, GITHUB_HEADERS, { sha256: asset.digest });
+    if (!relimiter.isReLimiterAddon(file)) throw new Error('The downloaded file is not a ReLimiter add-on (no ReLimiter/AddonInit in it) -- refusing to place it');
 
-    const configured = optiHere ? await autoConfigureGame(dir, exePath) : null;
-    return { ok: true, version: asset.tag, source: asset.repo, hostApi: asset.hostApi, standalone, applied: configured ? configured.applied : [] };
+    const host = await ensureReShadeAddonHost(dir, api, { addon: 'relimiter', plan });
+    try {
+      relimiter.deploy(dir, file, { version: asset.tag });
+    } catch (e) {
+      undoPlacedReShade(dir, host);
+      throw e;
+    }
+
+    const configured = host.optiHere ? await autoConfigureGame(dir, exePath) : null;
+    return { ok: true, version: asset.tag, source: asset.repo, hostApi: asset.hostApi, standalone: host.standalone, applied: configured ? configured.applied : [] };
   } catch (e) {
     return { ok: false, code: (e && e.code) || null, error: String((e && e.message) || e) };
   }
-});
+}));
 
 // The pop-out's on/off switches for frame pacing and RenoDX (panel.js renderHostedEnable): what is
 // installed in the folder, and -- where it is not -- whether Install would be refused and why. The same
@@ -1116,6 +1277,9 @@ async function reshadeAddonBlocker(dir, exePath) {
     const b = await pacingBesideUpscalerBlocker(dir);
     if (b) return b.code;
   }
+  // The player's own plain-build ReShade in a proxy slot (reshadeAddonHostPlan refuses it).
+  const theirs = relimiter.chickenReShade(dir) ? null : relimiter.userProxyReShade(dir);
+  if (theirs && !theirs.addonBuild) return 'foreign-plain-reshade';
   return null;
 }
 
@@ -1152,16 +1316,33 @@ ipcMain.handle('panel:addonToggles', async (_evt, { exePath } = {}) => {
   }
 });
 
-ipcMain.handle('relimiter:remove', async (_evt, exePath) => {
+// The mirror of addons:remove. What stays and what goes:
+//   RenoDX installed through the same ReShade, or a Feeder / Luma UE / Chicken that owns it: ReShade
+//     stays, and so does the part of our marker that records it as ours (keepReShade). Pacing's Remove
+//     used to delete the standalone proxy it had placed, and RenoDX went dark with it.
+//   otherwise: the ReShade this app placed for pacing goes too (withPlacedReShade), and LoadReshade goes
+//     back to auto. It used to pass keepReShade only, whose other branch deleted the marker that held
+//     reshadePlaced: ReShade64.dll, ReShade.ini and relimiter.ini stayed behind, LoadReshade stayed
+//     true (autoConfigureGame only ever forces it on), and the proof it was ours was gone -- Chicken's
+//     swap then refused "ReShade64.dll here is not this app's" and Install's preflight called it foreign.
+// Refused while the game runs: the add-on and ReShade are loaded and would not delete.
+ipcMain.handle('relimiter:remove', perFolder(async (_evt, exePath) => {
   try {
+    if (!exePath || !fs.existsSync(exePath)) throw Object.assign(new Error('Game .exe not found'), { code: 'no-exe' });
     const dir = gameDir(exePath);
-    // RenoDX installed through the same ReShade keeps it: pacing's Remove used to delete the standalone
-    // proxy it had placed, and RenoDX went dark with it.
-    return { ok: true, removed: relimiter.remove(dir, { keepReShade: addons.installedAddonIds(dir).length > 0 }) };
+    if (relimiter.deployed(dir) || relimiter.deployed(dir, 32)) await refuseWhileRunning(exePath, 'Frame pacing');
+    const shared = addons.installedAddonIds(dir).length > 0 || reshadeStackHere(dir);
+    const ours = relimiter.ownsReShade(dir);
+    const removed = relimiter.remove(dir, shared ? { keepReShade: true } : { withPlacedReShade: true });
+    const ini = path.join(optiScalerDirFor(dir), 'OptiScaler.ini');
+    if (!shared && ours && fs.existsSync(ini)) {
+      try { patchIniValues(ini, [{ section: 'Plugins', key: 'LoadReshade', value: 'auto' }]); } catch {}
+    }
+    return { ok: true, removed };
   } catch (e) {
-    return { ok: false, error: String((e && e.message) || e) };
+    return { ok: false, code: (e && e.code) || null, error: String((e && e.message) || e) };
   }
-});
+}));
 
 ipcMain.handle('lossless:detect', () => {
   try { return lossless.detect(); } catch (error) { return { installed: false, error: String(error && error.message ? error.message : error) }; }
@@ -1429,14 +1610,13 @@ ipcMain.handle('feeder:deploy', async (_evt, { exePath, mvProviderId, force, lic
     results.consumer = wantConsumer;
     if (results.consumer === 'dfc') {
       // Frame pacing's own ReShade proxy steps back to ReShade64.dll, which Chicken then takes as its
-      // ReShade -- the add-on rides on it from there.
-      try { relimiter.demoteStandaloneReShade(dir); } catch {}
-      results.dfc = await dfc.switchToDfc(dir, dfcCacheDir(), {
+      // ReShade -- the add-on rides on it from there (put back if the swap refuses: withPacingProxyDemoted).
+      results.dfc = await withPacingProxyDemoted(dir, () => dfc.switchToDfc(dir, dfcCacheDir(), {
         nrDllPath: nrDllPath || null,
         removeOptiScaler: removeOptiScalerForSwap,
         reshadeIsOurs: relimiter.placedReShade,
         fetchReShade: fetchReShadeForDfc,
-      });
+      }));
       invalidateDetection(dir);
     } else if (dfcRemoved) {
       results.dfcRemoved = dfcRemoved;
@@ -1531,7 +1711,29 @@ async function dfcRouteFor(dir, exePath) {
 //   to 'dfc'         OptiScaler out, ReShade in as the proxy (the Feeder's, or fetched), the NR
 //                    model, Chicken (dfc.switchToDfc)
 //   to 'optiscaler'  Chicken out, its cfg kept; the renderer's Install then puts OptiScaler back
-ipcMain.handle('dfc:switch', async (_evt, { exePath, to, nrDllPath }) => {
+// Chicken's swap (64-bit) with frame pacing's standalone proxy stepped back to ReShade64.dll first, so
+// Chicken takes that ReShade over rather than meet a second proxy (two proxies is the Arkham Knight
+// failure). switchToDfc can still refuse after that -- no Chicken copy added yet, no NR model, a proxy
+// slot it may not take -- and the demote used to stand: pacing's dxgi.dll became a ReShade64.dll that
+// nothing loads, on a game with no OptiScaler. On a refusal it goes back into the slot it came from,
+// recorded as ours only if it was.
+async function withPacingProxyDemoted(dir, fn) {
+  const before = relimiter.marker(dir);
+  let demoted = null;
+  try { demoted = relimiter.demoteStandaloneReShade(dir); } catch {}
+  try {
+    return await fn();
+  } catch (e) {
+    if (demoted && fs.existsSync(path.join(dir, 'ReShade64.dll')) && !fs.existsSync(path.join(dir, demoted))) {
+      try {
+        relimiter.promoteToStandalone(dir, demoted.toLowerCase() === 'd3d9.dll' ? 'dx9' : 'dx12', { placed: !!(before && before.reshadePlaced) });
+      } catch {}
+    }
+    throw e;
+  }
+}
+
+ipcMain.handle('dfc:switch', perFolder(async (_evt, { exePath, to, nrDllPath }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
@@ -1544,7 +1746,6 @@ ipcMain.handle('dfc:switch', async (_evt, { exePath, to, nrDllPath }) => {
         throw e;
       }
       if (route.dfcBits === 32) await refreshDfcCopy(32);
-      else try { relimiter.demoteStandaloneReShade(dir); } catch {}
       // A 32-bit game: Chicken's own companion route, with this app's 32-bit route taken out whole.
       const r = route.dfcBits === 32
         ? await dfc.switchToDfc32(dir, dfcCacheDir(), {
@@ -1565,12 +1766,12 @@ ipcMain.handle('dfc:switch', async (_evt, { exePath, to, nrDllPath }) => {
             return { ...r32, exe: exePath };
           },
         })
-        : await dfc.switchToDfc(dir, dfcCacheDir(), {
+        : await withPacingProxyDemoted(dir, () => dfc.switchToDfc(dir, dfcCacheDir(), {
           nrDllPath: nrDllPath || null,
           removeOptiScaler: removeOptiScalerForSwap,
           reshadeIsOurs: relimiter.placedReShade,
           fetchReShade: fetchReShadeForDfc,
-        });
+        }));
       invalidateDetection(dir);
       // Chicken's x64 worker on a hybrid laptop, on the card the game renders on (gpupref.js).
       if (route.dfcBits === 32) await preferDiscreteGpu(dir, exePath);
@@ -1583,7 +1784,7 @@ ipcMain.handle('dfc:switch', async (_evt, { exePath, to, nrDllPath }) => {
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error), code: (error && error.code) || null };
   }
-});
+}));
 
 // Where the user's own Deep Fried Chicken copy lives once they have supplied it. Beside the other
 // caches; never fetched into, only copied into from a file they picked.
@@ -2186,20 +2387,46 @@ ipcMain.handle('feeder:remove', async (_evt, exePath) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
-    const keepReShade = lumaue.lumaUeDeployed(dir);
-    const result = await feeder.removeFeederStack(dir, { keepReShade });
+    const { keepReShade, ...result } = await removeFeederKeepingShared(dir);
     const iniPath = path.join(dir, 'OptiScaler.ini');
     let ini = [];
+    let pacingRemoved = null;
     if (fs.existsSync(iniPath)) {
       if (!keepReShade) ini = patchIniValues(iniPath, [{ section: 'Plugins', key: 'LoadReshade', value: 'auto' }]);
+      // No longer a Feeder game: pacing and RenoDX now sit beside OptiScaler's own upscaler, where the
+      // engine or frame generation may make them crash or see nothing. Before autoConfigureGame, which
+      // forces LoadReshade=true wherever pacing is deployed.
+      try { pacingRemoved = await dropBlockedPacing(dir); } catch {}
       const { applied } = await autoConfigureGame(dir, exePath);
       ini = [...ini, ...(applied || [])];
     }
-    return { ok: true, ...result, ini };
+    return { ok: true, ...result, ini, pacingRemoved };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
 });
+
+// The Feeder's stack out, and with it the ReShade64.dll it brought -- unless something else here still
+// loads that ReShade: Luma UE, frame pacing or a RenoDX add-on. Deciding on Luma alone deleted the
+// ReShade pacing and RenoDX were running on. Kept for them, it becomes theirs (handReShadeToAddons), so
+// their last Remove takes it. Returns the stack's own report plus keepReShade.
+async function removeFeederKeepingShared(dir) {
+  const lumaHere = lumaue.lumaUeDeployed(dir);
+  const keepReShade = lumaHere || reshadeAddonsHere(dir);
+  const result = await feeder.removeFeederStack(dir, { keepReShade });
+  if (!lumaHere) handReShadeToAddons(dir);
+  return { ...result, keepReShade };
+}
+
+// The mirror for Luma UE. The Feeder, pacing or RenoDX keep its ReShade64.dll (removeLumaStack always
+// deleted it before).
+async function removeLumaKeepingShared(dir) {
+  const feederHere = feeder.feederDeployed(dir);
+  const keepReShade = feederHere || reshadeAddonsHere(dir);
+  const result = await lumaue.removeLumaStack(dir, { keepReShade });
+  if (!feederHere) handReShadeToAddons(dir);
+  return { ...result, keepReShade };
+}
 
 // Same shape as feeder:readiness -- lumaue.lumaUeReadiness() itself explains why (wrong game,
 // or which files are still missing) rather than this handler doing any of that reasoning.
@@ -2239,6 +2466,11 @@ ipcMain.handle('lumaue:deploy', async (_evt, { exePath, force, licenseConfirmed 
       licenseConfirmed: !!licenseConfirmed,
       profile,
     });
+    // Luma's deploy has just written ITS ReShade64.dll over whatever was there -- including one frame
+    // pacing had recorded as placed. That record is now wrong, and acting on it (dropBlockedPacing's
+    // withPlacedReShade) deleted Luma's ReShade. Luma owns it now; if Luma goes while pacing or RenoDX
+    // stays, removeLumaKeepingShared hands it back.
+    if (relimiter.placedReShade(dir)) relimiter.writeMarker(dir, { reshadePlaced: false });
     // The deploy places Luma's ReShade as a plain ReShade64.dll; nothing loads it until
     // OptiScaler.ini says [Plugins] LoadReshade=true. autoConfigureGame forces that once Luma is
     // on disk, but it only used to run on Install and at app start -- deploying Luma into an
@@ -2258,15 +2490,18 @@ ipcMain.handle('lumaue:remove', async (_evt, { exePath }) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
-    const result = await lumaue.removeLumaStack(dir);
+    const { keepReShade, ...result } = await removeLumaKeepingShared(dir);
     const iniPath = path.join(dir, 'OptiScaler.ini');
     let ini = [];
+    let pacingRemoved = null;
     if (fs.existsSync(iniPath)) {
-      if (!feeder.feederDeployed(dir)) ini = patchIniValues(iniPath, [{ section: 'Plugins', key: 'LoadReshade', value: 'auto' }]);
+      if (!keepReShade) ini = patchIniValues(iniPath, [{ section: 'Plugins', key: 'LoadReshade', value: 'auto' }]);
+      // Pacing/RenoDX left beside OptiScaler's upscaler are judged again (see feeder:remove).
+      try { pacingRemoved = await dropBlockedPacing(dir); } catch {}
       const { applied } = await autoConfigureGame(dir, exePath);
       ini = [...ini, ...(applied || [])];
     }
-    return { ok: true, ...result, ini };
+    return { ok: true, ...result, ini, pacingRemoved };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -3909,16 +4144,24 @@ async function uninstallEverything(dir) {
 
   // Frame pacing first: the Feeder's removal below takes ReShade64.dll, and an add-on left behind with
   // no ReShade to load it is a file that does nothing and a marker that claims otherwise.
+  // The ReShade64.dll pacing or RenoDX placed goes with it (withPlacedReShade): it used to be left, and
+  // then listed under "kept" as someone else's. Not when the Feeder or Luma UE is here -- their own
+  // stage below takes the ReShade64.dll they brought, with the files that go beside it.
   if (relimiter.marker(dir) || relimiter.deployed(dir)) {
-    const r = await stage('frame pacing', () => relimiter.remove(dir));
+    const stackReShade = feeder.feederDeployed(dir) || lumaue.lumaUeDeployed(dir);
+    const r = await stage('frame pacing', () => relimiter.remove(dir, { withPlacedReShade: !stackReShade }));
     if (r) removed.push(...r);
   }
   // The add-ons picker's installs (RenoDX, the shader packs) for the same reason, and from their own
   // marker: every file in it is one this app placed. Left behind, a RenoDX .addon64 sat in a folder
-  // with no ReShade and the picker still read "Remove".
+  // with no ReShade and the picker still read "Remove". A file Windows would not delete is reported
+  // under failed and stays in the marker, so the next Remove finds it again.
   for (const id of addons.installedIds(dir)) {
     const r = await stage(`the ${id} add-on`, () => addons.removeAddon(dir, id));
-    if (r) removed.push(...r.removed, ...(addons.installedIds(dir).length ? [] : [addons.ADDONS_MARKER]));
+    if (r) {
+      for (const f of r.failed || []) failed.push(f);
+      removed.push(...r.removed, ...(addons.installedIds(dir).length ? [] : [addons.ADDONS_MARKER]));
+    }
   }
   if (feeder.feederDeployed(dir)) {
     const r = await stage('the Feeder stack', () => feeder.removeFeederStack(dir, { keepReShade: false }));
@@ -4118,7 +4361,12 @@ async function planUninstall(dir) {
     const m = relimiter.marker(dir);
     for (const n of (m && m.files) || [relimiter.ADDON_64, relimiter.ADDON_32]) add(n);
     if (m) add(relimiter.MARKER);
-    if (m && m.reshadeProxy && m.reshadePlaced && relimiter.isReShadeProxy(path.join(dir, m.reshadeProxy))) add(m.reshadeProxy);
+    const proxyOurs = !!(m && m.reshadeProxy && m.reshadePlaced && relimiter.isReShadeProxy(path.join(dir, m.reshadeProxy)));
+    if (proxyOurs) add(m.reshadeProxy);
+    // The ReShade64.dll pacing or RenoDX placed (uninstallEverything's withPlacedReShade), and the ini
+    // and log relimiter.remove takes with either.
+    if (relimiter.placedReShade(dir)) add('ReShade64.dll');
+    if (proxyOurs || relimiter.placedReShade(dir)) for (const n of ['ReShade.ini', 'ReShade.log']) add(n);
   }
   for (const rel of addons.filesPlaced(dir)) add(rel);
   add(addons.ADDONS_MARKER);
@@ -4710,8 +4958,13 @@ async function applyHelpFix(exePath, fixId) {
     }
     case 'remove-feeder': {
       if (!feeder.feederDeployed(dir)) return { done: false, text: 'no Feeder deployed here' };
-      const r = await feeder.removeFeederStack(dir, { keepReShade: lumaue.lumaUeDeployed(dir) });
-      if (fs.existsSync(path.join(dir, 'OptiScaler.ini'))) await autoConfigureGame(dir, exePath);
+      // Luma, pacing or RenoDX keep the ReShade (removeFeederKeepingShared); pacing is judged again
+      // beside the upscaler before the reconfigure, as feeder:remove does.
+      const r = await removeFeederKeepingShared(dir);
+      if (fs.existsSync(path.join(dir, 'OptiScaler.ini'))) {
+        try { await dropBlockedPacing(dir); } catch {}
+        await autoConfigureGame(dir, exePath);
+      }
       return { done: true, text: `removed the Feeder (${r.removed.length} files)` };
     }
     // Needs Luma's licence confirmed by the user, which only the renderer's own dialog does.
@@ -4719,8 +4972,11 @@ async function applyHelpFix(exePath, fixId) {
       return { done: false, text: 'switching to Luma needs its licence confirmed -- use Fix it in Game Help' };
     case 'remove-luma': {
       if (!lumaue.lumaUeDeployed(dir)) return { done: false, text: 'no Luma UE deployed here' };
-      const r = await lumaue.removeLumaStack(dir);
-      if (fs.existsSync(path.join(dir, 'OptiScaler.ini'))) await autoConfigureGame(dir, exePath);
+      const r = await removeLumaKeepingShared(dir);
+      if (fs.existsSync(path.join(dir, 'OptiScaler.ini'))) {
+        try { await dropBlockedPacing(dir); } catch {}
+        await autoConfigureGame(dir, exePath);
+      }
       return { done: true, text: `removed Luma UE (${r.removed.length} files)` };
     }
     case 'reconfigure': {
@@ -6778,8 +7034,12 @@ async function autoConfigureGame(dir, exePath) {
       // OptiScaler's ReShade loading switched back to auto. One placed by hand is left.
       try {
         if (feeder.feederDeployed(dir) && fs.existsSync(path.join(dir, '.dlss5ui-feeder-deploy.json'))) {
-          const removed = await feeder.removeFeederStack(dir, { keepReShade: lumaue.lumaUeDeployed(dir) });
-          if (!lumaue.lumaUeDeployed(dir)) patchIniValues(iniPath, [{ section: 'Plugins', key: 'LoadReshade', value: 'auto' }]);
+          // Frame pacing and RenoDX keep the ReShade (removeFeederKeepingShared), and are then judged
+          // beside the upscaler like any non-Feeder game's (dropBlockedPacing), before the LoadReshade
+          // forcing further down.
+          const removed = await removeFeederKeepingShared(dir);
+          if (!removed.keepReShade) patchIniValues(iniPath, [{ section: 'Plugins', key: 'LoadReshade', value: 'auto' }]);
+          try { await dropBlockedPacing(dir); } catch {}
           presentRoute.feederRemoved = removed.removed.length > 0;
         }
       } catch (e) {
@@ -6805,8 +7065,9 @@ async function autoConfigureGame(dir, exePath) {
   if (presentroute.iniPresentGame(exePath)) {
     try {
       if (feeder.feederDeployed(dir) && fs.existsSync(path.join(dir, '.dlss5ui-feeder-deploy.json'))) {
-        await feeder.removeFeederStack(dir, { keepReShade: lumaue.lumaUeDeployed(dir) });
-        if (!lumaue.lumaUeDeployed(dir)) patchIniValues(iniPath, [{ section: 'Plugins', key: 'LoadReshade', value: 'auto' }]);
+        const removed = await removeFeederKeepingShared(dir);
+        if (!removed.keepReShade) patchIniValues(iniPath, [{ section: 'Plugins', key: 'LoadReshade', value: 'auto' }]);
+        try { await dropBlockedPacing(dir); } catch {}
       }
     } catch {}
     // ensureIniKey, not a default: installs from before Placement existed have no such line to fill in.

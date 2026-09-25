@@ -130,7 +130,17 @@ itself each forbid exactly that, and the MIT notice travels with the binary.
 - The add-on is identified by **content** (a PE header, over a size floor, carrying both `ReLimiter`
   and `AddonInit`), never by file name, the same rule `isAddonReShadeDll` follows. "Complete" needs
   the **Add-on** build of ReShade: the plain build carries the same version and product name and
-  simply never loads an add-on. Remove takes back the add-on and our marker and leaves ReShade alone.
+  simply never loads an add-on.
+- **Whose ReShade it is decides what Remove may take** (`relimiter:remove`, `addons:remove`). A
+  ReShade this app placed for pacing/RenoDX (`reshadePlaced`, only ever written when *this* install
+  put it there) goes with the last of them, with its ini/log and `LoadReshade` back to auto -- unless
+  the Feeder, Luma UE or Chicken is here, or the other add-on still is. A ReShade the **player** put
+  in a proxy slot (`relimiter.userProxyReShade`, by content under every `HOOK_DLLS` name) is used
+  where it is and never recorded, replaced or doubled; its plain build is refused
+  (`foreign-plain-reshade`). Removing the Feeder or Luma keeps their ReShade64.dll while pacing or
+  RenoDX needs it and hands it to pacing's record (`handReShadeToAddons`). Both Removes are refused
+  while the game runs (`game-running`); the add-on is fetched *before* ReShade is placed, and these
+  handlers queue per game folder (`perFolder`).
 - The engine reads the add-on through the host API on the fork
   (`mrcgibb9876-hash/ReLimiter`, `ReLimiterGetApi`, vendored as `dlssnr/ReLimiter_Api.h`), and the
   Pacing page draws itself from `describe_setting` rather than a table -- so a new add-on setting
