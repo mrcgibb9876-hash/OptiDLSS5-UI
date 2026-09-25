@@ -758,3 +758,34 @@ test('an add-on file that cannot be deleted is reported, and stays recorded as o
   assert.deepEqual(again.removed, ['renodx-cyberpunk2077.addon64']);
   assert.deepEqual(addons.installedIds(dir), []);
 });
+
+test('RenoDX source choice: our fork first, upstream when only upstream has a mod made for the game', () => {
+  const art = (name) => ({ artifacts: [{ name, arch: 'x64' }] });
+  const idx = (games) => ({ games });
+  const fork = { source: { repo: 'fork', hostApi: true }, index: idx([
+    { id: 'a', title: 'Alpha', steamAppIds: [1], mods: [{ id: 'alpha', status: 'stable', ...art('renodx-alpha.addon64') }] },
+    { id: 'ace7', title: 'Ace Combat 7', mods: [{ id: 'unrealengine', support: 'generic', ...art('renodx-unrealengine.addon64') }] },
+  ]) };
+  const up = { source: { repo: 'upstream', hostApi: false }, index: idx([
+    { id: 'a', title: 'Alpha', steamAppIds: [1], mods: [{ id: 'alpha', status: 'stable', ...art('renodx-alpha.addon64') }] },
+    { id: 'b', title: 'Bravo', steamAppIds: [2], mods: [{ id: 'bravo', status: 'stable', ...art('renodx-bravo.addon64') }] },
+    { id: 'ace7', title: 'Ace Combat 7', mods: [{ id: 'unrealengine', support: 'generic', ...art('renodx-unrealengine.addon64') }] },
+  ]) };
+  const pick = (p) => addons.pickRenodxMatch(fork, up, { bitness: 64, ...p });
+  // A tie goes to the fork (its build carries the host API).
+  const a = pick({ title: 'Alpha' });
+  assert.equal(a.source.repo, 'fork'); assert.equal(a.fromUpstream, false);
+  // Only upstream has Bravo: upstream it is.
+  const b = pick({ title: 'Bravo' });
+  assert.equal(b.source.repo, 'upstream'); assert.equal(b.match.modId, 'bravo'); assert.equal(b.fromUpstream, true);
+  // A per-game upstream mod beats an engine-only match in the fork.
+  const b2 = pick({ title: 'Bravo', engineId: 'unreal' });
+  assert.equal(b2.match.modId, 'bravo');
+  // Engine-only everywhere: the fork's engine mod.
+  const c = pick({ title: 'Charlie', engineId: 'unreal' });
+  assert.equal(c.source.repo, 'fork'); assert.equal(c.match.how, 'engine');
+  // Nothing anywhere.
+  assert.equal(pick({ title: 'Nothing' }), null);
+  // No upstream index (offline): the fork alone still answers.
+  assert.equal(addons.pickRenodxMatch(fork, null, { bitness: 64, title: 'Alpha' }).source.repo, 'fork');
+});

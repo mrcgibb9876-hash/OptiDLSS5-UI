@@ -521,6 +521,39 @@ async function renodxIndex() {
   throw new Error(`No RenoDX index could be fetched (${tried.join('; ')})`);
 }
 
+// The OTHER source's index (upstream, when ours answered), memoised the same way. Our fork is frozen
+// against upstream until the maintainer promotes a tested refresh, so a game upstream has since given a
+// mod of its own is found here (addons.pickRenodxMatch). Null when there is no second source or it fails.
+let renodxUpstreamMemo = null;
+async function renodxUpstreamIndex() {
+  if (renodxUpstreamMemo) return renodxUpstreamMemo;
+  const primary = await renodxIndex().catch(() => null);
+  const source = addons.RENODX_SOURCES.find((src) => !primary || src.repo !== primary.source.repo);
+  if (!source) return null;
+  const buf = await addonCtx().fetchBuffer(addons.renodxIndexUrl(source));
+  renodxUpstreamMemo = { index: JSON.parse(buf.toString('utf8')), source };
+  return renodxUpstreamMemo;
+}
+
+function renodxParams(exePath, dir, detected, steam) {
+  return {
+    steamAppid: steam ? steam.appid : null,
+    title: renodxTitle(exePath, dir, steam),
+    bitness: detected.bitness || null,
+    // Lets an Unreal game with no bespoke mod still get the engine-wide one. Already on the cached
+    // detection (the same field lumaue.js reads), so this costs no extra folder work.
+    engineId: detected.engineId || null,
+  };
+}
+
+// The one place a game's RenoDX mod and its release are chosen: { match, source, fromUpstream } or null.
+// Throws only when not even our own index can be read.
+async function renodxMatchFor(exePath, dir, detected) {
+  const primary = await renodxIndex();
+  const upstream = await renodxUpstreamIndex().catch(() => null);
+  return addons.pickRenodxMatch(primary, upstream, renodxParams(exePath, dir, detected, library.steamManifestFor(exePath)));
+}
+
 // The catalogue as this game sees it: what is installed here, and which RenoDX add-on (if any)
 // this particular game has. The index fetch is allowed to fail -- offline, or GitHub down -- and
 // the rest of the list still works, because only the RenoDX row depends on it.
@@ -540,16 +573,9 @@ ipcMain.handle('addons:forGame', async (_evt, { exePath } = {}) => {
     // engine's in-game HDR page can appear at all, and "the tab is missing" is otherwise a mystery.
     let renodxSource = null;
     try {
-      const renodx = await renodxIndex();
-      renodxSource = renodx.source;
-      match = addons.matchRenodx(renodx.index, {
-        steamAppid: steam ? steam.appid : null,
-        title: renodxTitle(exePath, dir, steam),
-        bitness: detected.bitness || null,
-        // Lets an Unreal game with no bespoke mod still get the engine-wide one. Already on the
-        // cached detection (the same field lumaue.js reads), so this costs no extra folder work.
-        engineId: detected.engineId || null,
-      });
+      const picked = await renodxMatchFor(exePath, dir, detected);
+      match = picked ? picked.match : null;
+      renodxSource = picked ? picked.source : (renodxIndexMemo && renodxIndexMemo.source) || null;
     } catch (error) {
       indexError = String(error && error.message ? error.message : error);
     }
@@ -687,19 +713,11 @@ ipcMain.handle('addons:install', perFolder(async (_evt, { exePath, id } = {}) =>
     const detected = (await detectFor(gameDir(exePath), exePath).catch(() => null)) || {};
     const opts = { bitness: detected.bitness || null };
     if (id === 'renodx') {
-      const steam = library.steamManifestFor(exePath);
-      const renodx = await renodxIndex();
-      // The asset comes from the release the index came from, never the other one.
-      opts.source = renodx.source;
-      opts.match = addons.matchRenodx(renodx.index, {
-        steamAppid: steam ? steam.appid : null,
-        title: renodxTitle(exePath, dir, steam),
-        bitness: detected.bitness || null,
-        // Lets an Unreal game with no bespoke mod still get the engine-wide one. Already on the
-        // cached detection (the same field lumaue.js reads), so this costs no extra folder work.
-        engineId: detected.engineId || null,
-      });
-      if (!opts.match) throw new Error('No RenoDX mod is built for this game');
+      const picked = await renodxMatchFor(exePath, dir, detected);
+      if (!picked) throw new Error('No RenoDX mod is built for this game');
+      // The asset comes from the release its index came from, never the other one.
+      opts.source = picked.source;
+      opts.match = picked.match;
     }
     // A ReShade ADD-ON needs the same folder to be true as pacing's does, so it goes through the
     // same function rather than a second copy of the reasoning. A shader pack does not: .fx effects
@@ -1296,14 +1314,8 @@ ipcMain.handle('panel:addonToggles', async (_evt, { exePath } = {}) => {
     let byEngine = false;
     try {
       const detected = (await detectFor(gameDir(exePath), exePath).catch(() => null)) || {};
-      const steam = library.steamManifestFor(exePath);
-      const renodx = await renodxIndex();
-      const match = addons.matchRenodx(renodx.index, {
-        steamAppid: steam ? steam.appid : null,
-        title: renodxTitle(exePath, dir, steam),
-        bitness: detected.bitness || null,
-        engineId: detected.engineId || null,
-      });
+      const picked = await renodxMatchFor(exePath, dir, detected);
+      const match = picked ? picked.match : null;
       byEngine = !!(match && /^engine/.test(match.how || ''));
       if (!match && !hdrInstalled && !hdrBlocker) hdrBlocker = 'no-mod';
     } catch {
@@ -3835,20 +3847,15 @@ ipcMain.handle('game:status', async (_evt, exePath) => {
 // stored detection rather than a scan (the grid's performance rules, see CLAUDE.md).
 function renodxCapability(exePath, dir) {
   if (!renodxIndexMemo) {
-    renodxIndex().catch(() => {});
+    renodxIndex().then(() => renodxUpstreamIndex()).catch(() => {});
     return null;
   }
+  if (!renodxUpstreamMemo) renodxUpstreamIndex().catch(() => {});
   try {
     const detected = storedDetectionFor(exePath) || {};
-    const steam = library.steamManifestFor(exePath);
-    const match = addons.matchRenodx(renodxIndexMemo.index, {
-      steamAppid: steam ? steam.appid : null,
-      title: renodxTitle(exePath, dir, steam),
-      bitness: detected.bitness || null,
-      engineId: detected.engineId || null,
-    });
-    if (!match) return null;
-    return /^engine/.test(match.how || '') ? 'engine' : 'game';
+    const picked = addons.pickRenodxMatch(renodxIndexMemo, renodxUpstreamMemo, renodxParams(exePath, dir, detected, library.steamManifestFor(exePath)));
+    if (!picked) return null;
+    return /^engine/.test(picked.match.how || '') ? 'engine' : 'game';
   } catch {
     return null;
   }

@@ -407,6 +407,23 @@ function matchRenodx(index, { steamAppid = null, title = null, bitness = null, e
   return describeMatch(mod, { gameId: entry.id, gameTitle: entry.title, bitness, how });
 }
 
+// Which release a game's RenoDX mod comes from, given both indexes (either may be null). Our fork first:
+// only its builds export the host API the in-game HDR page needs. But our fork is frozen against
+// upstream on purpose (it only moves when the maintainer promotes a tested refresh), so a game upstream
+// has since given a mod of its own would otherwise get nothing -- or only the engine-wide mod. So a
+// per-game match upstream beats an engine-only (or no) match in the fork; the fork wins every tie.
+// Returns { match, source, fromUpstream } or null. Pure, for the tests.
+function pickRenodxMatch(primary, upstream, params) {
+  const isGame = (m) => !!(m && !/^engine/.test(m.how || ''));
+  const m1 = primary && primary.index ? matchRenodx(primary.index, params) : null;
+  if (isGame(m1)) return { match: m1, source: primary.source, fromUpstream: false };
+  const m2 = upstream && upstream.index ? matchRenodx(upstream.index, params) : null;
+  if (isGame(m2)) return { match: m2, source: upstream.source, fromUpstream: true };
+  if (m1) return { match: m1, source: primary.source, fromUpstream: false };
+  if (m2) return { match: m2, source: upstream.source, fromUpstream: true };
+  return null;
+}
+
 // The download URL for one of the pinned release's assets. Built from the tag rather than read
 // from the index: the index's own `url` fields are relative ("./renodx-x.addon64"), which is
 // right for its web page and useless here.
@@ -687,7 +704,7 @@ module.exports = {
   ADDONS_MARKER,
   RENODX_REPO, RENODX_TAG, RENODX_INDEX_ASSET, RENODX_SOURCES,
   catalogue, addonById,
-  titleKey, indexRenodx, pickArtifact, matchRenodx,
+  titleKey, indexRenodx, pickArtifact, matchRenodx, pickRenodxMatch,
   ENGINE_GENERIC_MODS, engineGenericMod,
   releaseAssetUrl, renodxIndexUrl,
   readMarker, writeMarker, filesPlaced, installedIds, installedAddonIds,
