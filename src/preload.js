@@ -181,6 +181,7 @@ contextBridge.exposeInMainWorld('api', {
   managerUpdateCheck: () => ipcRenderer.invoke('update:managerCheck'),
   managerUpdateRestart: () => ipcRenderer.invoke('update:managerRestart'),
   managerUpdateDownload: () => ipcRenderer.invoke('update:managerDownload'),
+  githubGoLive: () => ipcRenderer.invoke('github:goLive'),
   onManagerUpdate: (cb) => { ipcRenderer.on('manager-update', (_evt, state) => cb(state)); },
   onReportSignIn: (cb) => { ipcRenderer.on('report-signin', (_evt, result) => cb(result)); },
 

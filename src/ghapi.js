@@ -30,6 +30,11 @@ let tokenProvider = null;
 let entries = null; // url -> { etag, body, at }
 let blockedUntil = 0;
 let saveTimer = null;
+// Until this time every read asks GitHub (with its ETag) instead of trusting the 20-minute window. Set by
+// the top bar's Check for Updates, so a release published a minute ago is seen when someone asks.
+let liveUntil = 0;
+
+function goLive(ms = 60 * 1000, now = Date.now) { liveUntil = now() + ms; }
 
 function configure({ cacheFile: file = null, token = null } = {}) {
   cacheFile = file;
@@ -115,7 +120,7 @@ async function githubGet(rawFetch, url, init = {}, { now = Date.now } = {}) {
   const cache = load();
   const cached = cache.get(key);
   const t = now();
-  if (cached && t - cached.at < FRESH_MS) return asResponse(cached);
+  if (cached && t - cached.at < FRESH_MS && t >= liveUntil) return asResponse(cached);
   if (t < blockedUntil) {
     if (cached) return asResponse(cached);
     throw rateLimitError(blockedUntil);
@@ -150,6 +155,6 @@ async function githubGet(rawFetch, url, init = {}, { now = Date.now } = {}) {
 }
 
 // For tests.
-function _reset() { entries = null; blockedUntil = 0; cacheFile = null; tokenProvider = null; }
+function _reset() { entries = null; blockedUntil = 0; liveUntil = 0; cacheFile = null; tokenProvider = null; }
 
-module.exports = { configure, handles, githubGet, FRESH_MS, _reset };
+module.exports = { configure, handles, githubGet, goLive, FRESH_MS, _reset };

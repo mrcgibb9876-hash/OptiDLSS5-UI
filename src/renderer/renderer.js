@@ -5791,6 +5791,8 @@ $('#btn-check-updates').addEventListener('click', async () => {
   btn.disabled = true;
   btn.textContent = t('Checking…');
   const lines = [];
+  // Asked for by a person: see what GitHub has right now, not what was remembered minutes ago.
+  try { await window.api.githubGoLive(); } catch {}
   try {
     // Every build in use, not just the default: a game left on the Pre-SR build was never offered its
     // newer releases before this. One await for the whole sweep so the manager check runs alongside it.

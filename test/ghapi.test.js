@@ -78,3 +78,16 @@ test('answers outlast a restart, and a signed-in token rides along but is droppe
   assert.deepEqual(saw, ['Bearer tok', null], 'the rejected token is dropped and the call retried without it');
   ghapi._reset();
 });
+
+test('Check for Updates goes live: a fresh answer is re-asked (with its ETag) for the next minute', async () => {
+  const { clock, advance } = fresh();
+  let calls = 0;
+  const raw = async () => { calls++; return calls === 1 ? ok({ tag_name: 'v5' }) : ok({ tag_name: 'v6' }, '"e2"'); };
+  await ghapi.githubGet(raw, URL_, {}, clock);
+  ghapi.goLive(60_000, clock.now);
+  assert.equal((await (await ghapi.githubGet(raw, URL_, {}, clock)).json()).tag_name, 'v6', 'a release published a moment ago is seen');
+  advance(61_000);
+  await ghapi.githubGet(raw, URL_, {}, clock);
+  assert.equal(calls, 2, 'after the minute the remembered answer is trusted again');
+  ghapi._reset();
+});

@@ -7725,6 +7725,8 @@ ipcMain.handle('update:managerState', () => managerUpdate.snapshot());
 ipcMain.handle('update:managerCheck', () => managerUpdate.check());
 ipcMain.handle('update:managerRestart', () => managerUpdate.restart());
 ipcMain.handle('update:managerDownload', () => managerUpdate.download());
+// Check for Updates asks GitHub live for the next minute rather than reusing remembered answers (ghapi.js).
+ipcMain.handle('github:goLive', () => { ghapi.goLive(); return true; });
 
 // Closes the "blind install" gap without this app guessing at settings it hasn't verified:
 // tells the user whether OptiScaler_DLSSNR's own engine has ever been specifically tuned for
