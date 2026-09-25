@@ -947,10 +947,9 @@ function renderHosted(host, kind) {
       if (autoOn) continue;
     }
 
-    // Typed, not dragged, for ReLimiter's numbers: a frame-rate cap has to land on 72 or 141 exactly,
-    // which a track from 30 to 1000 cannot do. Every RenoDX number is judged by eye while it moves,
-    // so all of them keep the slider.
-    const typed = kind === 'pacing' && s.type !== 'bool' && s.type !== 'enum';
+    // Typed, not dragged, for the frame-rate cap alone: it has to land on 72 or 141 exactly, which a
+    // track from 30 to 1000 cannot do. Every other number, pacing and RenoDX, keeps the slider.
+    const typed = kind === 'pacing' && s.key === 'target_fps';
     const set = (_k, v) => hostedApply(kind, s, hostedValue(s, v));
     wrap.appendChild(typed ? hostedNumberRow(hostedField(kind, s), s, set) : fieldRow(hostedField(kind, s), set));
   }

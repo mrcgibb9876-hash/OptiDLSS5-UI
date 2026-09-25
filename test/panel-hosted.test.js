@@ -137,9 +137,9 @@ test('the pages are always listed; an absent add-on greys its page and leaves a 
   assert.ok(hosted.indexOf("'hosted-enable'") < hosted.indexOf('if (!h || !h.available)'), 'drawn before the unavailable early return');
   assert.match(hosted, /hostedMissingText\(kind\)/, 'and the greyed page says why');
 
-  // Every ReLimiter number is typed, never dragged: a cap has to land on 72 or 141 exactly. RenoDX
-  // numbers are all sliders -- they are judged by eye while they move.
-  assert.match(hosted, /const typed = kind === 'pacing' && s\.type !== 'bool' && s\.type !== 'enum';/);
+  // Only the frame-rate cap is typed: it has to land on 72 or 141 exactly. Every other number,
+  // pacing and RenoDX, is a slider.
+  assert.match(hosted, /const typed = kind === 'pacing' && s\.key === 'target_fps';/);
   // Reset only when the engine says the add-on can, sent as the reserved `$reset` key.
   assert.match(hosted, /if \(h\.canReset\)/);
   assert.match(hosted, /hostedApply\(kind, \{ key: '\$reset' \}, true\)/);
