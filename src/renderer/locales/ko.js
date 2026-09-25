@@ -1696,4 +1696,8 @@ window.I18N.register("ko", {
     "우리 빌드에서 가져왔습니다. 게임 내 DLSS 5 패널이 이 설정을 보여줄 수 있는 것은 이 빌드뿐입니다. 오버레이에서 HDR 페이지를 찾아보세요.",
   "From RenoDX's own release. It works, but only through its own overlay: the DLSS 5 panel can only show these settings on our build.":
     "RenoDX 자체 릴리스에서 가져왔습니다. 작동은 하지만 RenoDX 자체 오버레이를 통해서만 가능합니다. DLSS 5 패널은 우리 빌드에서만 이 설정을 보여줄 수 있습니다.",
+  "This game has no ReShade yet. Installing this puts ReShade's Add-on build in with it, the same way frame pacing does.":
+    "이 게임에는 아직 ReShade가 없습니다. 이것을 설치하면 프레임 페이싱과 같은 방식으로 ReShade 애드온 빌드도 함께 설치됩니다.",
+  "The ReShade here is the plain build, which never loads an add-on. Installing this replaces it with the Add-on build.":
+    "여기 있는 ReShade는 애드온을 로드하지 않는 일반 빌드입니다. 이것을 설치하면 애드온 빌드로 교체됩니다.",
 });

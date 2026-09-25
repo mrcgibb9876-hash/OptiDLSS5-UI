@@ -320,14 +320,19 @@ async function resolveAddonAsset(ghHeaders, { bitness = 64, fetchImpl, sources =
 // user already has keeps everything else; only the add-on path, a DisabledAddons entry naming
 // ReLimiter (ReShade honours that on every launch, so the add-on would sit there unloaded), and the
 // first-run tutorial banner are touched.
-function configureReShadeIni(dir) {
+// `addon` is the name ReShade would have written into DisabledAddons -- ReShade honours that list on
+// every launch, so an add-on left in it sits there unloaded however correctly it was placed. Defaulted
+// to ReLimiter because this started as pacing's, but RenoDX needs exactly the same treatment and a
+// second copy of this function is how the two would drift.
+function configureReShadeIni(dir, { addon = 'relimiter' } = {}) {
   const iniFile = path.join(dir, 'ReShade.ini');
   const existing = fs.existsSync(iniFile) ? fs.readFileSync(iniFile, 'utf8') : '';
   let next = existing;
   if (!getIniKey(next, 'ADDON', 'AddonPath')) next = setIniKey(next, 'ADDON', 'AddonPath', '.\\');
   const disabled = getIniKey(next, 'ADDON', 'DisabledAddons');
-  if (disabled && /relimiter/i.test(disabled)) {
-    const kept = disabled.split(',').map((s) => s.trim()).filter((s) => s && !/relimiter/i.test(s));
+  const wanted = new RegExp(addon.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  if (disabled && wanted.test(disabled)) {
+    const kept = disabled.split(',').map((s) => s.trim()).filter((s) => s && !wanted.test(s));
     next = setIniKey(next, 'ADDON', 'DisabledAddons', kept.join(','));
   }
   if (!getIniKey(next, 'OVERLAY', 'TutorialProgress')) next = setIniKey(next, 'OVERLAY', 'TutorialProgress', '4');

@@ -1696,4 +1696,8 @@ window.I18N.register("ru", {
     "Из нашей сборки -- именно в ней панель DLSS 5 может показать эти настройки в игре; ищите страницу HDR в оверлее.",
   "From RenoDX's own release. It works, but only through its own overlay: the DLSS 5 panel can only show these settings on our build.":
     "Из собственного релиза RenoDX. Он работает, но только через свой оверлей: панель DLSS 5 показывает эти настройки лишь в нашей сборке.",
+  "This game has no ReShade yet. Installing this puts ReShade's Add-on build in with it, the same way frame pacing does.":
+    "В этой игре ещё нет ReShade. При установке вместе с ним ставится сборка ReShade с поддержкой дополнений -- так же, как при выравнивании кадров.",
+  "The ReShade here is the plain build, which never loads an add-on. Installing this replaces it with the Add-on build.":
+    "ReShade здесь -- обычная сборка, которая не загружает дополнения. При установке она заменяется сборкой с поддержкой дополнений.",
 });
