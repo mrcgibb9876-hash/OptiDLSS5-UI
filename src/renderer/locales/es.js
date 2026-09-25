@@ -27,8 +27,8 @@ window.I18N.register("es", {
     "Añadir ritmo de fotogramas",
   "Frame rate to hold":
     "Tasa de fotogramas a mantener",
-  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. The slider covers the range people actually use; the box beside it goes up to 1000 for a display that needs it.":
-    "Auto se queda justo por debajo del techo de VRR de la pantalla, que es lo que quiere la mayoría; un número fijo sirve para igualar una cifra que ya has elegido en otro sitio. El control deslizante cubre el rango que la gente usa de verdad; la casilla de al lado llega a 1000 para una pantalla que lo necesite.",
+  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. Type the frame rate: 30 to 1000.":
+    "Automático se queda justo por debajo del techo VRR de la pantalla, que es lo que casi todo el mundo quiere; un número fijo sirve para igualar una cifra que ya has elegido en otro sitio. Escribe los fps: de 30 a 1000.",
   "Auto (stay below the VRR ceiling)":
     "Auto (quedarse por debajo del techo de VRR)",
   "fps":

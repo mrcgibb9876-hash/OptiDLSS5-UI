@@ -27,8 +27,8 @@ window.I18N.register('pt-BR', {
     "Adicionar ritmo de quadros",
   "Frame rate to hold":
     "Taxa de quadros a manter",
-  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. The slider covers the range people actually use; the box beside it goes up to 1000 for a display that needs it.":
-    "O automático fica logo abaixo do teto de VRR do monitor, que é o que a maioria quer -- um número fixo serve para bater com um valor que você já escolheu em outro lugar. O controle deslizante cobre a faixa que as pessoas realmente usam; a caixa ao lado vai até 1000 para um monitor que precise.",
+  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. Type the frame rate: 30 to 1000.":
+    "Automático fica logo abaixo do teto de VRR do monitor, que é o que a maioria quer -- um número fixo serve para casar com um valor que você já escolheu em outro lugar. Digite a taxa de quadros: 30 a 1000.",
   "Auto (stay below the VRR ceiling)":
     "Automático (ficar abaixo do teto de VRR)",
   "fps":

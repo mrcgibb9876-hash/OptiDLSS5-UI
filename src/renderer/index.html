@@ -293,14 +293,17 @@
 
           <div id="game-relimiter-target-block" class="field-subblock hidden">
             <label class="field-label" data-i18n>Frame rate to hold</label>
-            <p class="field-hint" data-i18n>Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. The slider covers the range people actually use; the box beside it goes up to 1000 for a display that needs it.</p>
+            <p class="field-hint" data-i18n>Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. Type the frame rate: 30 to 1000.</p>
             <label class="scan-checkbox-row">
               <input type="checkbox" id="game-relimiter-auto" checked />
               <span data-i18n>Auto (stay below the VRR ceiling)</span>
             </label>
+            <!-- Typed, not dragged. A slider cannot hit 72, or 141, or whatever figure the player has
+                 already set in their own frame limiter, and matching a number chosen elsewhere is
+                 what a fixed frame rate is FOR -- so the exact value has to be reachable by keyboard
+                 rather than approached with a mouse. -->
             <div id="game-relimiter-fixed-row" class="field-row hidden">
-              <input id="game-relimiter-fps-slider" type="range" min="30" max="360" step="1" value="120" style="flex: 1 1 220px;" />
-              <input id="game-relimiter-fps" type="number" min="30" max="1000" step="1" value="120" style="width: 90px;" />
+              <input id="game-relimiter-fps" type="number" min="30" max="1000" step="1" value="120" style="width: 110px;" />
               <span class="field-hint" data-i18n>fps</span>
             </div>
             <span id="game-relimiter-target-status" class="status-line"></span>

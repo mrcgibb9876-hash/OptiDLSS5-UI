@@ -27,8 +27,8 @@ window.I18N.register("ko", {
     "프레임 페이싱 추가",
   "Frame rate to hold":
     "유지할 프레임 레이트",
-  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. The slider covers the range people actually use; the box beside it goes up to 1000 for a display that needs it.":
-    "자동은 디스플레이의 VRR 상한 바로 아래를 유지하며 대부분의 경우 이것이 적합합니다. 고정 값은 다른 곳에서 이미 정한 수치에 맞출 때 쓰세요. 슬라이더는 실제로 많이 쓰는 범위를 다루고, 옆의 입력란은 필요한 디스플레이를 위해 1000까지 올라갑니다.",
+  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. Type the frame rate: 30 to 1000.":
+    "자동은 디스플레이의 VRR 상한 바로 아래를 유지하며, 대부분은 이것을 원합니다. 고정값은 다른 곳에서 이미 정해 둔 수치에 맞출 때 씁니다. 프레임 레이트를 입력하세요: 30~1000.",
   "Auto (stay below the VRR ceiling)":
     "자동 (VRR 상한 아래로 유지)",
   "fps":

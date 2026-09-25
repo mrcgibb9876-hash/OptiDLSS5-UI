@@ -27,8 +27,8 @@ window.I18N.register("fr", {
     "Ajouter la cadence des images",
   "Frame rate to hold":
     "Fréquence d'images à maintenir",
-  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. The slider covers the range people actually use; the box beside it goes up to 1000 for a display that needs it.":
-    "Auto reste juste sous le plafond VRR de l'écran, ce que veulent la plupart des gens ; un nombre fixe sert à retrouver une valeur déjà choisie ailleurs. Le curseur couvre la plage réellement utilisée ; la case à côté monte à 1000 pour un écran qui en a besoin.",
+  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. Type the frame rate: 30 to 1000.":
+    "Automatique reste juste sous le plafond VRR de l'écran, ce que veulent la plupart des gens -- un nombre fixe sert à retrouver une valeur déjà choisie ailleurs. Saisissez la fréquence d'images : de 30 à 1000.",
   "Auto (stay below the VRR ceiling)":
     "Auto (rester sous le plafond VRR)",
   "fps":

@@ -4581,11 +4581,10 @@ async function loadRelimiterSection(game) {
 
   // Auto is target_fps = 0, which means "stay below the VRR ceiling" -- not "no limit" and not 0 fps.
   const auto = $('#game-relimiter-auto');
-  const slider = $('#game-relimiter-fps-slider');
   const box = $('#game-relimiter-fps');
   const fixedRow = $('#game-relimiter-fixed-row');
   auto.checked = !(st.targetFps > 0);
-  if (st.targetFps > 0) { slider.value = String(Math.min(360, st.targetFps)); box.value = String(st.targetFps); }
+  if (st.targetFps > 0) box.value = String(st.targetFps);
   fixedRow.classList.toggle('hidden', auto.checked);
 }
 
@@ -4683,11 +4682,21 @@ function syncLosslessModeInputs() {
 }
 $('#game-lossless-mode').addEventListener('change', syncLosslessModeInputs);
 
-// The slider and the box are two views of one number, so each writes the other. The slider stops at
-// 360 because that is the range people actually use and a slider across 30..1000 cannot hit 72; the
-// box goes to ReLimiter's real maximum for a display that needs it.
+// Typed, not dragged. There was a slider beside this box; it went because the exact number is the
+// whole point -- a fixed frame rate is for matching a figure chosen somewhere else (a 72 in the
+// game's own limiter, a 141 under a 144 Hz ceiling), and a track from 30 to 1000 cannot land on one.
+// The box carries ReLimiter's real range and nothing has to approximate.
 function relimiterTargetInputs() {
-  return { auto: $('#game-relimiter-auto'), slider: $('#game-relimiter-fps-slider'), box: $('#game-relimiter-fps') };
+  return { auto: $('#game-relimiter-auto'), box: $('#game-relimiter-fps') };
+}
+
+// What the box is worth once the user has finished typing. Clamped here rather than left to the
+// input's own min/max, which a typed value ignores until the form is submitted -- and this form is
+// never submitted. 0 is not reachable: Auto is the checkbox, not a number someone types.
+function relimiterTypedFps(box) {
+  const n = Math.round(Number(box.value));
+  if (!Number.isFinite(n)) return 120;
+  return Math.min(1000, Math.max(30, n));
 }
 
 async function saveRelimiterTarget() {
@@ -4695,13 +4704,16 @@ async function saveRelimiterTarget() {
   const game = games.find((x) => x.id === editingGameId);
   if (!game || !game.exePath) return;
   const { auto, box } = relimiterTargetInputs();
-  const fps = auto.checked ? 0 : Number(box.value);
+  const fps = auto.checked ? 0 : relimiterTypedFps(box);
+  // Show the value that was actually stored, so a 5 typed into the box does not sit there reading 5
+  // while ReLimiter holds 30.
+  if (!auto.checked) box.value = String(fps);
   const res = await window.api.relimiterSetTarget(game.exePath, fps).catch(() => null);
   const status = $('#game-relimiter-target-status');
   if (!res || !res.ok) { status.textContent = t('Could not write the frame rate.'); return; }
   status.textContent = auto.checked
     ? t('Set to stay below the VRR ceiling.')
-    : t('Holding {fps} fps.', { fps: String(Math.min(1000, Math.max(30, Math.round(fps) || 30))) });
+    : t('Holding {fps} fps.', { fps: String(fps) });
 }
 
 $('#game-relimiter-auto').addEventListener('change', () => {
@@ -4709,17 +4721,10 @@ $('#game-relimiter-auto').addEventListener('change', () => {
   $('#game-relimiter-fixed-row').classList.toggle('hidden', auto.checked);
   saveRelimiterTarget();
 });
-$('#game-relimiter-fps-slider').addEventListener('input', () => {
-  const { slider, box } = relimiterTargetInputs();
-  box.value = slider.value;
-});
-$('#game-relimiter-fps-slider').addEventListener('change', saveRelimiterTarget);
-$('#game-relimiter-fps').addEventListener('change', () => {
-  const { slider, box } = relimiterTargetInputs();
-  // The box may exceed the slider's range, so the slider pins at its own maximum rather than
-  // dragging the number down to it.
-  slider.value = String(Math.min(Number(slider.max), Math.max(Number(slider.min), Number(box.value) || 0)));
-  saveRelimiterTarget();
+$('#game-relimiter-fps').addEventListener('change', saveRelimiterTarget);
+// Enter saves without leaving the field, which is how a number typed on purpose expects to behave.
+$('#game-relimiter-fps').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); saveRelimiterTarget(); }
 });
 $('#btn-relimiter-install').addEventListener('click', async () => {
   if (!editingGameId) return;

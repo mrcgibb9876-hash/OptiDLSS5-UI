@@ -27,8 +27,8 @@ window.I18N.register("ru", {
     "Добавить выравнивание кадров",
   "Frame rate to hold":
     "Какую частоту кадров держать",
-  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. The slider covers the range people actually use; the box beside it goes up to 1000 for a display that needs it.":
-    "Авто держится чуть ниже предела VRR дисплея -- это то, что нужно большинству; фиксированное число нужно, чтобы совпасть со значением, выбранным в другом месте. Ползунок покрывает диапазон, которым реально пользуются; поле рядом доходит до 1000 для дисплея, которому это нужно.",
+  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. Type the frame rate: 30 to 1000.":
+    "«Автоматически» держится чуть ниже предела VRR дисплея — этого хочет большинство; фиксированное число нужно, чтобы совпасть со значением, уже выбранным где-то ещё. Введите частоту кадров: от 30 до 1000.",
   "Auto (stay below the VRR ceiling)":
     "Авто (держаться ниже предела VRR)",
   "fps":

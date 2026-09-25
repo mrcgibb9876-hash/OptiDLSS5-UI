@@ -27,8 +27,8 @@ window.I18N.register("de", {
     "Frame-Pacing hinzufügen",
   "Frame rate to hold":
     "Zu haltende Bildrate",
-  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. The slider covers the range people actually use; the box beside it goes up to 1000 for a display that needs it.":
-    "Auto bleibt knapp unter der VRR-Obergrenze des Displays, was die meisten wollen -- eine feste Zahl ist dafür, einen woanders gewählten Wert zu treffen. Der Schieberegler deckt den Bereich ab, den Leute wirklich nutzen; das Feld daneben geht bis 1000 für ein Display, das das braucht.",
+  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. Type the frame rate: 30 to 1000.":
+    "Auto bleibt knapp unter der VRR-Obergrenze des Displays, was die meisten wollen -- eine feste Zahl ist dafür da, einen anderswo bereits gewählten Wert zu treffen. Gib die Bildrate ein: 30 bis 1000.",
   "Auto (stay below the VRR ceiling)":
     "Auto (unter der VRR-Obergrenze bleiben)",
   "fps":

@@ -27,8 +27,8 @@ window.I18N.register("zh-CN", {
     "添加帧率节奏",
   "Frame rate to hold":
     "要保持的帧率",
-  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. The slider covers the range people actually use; the box beside it goes up to 1000 for a display that needs it.":
-    "自动会保持在略低于显示器 VRR 上限的位置，这是多数人想要的；固定数值适合用来对上你在别处已经选定的数字。滑块覆盖大家实际会用的范围；旁边的输入框最高可到 1000，供需要的显示器使用。",
+  "Auto stays just below the display's VRR ceiling, which is what most people want -- a hard number is for matching a figure you have already chosen elsewhere. Type the frame rate: 30 to 1000.":
+    "“自动”会保持在显示器 VRR 上限稍下方，多数人需要的就是这个；设固定值是为了与你在别处已经选好的数字对齐。输入帧率：30 到 1000。",
   "Auto (stay below the VRR ceiling)":
     "自动（保持在 VRR 上限之下）",
   "fps":
