@@ -1697,4 +1697,8 @@ window.I18N.register('pt-BR', {
     "Da nossa build, que é a única em que o painel do DLSS 5 consegue mostrar estas configurações no jogo: procure a página HDR no overlay.",
   "From RenoDX's own release. It works, but only through its own overlay: the DLSS 5 panel can only show these settings on our build.":
     "Da própria versão do RenoDX. Funciona, mas só pelo overlay dele: o painel do DLSS 5 só consegue mostrar estas configurações na nossa build.",
+  "This game has no ReShade yet. Installing this puts ReShade's Add-on build in with it, the same way frame pacing does.":
+    "Este jogo ainda não tem ReShade. Instalar isto também coloca a versão com add-ons do ReShade, do mesmo jeito que o ritmo de quadros faz.",
+  "The ReShade here is the plain build, which never loads an add-on. Installing this replaces it with the Add-on build.":
+    "O ReShade aqui é a versão simples, que nunca carrega um add-on. Instalar isto a substitui pela versão com add-ons.",
 });

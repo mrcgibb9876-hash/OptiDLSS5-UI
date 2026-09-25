@@ -613,11 +613,37 @@ ipcMain.handle('addons:install', async (_evt, { exePath, id } = {}) => {
       });
       if (!opts.match) throw new Error('No RenoDX mod is built for this game');
     }
+    // A ReShade ADD-ON needs the same folder to be true as pacing's does, so it goes through the
+    // same function rather than a second copy of the reasoning. A shader pack does not: .fx effects
+    // load off the preset under any ReShade build and nothing about them touches NGX.
+    const spec = addons.addonById(id);
+    let host = null;
+    if (spec && spec.kind === 'addon') {
+      if ((await peBitness(exePath)) === 32) {
+        throw Object.assign(new Error('32-bit games are not supported for ReShade add-ons yet'), { code: 'bitness-32' });
+      }
+      const api = (await resolveApi(dir, exePath)) || 'dx12';
+      if (!relimiter.isAutomatic(api)) {
+        throw Object.assign(new Error('ReShade on Vulkan needs its own setup run for this game first'), { code: 'vulkan-layer' });
+      }
+      host = await ensureReShadeAddonHost(dir, api, { addon: id });
+    }
+
     const res = await addons.installAddon(dir, id, addonCtx(), opts);
     // A pack that brought techniques changes the run order, so the preset is re-sorted now rather
     // than at the next Feeder deploy -- which might never come.
     reorderPresetFor(dir);
-    return { ok: true, ...res };
+    // The step without which the whole thing is inert on an OptiScaler game: [Plugins]
+    // LoadReshade=true is what makes OptiScaler load the ReShade64.dll beside it, and nothing else
+    // in this handler writes it. Placing an add-on and leaving this undone puts a file in the folder
+    // that never loads, which reads to a user exactly like the add-on not working.
+    const configured = host && host.optiHere ? await autoConfigureGame(dir, exePath) : null;
+    return {
+      ok: true,
+      ...res,
+      standalone: host ? host.standalone : false,
+      applied: configured ? configured.applied : [],
+    };
   } catch (error) {
     return { ok: false, error: String(error && error.message ? error.message : error) };
   }
@@ -958,6 +984,53 @@ async function dropBlockedPacing(dir, feederGame = isFeederGame(dir)) {
   return removed;
 }
 
+// Everything a ReShade ADD-ON needs true of a game folder before it is placed there, in one place.
+//
+// This was pacing's prologue, and it is here because RenoDX needs every line of it for the same
+// reasons -- an add-on is an add-on. Writing a second version of it for the add-ons picker is how the
+// two would drift, and the drift would be silent: a placed file that never loads looks identical to
+// one that does until someone reports the feature doing nothing.
+//
+// It throws with a `code` the caller passes straight back to the renderer.
+//
+//   reshade-dlss-crash  ReShade + ANY add-on + OptiScaler upscaling on the game's own device is the
+//                       Shadow of the Tomb Raider fault (0xC0000005 in ReShade64.dll inside DLSS
+//                       CreateFeature) on an engine that does not hold the NGX session device. It was
+//                       never specific to pacing; it is what loading an add-on beside our upscaler
+//                       does, so RenoDX is refused on those engines rather than crashing the game.
+//   optifg-armed        OptiScaler's frame generation hides the swap chain from ReShade, so the
+//                       add-on sees no frames.
+//   vulkan-layer        ReShade on Vulkan is a machine-wide layer only its own setup can register.
+//
+// Afterwards ReShade is present, is the Add-on build, is in a slot something will load, and is not
+// listing this add-on under DisabledAddons. The CALLER still has to run autoConfigureGame when
+// OptiScaler is here -- that is what writes [Plugins] LoadReshade=true, without which OptiScaler
+// never loads the ReShade64.dll beside it and the add-on is inert.
+async function ensureReShadeAddonHost(dir, api, { addon = 'relimiter' } = {}) {
+  const optiHere = fs.existsSync(path.join(dir, 'OptiScaler.ini')) && !!(await findActiveOptiScalerFile(dir));
+  if (optiHere && !isFeederGame(dir)) {
+    const blocker = await pacingBesideUpscalerBlocker(dir);
+    if (blocker) throw Object.assign(new Error(blocker.message), { code: blocker.code });
+  }
+  // Chicken: its ReShade is already the proxy, so the add-on simply joins it (relimiter.chickenReShade).
+  const standalone = !optiHere && !relimiter.chickenReShade(dir) && relimiter.reshadeModeFor(api) === 'local';
+
+  // DLSS 5 arrived after an earlier standalone install and something skipped the hand-back.
+  if (optiHere && relimiter.status(dir, { api }).standalone) relimiter.demoteStandaloneReShade(dir);
+  const before = relimiter.status(dir, { api });
+  if (!before.reshade || !before.reshadeIsAddonBuild) {
+    await ensureReShadeSetupOrAsk();
+    // A plain build standing in our standalone proxy slot is replaced there, not beside it.
+    if (before.standalone) relimiter.demoteStandaloneReShade(dir);
+    const placed = await feeder.deployReShade(dir, feederCacheDir(), GITHUB_HEADERS, { api, force: before.reshade && !before.reshadeIsAddonBuild });
+    // Recorded so Chicken's swap knows this ReShade64.dll is the app's to take over.
+    if (placed && placed.deployed && placed.file === 'ReShade64.dll' && !before.reshade) relimiter.writeMarker(dir, { reshadePlaced: true });
+  }
+  if (standalone && !relimiter.status(dir, { api }).standalone) relimiter.promoteToStandalone(dir, api);
+  relimiter.configureReShadeIni(dir, { addon });
+  return { optiHere, standalone };
+}
+
 // Add frame pacing to ANY game -- Feeder or not, DLSS 5 installed or not: ReShade (the add-on build)
 // where it is missing or plain, then the add-on itself.
 //   OptiScaler here   ReShade is the plain ReShade64.dll and OptiScaler loads it; the reconfigure
@@ -974,30 +1047,7 @@ ipcMain.handle('relimiter:install', async (_evt, exePath) => {
     if ((await peBitness(exePath)) === 32) throw Object.assign(new Error('32-bit games are not supported for frame pacing yet'), { code: 'bitness-32' });
     const api = (await resolveApi(dir, exePath)) || 'dx12';
     if (!relimiter.isAutomatic(api)) throw Object.assign(new Error('Vulkan needs ReShade’s own setup first'), { code: 'vulkan-layer' });
-    const optiHere = fs.existsSync(path.join(dir, 'OptiScaler.ini')) && !!(await findActiveOptiScalerFile(dir));
-    // Where OptiScaler upscales on the GAME's own device (anything but a Feeder game), only with an
-    // engine that keeps NGX's device alive and with OptiScaler's frame generation not armed --
-    // pacingBesideUpscalerBlocker says why each one matters.
-    if (optiHere && !isFeederGame(dir)) {
-      const blocker = await pacingBesideUpscalerBlocker(dir);
-      if (blocker) throw Object.assign(new Error(blocker.message), { code: blocker.code });
-    }
-    // Chicken: its ReShade is already the proxy, so the add-on simply joins it (relimiter.chickenReShade).
-    const standalone = !optiHere && !relimiter.chickenReShade(dir) && relimiter.reshadeModeFor(api) === 'local';
-
-    // DLSS 5 arrived after an earlier standalone install and something skipped the hand-back.
-    if (optiHere && relimiter.status(dir, { api }).standalone) relimiter.demoteStandaloneReShade(dir);
-    const before = relimiter.status(dir, { api });
-    if (!before.reshade || !before.reshadeIsAddonBuild) {
-      await ensureReShadeSetupOrAsk();
-      // A plain build standing in our standalone proxy slot is replaced there, not beside it.
-      if (before.standalone) relimiter.demoteStandaloneReShade(dir);
-      const placed = await feeder.deployReShade(dir, feederCacheDir(), GITHUB_HEADERS, { api, force: before.reshade && !before.reshadeIsAddonBuild });
-      // Recorded so Chicken's swap knows this ReShade64.dll is the app's to take over.
-      if (placed && placed.deployed && placed.file === 'ReShade64.dll' && !before.reshade) relimiter.writeMarker(dir, { reshadePlaced: true });
-    }
-    if (standalone && !relimiter.status(dir, { api }).standalone) relimiter.promoteToStandalone(dir, api);
-    relimiter.configureReShadeIni(dir);
+    const { optiHere, standalone } = await ensureReShadeAddonHost(dir, api, { addon: 'relimiter' });
 
     const asset = await relimiter.resolveAddonAsset(GITHUB_HEADERS, { fetchImpl: netFetch });
     // Cached under its source and tag, so the fork's build and upstream's of the same name never

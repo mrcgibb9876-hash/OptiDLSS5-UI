@@ -1696,4 +1696,8 @@ window.I18N.register("zh-CN", {
     "来自我们的构建——只有这个构建能让游戏内的 DLSS 5 面板显示这些设置，请在叠加层中查找 HDR 页面。",
   "From RenoDX's own release. It works, but only through its own overlay: the DLSS 5 panel can only show these settings on our build.":
     "来自 RenoDX 自己的发布版。它可以正常工作，但只能通过它自己的叠加层：DLSS 5 面板只能在我们的构建上显示这些设置。",
+  "This game has no ReShade yet. Installing this puts ReShade's Add-on build in with it, the same way frame pacing does.":
+    "这个游戏还没有 ReShade。安装它会一并装上 ReShade 的附加组件版本，方式与帧率平滑相同。",
+  "The ReShade here is the plain build, which never loads an add-on. Installing this replaces it with the Add-on build.":
+    "这里的 ReShade 是不会加载附加组件的普通版本。安装它会将其替换为附加组件版本。",
 });

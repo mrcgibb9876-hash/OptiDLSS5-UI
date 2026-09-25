@@ -480,3 +480,43 @@ test('the ReShade frame pacing placed is ours, as the proxy and as ReShade64.dll
   relimiter.demoteStandaloneReShade(dir);
   assert.equal(relimiter.ownsReShade(dir), true);
 });
+
+// One function decides what a ReShade ADD-ON needs true of a game folder, and both the pacing
+// install and the add-ons picker go through it. The reasoning lives in main.js
+// (ensureReShadeAddonHost); these check the part relimiter.js owns.
+
+test('DisabledAddons is cleared for the add-on asked about, and only that one', () => {
+  const dir = scratchDir('rl-disabled-addons');
+  // ReShade honours this list on every launch, so an add-on left in it sits there unloaded however
+  // correctly it was placed -- the failure that looks exactly like "the feature does nothing".
+  fs.writeFileSync(path.join(dir, 'ReShade.ini'),
+    '[ADDON]\nDisabledAddons=ReLimiter,renodx-cp2077,SomeoneElse\n');
+
+  relimiter.configureReShadeIni(dir, { addon: 'renodx' });
+  let ini = fs.readFileSync(path.join(dir, 'ReShade.ini'), 'utf8');
+  assert.match(ini, /DisabledAddons=ReLimiter,SomeoneElse/, "RenoDX's entry goes, the others stay");
+
+  relimiter.configureReShadeIni(dir);
+  ini = fs.readFileSync(path.join(dir, 'ReShade.ini'), 'utf8');
+  assert.match(ini, /DisabledAddons=SomeoneElse/, 'the default is still ReLimiter');
+  assert.match(ini, /SomeoneElse/, "a third party's disabled add-on is never ours to re-enable");
+});
+
+test('the add-on name is matched literally, not as a pattern', () => {
+  const dir = scratchDir('rl-disabled-regex');
+  // An id reaching this from the catalogue could contain regex punctuation; treating it as a pattern
+  // would either throw or match the wrong entry.
+  fs.writeFileSync(path.join(dir, 'ReShade.ini'), '[ADDON]\nDisabledAddons=a.c,abc\n');
+  relimiter.configureReShadeIni(dir, { addon: 'a.c' });
+  const ini = fs.readFileSync(path.join(dir, 'ReShade.ini'), 'utf8');
+  assert.match(ini, /DisabledAddons=abc/, "'a.c' must not match 'abc'");
+});
+
+test('AddonPath and the tutorial banner are set without disturbing an existing ini', () => {
+  const dir = scratchDir('rl-ini-additive');
+  fs.writeFileSync(path.join(dir, 'ReShade.ini'), '[GENERAL]\nEffectSearchPaths=.\\mine\n');
+  relimiter.configureReShadeIni(dir, { addon: 'renodx' });
+  const ini = fs.readFileSync(path.join(dir, 'ReShade.ini'), 'utf8');
+  assert.match(ini, /EffectSearchPaths=\.\\mine/, "the user's own keys are left alone");
+  assert.match(ini, /AddonPath/);
+});
