@@ -481,7 +481,6 @@ async function renderGrid() {
       <div class="card-body">
         <div class="card-title">${escapeHtml(game.name)}</div>
         <div class="card-path card-recommend hidden"></div>
-        <details class="card-explain hidden"><summary>${escapeHtml(t('How this route works'))}</summary><div class="route-explain"></div></details>
         <div class="card-problem hidden"><span class="card-problem-text"></span></div>
         <div class="card-actions">
           <button class="btn btn-primary btn-card-primary"></button>
@@ -811,14 +810,10 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   // The chip line (engine, API, route, Experimental, Verified, Known good, Proven route/layer) is gone:
   // asked for 2026-09-25 as clutter. The card keeps three signals -- the DLSS 5 / Chicken mark on the
   // art, the status chip (Working, Needs attention...) and the one problem row -- and the detail that
-  // used to sit in the chips is in Settings, Game Help and "How this route works".
+  // used to sit in the chips (and the card's "How this route works", also removed) is in Settings and
+// Game Help.
   line.classList.add('hidden');
 
-  // What the route does, what it cannot do, and where the panel is (route-explain.js), folded away.
-  const explainBox = card.querySelector('.card-explain');
-  const explainHtml = routeExplainHtml(route.explain);
-  explainBox.classList.toggle('hidden', !explainHtml);
-  explainBox.querySelector('.route-explain').innerHTML = explainHtml;
 
   // The DXVK <-> dgVoodoo2 swap, in the overflow as well as in Game Help and Edit (layerSwapFor).
   const swapBtn = card.querySelector('.btn-swap-layer');
@@ -915,6 +910,12 @@ async function applyRecommendation(game, card, backends, generation = renderGene
     showFailure(card, game, failure, { route, diag, run });
   } else {
     card._failure = null;
+  }
+
+  // The game never asked for DLSS on its last run: a hint, not a failure and not "no known fix".
+  if (diag && diag.ok && DLSS_NOT_ASKED.includes(diag.code) && diag.status !== 'fix') {
+    const words = t('Last run did not use DLSS -- switch DLSS on in the game\'s graphics settings');
+    claim({ bad: false, text: words, title: helpWords(diag) });
   }
 
   if (diag && diag.ok && ['fix', 'step', 'unavailable', 'unknown'].includes(diag.status)) {
@@ -1167,8 +1168,14 @@ function flipToConfirm(card, { title, detail, onConfirm, confirmLabel = t('Remov
 // early, or the last run's log says it crashed or the pass never ran, or Game Help has no fix for what
 // it found. A diagnosis WITH a fix keeps its own "Fix it" button: that is a known answer, not a dead end.
 // Anti-cheat refusing the game is not DLSS 5 failing, so that keeps its restore offer.
+// Crashes and a pass that could not run. NOT 'init-no-feature' or 'no-dlss': those mean the game never
+// asked for DLSS on that run, which is nearly always DLSS switched off in the game's own settings -- DOOM:
+// The Dark Ages read as failed while working (2026-09-25). Nor the Feeder's motion/depth quality
+// verdicts: the game ran, it just looks rougher. Those keep their own hint rows.
 const FAILED_RUN_VERDICTS = ['duplicate-dlss', 'shutdown-fault', 'ue-crash', 'wrapper-crash', 'feed-stopped', 'feed-host-gone',
-  'feed-no-motion', 'feed-depth-flat', 'feed-agility-redist', 'no-dlss', 'dlss-no-nr', 'init-no-feature', 'nr-model-crash'];
+  'feed-agility-redist', 'dlss-no-nr', 'nr-model-crash'];
+// Game Help codes that are the same "DLSS was never switched on" as above, whatever status they carry.
+const DLSS_NOT_ASKED = ['init-no-feature', 'no-dlss', 'no-hook'];
 
 function fallbackOf(game) {
   return game.fallback || (game.fallback = { tried: [], at: 0, seen: null });
@@ -1191,7 +1198,7 @@ function failureEvidence(game, { route, diag, run, issue }) {
   }
   // Game Help with no fix for what it found. No run is needed: an install it already knows cannot work
   // (a 32-bit game where the route has no pass, say) is a dead end the ladder should take over too.
-  if (diag && diag.ok && (diag.status === 'unavailable' || diag.status === 'unknown')) {
+  if (diag && diag.ok && (diag.status === 'unavailable' || diag.status === 'unknown') && !DLSS_NOT_ASKED.includes(diag.code)) {
     return { sig: `help:${(run && run.at) || 'norun'}:${diag.code}`, when: runAt, text: helpWords(diag), code: diag.code };
   }
   return null;

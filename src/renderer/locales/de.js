@@ -1740,4 +1740,6 @@ window.I18N.register("de", {
     "Intels Frame Generation, ausgeführt von OptiScaler. Aus, bis du sie hier einschaltest; dann wird sie für den nächsten Spielstart eingerichtet und lässt sich ab da live ein- und ausschalten. Frame-Pacing funktioniert daneben.",
   "Not available for this game.":
     "Für dieses Spiel nicht verfügbar.",
+  "Last run did not use DLSS -- switch DLSS on in the game's graphics settings":
+    "Der letzte Start hat DLSS nicht genutzt -- schalte DLSS in den Grafikeinstellungen des Spiels ein",
 });

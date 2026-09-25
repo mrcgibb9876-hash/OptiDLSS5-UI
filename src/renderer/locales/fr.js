@@ -1750,4 +1750,6 @@ window.I18N.register("fr", {
     "La génération d’images d’Intel, exécutée par OptiScaler. Désactivée tant que vous ne l’activez pas ici ; elle est alors préparée pour le prochain lancement du jeu, puis s’active et se désactive en direct. La régulation des images fonctionne à côté.",
   "Not available for this game.":
     "Non disponible pour ce jeu.",
+  "Last run did not use DLSS -- switch DLSS on in the game's graphics settings":
+    "La dernière session n’a pas utilisé DLSS -- activez DLSS dans les réglages graphiques du jeu",
 });

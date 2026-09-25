@@ -1741,4 +1741,6 @@ window.I18N.register('pt-BR', {
     "A geração de quadros da Intel, executada pelo OptiScaler. Desligada até você ativá-la aqui; então é preparada para a próxima vez que o jogo abrir e, a partir daí, liga e desliga ao vivo. O ritmo de quadros funciona junto.",
   "Not available for this game.":
     "Não disponível para este jogo.",
+  "Last run did not use DLSS -- switch DLSS on in the game's graphics settings":
+    "A última execução não usou DLSS -- ative o DLSS nas configurações gráficas do jogo",
 });

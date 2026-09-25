@@ -1740,4 +1740,6 @@ window.I18N.register("ko", {
     "OptiScaler가 실행하는 Intel의 프레임 생성입니다. 여기서 켜기 전까지는 꺼져 있으며, 켜면 다음 게임 시작에 맞춰 설정되고 그 뒤로는 실시간으로 켜고 끌 수 있습니다. 프레임 페이싱과 함께 작동합니다.",
   "Not available for this game.":
     "이 게임에서는 사용할 수 없습니다.",
+  "Last run did not use DLSS -- switch DLSS on in the game's graphics settings":
+    "마지막 실행에서 DLSS를 쓰지 않았습니다 -- 게임의 그래픽 설정에서 DLSS를 켜세요",
 });

@@ -1740,4 +1740,6 @@ window.I18N.register("es", {
     "La generación de fotogramas de Intel, ejecutada por OptiScaler. Desactivada hasta que la actives aquí; entonces se prepara para el siguiente inicio del juego y desde ahí se activa y desactiva en directo. El ritmo de fotogramas funciona junto a ella.",
   "Not available for this game.":
     "No disponible para este juego.",
+  "Last run did not use DLSS -- switch DLSS on in the game's graphics settings":
+    "La última partida no usó DLSS -- activa DLSS en los ajustes gráficos del juego",
 });

@@ -1740,4 +1740,6 @@ window.I18N.register("zh-CN", {
     "Intel 的帧生成，由 OptiScaler 运行。在这里开启之前保持关闭；开启后会为下次启动游戏做好准备，之后可随时实时开关。帧节奏可以与它一起使用。",
   "Not available for this game.":
     "此游戏不可用。",
+  "Last run did not use DLSS -- switch DLSS on in the game's graphics settings":
+    "上次运行没有使用 DLSS -- 请在游戏的图形设置中开启 DLSS",
 });
