@@ -474,6 +474,7 @@ async function renderGrid() {
         <span class="card-banner-fallback hidden"></span>
         <span class="card-badge badge-none"></span>
         <span class="card-mark hidden"></span>
+        <span class="card-warn hidden" aria-label="Anti-cheat">&#9888;</span>
       </div>
       <div class="card-body">
         <div class="card-title">${escapeHtml(game.name)}</div>
@@ -776,10 +777,8 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   mark.classList.toggle('card-mark-dfc', liveDfc);
   if (liveDfc) {
     mark.innerHTML = `<span class="card-mark-icon">\u{1F357}</span><span>Chicken</span>`;
-    mark.title = t('Deep Fried Chicken runs the neural pass here');
   } else if (liveOurs) {
     mark.innerHTML = '<img src="icon.png" alt=""><span>DLSS 5</span>';
-    mark.title = t('DLSS 5 (this app\x27s engine)');
   }
 
   // Which add-on runs the neural pass on this Feeder game, and the one click that swaps it (dfc.js).
@@ -795,32 +794,14 @@ async function applyRecommendation(game, card, backends, generation = renderGene
     passBtn.dataset.to = onDfc ? 'optiscaler' : 'dfc';
   }
 
-  // What detection found beside the exe that the person should know before installing: none
-  // of these block anything, all of them have bitten real installs. The card shows a few words
-  // each; the full sentence is the hover text.
-  const detectWarnings = [];
-  const detectShort = [];
-  if (detected.antiCheat) {
-    detectWarnings.push(t('Anti-cheat present ({file}) -- OptiScaler is for single-player games; using it in a game that goes online risks a ban.', { file: detected.antiCheat }));
-    detectShort.push(t('Anti-cheat: single-player only'));
-  }
-  // On the 32-bit route the ReShade beside the game is this app's own (legacy.js), not a conflict.
-  if (detected.reshadeProxy && route.route !== 'feeder32') {
-    detectWarnings.push(t('ReShade is already installed here as {file}. Install replaces it with OptiScaler -- pick Launch mode: Injector in Edit to keep both.', { file: detected.reshadeProxy }));
-    detectShort.push(t('ReShade already here ({file})', { file: detected.reshadeProxy }));
-  }
-  // An emulator: which renderer to pick in it, always -- its renderer is a setting the route cannot
-  // see or change, and on any other one DLSS 5 has nothing to hook (emulators.js, #106).
+  // What detection found beside the exe. Only anti-cheat is shown, and as a yellow triangle on the art
+  // rather than a line of text (2026-09-25): it is the one that can cost a player something (a ban),
+  // and the others -- a ReShade already here, an old shader compiler, the emulator's renderer -- are
+  // Install's and Game Help's business. The emulator renderer seen wrong on a real run is still claimed
+  // below as a problem.
+  const warn = card.querySelector('.card-warn');
+  if (warn) warn.classList.toggle('hidden', !detected.antiCheat);
   const emuRenderer = route.emulatorRenderer || null;
-  // A last run on another renderer is a problem, not advice: it is claimed below as one.
-  if (emuRenderer && !emuRenderer.seen) {
-    detectWarnings.push(emulatorRendererWords(emuRenderer));
-    detectShort.push(emuRenderer.openglOnly ? t('OpenGL only: no in-game panel') : t('Set {name} to {renderer}', emuRenderer));
-  }
-  if (detected.oldShaderCompiler) {
-    detectWarnings.push(t('{file} v{version} beside the exe predates Shader Model 5.1, so OptiScaler\'s shaders can silently fail to compile -- rename it and Windows\' own copy loads instead.', { file: detected.oldShaderCompiler.file, version: detected.oldShaderCompiler.version }));
-    detectShort.push(t('Old shader compiler ({file})', { file: detected.oldShaderCompiler.file }));
-  }
 
   // The verdict game:help already worked out, rather than a second analysis of the same logs.
   const run = diag && diag.ok ? diag.run : await window.api.lastRun(game.exePath);
@@ -912,12 +893,6 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   if (emuRenderer && emuRenderer.seen) {
     const words = emulatorRendererWords(emuRenderer);
     claim({ bad: true, text: t('{name} ran on {seen} -- set {renderer}', emuRenderer), title: words, action: { label: t('Show me'), run: () => openHelp(game) } });
-  }
-
-  if (detectShort.length) {
-    // Advisory, not broken: these keep the chip out of "Needs attention", because a game whose
-    // only finding is "this has anti-cheat" is not a game with something to fix.
-    claim({ bad: false, text: detectShort.map((w) => `\u26a0 ${w}`).join('  '), title: detectWarnings.join('\n') });
   }
 
   // How to reach the settings while the game is up, which is the one thing the card can usefully

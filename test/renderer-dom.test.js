@@ -95,7 +95,9 @@ test('the card carries no chip line and no run counts, only the mark, the status
   assert.ok(!js.includes('engine-badge api-badge'), 'the API chip is back on the card');
   assert.ok(!js.includes('engine-badge route-badge'), 'the route chip is back on the card');
   assert.match(js, /line\.classList\.add\('hidden'\)/);
-  assert.match(js, /mark\.title = t\('Deep Fried Chicken runs the neural pass here'\)/);
+  assert.ok(!/mark\.title =/.test(js), 'the mark carries no hover text (2026-09-25)');
+  assert.match(js, /class="card-warn hidden"/, 'anti-cheat is a triangle on the art');
+  assert.ok(!js.includes('detectShort'), 'the advisory warning line is back on the card');
 });
 
 test('a failed game climbs the ladder: DXVK, then Chicken, then a report', () => {
