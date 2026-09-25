@@ -48,6 +48,37 @@ jobs:
 
         Write-Output "package.json $pkg matches tag ${{ inputs.tag }}."
 
+    # A private build (any branch but master, or a pre-release) publishes "here too" as a DRAFT with the
+    # same tag_name. softprops/action-gh-release finds a release by its tag and UPDATES it -- so a dev
+    # branch still at a version master already released would overwrite that published release's
+    # assets with an untested build, draft flag or not. Checked before anything is built: a published
+    # release with this tag in this repo means the version has to be bumped first. The private test is
+    # the same expression as the "Decide whether this build is private" step further down.
+    - name: Refuse a private build over an already-published release
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        REF_NAME: ${{ github.ref_name }}
+        PRERELEASE: ${{ inputs.prerelease }}
+        REPO: ${{ github.repository }}
+        TAG: ${{ inputs.tag }}
+      run: |
+        $private = ($env:REF_NAME -ne 'master') -or ($env:PRERELEASE -eq 'true')
+        if (-not $private) { Write-Output "Public build: nothing to check."; exit 0 }
+        # releases/tags/{tag} answers only for a PUBLISHED release: a draft, or no release, is a 404.
+        # Any other failure is not proof of safety, so it stops the build too.
+        $out = gh api "repos/$env:REPO/releases/tags/$env:TAG" 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) {
+          if ($out -match 'HTTP 404') { Write-Output "No published release tagged $env:TAG here: safe to draft."; exit 0 }
+          Write-Error "Could not check for a published $env:TAG release: $out"
+          exit 1
+        }
+        $release = $out | ConvertFrom-Json
+        if (-not $release.draft) {
+          Write-Error "A published release tagged $env:TAG already exists in $env:REPO ($($release.html_url)). This private build would overwrite its assets. Bump the version in package.json and use a new tag."
+          exit 1
+        }
+
     # The title used to be a required input whose DEFAULT was the literal string
     # "OptiScaler Manager v1.1.0". Nobody ever passed one, so every release since has been titled
     # v1.1.0 -- v2.3.23 shipped under it, on the GitHub release page and on the Discord card.
