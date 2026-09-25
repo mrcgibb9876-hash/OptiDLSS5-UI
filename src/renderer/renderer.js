@@ -833,14 +833,16 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   // -- a choice not yet applied has its own "Press Install to switch" line.
   const mark = card.querySelector('.card-mark');
   const liveDfc = route.consumerHere === 'dfc';
-  const liveOurs = !liveDfc && !!route.optiInstalled;
+  // backends.optiscaler as well as the route: a card reading "Set up" wore no mark when the route
+  // lookup answered optiInstalled false for it (Yakuza 0, DOOM: The Dark Ages, 2026-09-25).
+  const liveOurs = !liveDfc && (!!route.optiInstalled || !!backends.optiscaler);
   mark.classList.toggle('hidden', !liveDfc && !liveOurs);
   mark.classList.toggle('card-mark-dfc', liveDfc);
   if (liveDfc) {
-    mark.textContent = '\u{1F357}';
+    mark.innerHTML = `<span class="card-mark-icon">\u{1F357}</span><span>Chicken</span>`;
     mark.title = t('Deep Fried Chicken runs the neural pass here');
   } else if (liveOurs) {
-    mark.innerHTML = '<img src="icon.png" alt="">';
+    mark.innerHTML = '<img src="icon.png" alt=""><span>DLSS 5</span>';
     mark.title = t('DLSS 5 (this app\x27s engine)');
   }
 

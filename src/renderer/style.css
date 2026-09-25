@@ -294,23 +294,31 @@ body {
   backdrop-filter: blur(4px);
 }
 /* Which neural pass is live here, opposite the status badge: our logo, or a drumstick for Chicken. */
+/* A labelled pill, not a 28px dot: it is one of the three things the card still shows (2026-09-25). */
 .card-mark {
   position: absolute;
   top: 8px;
   left: 8px;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
+  height: 34px;
+  padding: 0 12px 0 6px;
+  gap: 7px;
+  border-radius: 999px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: rgba(0,0,0,0.55);
+  background: rgba(0,0,0,0.72);
+  border: 1.5px solid rgba(var(--accent-rgb),0.9);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.45);
   backdrop-filter: blur(4px);
-  font-size: 17px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
   line-height: 1;
   cursor: default;
 }
-.card-mark img { width: 20px; height: 20px; display: block; }
+.card-mark img { width: 24px; height: 24px; display: block; }
+.card-mark .card-mark-icon { font-size: 20px; }
+.card-mark.card-mark-dfc { border-color: rgba(230,150,60,0.95); }
 .card-mark.hidden { display: none; }
 .badge-installed { background: rgba(var(--accent-rgb),0.85); color: var(--on-accent); }
 .badge-partial { background: rgba(217,164,65,0.9); color: #0c0e0f; }
