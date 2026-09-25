@@ -28,7 +28,7 @@ const path = require('node:path');
 const feeder = require('./feeder');
 const integrity = require('./integrity');
 const dfc = require('./dfc');
-const { peOriginalFilename } = require('./detect');
+const { peOriginalFilename, HOOK_DLLS } = require('./detect');
 const { setIniKey, getIniKey } = require('./ini-merge');
 
 const ADDON_64 = 'relimiter.addon64';
@@ -164,11 +164,39 @@ function chickenReShade(dir) {
   return dfc.reshadeProxyOf(dir);
 }
 
+// A ReShade the USER put in a proxy slot (dxgi.dll, d3d11.dll, ...), found by content: not Chicken's,
+// and not one our own marker records as moved there. Returns { file, addonBuild } or null.
+//
+// Why this has to exist. reshadeFileIn used to see a proxy ReShade only through our marker, so a
+// player's own ReShade as dxgi.dll read as "no ReShade here": the app deployed a second one as
+// ReShade64.dll, promoteToStandalone found dxgi.dll already ReShade, deleted the fresh copy and
+// recorded the PLAYER's dxgi.dll as reshadePlaced -- and pacing's Remove later deleted it. As d3d11.dll
+// it was worse: a second ReShade went down as dxgi.dll, two ReShades in one process. Found by the same
+// strict check as everything that decides what is renamed or deleted in a proxy slot (isReShadeProxy:
+// the PE OriginalFilename), over the single proxy-name list (HOOK_DLLS; see CLAUDE.md).
+function userProxyReShade(dir) {
+  const chicken = (chickenReShade(dir) || '').toLowerCase();
+  const m = marker(dir);
+  const recorded = String((m && m.reshadeProxy) || '').toLowerCase();
+  for (const name of HOOK_DLLS) {
+    const lower = name.toLowerCase();
+    if (lower === chicken || lower === recorded) continue;
+    const file = path.join(dir, name);
+    if (!fs.existsSync(file) || !isReShadeProxy(file)) continue;
+    return { file: name, addonBuild: feeder.isAddonReShadeDll(file) };
+  }
+  return null;
+}
+
 function reshadeFileIn(dir, api) {
   const chicken = chickenReShade(dir);
   if (chicken) return chicken;
   const m = marker(dir);
   if (m && m.reshadeProxy && isReShadeProxy(path.join(dir, m.reshadeProxy))) return m.reshadeProxy;
+  // The player's own proxy ReShade is the one the add-on loads through (main.js ensureReShadeAddonHost
+  // uses it where it is), so it is what status() has to judge.
+  const theirs = userProxyReShade(dir);
+  if (theirs) return theirs.file;
   return reshadeModeFor(api) === 'opengl32' ? 'opengl32.dll' : 'ReShade64.dll';
 }
 
@@ -178,18 +206,29 @@ function writeMarker(dir, patch) {
   return next;
 }
 
-// ReShade64.dll (just placed by deployReShade) becomes the game's proxy. Refused when the slot holds
-// something that is not ReShade -- another tool's dxgi.dll is not ours to overwrite.
-function promoteToStandalone(dir, api) {
+// ReShade64.dll becomes the game's proxy. Refused when the slot holds something that is not ReShade --
+// another tool's dxgi.dll is not ours to overwrite.
+//
+// placed: whether the ReShade64.dll being moved is this app's (deployed by this call, or recorded as
+// ours before it). Only then is the proxy recorded as reshadePlaced, which is what lets Remove delete
+// it. This used to write reshadePlaced:true unconditionally, which claimed a ReShade the player had put
+// there -- including, when the slot already held one, the PLAYER's dxgi.dll.
+// When the slot already holds a ReShade that is not ours, it is left exactly as it is and nothing is
+// recorded against it; a ReShade64.dll this app placed goes, so there are not two.
+function promoteToStandalone(dir, api, { placed = placedReShade(dir) } = {}) {
   const proxy = standaloneProxyName(api);
   const dest = path.join(dir, proxy);
   const src = path.join(dir, 'ReShade64.dll');
   if (fs.existsSync(dest) && !isReShadeProxy(dest)) {
     throw Object.assign(new Error(`${proxy} in this folder belongs to something else, so ReShade cannot go there`), { code: 'proxy-taken' });
   }
-  if (!fs.existsSync(dest)) fs.renameSync(src, dest);
-  else if (fs.existsSync(src)) fs.rmSync(src, { force: true });
-  writeMarker(dir, { reshadeProxy: proxy, reshadePlaced: true });
+  if (!fs.existsSync(dest)) {
+    fs.renameSync(src, dest);
+    writeMarker(dir, { reshadeProxy: proxy, reshadePlaced: !!placed });
+    return proxy;
+  }
+  if (placed && fs.existsSync(src)) fs.rmSync(src, { force: true });
+  writeMarker(dir, { reshadeProxy: null, reshadePlaced: false });
   return proxy;
 }
 
@@ -418,6 +457,15 @@ function remove(dir, { withPlacedReShade = false, keepReShade = false } = {}) {
     const p = path.join(dir, m.reshadeProxy);
     if (isReShadeProxy(p)) { fs.rmSync(p, { force: true }); removed.push(m.reshadeProxy); }
   }
+  // A ReShade this app placed is gone, so the ini and log it wrote beside itself go with it (the same
+  // four files the Feeder's and Luma's removals take, less the preset, which may hold the player's own
+  // effect choices). Only then: a ReShade that stays keeps its ini.
+  if (removed.includes('ReShade64.dll') || (m && m.reshadeProxy && removed.includes(m.reshadeProxy))) {
+    for (const name of ['ReShade.ini', 'ReShade.log']) {
+      const p = path.join(dir, name);
+      if (fs.existsSync(p)) { fs.rmSync(p, { force: true }); removed.push(name); }
+    }
+  }
   const mp = path.join(dir, MARKER);
   if (fs.existsSync(mp)) { fs.rmSync(mp, { force: true }); removed.push(MARKER); }
   return removed;
@@ -495,7 +543,7 @@ module.exports = {
   addonName, isReLimiterAddon, reshadeModeFor, isAutomatic,
   NGX_DEVICE_HOLD_MARK, engineKeepsNgxDevice, XEFG_RESHADE_MARK, engineGivesXefgToReShade,
   marker, deployed, status, missing, deploy, remove,
-  isReShadeProxy, chickenReShade, placedReShade, ownsReShade, writeMarker, standaloneProxyName, reshadeFileIn, promoteToStandalone, demoteStandaloneReShade,
+  isReShadeProxy, chickenReShade, placedReShade, ownsReShade, writeMarker, standaloneProxyName, reshadeFileIn, userProxyReShade, promoteToStandalone, demoteStandaloneReShade,
   RELEASE_SOURCES, addonAssetFromRelease, resolveAddonAsset, configureReShadeIni,
   NR_FPS_TARGET_MODE, nrConflict, NR_CONFLICT_EDITS,
   INI_NAME, INI_SECTION, iniPath, targetFpsEdits, TARGET_FPS_MIN, TARGET_FPS_MAX,

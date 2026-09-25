@@ -253,7 +253,7 @@ test('a proxy slot holding something else is refused, not overwritten', { skip: 
 test('Remove takes back a standalone ReShade it placed, because nothing else loads it', { skip: !canFakePe }, () => {
   const dir = scratchDir('rl-standalone-remove');
   realishReShade(dir, 'ReShade64.dll');
-  relimiter.promoteToStandalone(dir, 'dx11');
+  relimiter.promoteToStandalone(dir, 'dx11', { placed: true });
   relimiter.deploy(dir, fakeAddon(scratchDir('rl-standalone-remove-src')));
   const removed = relimiter.remove(dir);
   assert.ok(removed.includes('dxgi.dll'));
@@ -265,7 +265,7 @@ test('Remove takes back a standalone ReShade it placed, because nothing else loa
 test('Remove with another add-on still here keeps the standalone ReShade and its record', { skip: !canFakePe }, () => {
   const dir = scratchDir('rl-standalone-shared');
   realishReShade(dir, 'ReShade64.dll');
-  relimiter.promoteToStandalone(dir, 'dx11');
+  relimiter.promoteToStandalone(dir, 'dx11', { placed: true });
   relimiter.deploy(dir, fakeAddon(scratchDir('rl-standalone-shared-src')));
   const removed = relimiter.remove(dir, { keepReShade: true });
   assert.deepEqual(removed, ['relimiter.addon64']);
@@ -573,4 +573,84 @@ test('a spent GitHub API allowance falls back to the remembered answer, then to 
 
   // A real failure that is not a refusal still says so.
   await assert.rejects(relimiter.resolveAddonAsset({}, { fetchImpl: async () => ({ ok: false, status: 500 }), memoFile }), /No ReLimiter build/);
+});
+
+// ── whose ReShade is it ──────────────────────────────────────────────────────────────────────────
+
+// The player's ReShade as dxgi.dll was invisible to reshadeFileIn (it only read our marker), so a
+// second one was deployed, promoteToStandalone found dxgi.dll already ReShade, deleted ours and
+// recorded THEIRS as reshadePlaced -- and pacing's Remove deleted it.
+test("a player's ReShade in a proxy slot is seen, and never recorded as ours", { skip: !canFakePe }, () => {
+  const dir = scratchDir('rl-user-proxy');
+  realishReShade(dir, 'dxgi.dll');
+  assert.deepEqual(relimiter.userProxyReShade(dir), { file: 'dxgi.dll', addonBuild: true });
+  assert.equal(relimiter.reshadeFileIn(dir, 'dx12'), 'dxgi.dll');
+  // Even if a ReShade64.dll this app placed arrives and is promoted, theirs stays theirs.
+  realishReShade(dir, 'ReShade64.dll');
+  relimiter.writeMarker(dir, { reshadePlaced: true });
+  relimiter.promoteToStandalone(dir, 'dx12', { placed: true });
+  assert.equal(fs.existsSync(path.join(dir, 'ReShade64.dll')), false, 'ours went, so there are not two');
+  const m = relimiter.marker(dir);
+  assert.ok(!m.reshadePlaced && !m.reshadeProxy, 'nothing recorded against theirs');
+  relimiter.remove(dir, { withPlacedReShade: true });
+  assert.equal(fs.existsSync(path.join(dir, 'dxgi.dll')), true, 'Remove leaves it');
+});
+
+test('a ReShade64.dll that was not ours is moved into the slot but not claimed', { skip: !canFakePe }, () => {
+  const dir = scratchDir('rl-promote-not-ours');
+  realishReShade(dir, 'ReShade64.dll');
+  relimiter.promoteToStandalone(dir, 'dx12');
+  assert.equal(relimiter.marker(dir).reshadeProxy, 'dxgi.dll', 'recorded, so DLSS 5 can hand it back');
+  assert.equal(relimiter.ownsReShade(dir), false);
+  relimiter.remove(dir, { withPlacedReShade: true });
+  assert.equal(fs.existsSync(path.join(dir, 'dxgi.dll')), true, 'and never deleted');
+});
+
+test('Remove takes the ini and log of the ReShade it takes back, and only then', { skip: !canFakePe }, () => {
+  const dir = scratchDir('rl-remove-ini');
+  realishReShade(dir, 'ReShade64.dll');
+  fs.writeFileSync(path.join(dir, 'ReShade.ini'), '[ADDON]\n');
+  fs.writeFileSync(path.join(dir, 'ReShade.log'), 'log');
+  fs.writeFileSync(path.join(dir, 'ReShadePreset.ini'), 'Techniques=Mine@Mine.fx\n');
+  relimiter.deploy(dir, fakeAddon(scratchDir('rl-remove-ini-src')));
+  relimiter.remove(dir, { withPlacedReShade: true });
+  assert.equal(fs.existsSync(path.join(dir, 'ReShade.ini')), true, 'not ours: the ReShade and its ini stay');
+  relimiter.writeMarker(dir, { reshadePlaced: true });
+  relimiter.remove(dir, { withPlacedReShade: true });
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['ReShadePreset.ini'], 'the preset may hold the player\'s own choices');
+});
+
+// Chicken's swap can refuse after frame pacing's proxy was stepped back to ReShade64.dll; the proxy
+// must go back where it was, or nothing loads it (no OptiScaler on that game).
+test('the Chicken swap puts pacing\'s proxy back when it refuses', () => {
+  const main = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
+  const sw = main.slice(main.indexOf("ipcMain.handle('dfc:switch'"), main.indexOf("function dfcCacheDir"));
+  assert.doesNotMatch(sw, /demoteStandaloneReShade/, 'no bare demote before a switch that can still refuse');
+  assert.match(sw, /withPacingProxyDemoted\(dir, \(\) => dfc\.switchToDfc\(/);
+  const helper = main.slice(main.indexOf('async function withPacingProxyDemoted'), main.indexOf("ipcMain.handle('dfc:switch'"));
+  assert.match(helper, /catch \(e\) \{[\s\S]*promoteToStandalone[\s\S]*throw e;/);
+});
+
+test('demoted then re-promoted, pacing\'s proxy is ours exactly as before', { skip: !canFakePe }, () => {
+  const dir = scratchDir('rl-repromote');
+  realishReShade(dir, 'ReShade64.dll');
+  relimiter.writeMarker(dir, { reshadePlaced: true });
+  relimiter.promoteToStandalone(dir, 'dx12');
+  const before = relimiter.marker(dir);
+  assert.equal(relimiter.demoteStandaloneReShade(dir), 'dxgi.dll');
+  relimiter.promoteToStandalone(dir, 'dx12', { placed: !!before.reshadePlaced });
+  assert.equal(fs.existsSync(path.join(dir, 'dxgi.dll')), true);
+  assert.equal(relimiter.ownsReShade(dir), true);
+});
+
+test('Luma\'s removal keeps its ReShade when asked to, for pacing or RenoDX', async () => {
+  const lumaue = require(path.join(__dirname, '..', 'src', 'lumaue'));
+  const dir = scratchDir('rl-luma-keep');
+  for (const f of ['ReShade64.dll', 'ReShade.ini', 'Luma-Prey.addon']) fs.writeFileSync(path.join(dir, f), 'x');
+  fs.mkdirSync(path.join(dir, 'Luma'));
+  const r = await lumaue.removeLumaStack(dir, { keepReShade: true });
+  assert.ok(r.removed.includes('Luma-Prey.addon'));
+  assert.equal(fs.existsSync(path.join(dir, 'ReShade64.dll')), true);
+  assert.equal(fs.existsSync(path.join(dir, 'ReShade.ini')), true);
+  assert.ok(r.kept.some((k) => /ReShade64\.dll/.test(k)));
 });
