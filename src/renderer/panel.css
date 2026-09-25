@@ -287,7 +287,8 @@ html, body { margin: 0; height: 100%; }
 .p-select:hover { background: rgba(var(--shade), 0.20); }
 .p-select option { background: var(--popup); color: var(--value); }
 /* A typed number (Pacing's frame-rate target and the like): the same box as a select, text cursor. */
-.p-select.p-number { cursor: text; }
+.p-select.p-number { cursor: text; background: #fff; color: #008c32; font-weight: 600; }
+.p-select.p-number:hover { background: #f5faf5; }
 /* A Pacing/HDR page whose add-on is not here: greyed, as in-game. */
 .p-hosted-missing { opacity: 0.6; }
 
