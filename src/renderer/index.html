@@ -320,6 +320,21 @@
           <span id="game-api-status" class="status-line"></span>
         </div>
 
+        <!-- The proxy DLL name. Advanced-only and defaulted to Automatic: the app's own answer is
+             right for nearly every game, and the reason this exists is the handful where it is not
+             and the user has better information than detection does (an OptiScaler wiki page for
+             their game, or a launch they watched). Only names detect.js can read a folder by are
+             offered -- see PROXY_CHOICE_NAMES. -->
+        <div id="game-proxy-section" class="advanced-only hidden">
+          <label class="field-label" data-i18n>Proxy DLL name</label>
+          <p class="field-hint" data-i18n>OptiScaler is loaded by taking the name of a DLL the game already loads at start. The app picks that name itself and is right almost always -- change this only if you know which DLL your game loads, for instance because OptiScaler's own wiki page for it names one. Choosing a name moves the installed file to it straight away.</p>
+          <p class="field-hint" data-i18n>A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.</p>
+          <div class="field-row">
+            <select id="game-proxy-select"></select>
+          </div>
+          <span id="game-proxy-status" class="status-line"></span>
+        </div>
+
         <div id="game-feeder-section" class="advanced-only hidden">
           <label class="field-label" data-i18n>Neural Rendering source: DLSS5 Feeder</label>
           <p class="field-hint" data-i18n>This game has no native DLSS, so there's no DLSS call for OptiScaler to add Neural Rendering to. The Feeder synthesises one from ReShade's own depth and motion vectors -- estimated, so it ghosts more in fast motion than a native-DLSS-fed game. Deploys ReShade (as a plain ReShade64.dll, not a proxy), the Feeder add-on, and a motion-vector shader here; install OptiScaler normally afterward (Install button) -- it loads ReShade itself once installed, not the other way round.</p>

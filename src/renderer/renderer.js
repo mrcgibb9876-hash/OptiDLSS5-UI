@@ -2804,6 +2804,7 @@ async function openGameModal(game, opts = {}) {
   await loadEngineSection(game);
   await loadLayerSection(game);
   await loadApiSection(game);
+  await loadProxySection(game);
   await loadEngineProfileStatus(game);
   await loadFrameGenSection(game);
   await loadInjectorSection(game);
@@ -3361,6 +3362,79 @@ $('#game-layer-select').addEventListener('change', async (e) => {
   await loadLayerSection(game);
 });
 
+// The per-game proxy DLL name -- see game:setProxyName in main.js. Advanced-only, because the
+// automatic answer is right for nearly every game and a wrong choice here is a game where DLSS 5
+// silently does nothing. It exists for the handful where the user knows better than detection:
+// OptiScaler's wiki names a proxy for several games this app has no entry for, and until now there
+// was no way to act on that (#132 -- a reporter went through every section of Edit looking for it).
+async function loadProxySection(game) {
+  const section = $('#game-proxy-section');
+  const select = $('#game-proxy-select');
+  const status = $('#game-proxy-status');
+  if (!game || !game.exePath) {
+    section.classList.add('hidden');
+    return;
+  }
+  const info = await window.api.proxyInfo(game.exePath);
+  // The 32-bit route keeps OptiScaler in host64\ as winmm.dll, loaded by the helper: there is no
+  // proxy beside the exe to name, so the row is hidden rather than shown and refused.
+  if (!info.ok || !info.settable) {
+    section.classList.add('hidden');
+    return;
+  }
+  section.classList.remove('hidden');
+
+  select.innerHTML = '';
+  const auto = document.createElement('option');
+  auto.value = '';
+  auto.textContent = info.automatic
+    ? t('Automatic ({name})', { name: info.automatic })
+    : t('Automatic');
+  select.appendChild(auto);
+  for (const name of info.names || []) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    select.appendChild(opt);
+  }
+  select.value = info.chosen || '';
+
+  // What is actually in the folder is worth saying next to what is chosen: the two differ while an
+  // install is still to happen, and that difference is the whole question on a "no log at all" game.
+  const installed = info.installed;
+  status.className = `status-line ${info.chosen ? 'status-ok' : ''}`.trim();
+  status.textContent = info.chosen
+    ? t('Set by hand to {name}.', { name: info.chosen }) + (installed && installed.toLowerCase() !== info.chosen
+      ? ' ' + t('OptiScaler is currently installed as {installed} and moves on the next Install or Reconfigure.', { installed })
+      : '')
+    : installed
+      ? t('OptiScaler is installed as {installed}, chosen automatically.', { installed })
+      : '';
+}
+
+$('#game-proxy-select').addEventListener('change', async (e) => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  const proxy = e.target.value || null;
+  const status = $('#game-proxy-status');
+  status.textContent = t('Applying…');
+  const res = await window.api.setProxyName(game.exePath, proxy);
+  if (!res.ok) {
+    toast(t('Could not set the proxy DLL name: {error}', { error: res.error }));
+  } else {
+    // A refused move is said, not swallowed: migrateProxyIfNeeded skips when the target name is
+    // somebody else's file, and a silent skip would read as "renamed" while nothing moved.
+    const moved = res.migration && res.migration.to && !res.migration.skipped
+      ? ' ' + t('Moved OptiScaler from {from} to {to}.', { from: res.migration.from, to: res.migration.to })
+      : res.migration && res.migration.skipped
+        ? ' ' + t('Did NOT move it: {why}.', { why: res.migration.skipped })
+        : '';
+    toast((proxy ? t('OptiScaler will load as {name} for this game.', { name: proxy }) : t('Back to the automatic proxy DLL name.')) + moved);
+  }
+  await loadProxySection(game);
+  await loadRouteStatus(game);
+});
+
 // The per-game graphics API choice -- see game:setApiOverride in main.js for what it drives.
 // Offered for every game with an exe (detection can be wrong on a single-API game too), and
 // called out when the game demonstrably ships more than one renderer.
@@ -3433,6 +3507,7 @@ $('#game-api-select').addEventListener('change', async (e) => {
   // Every section below the choice depends on it.
   await loadRouteStatus(game);
   await loadApiSection(game);
+  await loadProxySection(game);
   await loadInjectorSection(game);
   await loadFeederSection(game);
   await loadOptiFgSection(game);

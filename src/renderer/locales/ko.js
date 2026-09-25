@@ -1651,4 +1651,30 @@ window.I18N.register("ko", {
   "Adding frame pacing...": "프레임 페이싱 추가 중...",
   "Could not add frame pacing: {error}": "프레임 페이싱을 추가하지 못했습니다: {error}",
   "This is upstream ReLimiter, which the in-game panel cannot drive -- use ReLimiter's own overlay in the game, or the target below.": "이것은 원본 ReLimiter로, 게임 내 패널에서 조작할 수 없습니다. 게임 안에서 ReLimiter 자체 오버레이나 아래 목표값을 사용하세요.",
+  "Automatic ({name})":
+    "자동 ({name})",
+  "Automatic":
+    "자동",
+  "Set by hand to {name}.":
+    "직접 {name}(으)로 설정했습니다.",
+  "OptiScaler is currently installed as {installed} and moves on the next Install or Reconfigure.":
+    "OptiScaler는 현재 {installed}(으)로 설치되어 있으며 다음 설치 또는 재구성 때 옮겨집니다.",
+  "OptiScaler is installed as {installed}, chosen automatically.":
+    "OptiScaler가 자동으로 선택된 {installed}(으)로 설치되어 있습니다.",
+  "Could not set the proxy DLL name: {error}":
+    "프록시 DLL 이름을 설정할 수 없습니다: {error}",
+  "Moved OptiScaler from {from} to {to}.":
+    "OptiScaler를 {from}에서 {to}(으)로 옮겼습니다.",
+  "Did NOT move it: {why}.":
+    "옮기지 않았습니다: {why}.",
+  "OptiScaler will load as {name} for this game.":
+    "이 게임에서 OptiScaler가 {name}(으)로 로드됩니다.",
+  "Back to the automatic proxy DLL name.":
+    "자동 프록시 DLL 이름으로 되돌렸습니다.",
+  "Proxy DLL name":
+    "프록시 DLL 이름",
+  "OptiScaler is loaded by taking the name of a DLL the game already loads at start. The app picks that name itself and is right almost always -- change this only if you know which DLL your game loads, for instance because OptiScaler's own wiki page for it names one. Choosing a name moves the installed file to it straight away.":
+    "OptiScaler는 게임이 시작할 때 이미 로드하는 DLL의 이름을 가져와 로드됩니다. 앱이 그 이름을 스스로 고르며 거의 항상 맞습니다. 게임이 어떤 DLL을 로드하는지 알 때만 바꾸세요. 예를 들어 OptiScaler 위키의 해당 게임 문서에 이름이 적혀 있는 경우입니다. 이름을 고르면 설치된 파일이 즉시 그 이름으로 옮겨집니다.",
+  "A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.":
+    "이름이 틀려도 위험하지는 않고 아무 일도 하지 않을 뿐입니다. 게임이 그 파일을 절대 로드하지 않으므로 DLSS 5도 동작하지 않고 로그도 남지 않습니다. 되돌리려면 자동으로 다시 설정하세요.",
 });

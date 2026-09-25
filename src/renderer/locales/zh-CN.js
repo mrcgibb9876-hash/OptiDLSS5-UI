@@ -1651,4 +1651,30 @@ window.I18N.register("zh-CN", {
   "Adding frame pacing...": "正在添加帧率节奏...",
   "Could not add frame pacing: {error}": "无法添加帧率节奏：{error}",
   "This is upstream ReLimiter, which the in-game panel cannot drive -- use ReLimiter's own overlay in the game, or the target below.": "这是原版 ReLimiter，游戏内面板无法控制它——请在游戏中使用 ReLimiter 自带的覆盖层，或下方的目标值。",
+  "Automatic ({name})":
+    "自动（{name}）",
+  "Automatic":
+    "自动",
+  "Set by hand to {name}.":
+    "已手动设为 {name}。",
+  "OptiScaler is currently installed as {installed} and moves on the next Install or Reconfigure.":
+    "OptiScaler 目前安装为 {installed}，将在下次安装或重新配置时移动。",
+  "OptiScaler is installed as {installed}, chosen automatically.":
+    "OptiScaler 安装为 {installed}，由程序自动选择。",
+  "Could not set the proxy DLL name: {error}":
+    "无法设置代理 DLL 名称：{error}",
+  "Moved OptiScaler from {from} to {to}.":
+    "已将 OptiScaler 从 {from} 移动到 {to}。",
+  "Did NOT move it: {why}.":
+    "并未移动：{why}。",
+  "OptiScaler will load as {name} for this game.":
+    "本游戏的 OptiScaler 将以 {name} 加载。",
+  "Back to the automatic proxy DLL name.":
+    "已恢复为自动选择代理 DLL 名称。",
+  "Proxy DLL name":
+    "代理 DLL 名称",
+  "OptiScaler is loaded by taking the name of a DLL the game already loads at start. The app picks that name itself and is right almost always -- change this only if you know which DLL your game loads, for instance because OptiScaler's own wiki page for it names one. Choosing a name moves the installed file to it straight away.":
+    "OptiScaler 借用游戏启动时本就会加载的某个 DLL 的名字来加载自己。这个名字由程序自行选择，几乎总是对的 —— 只有在你确实知道自己的游戏加载哪个 DLL 时才改它，例如 OptiScaler 维基中该游戏的页面点名了某一个。选定名称后，已安装的文件会立即移动过去。",
+  "A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.":
+    "名字选错并不危险，只是不起作用：游戏永远不会加载那个文件，所以 DLSS 5 什么都不做，也不会写日志。改回“自动”即可撤销。",
 });

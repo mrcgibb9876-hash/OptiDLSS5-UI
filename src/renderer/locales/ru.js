@@ -1651,4 +1651,30 @@ window.I18N.register("ru", {
   "Adding frame pacing...": "Добавление выравнивания кадров...",
   "Could not add frame pacing: {error}": "Не удалось добавить выравнивание кадров: {error}",
   "This is upstream ReLimiter, which the in-game panel cannot drive -- use ReLimiter's own overlay in the game, or the target below.": "Это исходный ReLimiter, которым внутриигровая панель управлять не может -- используйте собственный оверлей ReLimiter в игре или цель ниже.",
+  "Automatic ({name})":
+    "Автоматически ({name})",
+  "Automatic":
+    "Автоматически",
+  "Set by hand to {name}.":
+    "Задано вручную: {name}.",
+  "OptiScaler is currently installed as {installed} and moves on the next Install or Reconfigure.":
+    "Сейчас OptiScaler установлен как {installed} и будет перемещён при следующей установке или перенастройке.",
+  "OptiScaler is installed as {installed}, chosen automatically.":
+    "OptiScaler установлен как {installed}, имя выбрано автоматически.",
+  "Could not set the proxy DLL name: {error}":
+    "Не удалось задать имя прокси-DLL: {error}",
+  "Moved OptiScaler from {from} to {to}.":
+    "OptiScaler перемещён из {from} в {to}.",
+  "Did NOT move it: {why}.":
+    "НЕ перемещён: {why}.",
+  "OptiScaler will load as {name} for this game.":
+    "Для этой игры OptiScaler будет загружаться как {name}.",
+  "Back to the automatic proxy DLL name.":
+    "Возврат к автоматическому имени прокси-DLL.",
+  "Proxy DLL name":
+    "Имя прокси-DLL",
+  "OptiScaler is loaded by taking the name of a DLL the game already loads at start. The app picks that name itself and is right almost always -- change this only if you know which DLL your game loads, for instance because OptiScaler's own wiki page for it names one. Choosing a name moves the installed file to it straight away.":
+    "OptiScaler загружается под именем DLL, которую игра и так загружает при старте. Приложение выбирает это имя само и почти всегда угадывает -- меняйте только если знаете, какую DLL загружает ваша игра, например потому что её называет страница вики OptiScaler для этой игры. При выборе имени установленный файл сразу переносится под него.",
+  "A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.":
+    "Неверное имя не опасно, просто бесполезно: игра никогда не загрузит этот файл, поэтому DLSS 5 ничего не делает и журнал не пишется. Чтобы отменить, верните значение «Автоматически».",
 });

@@ -1651,4 +1651,30 @@ window.I18N.register("es", {
   "Adding frame pacing...": "Añadiendo el ritmo de fotogramas...",
   "Could not add frame pacing: {error}": "No se pudo añadir el ritmo de fotogramas: {error}",
   "This is upstream ReLimiter, which the in-game panel cannot drive -- use ReLimiter's own overlay in the game, or the target below.": "Este es el ReLimiter original, que el panel del juego no puede controlar: usa la superposición propia de ReLimiter en el juego, o el objetivo de abajo.",
+  "Automatic ({name})":
+    "Automático ({name})",
+  "Automatic":
+    "Automático",
+  "Set by hand to {name}.":
+    "Establecido a mano en {name}.",
+  "OptiScaler is currently installed as {installed} and moves on the next Install or Reconfigure.":
+    "OptiScaler está instalado ahora como {installed} y se moverá en el próximo Instalar o Reconfigurar.",
+  "OptiScaler is installed as {installed}, chosen automatically.":
+    "OptiScaler está instalado como {installed}, elegido automáticamente.",
+  "Could not set the proxy DLL name: {error}":
+    "No se pudo establecer el nombre del DLL proxy: {error}",
+  "Moved OptiScaler from {from} to {to}.":
+    "OptiScaler movido de {from} a {to}.",
+  "Did NOT move it: {why}.":
+    "NO se movió: {why}.",
+  "OptiScaler will load as {name} for this game.":
+    "OptiScaler se cargará como {name} para este juego.",
+  "Back to the automatic proxy DLL name.":
+    "Vuelta al nombre automático del DLL proxy.",
+  "Proxy DLL name":
+    "Nombre del DLL proxy",
+  "OptiScaler is loaded by taking the name of a DLL the game already loads at start. The app picks that name itself and is right almost always -- change this only if you know which DLL your game loads, for instance because OptiScaler's own wiki page for it names one. Choosing a name moves the installed file to it straight away.":
+    "OptiScaler se carga tomando el nombre de un DLL que el juego ya carga al arrancar. La aplicación elige ese nombre por su cuenta y acierta casi siempre; cámbialo solo si sabes qué DLL carga tu juego, por ejemplo porque la página del wiki de OptiScaler para ese juego nombra uno. Al elegir un nombre, el archivo instalado se mueve allí de inmediato.",
+  "A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.":
+    "Un nombre equivocado no es peligroso, solo inútil: el juego nunca carga ese archivo, así que DLSS 5 no hace nada y no se escribe ningún registro. Vuelve a Automático para deshacerlo.",
 });

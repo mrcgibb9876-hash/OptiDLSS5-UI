@@ -649,6 +649,9 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = 
       add('api', detected.api ? `${detected.api}${detected.reason ? ` -- ${detected.reason}` : ''}` : 'not detected');
     }
     if ((detected.apis || []).length > 1) add('apis seen', detected.apis.join(', '));
+    // A proxy name chosen by hand, said the same way the API choice is: a report where OptiScaler
+    // is under an unexpected name should say whether a person put it there or the app did.
+    if (detected.proxyChoice) add('proxy', `${detected.proxyChoice} -- SET BY HAND in Edit`);
     add('bitness', detected.bitness ? `${detected.bitness}-bit` : null);
     add('engine', detected.engine);
     // The files beside the exe that change the answer above, and that no header line mentions.
@@ -857,7 +860,7 @@ function withDigest(body, digest) {
 // engine log carries the result code and nothing behind it. Uncharted (2026-09-24) had a 42 KB
 // nvngx.log sitting in the folder while the bundle collected everything except it, so the report
 // could say BAD0000B and not one word about the cause.
-const BUNDLE_FILES = ['OptiScaler.log', 'OptiScaler.ini', 'nvngx.log', 'ReShade.log', 'ReShade.ini', 'ReShadePreset.ini', 'dlss5-feed.log', 'dlss5-feed.cfg', 'dlss5-feed-host.log', '.optiscaler-manager-install.json', '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.dlss5ui-api.json', '.dlss5ui-lossless.json', '.dlss5ui-legacy.json', '.dlss5ui-translation.json', '.dlss5ui-engine.json', '.dlss5ui-framegen.json'];
+const BUNDLE_FILES = ['OptiScaler.log', 'OptiScaler.ini', 'nvngx.log', 'ReShade.log', 'ReShade.ini', 'ReShadePreset.ini', 'dlss5-feed.log', 'dlss5-feed.cfg', 'dlss5-feed-host.log', '.dlss5ui-proxy.json', '.optiscaler-manager-install.json', '.dlss5ui-feeder-deploy.json', '.dlss5ui-lumaue-deploy.json', '.dlss5ui-api.json', '.dlss5ui-lossless.json', '.dlss5ui-legacy.json', '.dlss5ui-translation.json', '.dlss5ui-engine.json', '.dlss5ui-framegen.json'];
 
 function folderListing(dir) {
   try {
