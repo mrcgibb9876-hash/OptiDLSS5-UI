@@ -789,3 +789,89 @@ test('RenoDX source choice: our fork first, upstream when only upstream has a mo
   // No upstream index (offline): the fork alone still answers.
   assert.equal(addons.pickRenodxMatch(fork, null, { bitness: 64, title: 'Alpha' }).source.repo, 'fork');
 });
+
+// ── RenoDX UE-Extended: one RenoDX add-on per folder, and the Engine.ini it needs ─────────────────
+
+const ue = require('../src/ueextended');
+const ueini = require('../src/ueini');
+
+const GENERIC_UE_INDEX = {
+  games: [{ id: 'ace7', title: 'Ace Combat 7', steam_appid: 502500, mods: [{ id: 'unrealengine', support: 'generic', status: 'beta', artifacts: [{ name: 'renodx-unrealengine.addon64', arch: 'x64' }] }] }],
+};
+
+function ueGame() {
+  const root = scratchDir('addons-ue');
+  const localAppData = path.join(root, 'Local');
+  fs.mkdirSync(localAppData);
+  const exe = path.join(root, 'Dawnwalker', 'Binaries', 'Win64', 'Dawnwalker.exe');
+  fs.mkdirSync(path.dirname(exe), { recursive: true });
+  fs.writeFileSync(exe, 'MZ');
+  return { dir: path.dirname(exe), exe, localAppData };
+}
+
+test('UE-Extended replaces the generic Unreal add-on, and back again -- never both in the folder', async () => {
+  const { dir, exe, localAppData } = ueGame();
+  const ctx = fakeCtx({ 'renodx-unrealengine.addon64': 'MZ generic', 'renodx-ue-extended.addon64': 'MZ ue-ext' });
+  const params = { title: 'The Blood of Dawnwalker', bitness: 64, engineId: 'unreal' };
+  const generic = addons.pickRenodxMatch({ index: GENERIC_UE_INDEX, source: addons.RENODX_SOURCES[0] }, null, params);
+  const entry = ue.ueExtendedEntry({ exeName: 'Dawnwalker.exe', productName: 'Dawnwalker' });
+  const ueExt = ue.applyUeExtended(generic, { ...params, source: ue.UE_EXTENDED_TEST_RELEASE, entry });
+
+  await addons.installAddon(dir, 'renodx', ctx, { match: generic.match, source: generic.source, exePath: exe, localAppData, ...HAS_RESHADE });
+  assert.ok(fs.existsSync(path.join(dir, 'renodx-unrealengine.addon64')));
+  assert.ok(!fs.existsSync(path.join(localAppData, 'Dawnwalker')), 'the generic mod writes no Engine.ini');
+
+  const res = await addons.installAddon(dir, 'renodx', ctx, { match: ueExt.match, source: ueExt.source, exePath: exe, localAppData, ...HAS_RESHADE });
+  assert.deepEqual(res.replaced, ['renodx-unrealengine.addon64'], 'the old RenoDX add-on went through Remove');
+  assert.ok(!fs.existsSync(path.join(dir, 'renodx-unrealengine.addon64')));
+  assert.ok(fs.existsSync(path.join(dir, 'renodx-ue-extended.addon64')));
+  assert.match(ctx.asked[ctx.asked.length - 1], /\/releases\/download\/test-ue-extended\/renodx-ue-extended\.addon64$/);
+  const marker = addons.readMarker(dir);
+  assert.equal(marker.installed.length, 1);
+  assert.deepEqual(marker.installed[0].files, ['renodx-ue-extended.addon64']);
+  assert.equal(marker.installed[0].renodxMod, 'ue-extended');
+
+  // Dawnwalker is native-HDR in the table: Unreal's HDR is on in Engine.ini, read-only, and journaled.
+  const ini = path.join(localAppData, 'Dawnwalker', 'Saved', 'Config', 'Windows', 'Engine.ini');
+  assert.ok(fs.existsSync(ini));
+  assert.match(fs.readFileSync(ini, 'utf8'), /r\.HDR\.EnableHDROutput=1/);
+  assert.ok(ueini.isReadOnly(ini));
+  assert.equal(marker.installed[0].engineIni.file, ini);
+  assert.equal(marker.installed[0].engineIni.created, true);
+
+  // And back: the generic mod replaces UE-Extended, and the Engine.ini goes with it.
+  const back = await addons.installAddon(dir, 'renodx', ctx, { match: generic.match, source: generic.source, exePath: exe, localAppData, ...HAS_RESHADE });
+  assert.deepEqual(back.replaced, ['renodx-ue-extended.addon64']);
+  assert.ok(!fs.existsSync(path.join(dir, 'renodx-ue-extended.addon64')));
+  assert.ok(!fs.existsSync(ini), 'the Engine.ini we created is gone');
+  assert.deepEqual(addons.readMarker(dir).installed.map((e) => e.files), [['renodx-unrealengine.addon64']]);
+});
+
+test('removing UE-Extended restores an Engine.ini the player already had', async () => {
+  const { dir, exe, localAppData } = ueGame();
+  const cfg = path.join(localAppData, 'Dawnwalker', 'Saved', 'Config', 'Windows');
+  fs.mkdirSync(cfg, { recursive: true });
+  const ini = path.join(cfg, 'Engine.ini');
+  fs.writeFileSync(ini, '[SystemSettings]\nr.Mine=1\n');
+  const ctx = fakeCtx({ 'renodx-ue-extended.addon64': 'MZ ue-ext' });
+  const m = ue.applyUeExtended(null, { engineId: 'unreal', bitness: 64, source: ue.UE_EXTENDED_RELEASE, entry: { key: 'Dawnwalker', nativeHdr: true, how: 'product' } });
+  const res = await addons.installAddon(dir, 'renodx', ctx, { match: m.match, source: m.source, exePath: exe, localAppData, ...HAS_RESHADE });
+  assert.equal(res.engineIni.backup, ini + ueini.BACKUP_SUFFIX);
+  assert.match(fs.readFileSync(ini, 'utf8'), /r\.Mine=1[\s\S]*r\.AllowHDR=1/);
+
+  const out = await addons.removeAddon(dir, 'renodx');
+  assert.equal(out.engineIni.restored, true);
+  assert.equal(fs.readFileSync(ini, 'utf8'), '[SystemSettings]\nr.Mine=1\n');
+  assert.ok(!fs.existsSync(ini + ueini.BACKUP_SUFFIX));
+  assert.ok(!ueini.isReadOnly(ini));
+});
+
+test('UE-Extended on an upgrade-path game (Set_Path 1) leaves Engine.ini alone', async () => {
+  const { dir, exe, localAppData } = ueGame();
+  const ctx = fakeCtx({ 'renodx-ue-extended.addon64': 'MZ ue-ext' });
+  const m = ue.applyUeExtended(null, { engineId: 'unreal', bitness: 64, source: ue.UE_EXTENDED_RELEASE, entry: { key: 'P3R.exe', nativeHdr: false, how: 'exe' } });
+  const res = await addons.installAddon(dir, 'renodx', ctx, { match: m.match, source: m.source, exePath: exe, localAppData, ...HAS_RESHADE });
+  assert.equal(res.engineIni, null);
+  assert.ok(!fs.existsSync(path.join(localAppData, 'Dawnwalker')));
+  assert.equal(addons.readMarker(dir).installed[0].engineIni, undefined);
+});

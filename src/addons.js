@@ -37,6 +37,8 @@ const { BAND } = require('./preset-order');
 const integrity = require('./integrity');
 const saferemove = require('./saferemove');
 const { HOOK_DLLS } = require('./detect');
+const ueini = require('./ueini');
+const { UE_EXTENDED_MOD_ID } = require('./ueextended');
 
 const ADDONS_MARKER = '.dlss5ui-addons.json';
 
@@ -566,7 +568,20 @@ async function installAddon(dir, id, ctx, opts = {}) {
   // silently flipping to "Install". For an add-on with a host to prepare it happens after the fetch,
   // so a failed download cannot leave the game with neither.
   const swappedOut = [];
+  // What this add-on replaces of ITSELF: one RenoDX add-on per folder. The RenoDX row picks one file
+  // (a per-game mod, UE-Extended or the generic Unreal one), and ReShade loads every .addon64 it finds
+  // -- so a new pick takes the old file out through the ordinary Remove first (which also undoes its
+  // Engine.ini, see removeAddon), rather than recordInstall forgetting a file that is still loading.
+  const replaced = [];
   const swap = async () => {
+    const prior = spec.kind === 'addon' ? ((readMarker(dir) || {}).installed || []).find((e) => e.id === id) : null;
+    if (prior) {
+      const r = await removeAddon(dir, id);
+      if (r.failed && r.failed.length) {
+        throw Object.assign(new Error(`${(prior.files || []).join(', ')} could not be taken out first (${r.failed.map((f) => `${f.rel}: ${f.code}`).join(', ')}) -- close the game and try again`), { code: 'remove-failed' });
+      }
+      replaced.push(...r.removed);
+    }
     for (const other of conflictsFor(dir, id)) {
       const r = await removeAddon(dir, other);
       if (r.failed && r.failed.length) {
@@ -621,15 +636,37 @@ async function installAddon(dir, id, ctx, opts = {}) {
     const dest = path.join(dir, name);
     await fsp.writeFile(dest, buf);
     written.push(name);
+    const engineIni = ueExtendedEngineIni(dir, opts);
     recordInstall(dir, {
       id, kind: spec.kind, files: written,
       renodxMod: opts.match ? opts.match.modId : undefined,
       renodxTitle: opts.match ? opts.match.title : undefined,
+      // What was done to the game's Engine.ini (ueini.js), so Remove undoes exactly that.
+      engineIni: engineIni && !engineIni.skipped && !engineIni.error ? engineIni : undefined,
     });
-    return { id, files: written, techniques: [], swappedOut };
+    return { id, files: written, techniques: [], swappedOut, replaced, engineIni };
   }
 
   throw new Error(`${id}: unknown kind ${spec.kind}`);
+}
+
+// RenoDX UE-Extended on a native-HDR game (its table's Set_Path 0, or the player's own ReShade.ini
+// [renodx] Set_Path=0) needs Unreal's HDR switched on in Engine.ini, which the add-on does not do.
+// Returns ueini's record, { skipped } when that folder cannot be found, { error } when writing failed,
+// or null when it does not apply. Never fails the install: the add-on is in place either way.
+// opts.localAppData is for the tests.
+function ueExtendedEngineIni(dir, opts) {
+  const m = opts.match;
+  if (!m || m.modId !== UE_EXTENDED_MOD_ID || !opts.exePath) return null;
+  if (!ueini.wantsNativeHdr(m.ueExtended, dir)) return null;
+  try {
+    const rec = ueini.applyEngineIniHdr(opts.exePath, { localAppData: opts.localAppData || process.env.LOCALAPPDATA });
+    if (rec.skipped) console.warn(`[renodx] Engine.ini not written: ${rec.reason}`);
+    return rec;
+  } catch (error) {
+    console.warn(`[renodx] Engine.ini could not be written: ${(error && error.message) || error}`);
+    return { error: String((error && error.message) || error) };
+  }
 }
 
 // Which file to fetch for an 'addon' entry. RenoDX's comes from the per-game match the caller
@@ -694,10 +731,16 @@ async function removeAddon(dir, id, opts = {}) {
     writeMarker(dir, marker);
     return { removed, kept: [], failed };
   }
+  // The Engine.ini this install changed goes back only once the add-on itself is out: while its file
+  // still loads, the game still needs the HDR it was given.
+  let engineIni = null;
+  if (entry.engineIni) {
+    try { engineIni = ueini.revertEngineIniHdr(entry.engineIni); } catch (error) { engineIni = { error: String((error && error.message) || error) }; }
+  }
   marker.installed = marker.installed.filter((e) => e.id !== id);
   if (marker.installed.length) writeMarker(dir, marker);
   else await fsp.rm(path.join(dir, ADDONS_MARKER), { force: true });
-  return { removed, kept: [], failed };
+  return { removed, kept: [], failed, engineIni };
 }
 
 module.exports = {

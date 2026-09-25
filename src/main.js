@@ -14,6 +14,7 @@ const injector = require('./injector');
 const feeder = require('./feeder');
 const relimiter = require('./relimiter');
 const addons = require('./addons');
+const ueextended = require('./ueextended');
 const lossless = require('./lossless');
 const reengine = require('./reengine');
 const integrity = require('./integrity');
@@ -546,12 +547,44 @@ function renodxParams(exePath, dir, detected, steam) {
   };
 }
 
+// Which release carries RenoDX UE-Extended (ueextended.js): the fork's snapshot once the asset is on it,
+// else the test-ue-extended pre-release when the dev-only override is on, else none. The snapshot's
+// asset list is asked once per session (memoised like the index); the override is read each time from
+// settings.json / OPTIDLSS5_UE_EXTENDED_TEST so it applies without a restart.
+let ueExtendedAssetsMemo = null;
+function ueExtendedSnapshotAssets() {
+  if (!ueExtendedAssetsMemo) {
+    const rel = ueextended.UE_EXTENDED_RELEASE;
+    ueExtendedAssetsMemo = addonCtx().resolveRelease(rel.repo, rel.tag)
+      .then((r) => ((r && r.assets) || []).map((a) => a.name))
+      .catch(() => { ueExtendedAssetsMemo = null; return null; });
+  }
+  return ueExtendedAssetsMemo;
+}
+async function ueExtendedSourceNow() {
+  const testOverride = ueextended.testOverrideEnabled(readJson(settingsFile(), {}));
+  return ueextended.ueExtendedSource({ snapshotAssets: await ueExtendedSnapshotAssets(), testOverride });
+}
+
+// UE-Extended's settings table entry for this game (exe file name, then the stored product name), or
+// null. The table is the shipped JSON, so this is a lookup -- safe on every card render.
+function ueExtendedEntryFor(exePath, detected) {
+  return ueextended.ueExtendedEntry({ exeName: path.basename(String(exePath || '')), productName: (detected && detected.productName) || null });
+}
+
 // The one place a game's RenoDX mod and its release are chosen: { match, source, fromUpstream } or null.
-// Throws only when not even our own index can be read.
+// A per-game mod wins; an Unreal game with only the engine-wide mod (or none) gets UE-Extended when a
+// release carries it. Throws only when not even our own index can be read.
 async function renodxMatchFor(exePath, dir, detected) {
   const primary = await renodxIndex();
   const upstream = await renodxUpstreamIndex().catch(() => null);
-  return addons.pickRenodxMatch(primary, upstream, renodxParams(exePath, dir, detected, library.steamManifestFor(exePath)));
+  const params = renodxParams(exePath, dir, detected, library.steamManifestFor(exePath));
+  const picked = addons.pickRenodxMatch(primary, upstream, params);
+  if (params.engineId !== 'unreal') return picked;
+  return ueextended.applyUeExtended(picked, {
+    engineId: params.engineId, bitness: params.bitness, title: params.title,
+    source: await ueExtendedSourceNow(), entry: ueExtendedEntryFor(exePath, detected),
+  });
 }
 
 // The catalogue as this game sees it: what is installed here, and which RenoDX add-on (if any)
@@ -604,6 +637,9 @@ ipcMain.handle('addons:forGame', async (_evt, { exePath } = {}) => {
       })),
       renodx: match,
       renodxSource,
+      // The RenoDX file installed here now, so the row can offer to switch when the pick has changed
+      // (the generic Unreal mod installed, UE-Extended now chosen, or the reverse).
+      renodxInstalledFiles: (((addons.readMarker(dir) || {}).installed || []).find((e) => e.id === 'renodx') || {}).files || [],
       indexError,
       // The motion-vector providers, shown in this same list. They are not add-ons in the
       // catalogue's sense -- the Feeder picks exactly one and the deploy owns it -- but this is
@@ -737,7 +773,8 @@ ipcMain.handle('addons:install', perFolder(async (_evt, { exePath, id } = {}) =>
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
     const dir = gameDir(exePath);
     const detected = (await detectFor(gameDir(exePath), exePath).catch(() => null)) || {};
-    const opts = { bitness: detected.bitness || null };
+    // exePath: UE-Extended's Engine.ini lives under the project folder above Binaries (ueini.js).
+    const opts = { bitness: detected.bitness || null, exePath };
     if (id === 'renodx') {
       const picked = await renodxMatchFor(exePath, dir, detected);
       if (!picked) throw new Error('No RenoDX mod is built for this game');
@@ -3880,8 +3917,9 @@ function renodxCapability(exePath, dir) {
   try {
     const detected = storedDetectionFor(exePath) || {};
     const picked = addons.pickRenodxMatch(renodxIndexMemo, renodxUpstreamMemo, renodxParams(exePath, dir, detected, library.steamManifestFor(exePath)));
-    if (!picked) return null;
-    return /^engine/.test(picked.match.how || '') ? 'engine' : 'game';
+    // 'ue-plus' (blue) for an Unreal game UE-Extended has settings for: the exe name, then the product
+    // name the stored detection already carries -- never read from the exe here.
+    return ueextended.renodxTagClass(picked, { engineId: detected.engineId || null, entry: ueExtendedEntryFor(exePath, detected) });
   } catch {
     return null;
   }
