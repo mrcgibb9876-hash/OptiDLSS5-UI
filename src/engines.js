@@ -1,5 +1,5 @@
 // The OptiScaler engine build this app installs: this project's own OptiScaler_DLSSNR fork (the
-// DLSS 5 developer-controls panel on Alt+Home). It runs Neural Rendering before or after DLSS
+// DLSS 5 developer-controls panel on Insert). It runs Neural Rendering before or after DLSS
 // upscaling ([DlssNr] RunBeforeSR) for 1-3 passes ([DlssNr] Passes), both editable in Edit Game.
 //
 // wilsjo2's OptiScaler-DLSSNR-PreSR-Multipass is offered as a second build. It was here in
@@ -7,8 +7,8 @@
 // machinery never went away -- only this table's entry and the renderer's selector did -- so the
 // release fetch, the per-build managed folder and the per-game marker all still work by engine id.
 //
-// The difference that matters to a user: this build has no Alt+Home developer panel. Its DLSS 5
-// settings are reachable from the break-away panel instead (Alt+Shift+Home, panelwindow.js), which
+// The difference that matters to a user: this build has no in-game developer panel. Its DLSS 5
+// settings are reachable from the break-away panel instead (Insert opens it on this build, panelroute.js), which
 // edits OptiScaler.ini and so needs nothing drawn inside the game. `panel: false` is what tells the
 // rest of the app to say that rather than promising a key that does nothing (route-explain.js).
 'use strict';

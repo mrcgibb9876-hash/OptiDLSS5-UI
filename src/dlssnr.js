@@ -28,7 +28,7 @@ const MOD = { ALT: 0x0100, CTRL: 0x0200, SHIFT: 0x0400 };
 const VK_NAME = { 0x24: 'Home', 0x23: 'End', 0x2D: 'Insert', 0x2E: 'Delete', 0x79: 'F10', 0x60: 'Numpad 0', 0x6E: 'Numpad .' };
 
 // A bind the list does not offer -- set in the in-game panel, or by hand -- still has to read back
-// honestly. Without this the dialog would show "Alt+Home (default)" over an ini that says
+// honestly. Without this the dialog would show "Insert (default)" over an ini that says
 // something else, and the first edit of any other field would look like it had moved the key.
 function describeKeybind(code) {
   const vk = code & 0x00FF;

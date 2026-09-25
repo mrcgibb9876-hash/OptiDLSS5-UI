@@ -94,7 +94,9 @@ test('the card carries no chip line and no run counts, only the mark, the status
   assert.ok(!js.includes("ev.className = 'card-evidence'"), 'the run count is back on the card');
   assert.ok(!js.includes('engine-badge api-badge'), 'the API chip is back on the card');
   assert.ok(!js.includes('engine-badge route-badge'), 'the route chip is back on the card');
-  assert.match(js, /line\.classList\.add\('hidden'\)/);
+  // The hidden recommend line and problem row went too: nothing is left for a chip to be drawn into.
+  assert.ok(!js.includes('card-recommend'), 'the chip line is back in the card template');
+  assert.ok(!js.includes('card-problem'), 'the old problem row is back in the card template');
   assert.ok(!/mark\.title =/.test(js), 'the mark carries no hover text (2026-09-25)');
   assert.match(js, /class="card-warn hidden"/, 'anti-cheat is a triangle on the art');
   assert.ok(!js.includes('detectShort'), 'the advisory warning line is back on the card');
@@ -108,6 +110,29 @@ test('a failed game climbs the ladder: DXVK, then Chicken, then a report', () =>
   const flip = js.slice(js.indexOf('function flipToFailure('), js.indexOf('function failureProblem('));
   assert.match(flip, /sendGameFailure\(/, 'the last rung sends the report');
   assert.ok(!/no known fix/.test(flip), 'the dead-end wording is gone from the ladder');
+});
+
+test('a Chicken rung that failed or was cancelled is not counted as tried', () => {
+  // 2026-09-25: tryFallback read game.neuralConsumer, which switchNeuralPass sets BEFORE installing,
+  // and installGame resolved undefined on every path -- so a refused switch read as done.
+  const install = js.slice(js.indexOf('async function installGame(game)'), js.indexOf('// ── PureDark'));
+  assert.doesNotMatch(install, /return;/, 'every exit of installGame says whether it worked');
+  assert.match(install, /return !!res\.ok;\r?\n\}/);
+  const sw = js.slice(js.indexOf('async function switchNeuralPass('), js.indexOf('async function loadSettingsDfc('));
+  assert.match(sw, /const ok = await installGame\(game\);[\s\S]*game\.neuralConsumer = previous;[\s\S]*return ok;/);
+  const tf = js.slice(js.indexOf('async function tryFallback('), js.indexOf('function flipToFailure('));
+  assert.match(tf, /if \(await switchNeuralPass\(game, 'dfc'\)\)/);
+  assert.doesNotMatch(tf, /game\.neuralConsumer === 'dfc'/);
+  assert.match(tf, /fb\.at = before\.at;/, 'an undo puts the old `at` back, not 0');
+});
+
+test('a report survives the grid being redrawn under it', () => {
+  // The window regaining focus after GitHub's page redraws the grid; the progress lives outside the card.
+  assert.match(js, /const reportProgress = new Map\(\);/);
+  const show = js.slice(js.indexOf('function showFailure('), js.indexOf('function escapeHtml('));
+  assert.match(show, /reportProgress\.get\(exePath\)/, 'a redrawn card turns back to a report in progress');
+  assert.match(show, /cardsByExe\.get\(exePath\)/, 'the delayed spin finds the live card');
+  assert.match(js, /function reportSignInShared\(\)/, 'one device flow is shared, never a second one started');
 });
 
 test('the DLSS 5 field table is not offered in two places at once', () => {
@@ -177,3 +202,23 @@ test('both update paths sweep every engine build in use, not just the default', 
   assert.match(check, /engineLabel\(engineRes\.engine\)/, 'the result lines do not name the build');
 });
 
+
+test('the card shows where the game came from, read from status.store', () => {
+  // Asked for 2026-09-25: Steam, GOG, Xbox, Epic, EA, Ubisoft, or "User" for a folder of the player's
+  // own. From the game:status answer renderGrid already has -- no extra IPC per card.
+  const tpl = js.slice(js.indexOf('card.innerHTML = `'), js.indexOf('setBannerWithFallback(game, card.querySelector'));
+  const icons = tpl.slice(tpl.indexOf('<div class="card-icons">'), tpl.indexOf('</div>', tpl.indexOf('<div class="card-icons">')));
+  assert.match(icons, /\$\{storeTag\(status\)\}/, 'the store tag sits in the icon row, beside the pill and the triangle');
+  const src = js.slice(js.indexOf('const STORE_LABELS'), js.indexOf('const API_LABEL'));
+  const vm = require('node:vm');
+  const ctx = { t: (s) => `T(${s})`, escapeHtml: (s) => String(s) };
+  vm.runInNewContext(`${src}; this.storeTag = storeTag;`, ctx);
+  const label = (status) => (/>([^<]*)</.exec(ctx.storeTag(status)) || [])[1];
+  for (const [id, name] of [['steam', 'Steam'], ['gog', 'GOG'], ['xbox', 'Xbox'], ['epic', 'Epic'], ['ea', 'EA'], ['ubisoft', 'Ubisoft']]) {
+    assert.strictEqual(label({ store: id }), name, id);
+  }
+  assert.strictEqual(label({ store: 'other' }), 'T(User)', 'a folder of the player\'s own is "User", translated');
+  assert.strictEqual(label({}), 'T(User)', 'no store answer reads as the player\'s own too');
+  assert.strictEqual(ctx.storeTag({ exeMissing: true }), '', 'a missing exe has no install to read a store from');
+  assert.match(ctx.storeTag({ store: 'steam' }), /class="card-store"/);
+});

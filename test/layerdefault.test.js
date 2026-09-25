@@ -243,9 +243,8 @@ test('Install asks for the layer before it places anything, and learning uses th
 });
 
 test('the proven-layer strings are in every locale', () => {
-  const keys = ['Proven layer: {layer}', 'Proven layer', 'native Direct3D',
-    '{layer} is proven on this game, so Install puts it in front of the game instead of the usual layer.',
-    '{layer} is the layer this game was proven on.',
+  // The card's proven-layer chip and its two hover lines left with the chip line (2026-09-25).
+  const keys = ['Proven layer', 'native Direct3D',
     'DXVK is proven on this game, so Install puts it in front of the game. Pick the other layer here to keep the usual one.'];
   const dir = path.join(REPO, 'src', 'renderer', 'locales');
   for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.js'))) {

@@ -298,7 +298,6 @@ function refreshCardState(card) {
     : (state.problem && state.problem.bad) ? state.problem
     : running && state.panelHint ? { bad: false, text: state.panelHint.text, title: state.panelHint.title }
     : state.problem;
-  card.querySelector('.card-problem')?.classList.add('hidden');
 
   // The primary delegates to a real button rather than duplicating its work, so there is still one
   // implementation of Install, Tune and Launch and one place their confirmations live.
@@ -472,9 +471,8 @@ async function renderGrid() {
         <div class="card-icons">
           <span class="card-mark hidden"></span>
           <span class="card-warn hidden" aria-label="Anti-cheat">&#9888;</span>
+          ${storeTag(status)}
         </div>
-        <div class="card-path card-recommend hidden"></div>
-        <div class="card-problem hidden"><span class="card-problem-text"></span></div>
         <div class="card-actions">
           <button class="btn btn-primary btn-card-primary"></button>
           <button class="btn btn-launch" title="${escapeHtml(t('Runs the game from its own folder -- for an Unreal game, the -Win64-Shipping.exe that OptiScaler is installed beside.'))}">&#9654; ${escapeHtml(t('Launch'))}</button>
@@ -654,8 +652,7 @@ async function renderGrid() {
     }
     // Game Help, Analyse game and Verify install left the ⋯ menu (2026-09-25): the card itself now says
     // what went wrong and what to try next (flipToFailure), and its problem row's Help / Show me button
-    // still opens Game Help where there is more to read. analyseGame and verifyInstall have no caller
-    // now; they and their IPC are left in place for the clean-up pass to decide on.
+    // still opens Game Help where there is more to read. Analyse and Verify are gone altogether.
     card.querySelector('.btn-launch').addEventListener('click', async () => {
       const res = await window.api.launchGame(game.exePath, game.launcher);
       if (!res.ok) { toast(t('Could not launch {name}: {error}', { name: game.name, error: res.error })); return; }
@@ -718,7 +715,6 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   // Every await below belongs to one render of one card. A newer render has already replaced the
   // card this is filling in, so the work behind it is thrown away rather than finished.
   const current = () => generation === renderGeneration;
-  const line = card.querySelector('.card-recommend');
   const install = card.querySelector('.btn-install');
   let detected = game.detectedPath;
 
@@ -732,7 +728,6 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   }
   detected = detected || fresh || { recommend: 'unknown', reason: t('not detected yet') };
 
-  if (!line) return;
   const canRecommendInstall = !backends.optiscaler;
   const [route, diag] = await Promise.all([
     window.api.gameRoute(game.exePath, detected),
@@ -744,7 +739,6 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   // asked for 2026-09-25 as clutter. The card keeps three signals -- the DLSS 5 / Chicken mark on the
   // art, the status chip (Working, Needs attention...) and the one problem row -- and the detail that
   // used to sit in the chips (and the route text, removed from the card and Settings) is in Game Help.
-  line.classList.add('hidden');
 
 
   // The DXVK <-> dgVoodoo2 swap, in the overflow as well as in Game Help and Edit (layerSwapFor).
@@ -902,8 +896,8 @@ async function applyRecommendation(game, card, backends, generation = renderGene
         title: t('Expect nothing on screen in the game: no OptiScaler splash when it loads, and no menu on any key. A 32-bit game cannot run DLSS in its own process, so the neural pass runs in the 64-bit helper beside the game -- and OptiScaler runs there with it, in a process with no window to draw on. Press "Show the DLSS 5 panel in-game" in the add-on first; Insert then opens OptiScaler\'s menu inside it. Needs windowed or borderless. Game Help spells it out.'),
       }
     // With the pop-out panel switched off (or its hotkey taken by another program) naming that
-    // hotkey sent people to a key that did nothing (review of 2026-09-18); Alt+Home is then the
-    // only way in, so the card says just that.
+    // hotkey sent people to a key that did nothing (review of 2026-09-18); the in-game Insert is then
+    // the only way in, so the card says just that.
     : route.optiInstalled && !popoutHotkeyUsable()
       ? {
           text: t('Press Insert in the game for the DLSS 5 panel'),
@@ -931,6 +925,16 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   // The route is only known now, and the poll may already have decided this card was running.
   if (runningGames.has(game.exePath)) applyRunningState(card, true);
 }
+// Where the game came from (main.js game:status -> library.storeFor), as a small neutral pill in the
+// card's icon row. Store names are proper nouns and stay as they are; a game added from a folder that
+// belongs to no store is the player's own. Nothing when the exe is gone: there is no install to read.
+const STORE_LABELS = { steam: 'Steam', epic: 'Epic', gog: 'GOG', xbox: 'Xbox', ea: 'EA', ubisoft: 'Ubisoft' };
+function storeTag(status) {
+  if (!status || status.exeMissing) return '';
+  const label = STORE_LABELS[status.store] || t('User');
+  return `<span class="card-store" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`;
+}
+
 const API_LABEL = { dx12: 'DX12', dx11: 'DX11', vulkan: 'Vulkan', opengl: 'OpenGL', dx10: 'DX10', dx9: 'DX9', dx8: 'DX8' };
 
 // Remove, with the exact list first: Remove never surprises anyone with what it took. The card's own
@@ -952,6 +956,9 @@ async function confirmRemoveOnCard(card, game, { title = t('Remove DLSS 5?'), le
       if (res.ok) {
         await removeLosslessProfile(game);
         launchIssues.delete(game.exePath);
+        // The ladder was about what is now gone: a fresh install starts it from the top again.
+        delete game.fallback;
+        saveGamesSoon();
       }
       toast(res.ok ? describeUninstall(res) : t("Couldn't remove OptiScaler: {error}", { error: res.error }));
       renderGrid();
@@ -1058,6 +1065,9 @@ function flipToConfirm(card, { title, detail, onConfirm, confirmLabel = t('Remov
   card.querySelector('.card-fail-status').classList.add('hidden');
   card.querySelector('.card-remove-title').textContent = title;
   card.querySelector('.card-remove-detail').textContent = detail;
+  // flipToFailure puts the whole failure text in the tooltip; a confirm has its own words.
+  card.querySelector('.card-remove-detail').title = '';
+  card.classList.remove('card-spin');
   const confirmBtn = card.querySelector('.btn-flip-confirm');
   confirmBtn.textContent = confirmLabel;
   confirmBtn.classList.toggle('btn-danger', danger);
@@ -1087,14 +1097,21 @@ function addonMenuReason(kind, code) {
   }
 }
 
+// Games whose pacing/RenoDX change is running: a second click used to start the same install again.
+const addonMenuBusy = new Set();
+
 function paintAddonMenu(card) {
   const st = addonMenuState.get(card._exePath);
+  const busy = addonMenuBusy.has(card._exePath);
   for (const b of card.querySelectorAll('.btn-menu-addon')) {
     const kind = b.dataset.kind;
     const name = kind === 'pacing' ? t('Frame pacing') : 'HDR (RenoDX)';
     const s = st && st.ok ? st[kind] : null;
     b.classList.toggle('menu-addon-on', !!(s && s.installed));
-    if (!s) { b.textContent = name; b.disabled = !!(st && !st.ok); b.title = ''; continue; }
+    // Not known yet (the answer is still coming) or being changed: shown as such and not pressable --
+    // an entry that looked ready and did nothing when clicked read as broken.
+    if (!st || busy) { b.textContent = `${name}: …`; b.disabled = true; b.title = ''; continue; }
+    if (!s) { b.textContent = name; b.disabled = true; b.title = ''; continue; }
     const blocked = !s.installed && !!s.blocker;
     b.disabled = blocked;
     b.textContent = s.installed ? t('{name}: On — turn off', { name }) : t('{name}: Off — turn on', { name });
@@ -1104,20 +1121,35 @@ function paintAddonMenu(card) {
 
 async function refreshAddonMenu(card, game) {
   paintAddonMenu(card);
-  try { addonMenuState.set(game.exePath, await window.api.panelAddonToggles(game.exePath)); } catch {}
+  // A failed read is stored as one, so the entries leave their "…" instead of waiting on nothing.
+  let st;
+  try { st = await window.api.panelAddonToggles(game.exePath); } catch (e) { st = { ok: false, error: String((e && e.message) || e) }; }
+  addonMenuState.set(game.exePath, st || { ok: false });
   paintAddonMenu(card);
+  const live = cardsByExe.get(game.exePath);
+  if (live && live !== card) paintAddonMenu(live);
 }
 
 async function toggleAddonFromMenu(card, game, kind) {
+  if (addonMenuBusy.has(game.exePath)) return;
   const st = addonMenuState.get(game.exePath);
   const s = st && st.ok ? st[kind] : null;
   if (!s) return;
   if (!s.installed && s.blocker) { toast(addonMenuReason(kind, s.blocker)); return; }
   const name = kind === 'pacing' ? t('Frame pacing') : 'RenoDX';
   toast(s.installed ? t('Removing…') : t('Fetching and placing…'));
-  const res = kind === 'pacing'
-    ? (s.installed ? await window.api.relimiterRemove(game.exePath) : await window.api.relimiterInstall(game.exePath))
-    : (s.installed ? await window.api.addonsRemove(game.exePath, 'renodx') : await window.api.addonsInstall(game.exePath, 'renodx'));
+  addonMenuBusy.add(game.exePath);
+  paintAddonMenu(card);
+  let res;
+  try {
+    res = kind === 'pacing'
+      ? (s.installed ? await window.api.relimiterRemove(game.exePath) : await window.api.relimiterInstall(game.exePath))
+      : (s.installed ? await window.api.addonsRemove(game.exePath, 'renodx') : await window.api.addonsInstall(game.exePath, 'renodx'));
+  } catch (e) {
+    res = { ok: false, error: String((e && e.message) || e) };
+  } finally {
+    addonMenuBusy.delete(game.exePath);
+  }
   if (!res || !res.ok) {
     toast(t('Could not change {name}: {error}', { name, error: (res && addonMenuReason(kind, res.code)) || (res && res.error) || t('unknown') }));
   } else {
@@ -1171,7 +1203,8 @@ function failureEvidence(game, { route, diag, run, issue }) {
   }
   // Game Help with no fix for what it found. No run is needed: an install it already knows cannot work
   // (a 32-bit game where the route has no pass, say) is a dead end the ladder should take over too.
-  if (diag && diag.ok && (diag.status === 'unavailable' || diag.status === 'unknown') && !DLSS_NOT_ASKED.includes(diag.code)) {
+  // After a rung, though, a finding with no run behind it is still about the setup before the swap.
+  if (diag && diag.ok && (diag.status === 'unavailable' || diag.status === 'unknown') && !DLSS_NOT_ASKED.includes(diag.code) && (runAt || !since)) {
     return { sig: `help:${(run && run.at) || 'norun'}:${diag.code}`, when: runAt, text: helpWords(diag), code: diag.code };
   }
   return null;
@@ -1189,26 +1222,71 @@ function fallbackOffers(game, route) {
   return offers;
 }
 
+// A report in progress, per game (exePath -> { html, busy }). Kept here and not on the card: the grid is
+// redrawn whenever the window regains focus -- which is exactly what coming back from GitHub's sign-in
+// page does -- and the progress used to go on writing into the detached old card, with a second click
+// on the new one starting a second sign-in (2026-09-25).
+const reportProgress = new Map();
+const reportLinks = new Map(); // link id -> issue URL, for the "Open it" link in a repainted status
+
+function paintReportProgress(exePath) {
+  const card = cardsByExe.get(exePath);
+  if (!card || !card._failure) return;
+  const p = reportProgress.get(exePath);
+  const send = card.querySelector('.card-fail-actions .btn-report-issue');
+  if (send) send.disabled = !!(p && p.busy);
+  // Only while the back face shows the failure, not a Remove confirm sharing it.
+  if (card.querySelector('.card-fail-actions').classList.contains('hidden')) return;
+  const status = card.querySelector('.card-fail-status');
+  status.innerHTML = p ? p.html : '';
+  status.classList.toggle('hidden', !(p && p.html));
+}
+
+document.addEventListener('click', (e) => {
+  const link = e.target.closest && e.target.closest('a[data-report-link]');
+  if (!link) return;
+  e.preventDefault();
+  const url = reportLinks.get(link.dataset.reportLink);
+  if (url) window.api.openExternal(url);
+});
+
+// One rung at a time per game: the buttons stay live for the length of the un-flip, and a second click
+// there started the same swap twice.
+const fallbackBusy = new Set();
+
 async function tryFallback(card, game, rung) {
-  const fb = fallbackOf(game);
-  card.classList.remove('flipped', 'card-spin');
-  launchIssues.delete(game.exePath);
-  const before = fb.tried.slice();
-  if (!fb.tried.includes(rung)) fb.tried.push(rung);
-  fb.at = Date.now();
-  saveGamesSoon();
-  if (rung === 'dxvk') {
-    const res = await applyLayerSwap(game, 'swap-to-dxvk');
-    if (res && res.ok && res.done) { toast(t('DXVK is in. Launch the game again to see if DLSS 5 works now.')); return; }
-  } else {
-    await switchNeuralPass(game, 'dfc');
-    if (game.neuralConsumer === 'dfc') { toast(t('Deep Fried Chicken is in. Launch the game again to see if it works now.')); return; }
+  if (fallbackBusy.has(game.exePath)) return;
+  fallbackBusy.add(game.exePath);
+  for (const b of card.querySelectorAll('.card-fail-actions .btn')) b.disabled = true;
+  try {
+    const fb = fallbackOf(game);
+    card.classList.remove('flipped', 'card-spin');
+    const issue = launchIssues.get(game.exePath);
+    launchIssues.delete(game.exePath);
+    const before = { tried: fb.tried.slice(), at: fb.at };
+    if (!fb.tried.includes(rung)) fb.tried.push(rung);
+    fb.at = Date.now();
+    saveGamesSoon();
+    if (rung === 'dxvk') {
+      const res = await applyLayerSwap(game, 'swap-to-dxvk');
+      if (res && res.ok && res.done) { toast(t('DXVK is in. Launch the game again to see if DLSS 5 works now.')); return; }
+    } else if (await switchNeuralPass(game, 'dfc')) {
+      // switchNeuralPass says whether the install went through; the folder says whether Chicken is what
+      // is in it now. Both, because the choice recorded on the game proved nothing (it is set first).
+      let route = null;
+      try { route = await window.api.gameRoute(game.exePath, game.detectedPath); } catch {}
+      if (!route || route.consumerHere === 'dfc') { toast(t('Deep Fried Chicken is in. Launch the game again to see if it works now.')); return; }
+    }
+    // Cancelled or refused: the rung is still there to try, and the ladder is exactly as it was --
+    // the old `at` too, or evidence the last rung had already ruled out would count again.
+    fb.tried = before.tried;
+    fb.at = before.at;
+    if (issue && !launchIssues.has(game.exePath)) launchIssues.set(game.exePath, issue);
+    saveGamesSoon();
+    renderGrid();
+  } finally {
+    fallbackBusy.delete(game.exePath);
   }
-  // Cancelled or refused: the rung is still there to try.
-  fb.tried = before;
-  fb.at = 0;
-  saveGamesSoon();
-  renderGrid();
 }
 
 function flipToFailure(card, game, { spin = false } = {}) {
@@ -1242,14 +1320,26 @@ function flipToFailure(card, game, { spin = false } = {}) {
     card.querySelector('.card-remove-title').textContent = tried.length
       ? t('Nothing worked on {name} yet', { name: game.name })
       : t('DLSS 5 did not work on {name}', { name: game.name });
-    const send = button(t('Report issue'), 'btn-primary', async () => {
-      send.disabled = true;
+    button(t('Report issue'), 'btn-primary btn-report-issue', async () => {
+      const exePath = game.exePath;
+      if (reportProgress.has(exePath) && reportProgress.get(exePath).busy) return;
+      reportProgress.set(exePath, { html: '', busy: true });
+      paintReportProgress(exePath);
       try {
-        await sendGameFailure(game, { ...f.diag, code: (f.diag && f.diag.code) || f.code, run: f.run }, {
-          setStatus: (html) => { status.innerHTML = html; status.classList.toggle('hidden', !html); },
+        // An early exit is named as one: the diagnosis beside it ('nr-ran', say) is about the run before.
+        const code = f.code === 'early-exit' ? 'early-exit' : (f.diag && f.diag.code) || f.code;
+        await sendGameFailure(game, { ...f.diag, code, run: f.run }, {
+          setStatus: (html) => { reportProgress.set(exePath, { html, busy: true }); paintReportProgress(exePath); },
           tried,
         });
-      } finally { send.disabled = false; }
+      } catch (e) {
+        reportProgress.set(exePath, { html: escapeHtml(t('Could not send: {error}', { error: String((e && e.message) || e) })), busy: true });
+      } finally {
+        const last = reportProgress.get(exePath);
+        if (last && last.html) reportProgress.set(exePath, { html: last.html, busy: false });
+        else reportProgress.delete(exePath);
+        paintReportProgress(exePath);
+      }
     });
     if (f.route && f.route.optiInstalled) {
       button(t('Restore the original files'), 'btn-ghost', () => { card.classList.remove('card-spin'); confirmRemoveOnCard(card, game, { title: t('Restore the original files?'), confirmLabel: t('Restore originals') }); });
@@ -1258,27 +1348,47 @@ function flipToFailure(card, game, { spin = false } = {}) {
   button(t('Not now'), 'btn-ghost', () => card.classList.remove('flipped', 'card-spin'));
   card.classList.toggle('card-spin', spin);
   card.classList.add('flipped');
+  paintReportProgress(game.exePath);
 }
 
 // The front's problem row for a failure: short words, and the button that turns the card again.
 function failureProblem(card, game, evidence) {
   const next = fallbackOffers(game, (card._failCtx || {}).route).length ? t('What to try next') : t('Report issue');
-  return { bad: true, failure: true, text: t('DLSS 5 did not work here'), title: evidence.text, action: { label: next, run: () => flipToFailure(card, game) } };
+  return { bad: true, text: t('DLSS 5 did not work here'), title: evidence.text, action: { label: next, run: () => flipToFailure(card, game) } };
 }
 
 // Turns the card for a failure it has not shown yet; one it already showed stays on the front, with the
 // problem row's button to turn it again.
 function showFailure(card, game, evidence, ctx) {
   card._failure = { ...evidence, ...ctx };
+  const exePath = game.exePath;
+  // A report still going on this game: the grid was redrawn under it (the window regaining focus after
+  // GitHub's page does that), so the new card turns straight back to where the progress is shown.
+  const report = reportProgress.get(exePath);
+  if (report && report.busy) { flipToFailure(card, game); return; }
   const fb = fallbackOf(game);
   if (fb.seen === evidence.sig) return;
-  fb.seen = evidence.sig;
-  saveGamesSoon();
   // Only a failure from the last day turns the card on its own. Opening this build for the first time
   // would otherwise spin every card with an old crash in its log at once; those keep the row's button.
-  if (!evidence.when || Date.now() - evidence.when > 24 * 3600 * 1000) return;
-  // After the grid has painted, so the turn is seen rather than landing already turned.
-  setTimeout(() => { if (card.isConnected) flipToFailure(card, game, { spin: true }); }, 350);
+  if (!evidence.when || Date.now() - evidence.when > 24 * 3600 * 1000) {
+    fb.seen = evidence.sig;
+    saveGamesSoon();
+    return;
+  }
+  // After the grid has painted, so the turn is seen rather than landing already turned. The card is
+  // looked up again then: a redraw in those 350 ms replaced this one, and marking the failure seen
+  // before a turn that never happened lost the spin for good. A card already turned (a Remove confirm
+  // on the shared back face) is not spun under the player; the next render tries again.
+  setTimeout(() => {
+    const live = cardsByExe.get(exePath);
+    if (!live || !live.isConnected || !live._failure || live._failure.sig !== evidence.sig) return;
+    if (live.classList.contains('flipped')) return;
+    const g = live._game || game;
+    flipToFailure(live, g, { spin: true });
+    const liveFb = fallbackOf(g);
+    liveFb.seen = evidence.sig;
+    saveGamesSoon();
+  }, 350);
 }
 
 function escapeHtml(str) {
@@ -1294,8 +1404,6 @@ const helpModal = $('#help-modal');
 let helpGame = null;
 let helpFixesTried = [];
 let helpDiag = null;
-let helpPoll = null;
-let helpLastRunAt = null;
 // The fixes applied this session, per game, as { id, runAt } (see gamehelp.js): the modal and
 // the card read the same list, so a card does not offer "Fix it" again for a fix that is only
 // waiting on the next run.
@@ -1360,7 +1468,7 @@ function helpWords(diag) {
     case 'ok-exit-crash': return t('Neural Rendering ran ({count} passes). The game crashed only on the way out, inside NVIDIA\'s shutdown, which does not affect play.', v);
     case 'd3d11-native': return t('DLSS was created on the native D3D11 path, so the Neural Rendering pass never ran. Dx11Upscaler must be dlss_12. Reconfigure writes it.');
     case 'nr-disabled': return t('DLSS ran but Neural Rendering is switched off in OptiScaler.ini. Reconfigure turns it on.');
-    case 'dlss-no-nr': return t('DLSS was created and Neural Rendering is on, yet the pass never ran. This is not a known case. Save the bundle to share, or ask the AI.');
+    case 'dlss-no-nr': return t('DLSS was created and Neural Rendering is on, yet the pass never ran. This is not a known case. Report it with Report issue on the card (it sends the logs), or ask the AI.');
     case 'foreign-optiscaler': return t('Another OptiScaler build is in this folder as {file}, and it is not the one this app installed. That copy is what the game loads and what answers the DLSS calls -- an upstream OptiScaler has no neural pass, so DLSS 5 can never run while it is there, however complete everything else looks. Delete {file} (it is not ours to remove for you), then press Install here.', v);
     case 'asi-optiscaler': return t('OptiScaler is here as {file}, an ASI loader\'s plugin. This app never installs it that way -- it always uses a proxy DLL name -- so that copy is not ours, and it is the one the game loads and the one that answers the DLSS calls. Whatever this app has put beside it makes no difference while it is there. Remove {file} (it is not ours to remove for you), then press Install here.', v);
     case 'dlss-runtime-missing': return t('OptiScaler switched DLSS off a second into the run, because nvngx_dlss.dll is not beside the game exe -- its log says so in as many words. Nothing this app builds can make a DLSS call without it: not the Feeder\x27s synthesised one, not REFramework\x27s upscaler on a Resident Evil, not a DLSS 5 only profile. On this route the deploy fetches and places it, so running that again puts it back.');
@@ -1369,7 +1477,7 @@ function helpWords(diag) {
     case 'feeder-incomplete': return t('The Feeder is deployed here, but not all of it arrived: {missing} still missing. The add-on cannot load without those, so nothing feeds DLSS and the game runs as if none of this were installed. Install again puts them back. If it keeps failing at the same piece, the download is being blocked rather than the game refusing it.', v);
     case 'feeder-technique': return t('DLSS initialised but the Feeder\'s shader technique was missing. Install again to redeploy the Feeder.');
     case 'luma-select-dlss': return t('Luma UE is deployed but no DLSS call happened. In-game, press Home for Luma\'s overlay and select DLSS as the upscaler, in gameplay. Then check again.');
-    case 'init-no-feature': return t('DLSS initialised but no feature was ever created. This is not a known case. Save the bundle to share, or ask the AI.');
+    case 'init-no-feature': return t('DLSS initialised but no feature was ever created. This is not a known case. Report it with Report issue on the card (it sends the logs), or ask the AI.');
     case 'vulkan-layer-missing': return t('On Vulkan, the DLSS5 Feeder runs inside ReShade, and ReShade only reaches a Vulkan game as a layer installed for the whole PC. None is installed, so the Feeder never loaded and nothing called DLSS. Run ReShade\'s own installer (the version with add-on support), pick this exe, choose Vulkan, then Install here again. Or switch the emulator to Direct3D 11, if it has it, and pick DX11 in Edit: that needs no layer. Not OpenGL: DLSS 5 cannot draw its panel there.');
     case 'vulkan-layer-no-addon': return t('ReShade is installed as a Vulkan layer on this PC, but a build without add-on support, so the DLSS5 Feeder (an add-on) cannot load and nothing called DLSS. Reinstall ReShade with add-on support (its installer: "Enable loading of add-ons"), then Install here again.');
     case 'host32-opti-dll-gone': return t('OptiScaler\'s own file is missing from the helper folder. This app put it there -- its install record lists host64\\winmm.dll -- and it is not on disk now, so something removed it after the install. That is almost always antivirus: a 64-bit winmm.dll appearing beside a game exe looks exactly like a DLL hijack. Everything else is fine, which is why the Feeder\'s own window opens and the DLSS 5 overlay is not in it. Add an exclusion for this game\'s folder -- Windows Security > Virus & threat protection > Manage settings > Exclusions -- and then press Install here again. Do the exclusion first: without it, Install just puts the file back for it to be taken again. Protection history may also offer Allow for the item, but a cloud detection (a name ending in !cl) is often deleted rather than held, so do not count on finding one.');
@@ -1390,7 +1498,7 @@ function helpWords(diag) {
     case 'dxvk-crash': return t('The game still crashes inside {dll} with either layer in front of it. Remove puts the folder back as it was.', v);
     case 'dxvk-layer-missing': return t('DXVK presents this game through Vulkan, so ReShade -- and the DLSS5 Feeder add-on that rides on it -- can only reach it as ReShade\'s 32-bit Vulkan layer. That layer is {why} for {exe}, so the add-on never loads and DLSS 5 cannot run. Fix it runs ReShade\'s own setup again (it asks for administrator permission and installs the layer for the whole PC, switched on for this game).', { ...v, why: v.why === 'no-addon' ? t('a build without add-on support') : v.why === 'not-listed' ? t('installed but not switched on') : t('not installed') });
     case 'dxvk-reshade-ini-missing': return t('DXVK presents this game through Vulkan, and ReShade\'s Vulkan layer only starts in a game whose folder has a ReShade.ini -- this one has none any more, so the DLSS5 Feeder add-on cannot load. Install puts the Feeder\'s files, ReShade.ini among them, back.');
-    case 'dxvk-two-reshades': return t('{file} beside the game is ReShade again, while DXVK sends the game through ReShade\'s Vulkan layer too. Two ReShades in one game fight over the frame. Switch the game back off DXVK (More…), or move {file} out of the folder.', v);
+    case 'dxvk-two-reshades': return t('{file} beside the game is ReShade again, while DXVK sends the game through ReShade\'s Vulkan layer too. Two ReShades in one game fight over the frame. Switch the game back off DXVK (the card\'s ⋯ menu), or move {file} out of the folder.', v);
     case 'dxvk-addon-not-loaded': return t('The game ran under DXVK and ReShade\'s Vulkan layer loaded (it wrote ReShade.log), but the DLSS5 Feeder add-on did not: dlss5-feed.log has not been written since the swap. Open ReShade\'s overlay in the game (Home) and look at its Add-ons tab for DLSS 5 Feed and any error beside it; ReShade.log in the game folder names add-ons it refused. If it is not there at all, switch the game back off DXVK.', v);
     // Worded for both routes DXVK serves: in place of dgVoodoo2 (DX8/9) or of native Direct3D (32-bit DX10/11).
     case 'dxvk-needs-run': return t('DXVK is in front of the game, and it has not been run since. Launch it, reach gameplay, play a minute and quit. If ReShade.log and dlss5-feed.log in the game folder are still older than the swap after that, ReShade\'s Vulkan layer did not attach to this game.');
@@ -1409,7 +1517,7 @@ function helpWords(diag) {
     case 'no-hook': return t('Nothing called DLSS on the last run, so nothing was hooked. Check the game\'s own graphics settings have DLSS or DLAA selected. If they do, this is not a known case: save the bundle or ask the AI.');
     case 'ue-crash-luma': return t('The game crashed (Unreal crash report: {message}) with Luma UE deployed, and Luma is not verified on this game. Remove Luma UE and try the Feeder route.', { message: (v.message || '').slice(0, 120) });
     case 'ue-crash-feeder': return t('The game crashed (Unreal crash report: {message}) with the Feeder deployed. Remove the Feeder and check whether it runs clean.', { message: (v.message || '').slice(0, 120) });
-    case 'ue-crash': return t('The game crashed (Unreal crash report: {message}). No rule covers this. Save the bundle to share, or ask the AI.', { message: (v.message || '').slice(0, 120) });
+    case 'ue-crash': return t('The game crashed (Unreal crash report: {message}). No rule covers this. Report it with Report issue on the card (it sends the logs), or ask the AI.', { message: (v.message || '').slice(0, 120) });
     case 'luma-available': return t('The DLSS5 Feeder is running this game, but Luma-Framework has a mod for it that adds real DLSS with the game\'s own motion vectors -- sharper in motion than the Feeder\'s estimate. Switching removes the Feeder and sets up Luma (after you confirm its licence). Luma runs on DirectX 11.');
     case 'luma-needs-dx11': return t('Luma is set up here, but the game last ran on DirectX 12, where Luma does not load. Switch the game to DirectX 11 in its own graphics settings, then launch again.');
     case 'driver-outdated': return (v.min
@@ -1426,7 +1534,7 @@ function helpWords(diag) {
     case 'smooth-motion-stacked': return t('Two frame generators are running on this game. The DLSS5 Feeder saw NVIDIA Smooth Motion active in the process on the last run, and this app has {generator} set up here as well. Smooth Motion is frame generation done by the driver itself, after the frame leaves the game, so it does not replace the other one -- the two interleave their generated frames, which costs latency and shows as doubled motion artefacts. Turn one of them off: Smooth Motion is per game in the NVIDIA app, under Graphics -- Program Settings -- Driver Settings. Nothing here can switch it for you; NVIDIA publishes no setting for it that a program can read or write.', v);
     case 'wrapper-crash-swap': return t('The game crashed as it started, inside dgVoodoo2\'s {dll} -- before the DLSS5 Feeder or OptiScaler had done anything. No dgVoodoo2 setting is known to get past this: where it was first seen, every setting tried hung or crashed the same way. But dgVoodoo2 is not the only way to present DirectX 8/9 to a modern pipeline -- DXVK does the same job by a different route, and on one report the same game crashed under dgVoodoo2 on one machine while running through DXVK on another. Worth trying before giving up. Whatever dgVoodoo2 displaced is handed back first, so this can be undone; run the game afterwards and check here again.', v);
     case 'dgvoodoo-crash': return t('The game crashed as it started, inside dgVoodoo2\'s {dll} -- before the DLSS5 Feeder or OptiScaler had done anything. This DirectX 9 route cannot work without dgVoodoo2, and no dgVoodoo2 setting is known to get past this: where it was first seen, every setting tried hung or crashed the same way while the game ran fine without dgVoodoo2. The same fault can also show as a black screen that never responds, which leaves no log. Removing puts the game back exactly as it was.', v);
-    case 'wrapper-crash': return t('The game crashed as it started, inside {dll} in its own folder -- a DirectX wrapper this app did not place. No rule covers this. Save the bundle to share, or ask the AI.', v);
+    case 'wrapper-crash': return t('The game crashed as it started, inside {dll} in its own folder -- a DirectX wrapper this app did not place. No rule covers this. Report it with Report issue on the card (it sends the logs), or ask the AI.', v);
     case 'feeder-mv-broken': return t('The Feeder is deployed here, but its motion-vector shader is {why} ({provider}). DLSS is then fed no motion at all: sharp standing still, smearing the moment you move. Re-deploying writes the provider, its shader and the preset from one answer -- the default is VORT now, which compiles on the ReShade this app installs.', v);
     case 'feed-no-motion': return t('The Feeder ran and DLSS got no motion vectors. The Feeder\'s own log says: {detail} Re-deploying rewrites the provider, its shader, both DLSS5_MV_PROVIDER levels and the preset together.', v);
     // The 32-bit route: the provider is switched in place (legacy:setMvProvider), not redeployed.
@@ -1441,8 +1549,8 @@ function helpWords(diag) {
     case 'sr-backend-fallback': return v.why
       ? t('DLSS could not be created and OptiScaler silently upscaled with {backend} instead. The neural pass still ran on top of it, which is why this looks like a working run -- but the game is not running DLSS. NVIDIA\x27s own reason for refusing is {result}, {why}. One known cause worth ruling out first: a DLSS Override set for this game in the NVIDIA App makes the driver load its own DLSS out of C:\\ProgramData\\NVIDIA\\NGX\\models rather than the copy here, and when that one cannot be resolved DLSS refuses exactly like this. Turn the override off for the game and launch again. If it still refuses, send the report with nvngx.log -- NGX\x27s own log, beside the exe, and the only thing that says more than the code does.', v)
       : t('DLSS could not be created ({result}) and OptiScaler silently upscaled with {backend} instead. The neural pass still ran on top of it, which is why this looks like a working run -- but the game is not running DLSS. Check nvngx_dlss.dll is beside the exe and that the game\x27s own settings ask for DLSS; if both are right, OptiScaler.log has the NGX result for a bug report.', v);
-    case 'fix-failed': return t('The fix "{fix}" was applied and the result did not change. DLSS 5 is not currently available for this game with what this app can do on its own. Save the bundle to share, or ask the AI.', v);
-    default: return t('No rule covers this run ({verdict}). Save the bundle to share, or ask the AI.', { verdict: v.verdict || diag.code });
+    case 'fix-failed': return t('The fix "{fix}" was applied and the result did not change. DLSS 5 is not currently available for this game with what this app can do on its own. Report it with Report issue on the card (it sends the logs), or ask the AI.', v);
+    default: return t('No rule covers this run ({verdict}). Report it with Report issue on the card (it sends the logs), or ask the AI.', { verdict: v.verdict || diag.code });
   }
 }
 
@@ -1462,7 +1570,7 @@ function helpSteps(diag) {
   const v = diag.vars || {};
   const launch = t('Launch the game and check again');
   const fixIt = (what) => [what, launch];
-  const report = [t('Save the bundle (More…)'), t('Report it on GitHub (More…)')];
+  const report = [t('Still not working? Press Report issue on the card -- it sends the logs')];
   switch (diag.code) {
     case 'driver-outdated': return [v.min ? t('Update the NVIDIA driver ({min} or newer)', v) : t('Update the NVIDIA driver'), t('Restart the PC'), launch];
     case 'dfc-here': return [t('Launch the game'), t('Press Home and open the Deep Fried Chicken tab')];
@@ -1476,12 +1584,12 @@ function helpSteps(diag) {
     case 'nr-model-crash': return [
       t("Switch the game to Direct3D 11 if it has that option"),
       ...(v.smoothMotion ? [t('Turn off NVIDIA Smooth Motion for this game')] : []),
-      t('Still crashing? Save the bundle and report it'),
+      t('Still crashing? Press Report issue on the card'),
     ];
     case 'foreign': return fixIt(t('Press Fix it to remove {tool}', v));
     case 'foreign-optiscaler': return [t('Delete {file} from the game folder', v), t('Press Install')];
     case 'asi-optiscaler': return [t('Remove {file} from the ASI loader', v), t('Press Install')];
-    case 'asi-loader-blind': return [t('Check the .asi plugins in the game folder: {files}', v), t('Save the bundle or ask the AI')];
+    case 'asi-loader-blind': return [t('Check the .asi plugins in the game folder: {files}', v), t('Or press Report issue on the card, or ask the AI')];
     case 'feeder-misdeployed': case 'ue-crash-feeder': return fixIt(t('Press Fix it (removes the Feeder)'));
     case 'luma-known-bad': case 'ue-crash-luma': return fixIt(t('Press Fix it (removes Luma UE)'));
     case 'optiscaler-no-native-dlss': return [t('Turn DLSS or DLAA on in the game, if it has one', v), t('If it has none, delete {file} from the game folder', v), t('Press Install')];
@@ -1525,7 +1633,7 @@ function helpSteps(diag) {
     case 'vulkan-layer-blacklisted': return [t('Add {arg} to the launch arguments', { arg: '+r_allowBlackListedLayers 1' }), t('Steam: Properties > Launch Options. A shortcut: after the exe path'), launch];
     case 'host32-opti-dll-gone': return [t('Windows Security > Exclusions: add this game\'s folder'), t('Press Install here again'), t('Protection history may also offer Allow -- but may show nothing')];
     case 'host32-exe-gone': return [t('Windows Security > Exclusions: add this game\'s folder'), t('Press Install here again'), t('Protection history may also offer Allow -- but may show nothing')];
-    case 'feed-host-gone': return [t('Open host64\\dlss5-feed-host.log beside the game -- it names the reason'), t('Save the bundle to share: it carries that log')];
+    case 'feed-host-gone': return [t('Open host64\\dlss5-feed-host.log beside the game -- it names the reason'), t('Report issue on the card sends that log too')];
     case 'feed-host-startup': return fixIt(t('Press Install (rebuilds the helper and the add-on together)'));
     case 'opti-proxy-name': return fixIt(t('Press Fix it (moves OptiScaler to {to})', v));
     case 'opti-not-routed': return fixIt(t('Press Fix it (restores the NGX redirect keys)'));
@@ -1537,7 +1645,7 @@ function helpSteps(diag) {
     case 'dxvk-crash-native': return [t('Press Fix it to take DXVK back out'), launch];
     case 'dxvk-layer-missing': return [t('Press Fix it and allow the administrator prompt'), launch];
     case 'dxvk-reshade-ini-missing': return [t('Press Install on the card'), launch];
-    case 'dxvk-two-reshades': return [t('Switch the game back off DXVK (More…), or move the extra ReShade out'), launch];
+    case 'dxvk-two-reshades': return [t('Switch the game back off DXVK (the card\'s ⋯ menu), or move the extra ReShade out'), launch];
     case 'dxvk-addon-not-loaded': return [t('In the game, press Home and check ReShade\'s Add-ons tab for DLSS 5 Feed'), t('Read ReShade.log in the game folder'), ...report];
     case 'dxvk-needs-run': return [t('Launch the game'), t('Play a minute of actual gameplay, then quit'), t('Come back here')];
     case 'dxvk-panel-fullscreen': return [t('Set the game to borderless or windowed in its own options'), t('Restart it and press Insert')];
@@ -1798,8 +1906,6 @@ function fgSuggestionText(fg) {
   }
 }
 
-function stopHelpPoll() { if (helpPoll) { clearInterval(helpPoll); helpPoll = null; } $('#help-waiting').classList.add('hidden'); }
-
 async function openHelp(game) {
   helpGame = game;
   helpFixesTried = helpTriedFor(game);
@@ -1813,14 +1919,10 @@ async function openHelp(game) {
   $('#help-ai-out').classList.add('hidden');
   $('#help-ai-out').textContent = '';
   helpModal.classList.remove('hidden');
-  const diag = await refreshHelp();
-  // Closed, or reopened on another game, while that ran: what follows belongs to that one now.
-  if (helpGame !== game) return;
-  helpLastRunAt = diag && diag.run && diag.run.at ? diag.run.at : null;
-
+  await refreshHelp();
 }
 
-function closeHelp() { stopHelpPoll(); helpModal.classList.add('hidden'); helpGame = null; }
+function closeHelp() { helpModal.classList.add('hidden'); helpGame = null; }
 
 $('#help-close').addEventListener('click', closeHelp);
 helpModal.addEventListener('click', (e) => { if (e.target === helpModal) closeHelp(); });
@@ -1953,6 +2055,28 @@ window.api.onReportSignIn((result) => {
   if (reportSignInWaiter) { reportSignInWaiter(result); reportSignInWaiter = null; }
 });
 
+// One device flow at a time, shared by every Report issue that needs it: a second press while the first
+// code is waiting reuses that code rather than starting a flow that makes the first one worthless.
+// Resolves { flow, result } where result is the promise of the sign-in's outcome.
+let reportSignInPending = null;
+function reportSignInShared() {
+  if (reportSignInPending) return reportSignInPending;
+  const pending = (async () => {
+    let flow;
+    try { flow = await window.api.reportSignIn(); } catch (e) { flow = { ok: false, error: String((e && e.message) || e) }; }
+    if (!flow || !flow.ok) return { flow: flow || { ok: false, error: '?' }, result: Promise.resolve({ ok: false, error: flow && flow.error }) };
+    const result = new Promise((resolve) => {
+      // Never left hanging: a waiter this replaces is told it was superseded.
+      if (reportSignInWaiter) reportSignInWaiter({ ok: false, superseded: true });
+      reportSignInWaiter = resolve;
+    });
+    return { flow, result };
+  })();
+  reportSignInPending = pending;
+  pending.then(({ result }) => result).finally(() => { if (reportSignInPending === pending) reportSignInPending = null; });
+  return pending;
+}
+
 // The whole send, from the card's "Report issue" once every other rung is
 // tried. setStatus takes HTML (already escaped here) for wherever the progress is shown. `tried` names
 // what the card's ladder already tried, so the report says it rather than the maintainer asking.
@@ -1978,12 +2102,14 @@ async function sendGameFailure(game, diag, { setStatus, tried = [] } = {}) {
       return;
     }
     if (!status.signedIn) {
-      const flow = await window.api.reportSignIn();
+      const { flow, result: outcome } = await reportSignInShared();
       if (!flow.ok) { toast(t('GitHub sign-in failed: {error}', { error: flow.error })); return; }
       try { await navigator.clipboard.writeText(flow.userCode); } catch {}
       setSendStatus(`${escapeHtml(t('Sign in once: on the GitHub page that opened, enter this code (it is already copied):'))} <strong class="help-send-code">${escapeHtml(flow.userCode)}</strong>`);
-      const result = await new Promise((resolve) => { reportSignInWaiter = resolve; });
-      if (!result.ok) { setSendStatus(escapeHtml(t('GitHub sign-in failed: {error}', { error: result.error }))); return; }
+      // Toasted as well: the card's back face is small, and a redraw can put the card on its front.
+      toast(t('GitHub sign-in code: {code} (copied). Enter it on the GitHub page that opened.', { code: flow.userCode }));
+      const result = await outcome;
+      if (!result.ok) { setSendStatus(escapeHtml(result.superseded ? '' : t('GitHub sign-in failed: {error}', { error: result.error }))); return; }
     }
     setSendStatus(escapeHtml(t('Gathering the report…')));
     const { title, body } = withTried(await buildGameReport(game, diag));
@@ -1996,10 +2122,11 @@ async function sendGameFailure(game, diag, { setStatus, tried = [] } = {}) {
     if (!res.ok) { setSendStatus(escapeHtml(t('Could not send: {error}', { error: res.error }))); return; }
     if (res.cancelled) { setSendStatus(''); return; }
     // An id per send: the status can be on a card as well as in Game Help, and both can be on screen.
+    // Opened through a delegated handler (reportLinks), so the link still works after the status is
+    // painted again onto a redrawn card.
     const linkId = `send-link-${Date.now()}`;
-    setSendStatus(`${escapeHtml(t('Sent as issue #{number}. The maintainer will reply there.', { number: res.issueNumber }))} <a href="#" id="${linkId}">${escapeHtml(t('Open it'))}</a>`);
-    const link = document.getElementById(linkId);
-    if (link) link.addEventListener('click', (e) => { e.preventDefault(); window.api.openExternal(res.issueUrl); });
+    reportLinks.set(linkId, res.issueUrl);
+    setSendStatus(`${escapeHtml(t('Sent as issue #{number}. The maintainer will reply there.', { number: res.issueNumber }))} <a href="#" data-report-link="${linkId}">${escapeHtml(t('Open it'))}</a>`);
   }
 }
 
@@ -2032,10 +2159,9 @@ $('#help-ai').addEventListener('click', async () => {
   refreshHelp();
 });
 
-// ── Checks before Install, Analyse game, Verify install ───────────────────────
-// One dialog for all three (src/preflight.js, src/probe.js, src/verify.js). Analyse and Verify start
-// the game and close it again; nothing here focuses the game or sends it input, and the progress is
-// written into this window whether it is in front or not.
+// ── Checks before Install ─────────────────────────────────────────────────────
+// src/preflight.js's findings, shown before Install goes ahead. (Analyse game and Verify install used
+// the same dialog; both are gone, 2026-09-25.)
 const checksModal = $('#checks-modal');
 let checksResolve = null;
 let checksExe = null;
@@ -2120,134 +2246,29 @@ async function preflightBeforeInstall(game) {
   return new Promise((resolve) => { checksResolve = resolve; });
 }
 
-const PROBE_API_NAMES = { dx8: 'DirectX 8', dx9: 'DirectX 9', dx10: 'DirectX 10', dx11: 'DirectX 11', dx12: 'DirectX 12', vulkan: 'Vulkan', opengl: 'OpenGL' };
-const baseName = (p) => String(p || '').split(/[\\/]/).pop();
-
-window.api.onProbeProgress((p) => {
-  if (!p || p.exePath !== checksExe) return;
-  const status = $('#checks-status');
-  if (p.phase === 'launching') status.textContent = p.method === 'etw' ? t('Starting the game…') : t('Starting the game (watching without administrator rights)…');
-  else if (p.phase === 'watching') status.textContent = t('Watching: {elapsed} of {seconds} s. Leave the game alone; it is closed by itself.', { elapsed: p.elapsed, seconds: p.seconds });
-  else if (p.phase === 'closing') status.textContent = t('Closing the game…');
-  else if (p.phase === 'reading') status.textContent = t('Reading what was seen…');
-});
-
-function analyseGame(game) {
-  openChecks({
-    exePath: game.exePath,
-    title: t('Analyse game -- {name}', { name: game.name }),
-    intro: t('Starts the game once, as it is, for about 25 seconds and writes down what it really loads: the graphics API, which DLLs from where, and which process hands off to which. Nothing is installed or changed, and the game is closed at the end. Leave it alone while it runs.'),
-  });
-  showChecksGo(t('Start'), async () => {
-    $('#checks-go').classList.add('hidden');
-    const res = await window.api.probeGame(game.exePath, game.launcher);
-    if (checksExe !== game.exePath) return;
-    const status = $('#checks-status');
-    if (!res.ok) {
-      status.textContent = res.cancelled ? t('Not launched.') : t('Analyse game failed: {error}', { error: res.error });
-      return;
-    }
-    const s = res.summary || {};
-    if (s.api) {
-      addCheckItem('info', t('Graphics API: {api} ({evidence}).', { api: PROBE_API_NAMES[s.api] || s.api, evidence: s.apiEvidence || '' }));
-    } else {
-      addCheckItem('warn', t('No graphics API was seen. The game may not have reached its renderer in time -- a launcher waiting for a sign-in looks like this.'));
-    }
-    if (s.handoff && s.realExe) addCheckItem('info', t('The launch hands off to {exe}: that is the process that really runs the game.', { exe: baseName(s.realExe) }));
-    if ((s.ignoredProxies || []).length) addCheckItem('warn', t('{files} sits beside the exe, but the game loaded Windows\' own copy instead.', { files: s.ignoredProxies.join(', ') }));
-    if (res.proxyHint) addCheckItem('info', t('DLSS 5 goes in as {name} for this game.', { name: res.proxyHint }));
-    if ((s.antiCheat || []).length) addCheckItem('warn', t('Anti-cheat seen: {list}.', { list: s.antiCheat.join(', ') }));
-    if ((s.overlays || []).length) addCheckItem('warn', t('Overlays seen: {list}.', { list: s.overlays.join(', ') }));
-    if (s.method === 'poll') addCheckItem('info', t('Watched without administrator rights, by listing modules once a second: a DLL that loads and unloads quickly, and most of a 32-bit game\'s modules, can be missed.'));
-    status.textContent = t('Done. The card uses what was seen from now on, until the game is updated.');
-    renderGrid();
-  });
-}
-
-window.api.onVerifyProgress((p) => {
-  if (!p || p.exePath !== checksExe) return;
-  const status = $('#checks-status');
-  if (p.phase === 'waiting') status.textContent = t('Waiting for the game to start…');
-  else if (p.phase === 'running') status.textContent = t('Running: {elapsed} of {seconds} s. Leave the game alone; it is closed by itself.', { elapsed: p.elapsed, seconds: p.seconds });
-  else if (p.phase === 'closing') status.textContent = t('Closing the game…');
-  else if (p.phase === 'reading') status.textContent = t('Reading the logs…');
-});
-
-function verifyInstall(game) {
-  openChecks({
-    exePath: game.exePath,
-    title: t('Verify install -- {name}', { name: game.name }),
-    intro: t('Starts the game for about 30 seconds, reads its logs the way Game Help does, and closes it again. Leave the game alone while it runs.'),
-  });
-  showChecksGo(t('Start'), async () => {
-    $('#checks-go').classList.add('hidden');
-    const res = await window.api.verifyInstall(game.exePath, game.launcher, game.detectedPath || null);
-    if (checksExe !== game.exePath) return;
-    const status = $('#checks-status');
-    if (!res.ok) {
-      status.textContent = res.cancelled ? t('Not launched.') : t('Verify install failed: {error}', { error: res.error });
-      return;
-    }
-    const v = res.verdict;
-    status.textContent = '';
-    switch (v.code) {
-      case 'ran':
-        addCheckItem('ok', t('DLSS 5 ran: {frames} frames in the log.', { frames: v.frames }));
-        break;
-      case 'not-started':
-        addCheckItem('warn', t('The game never appeared within a minute. If a launcher is waiting for you, finish there and verify again.'));
-        break;
-      case 'exited':
-        addCheckItem('warn', t('The game closed itself during the check -- often a launcher or a first-run prompt. Start it once by hand, then verify again.'));
-        break;
-      case 'no-log':
-        addCheckItem('warn', t('The game ran but wrote no new log, so OptiScaler may not have loaded. Game Help can say why.'));
-        showChecksGo(t('Game Help'), () => { closeChecks(); openHelp(game); });
-        break;
-      case 'diagnosis':
-        addCheckItem('warn', v.diag ? helpWords(v.diag) : t('The game ran, and the logs say something is off.'));
-        showChecksGo(t('Game Help'), () => { closeChecks(); openHelp(game); });
-        break;
-      case 'crash':
-        // Offered, not done: the crash can have a cause that has nothing to do with the install, and
-        // the files may be wanted for a report.
-        addCheckItem('block', t('The game crashed during the check.') + (v.diag ? ' ' + helpWords(v.diag) : ''));
-        showChecksGo(t('Uninstall DLSS 5'), async () => {
-          if (!window.confirm(t('Remove everything this app put in the game folder?'))) return;
-          $('#checks-go').disabled = true;
-          const un = await window.api.runUninstall(game.exePath);
-          if (un.ok) await removeLosslessProfile(game);
-          toast(un.ok ? describeUninstall(un) : t("Couldn't remove OptiScaler: {error}", { error: un.error }));
-          closeChecks();
-          renderGrid();
-        }, { danger: true });
-        break;
-      default:
-        addCheckItem('warn', t('The game ran, and the logs say something is off.'));
-    }
-  });
-}
-
+// Resolves true only when what was asked for is now in the folder; every refusal, cancel and failure
+// resolves false. The ladder's "Try with Deep Fried Chicken" reads this: it used to read the choice
+// it had just recorded, so a failed or cancelled switch counted as done (2026-09-25).
 async function installGame(game) {
   // Normally already on disk (bundled, then kept current); fetched here only if that failed.
   const engineId = engineOf(game);
   const ready = await ensureEngine(engineId);
   if (!ready.ok) {
     toast(t('Could not set up the {engine} build: {error}', { engine: engineLabel(engineId), error: ready.error }));
-    return;
+    return false;
   }
   const releaseFolder = engineFolder(engineId);
   const valid = await window.api.validateRelease(releaseFolder);
   if (!valid.valid) {
     toast(t('Set up the OptiScaler release folder in Settings first ({reason}).', { reason: valid.reason }));
     openSettingsModal();
-    return;
+    return false;
   }
   const nrValid = await window.api.validateNrDll(settings.nrDllPath);
   if (!nrValid.valid) {
     toast(t('DLSS NR file problem: {reason}', { reason: nrValid.reason }));
     openSettingsModal();
-    return;
+    return false;
   }
   // A Feeder game gets its whole route from this one button: the Feeder first (so nvngx_dlss.dll
   // and dlss5-feed.addon64 are on disk when autoConfigureGame runs and picks the DLSS 5 only
@@ -2263,7 +2284,7 @@ async function installGame(game) {
     game.detectedPath = await window.api.detectPath(game.exePath);
     window.api.saveGames(games);
   }
-  if (!(await preflightBeforeInstall(game))) return;
+  if (!(await preflightBeforeInstall(game))) return false;
   const route = await window.api.gameRoute(game.exePath, game.detectedPath);
   // Which add-on runs the neural pass here (Edit / the card menu). When the folder is set up for the
   // other one, this Install is the swap.
@@ -2280,12 +2301,12 @@ async function installGame(game) {
     if (!sw.ok) {
       toast(sw.code && String(sw.code).startsWith('dfc-') ? dfcUnsupportedWords(sw.code) : t('Could not switch this game: {error}', { error: sw.error }));
       renderGrid();
-      return;
+      return false;
     }
     if (consumer === 'dfc') {
       toast(t('Installed with Deep Fried Chicken. Press Home in the game for its menu.'));
       renderGrid();
-      return;
+      return true;
     }
     // Back to DLSS 5: this app's 32-bit route goes in below, from nothing, as on a first install.
     route.dgVoodooDeployed = false;
@@ -2305,18 +2326,18 @@ async function installGame(game) {
       try { report = await window.api.safetyDgVoodooQuarantine(game.exePath); } catch {}
       await showQuarantineNotice(report, 'dgVoodoo2');
       renderGrid();
-      return;
+      return false;
     }
     if (!dg.ok) {
       toast(dxvkChosen
         ? t('DXVK could not be set up: {error}', { error: dg.error })
         : t('dgVoodoo2 could not be set up: {error}', { error: dg.error }));
       renderGrid();
-      return;
+      return false;
     }
     if (dg.cancelled) {
       toast(t('Install stopped: this game\'s DirectX 8/9 route needs dgVoodoo2.'));
-      return;
+      return false;
     }
   }
 
@@ -2353,7 +2374,7 @@ async function installGame(game) {
         ? t('Installed, but ReShade\'s 32-bit Vulkan layer is not set up ({error}), so DLSS 5 cannot run under DXVK yet. Game Help can try again.', { error: res32.dxvkLayer.error })
         : t('Installed. No splash or menu appears in the game on this route -- Game Help shows how to reach it.'));
     renderGrid();
-    return;
+    return !!res32.ok;
   }
 
   // Which add-on runs the neural pass here (Edit > Neural pass). When the folder is set up for the
@@ -2375,22 +2396,22 @@ async function installGame(game) {
       const r = await window.api.feederOpenReShadeSetup();
       if (r && r.ok) toast(t('ReShade\'s installer is open: pick this game\'s exe, choose Vulkan, tick "Enable loading of add-ons". Then press Install again.'));
       renderGrid();
-      return;
+      return false;
     }
     if (!deployed.ok && deployed.code && String(deployed.code).startsWith('dfc-')) {
       toast(dfcUnsupportedWords(deployed.code));
       renderGrid();
-      return;
+      return false;
     }
     if (!deployed.ok && swapNeeded) {
       toast(t('Could not switch this game: {error}', { error: deployed.error }));
       renderGrid();
-      return;
+      return false;
     }
     if (deployed.ok && consumer === 'dfc') {
       toast(t('Installed with Deep Fried Chicken. Press Home in the game for its menu.'));
       renderGrid();
-      return;
+      return true;
     }
     if (!deployed.ok) {
       if (deployed.needsReShadeInstaller) {
@@ -2402,7 +2423,7 @@ async function installGame(game) {
         toast(t('Could not deploy the DLSS5 Feeder: {error}. OptiScaler was not installed -- without the Feeder it would have no DLSS call to hook. Retry once you are online.', { error: deployed.error }));
       }
       renderGrid();
-      return;
+      return false;
     }
     if (!route.feederDeployed) feederNote = ' ' + t('Deployed the DLSS5 Feeder first ({provider}).', { provider: provider.displayName });
   } else if (route.route !== 'feeder' && dfcOffered && (swapNeeded || consumer === 'dfc')) {
@@ -2413,18 +2434,18 @@ async function installGame(game) {
     if (!sw.ok) {
       toast(sw.code && String(sw.code).startsWith('dfc-') ? dfcUnsupportedWords(sw.code) : t('Could not switch this game: {error}', { error: sw.error }));
       renderGrid();
-      return;
+      return false;
     }
     if (consumer === 'dfc') {
       toast(t('Installed with Deep Fried Chicken. Press Home in the game for its menu.'));
       renderGrid();
-      return;
+      return true;
     }
     // A 32-bit Vulkan game has no DLSS 5 route of this app's own: taking Chicken out is all there is.
     if (route.route === 'unsupported') {
       toast(t('Deep Fried Chicken is out. DLSS 5 has no route of its own for this game.'));
       renderGrid();
-      return;
+      return true;
     }
     // Back to DLSS 5: OptiScaler goes in below, as on any install.
   }
@@ -2458,7 +2479,7 @@ async function installGame(game) {
     const proxyCreatedNote = res.proxy && res.proxy.created
       ? ' ' + t('Hooked it up as {proxy}{backup}.', { proxy: res.proxy.proxy, backup: res.proxy.backedUp ? ' ' + t('(backed up the original as {file})', { file: res.proxy.backedUp }) : '' })
       : res.proxyError
-        ? ' ' + t('NOTE: could not set up the proxy DLL -- {error} Use "Run Setup" to do it by hand.', { error: res.proxyError })
+        ? ' ' + t('NOTE: could not set up the proxy DLL -- {error} Close the game and press Install again.', { error: res.proxyError })
         : '';
 
     // Worth naming rather than folding into a count: two of these are settings that crash the game
@@ -2530,6 +2551,7 @@ async function installGame(game) {
     toast(t('Install failed: {error}', { error: res.error }));
   }
   renderGrid();
+  return !!res.ok;
 }
 
 // ── PureDark's Upscaler Base Plugin (Resident Evil pd route) ─────────────────
@@ -2633,16 +2655,6 @@ $('#pdplugin-browse').addEventListener('click', async () => {
 // Says what was actually done rather than what was started. The old flow could only report that a
 // terminal had opened, which is why the badge and the folder could disagree.
 // One sentence per runlog.js verdict, with the numbers that matter.
-// The same run as describeRun, with the words taken out: what the card shows beside the route,
-// where the chip has already said it worked and only the numbers add anything.
-function runEvidenceShort(run) {
-  if (!run || !run.ran || run.verdict !== 'nr-ran') return '';
-  const parts = [t('{count} passes', { count: run.nrFrames || run.nrDispatch })];
-  if (run.fps) parts.push(t('{fps} fps', { fps: run.fps }));
-  if (run.runtimeApi) parts.push(run.runtimeApi.toUpperCase());
-  return parts.join(' \u00b7 ');
-}
-
 function describeRun(run) {
   if (!run || !run.ran) return t('not run yet');
   const api = run.runtimeApi ? run.runtimeApi.toUpperCase() : null;
@@ -2949,7 +2961,7 @@ function showNumber(field, value) {
 }
 
 // The whole [DlssNr] table used to be laid out here, a second copy of the in-game panel that a
-// player could set a value in while the panel had the same file open. Alt+Shift+Home is the panel,
+// player could set a value in while the panel had the same file open. Insert opens the panel,
 // live, over the frame it changes -- so only the Window group survives here, because the window a
 // game opens in is decided before there is a frame to see.
 //
@@ -3186,14 +3198,6 @@ $('#btn-amdnr-run-setup').addEventListener('click', async () => {
 // of dgVoodoo2 on a DirectX 8/9 game, and instead of the game's own Direct3D on a 32-bit DirectX
 // 10/11 game (legacy.js dxvkReplacesNative, 2026-09-18) -- 'native' marks the second, whose other
 // side is "Direct3D 11 (native)" rather than dgVoodoo2.
-// A translation layer's display name (route.layerChoice, catalog setup.via).
-function layerName(via) {
-  if (via === 'dxvk') return t('DXVK (Vulkan)');
-  if (via === 'dgvoodoo') return t('dgVoodoo2 (Direct3D 11)');
-  if (via === 'native') return t('native Direct3D');
-  return String(via || '');
-}
-
 function layerSwapFor(route) {
   if (!(route && route.legacy && route.legacy.supported)) return null;
   if (route.consumerHere === 'dfc') return null;
@@ -4062,19 +4066,28 @@ async function switchNeuralPass(game, to) {
   } else {
     ask = t('Switch {game} back to DLSS 5? This removes Deep Fried Chicken from the game folder and installs DLSS 5 in its place. Your Chicken settings are kept for next time.', { game: game.name });
   }
-  if (!window.confirm(ask)) return;
+  if (!window.confirm(ask)) return false;
   if (to === 'dfc') {
     const st = await window.api.dfcStatus(null);
     if (!st || !st.supplied) {
-      if (!window.confirm(t('Deep Fried Chicken is not added to this app yet. Pick the folder you unpacked it into now?'))) return;
+      if (!window.confirm(t('Deep Fried Chicken is not added to this app yet. Pick the folder you unpacked it into now?'))) return false;
       const res = await window.api.dfcSupply();
-      if (!res || res.cancelled) return;
-      if (!res.ok) { toast(t('That is not a Deep Fried Chicken download: {error}', { error: res.error })); return; }
+      if (!res || res.cancelled) return false;
+      if (!res.ok) { toast(t('That is not a Deep Fried Chicken download: {error}', { error: res.error })); return false; }
     }
   }
+  // Resolves with installGame's answer, so a caller can tell a switch that happened from one that was
+  // cancelled or refused. The choice goes back on a failure: left behind, it made the next Install try
+  // the swap again and the ladder read the game as switched (2026-09-25).
+  const previous = game.neuralConsumer;
   game.neuralConsumer = to === 'dfc' ? 'dfc' : 'optiscaler';
   window.api.saveGames(games);
-  await installGame(game);
+  const ok = await installGame(game);
+  if (!ok) {
+    game.neuralConsumer = previous;
+    window.api.saveGames(games);
+  }
+  return ok;
 }
 
 async function loadSettingsDfc() {
@@ -5227,7 +5240,7 @@ $('#settings-feeder-prerelease').addEventListener('change', async (e) => {
 });
 
 // Which build a game gets on its next Install. Says what is on disk for the chosen build, and repeats
-// the thing a user most needs to know about the Pre-SR fork: Alt+Home draws nothing there.
+// the thing a user most needs to know about the Pre-SR fork: it draws nothing in the game.
 function showEngineChoiceState() {
   const el = $('#settings-engine-status');
   if (!el) return;
@@ -5544,8 +5557,8 @@ function compareTags(a, b) {
 // files. A game may name its own build (game.engine, from its .dlss5ui-engine.json marker); otherwise
 // it follows settings.engine.
 //
-// The Pre-SR build draws no panel inside the game, so Alt+Home does nothing on it -- the break-away
-// panel (Alt+Shift+Home) is what reaches its settings, because that one edits the ini instead of
+// The Pre-SR build draws no panel inside the game, so there Insert opens the break-away panel
+// instead (panelroute.js) -- that is what reaches its settings, because it edits the ini instead of
 // drawing. engines.js carries the fact as `panel`, and route-explain.js says it on the card.
 const ENGINE_LABELS = {
   dlssnr: 'OptiScaler_DLSSNR',
@@ -5708,6 +5721,8 @@ function renderManagerUpdate(state) {
   const dismissBtn = $('#btn-manager-dismiss');
   downloadBtn.classList.add('hidden');
   dismissBtn.classList.add('hidden');
+  downloadBtn.textContent = t('Download update');
+  delete downloadBtn.dataset.retry;
   if (!state || !state.supported) { banner.classList.add('hidden'); return; }
   if (state.phase === 'available') {
     if (managerUpdateDismissed === state.version) { banner.classList.add('hidden'); return; }
@@ -5717,6 +5732,19 @@ function renderManagerUpdate(state) {
     downloadBtn.disabled = false;
     dismissBtn.classList.remove('hidden');
     text.textContent = t('Manager v{version} is available.', { version: state.version || '?' });
+  } else if (state.phase === 'error') {
+    // Said, with a way to try again: a failed download used to take the banner away silently, which
+    // read as the update having vanished. With a version known the retry is the download (main keeps
+    // `version` on a failure); without one it is a fresh check.
+    if (state.version && managerUpdateDismissed === state.version) { banner.classList.add('hidden'); return; }
+    banner.classList.remove('hidden');
+    restartBtn.classList.add('hidden');
+    downloadBtn.classList.remove('hidden');
+    downloadBtn.disabled = false;
+    downloadBtn.textContent = t('Retry');
+    downloadBtn.dataset.retry = state.version ? 'download' : 'check';
+    dismissBtn.classList.remove('hidden');
+    text.textContent = t('Manager update failed: {error}', { error: state.error || t('unknown') });
   } else if (state.phase === 'downloading') {
     banner.classList.remove('hidden');
     restartBtn.classList.add('hidden');
@@ -5731,8 +5759,25 @@ function renderManagerUpdate(state) {
 }
 
 $('#btn-manager-download').addEventListener('click', async () => {
-  $('#btn-manager-download').disabled = true;
-  renderManagerUpdate(await window.api.managerUpdateDownload());
+  const btn = $('#btn-manager-download');
+  const retry = btn.dataset.retry;
+  btn.disabled = true;
+  let st;
+  try {
+    // A retry after a failed download re-checks first when main no longer holds 'available': the
+    // download refuses from any other phase and would just hand the error back.
+    if (retry === 'check') st = await window.api.managerUpdateCheck();
+    else {
+      st = await window.api.managerUpdateDownload();
+      if (retry && st && st.phase === 'error') {
+        st = await window.api.managerUpdateCheck();
+        if (st && st.phase === 'available') st = await window.api.managerUpdateDownload();
+      }
+    }
+  } catch (e) {
+    st = { supported: true, phase: 'error', error: String((e && e.message) || e) };
+  }
+  renderManagerUpdate(st);
 });
 $('#btn-manager-dismiss').addEventListener('click', async () => {
   const st = await window.api.managerUpdateState();
@@ -5869,8 +5914,16 @@ $('#btn-check-updates').addEventListener('click', async () => {
       if (st.supported) {
         // Found, not fetched: the banner offers Download (the player decides, 2026-09-25).
         managerUpdateDismissed = null;
-        renderManagerUpdate(await window.api.managerUpdateCheck());
-        lines.push(t('Manager v{version} is available -- press Download update in the banner at the top.', { version: managerRes.latestVersion }));
+        const ms = await window.api.managerUpdateCheck();
+        renderManagerUpdate(ms);
+        // Worded from where it actually is: "press Download" for one already downloaded pointed at a
+        // button the banner no longer shows.
+        const phase = ms && ms.phase;
+        const version = (ms && ms.version) || managerRes.latestVersion;
+        if (phase === 'downloaded') lines.push(t('Manager v{version} is ready -- restart to update.', { version }));
+        else if (phase === 'downloading') lines.push(t('Downloading Manager v{version}… {percent}%', { version, percent: ms.percent || 0 }));
+        else if (phase === 'error') lines.push(t('Manager update failed: {error}', { error: ms.error || t('unknown') }));
+        else lines.push(t('Manager v{version} is available -- press Download update in the banner at the top.', { version: managerRes.latestVersion }));
       } else {
         // Say WHY it did not just download it. The reason was sitting in the state and being thrown
         // away at the one moment someone is stood in front of the app wondering what changed -- so
@@ -5883,6 +5936,9 @@ $('#btn-check-updates').addEventListener('click', async () => {
         if (st.reason) lines.push(t('It could not update itself: {reason}.', { reason: t(st.reason) }));
       }
     }
+  } catch (e) {
+    // Whatever threw, the press still gets an answer rather than the button just coming back.
+    lines.push(t('Manager check failed: {error}', { error: String((e && e.message) || e) }));
   } finally {
     btn.disabled = false;
     btn.textContent = label;
@@ -6100,13 +6156,18 @@ async function openAddonsModal(game) {
   $('#addons-modal').classList.remove('hidden');
   $('#addons-list').innerHTML = `<p class="field-hint">${escapeHtml(t('Looking at this game…'))}</p>`;
   $('#addons-status').textContent = '';
-  await renderAddons();
+  await renderAddons(game);
 }
 
-async function renderAddons() {
+// Everything below works on the game it was called for, never on addonsGame read after an await: the
+// modal closed mid-install set that to null and the redraw threw, and reopened for another game it let a
+// late reply draw the first game's rows under the second's name (2026-09-25).
+async function renderAddons(game = addonsGame) {
+  if (!game) return;
   // A rejected invoke (a reply Electron cannot send, say) must say so, not leave "Looking…" up.
-  const res = await window.api.addonsForGame(addonsGame.exePath)
+  const res = await window.api.addonsForGame(game.exePath)
     .catch((error) => ({ ok: false, error: String(error && error.message ? error.message : error) }));
+  if (addonsGame !== game) return;
   if (!res || !res.ok) {
     $('#addons-list').innerHTML = `<p class="field-hint status-bad">${escapeHtml(res && res.error ? res.error : t('Could not read this game.'))}</p>`;
     return;
@@ -6250,14 +6311,15 @@ async function renderAddons() {
       el.disabled = true;
       $('#addons-status').className = 'field-hint';
       $('#addons-status').textContent = t('Switching to {name}…', { name: el.dataset.name });
-      const out = await window.api.addonsSetMvProvider(addonsGame.exePath, id, { licenseConfirmed });
+      const out = await window.api.addonsSetMvProvider(game.exePath, id, { licenseConfirmed });
+      if (addonsGame !== game) return;
       if (out && out.ok) {
         $('#addons-status').textContent = t('Motion vectors now come from {name}. Launch the game and see how it looks.', { name: el.dataset.name });
       } else {
         $('#addons-status').className = 'field-hint status-bad';
         $('#addons-status').textContent = (out && out.error) || t('That did not work.');
       }
-      await renderAddons();
+      await renderAddons(game);
     });
   }
 
@@ -6272,8 +6334,9 @@ async function renderAddons() {
       $('#addons-status').className = 'field-hint';
       $('#addons-status').textContent = removing ? t('Removing…') : t('Fetching and placing…');
       const out = removing
-        ? await window.api.addonsRemove(addonsGame.exePath, id)
-        : await window.api.addonsInstall(addonsGame.exePath, id);
+        ? await window.api.addonsRemove(game.exePath, id)
+        : await window.api.addonsInstall(game.exePath, id);
+      if (addonsGame !== game) return;
       if (out && out.ok) {
         const swapped = (out.swappedOut || []).map((sid) => {
           const s2 = res.catalogue.find((x) => x.id === sid);
@@ -6298,7 +6361,7 @@ async function renderAddons() {
         };
         $('#addons-status').textContent = (out && byCode[out.code]) || (out && out.error) || t('That did not work.');
       }
-      await renderAddons();
+      await renderAddons(game);
     });
   }
 }

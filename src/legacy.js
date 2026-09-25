@@ -499,7 +499,7 @@ const HOST_RESHADE_KEYS = [
   ['INPUT', 'KeyOverlay', '0,0,0,0'],
 ];
 
-// Gives an existing 32-bit install the Alt+Home key for the in-game panel (installs made before the
+// Gives an existing 32-bit install the panel key (Insert) for the in-game panel (installs made before the
 // deploy set it). Only for this route: a cast_key on any other route would toggle a picture of a
 // host process that is not running there. Returns true when the file changed.
 function ensureCastKey(dir) {
@@ -956,9 +956,9 @@ async function deployHost32(dir, plan, deps) {
     if (!had && fs.existsSync(path.join(hostDir, 'nvngx_dlss.dll'))) marker.files.push(`${HOST_DIR}/nvngx_dlss.dll`);
   }
 
-  // Alt+Home shows the helper's panel inside the game. This is the only route where that takes a
+  // Insert shows the helper's panel inside the game. This is the only route where that takes a
   // key at all -- on every other route OptiScaler draws the panel in the game's own process and
-  // owns Alt+Home itself, while here the panel lives in host64\ and the game shows a cast of it,
+  // owns Insert itself, while here the panel lives in host64\ and the game shows a cast of it,
   // which the Feeder only puts on screen when its cast_key is pressed. That key ships as "none".
   // Directly, not through ensureCastKey: the marker that would tell it this is a host32 install is
   // written a few lines below, so on a fresh deploy that check has nothing to find yet.

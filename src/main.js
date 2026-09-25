@@ -47,7 +47,6 @@ const gameupdate = require('./gameupdate');
 const probe = require('./probe');
 const preflight = require('./preflight');
 const gpupref = require('./gpupref');
-const verify = require('./verify');
 const translation = require('./translation');
 const catalog = require('./catalog');
 const routescore = require('./routescore');
@@ -2812,7 +2811,7 @@ function gameDir(exePath) {
 // Same shape as the Lossless marker: game:install copies the release ini over the folder
 // wholesale, and a multiplier can be picked before OptiScaler is installed, so the source of
 // truth is a per-game marker beside the exe that autoConfigureGame re-applies. No marker means
-// "don't touch" -- a value set live from the Alt+Home panel is then left alone.
+// "don't touch" -- a value set live from the in-game panel is then left alone.
 const FRAMEGEN_MARKER = '.dlss5ui-framegen.json';
 
 // The value of one key in one section of an ini, as written (trimmed), or null when absent.
@@ -3375,7 +3374,7 @@ ipcMain.handle('dlssnr:set', (_evt, { exePath, values } = {}) => {
 
 // The break-away DLSS 5 panel. Same settings as the Edit dialog's DLSS 5 tab and the in-game panel,
 // in a small always-on-top window of this app's own, opened by a global hotkey. It exists because
-// the in-game panel depends on the game cooperating: some games swallow Alt+Home, and a 32-bit game
+// the in-game panel depends on the game cooperating: some games swallow its key, and a 32-bit game
 // only ever shows a mirror of the 64-bit helper's panel. This one needs nothing from the game.
 // See src/panelwindow.js for why it cannot beat exclusive fullscreen.
 function panelEnabled(settings) {
@@ -3770,8 +3769,8 @@ ipcMain.handle('panel:live-stop', async (_evt, exePath) => {
 
 app.on('will-quit', () => { for (const dir of [...liveTouched.keys()]) stopLive(dir); });
 
-// The store a game came from (library.storeFor), for the grid's filter. A game does not move between
-// stores, so it is worked out once per exe per session: the grid asks for every card on every render.
+// The store a game came from (library.storeFor), for the store tag on its card. A game does not move
+// between stores, so it is worked out once per exe per session: the grid asks for every card on every render.
 const storeCache = new Map();
 function storeOf(exePath) {
   const key = String(exePath).toLowerCase();
@@ -3891,8 +3890,8 @@ ipcMain.handle('amdnr:deployNrModel', async (_evt, { exePath, replace }) => {
   }
 });
 
-// Same shape as game:run-setup: the tool's own installer is interactive, so it gets a console
-// the user answers in. Only ever runs a file already sitting in the game folder.
+// The tool's own installer is interactive, so it gets a console the user answers in. Only ever runs
+// a file already sitting in the game folder.
 ipcMain.handle('amdnr:runSetup', (_evt, exePath) => {
   try {
     if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
@@ -4068,19 +4067,6 @@ ipcMain.handle('game:install', async (_evt, { exePath, releaseFolder, nrDllPath,
   } catch (err) {
     return { ok: false, error: err.message };
   }
-});
-
-ipcMain.handle('game:run-setup', async (_evt, exePath) => {
-  const dir = gameDir(exePath);
-  const bat = findSetupBat(dir);
-  if (!bat) return { ok: false, error: 'setup_windows.bat not found in game folder. Install first.' };
-  spawn('cmd.exe', ['/c', 'start', '""', 'cmd.exe', '/k', bat], {
-    cwd: dir,
-    detached: true,
-    stdio: 'ignore',
-    shell: false
-  }).unref();
-  return { ok: true };
 });
 
 async function removeSharedNrDllIfUnneeded(dir) {
@@ -4655,8 +4641,6 @@ const sendToWindows = (channel, payload) => {
 
 ipcMain.handle('report:status', () => ({ configured: ghreport.configured(), signedIn: !!readReportToken() }));
 
-ipcMain.handle('report:signout', () => { clearReportToken(); return { ok: true }; });
-
 // Starts GitHub's device flow: returns the code to show, opens the page to type it into, and finishes in
 // the background (the renderer hears 'report-signin' when the player has approved, declined or timed out).
 let reportSignIn = null;
@@ -4666,8 +4650,10 @@ ipcMain.handle('report:signin', async () => {
     shell.openExternal(flow.verification_uri);
     const attempt = {};
     reportSignIn = attempt;
+    // A token from ANY attempt is kept: a player who typed the first code after a second flow started
+    // was signed in on GitHub and dropped here (2026-09-25). Only a superseded attempt's failure is quiet.
     ghreport.pollForToken(flow.device_code, { interval: flow.interval, expiresIn: flow.expires_in })
-      .then((token) => { if (reportSignIn !== attempt) return; writeReportToken(token); sendToWindows('report-signin', { ok: true }); })
+      .then((token) => { writeReportToken(token); sendToWindows('report-signin', { ok: true }); })
       .catch((error) => { if (reportSignIn === attempt) sendToWindows('report-signin', { ok: false, error: String(error && error.message ? error.message : error) }); });
     return { ok: true, userCode: flow.user_code, verificationUri: flow.verification_uri };
   } catch (error) {
@@ -5669,35 +5655,9 @@ ipcMain.handle('game:launch', async (_evt, { exePath, launcher = 'auto', dryRun 
   return res;
 });
 
-// ── Analyse game, Checks before Install, Verify install ──────────────────────
-// Analyse (probe.js) and Verify (verify.js) each start the game and close it again, so only one of
-// either runs at a time. Neither focuses, clicks or types into the game: some games die on a focus
-// change (Assassin's Creed II), and the progress shows in this window whether it is in front or not.
-let watchedLaunchBusy = null;
-const sendTo = (sender, channel, payload) => { try { if (!sender.isDestroyed()) sender.send(channel, payload); } catch {} };
-
-ipcMain.handle('game:probe', async (evt, { exePath, launcher = 'auto' } = {}) => {
-  if (watchedLaunchBusy) return { ok: false, error: `${watchedLaunchBusy} is already running` };
-  try {
-    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
-    watchedLaunchBusy = 'Analyse game';
-    const workDir = path.join(os.tmpdir(), 'optidlss5-probe');
-    const res = await probe.runProbe({
-      exePath: launchTarget(exePath), execFileAsync, workDir,
-      launch: () => launchGame({ exePath, launcher }),
-      onProgress: (p) => sendTo(evt.sender, 'game:probe-progress', { exePath, ...p }),
-    });
-    if (!res.ok) return res;
-    // Stored under the card's exe, which is what effectiveDetection and the proxy helpers look up.
-    probe.writeFacts(probeFactsFile(), exePath, res.facts);
-    return { ok: true, summary: probe.summary(res.facts), proxyHint: probe.proxyHint(res.facts), closed: res.closed, etwError: res.etwError, facts: res.facts };
-  } catch (error) {
-    return { ok: false, error: String(error && error.message ? error.message : error) };
-  } finally {
-    watchedLaunchBusy = null;
-  }
-});
-
+// ── Checks before Install ─────────────────────────────────────────────────────
+// What a watched launch saw (probe.js facts, kept from earlier Analyse runs) still feeds the checks and
+// the proxy choice; nothing here starts the game.
 ipcMain.handle('game:probe-facts', (_evt, { exePath } = {}) => {
   const facts = probeFactsFor(exePath);
   return { ok: true, summary: probe.summary(facts), proxyHint: probe.proxyHint(facts) };
@@ -5756,36 +5716,8 @@ ipcMain.handle('game:preflight-fix', async (_evt, { exePath, fix } = {}) => {
   }
 });
 
-ipcMain.handle('game:verify', async (evt, { exePath, launcher = 'auto', detected } = {}) => {
-  if (watchedLaunchBusy) return { ok: false, error: `${watchedLaunchBusy} is already running` };
-  try {
-    if (!exePath || !fs.existsSync(exePath)) throw new Error('Game .exe not found');
-    watchedLaunchBusy = 'Verify install';
-    const res = await verify.runVerify({
-      exePath: launchTarget(exePath), execFileAsync, workDir: path.join(os.tmpdir(), 'optidlss5-probe'),
-      launch: () => launchGame({ exePath, launcher }),
-      readRun: async () => {
-        const ctx = await helpContext(exePath, detected);
-        return { run: ctx.run, diag: gamehelp.diagnose(ctx) };
-      },
-      onProgress: (p) => sendTo(evt.sender, 'game:verify-progress', { exePath, ...p }),
-    });
-    return res;
-  } catch (error) {
-    return { ok: false, error: String(error && error.message ? error.message : error) };
-  } finally {
-    watchedLaunchBusy = null;
-  }
-});
-
-// Whether the game's process is up, by image name -- the one signal that works for a direct
-// launch and a Steam one alike, so the help modal judges the log after the game stops, not
-// while it is still writing. null when tasklist cannot say.
-// Which of these games are running, from one process listing rather than one per game. The
-// single-game handler below spawns a tasklist.exe of its own, which is fine for the one game a
-// help modal is watching and is not fine for a grid that asks about every card every few seconds:
-// twenty games would be twenty process spawns a tick, which is the shape of the problem v1.59.0
-// spent its whole release removing.
+// Which of these games are running, from one process listing rather than one per game: a tasklist.exe
+// per card every few seconds is the shape of the problem v1.59.0 spent its whole release removing.
 ipcMain.handle('games:running', async (_evt, exePaths) => {
   try {
     const running = await runningImageSet();
@@ -5802,16 +5734,6 @@ ipcMain.handle('games:running', async (_evt, exePaths) => {
     return { ok: true, running: out };
   } catch (error) {
     return { ok: false, running: {}, error: String(error && error.message ? error.message : error) };
-  }
-});
-
-ipcMain.handle('game:running', async (_evt, { exePath } = {}) => {
-  try {
-    const name = path.basename(launchTarget(exePath));
-    const { stdout } = await execFileAsync('tasklist.exe', ['/FI', `IMAGENAME eq ${name}`, '/NH', '/FO', 'CSV'], { windowsHide: true });
-    return { ok: true, running: stdout.toLowerCase().includes(`"${name.toLowerCase()}"`) };
-  } catch (error) {
-    return { ok: false, running: null, error: String(error && error.message ? error.message : error) };
   }
 });
 
@@ -6988,7 +6910,7 @@ async function autoConfigureGame(dir, exePath) {
   // it decides that by asking whether it is running in the 32-bit route's helper. On an OpenGL or
   // Vulkan game that misses this case: OptiScaler is in the game's own process, so it answers "the
   // panel is right there on a keypress" -- but there is no DXGI swapchain for it to draw on, the
-  // menu never initialises, and Alt+Home does nothing. The ini is the only way in, and it was the
+  // menu never initialises, and Insert does nothing in the game. The ini is the only way in, and it was the
   // one route where the engine had stopped reading it.
   //
   // Tomb Raider I-III Remastered, 2026-09-16: "Live settings reload: off (this game can open the
@@ -7301,7 +7223,7 @@ async function syncGameIfStale(_evt, { exePath, releaseFolder, nrDllPath }) {
       // DG_WINDOWED): an exclusive-fullscreen game can freeze the moment the helper starts.
       let dgWindowed = false;
       try { dgWindowed = legacy.ensureDgVoodooWindowed(dir, { vendor: gpuVendor }); } catch {}
-      // Installs from before the deploy gave the in-game panel its Alt+Home key (legacy.js ensureCastKey).
+      // Installs from before the deploy gave the in-game panel its key (legacy.js ensureCastKey).
       try { legacy.ensureCastKey(dir); } catch {}
       // The Feeder follows its releases here too. A locked file (the game running) is thrown, so the
       // sync fails and the renderer retries once the game closes.
@@ -7926,10 +7848,6 @@ ipcMain.handle('update:check', async (_evt, { engine } = {}) => {
     return { ok: false, engine: id, error: err.message };
   }
 });
-
-ipcMain.handle('engine:list', () => Object.values(engines.ENGINES).map((e) => ({
-  ...e, managedFolder: managedReleaseFolder(e.id), releasePage: engines.releasePageUrl(e.id),
-})));
 
 // Releases and issues live in a public repo of their own: the source repo is private, and a private
 // repo's releases are private too, which would cut every installed copy off from its updates.

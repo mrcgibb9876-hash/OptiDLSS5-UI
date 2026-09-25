@@ -315,7 +315,7 @@ test('Install is the swap: it passes the choice, and Chicken never gets OptiScal
   const body = src.slice(at, src.indexOf("toast(t('Installing…'));", at));
   assert.match(body, /consumer, nrDllPath: settings\.nrDllPath, swapOnly: route\.feederDeployed/, 'the choice reaches the deploy');
   assert.match(body, /consumerHere[\s\S]*!== consumer/, 'a folder set up for the other one is swapped');
-  assert.match(body, /deployed\.ok && consumer === 'dfc'[\s\S]*?return;/, 'and a Chicken install stops before OptiScaler');
+  assert.match(body, /deployed\.ok && consumer === 'dfc'[\s\S]*?return true;/, 'and a Chicken install stops before OptiScaler');
   // A game already on Chicken still goes through the (idempotent) swap, never on to the OptiScaler
   // install below it -- found in the real app, 2026-09-22.
   assert.match(body, /!route\.feederDeployed \|\| swapNeeded \|\| consumer === 'dfc'/);

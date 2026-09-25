@@ -456,7 +456,7 @@ function pickBannerMatch(query, items) {
   return best ? best.item : null;
 }
 
-// Which store a game came from, for the grid's filter. Nothing records it when a game is added, and a
+// Which store a game came from, for the store tag on its card. Nothing records it when a game is added, and a
 // banner's Steam app id says only where its art came from, so it is read off the install itself:
 // Steam's appmanifest beside steamapps\common, the files Epic (.egstore) and GOG (goggame-*.info) leave
 // in a game's root, and the folder names the Xbox app, EA app and Ubisoft Connect install under. A copy
