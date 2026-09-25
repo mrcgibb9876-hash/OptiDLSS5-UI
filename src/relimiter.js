@@ -302,20 +302,53 @@ function addonAssetFromRelease(release, bitness = 64) {
 
 // The first source with a usable build. A source that has no release yet (the fork, until it
 // publishes one) answers 404, which is an ordinary "try the next one", not a failure.
-async function resolveAddonAsset(ghHeaders, { bitness = 64, fetchImpl, sources = RELEASE_SOURCES } = {}) {
+//
+// GitHub's API allows 60 unauthenticated calls an hour per IP, and the app spends them on its update
+// checks too, so a 403/429 here is "the hour is used up", not "there is no build" -- which is what
+// "Could not add frame pacing: HTTP 403; HTTP 403" was on 2026-09-25. So, per source, on a refusal:
+//   1. the last answer this app got for that source (memoFile), digest and all, so the download is
+//      still checked against GitHub's published hash;
+//   2. failing that, GitHub's own /releases/latest/download/<asset> link, which is a plain download
+//      and not an API call. No digest then, but deploy() still refuses a file that is not ReLimiter.
+// The fork is still tried first, so the host API export is not lost to a rate limit.
+async function resolveAddonAsset(ghHeaders, { bitness = 64, fetchImpl, sources = RELEASE_SOURCES, memoFile = null } = {}) {
   const tried = [];
+  const memo = readJsonSafe(memoFile) || {};
+  const refusedBy = [];
   for (const src of sources) {
     try {
       const res = await fetchImpl(`https://api.github.com/repos/${src.repo}/releases/latest`, { headers: ghHeaders });
-      if (!res.ok) { tried.push(`${src.repo}: HTTP ${res.status}`); continue; }
+      if (!res.ok) {
+        tried.push(`${src.repo}: HTTP ${res.status}`);
+        if (res.status === 403 || res.status === 429) refusedBy.push(src);
+        continue;
+      }
       const found = addonAssetFromRelease(await res.json(), bitness);
       if (!found) { tried.push(`${src.repo}: no ${addonName(bitness)} in its latest release`); continue; }
-      return { ...found, repo: src.repo, hostApi: src.hostApi };
+      const answer = { ...found, repo: src.repo, hostApi: src.hostApi };
+      if (memoFile) {
+        try { fs.writeFileSync(memoFile, JSON.stringify({ ...memo, [`${src.repo}:${bitness}`]: answer }, null, 2)); } catch {}
+      }
+      return answer;
     } catch (e) {
       tried.push(`${src.repo}: ${(e && e.message) || e}`);
     }
   }
+  for (const src of refusedBy) {
+    const remembered = memo[`${src.repo}:${bitness}`];
+    if (remembered && remembered.url) return { ...remembered, repo: src.repo, hostApi: src.hostApi, fromMemo: true };
+  }
+  if (refusedBy.length) {
+    const src = refusedBy[0];
+    const name = addonName(bitness);
+    return { url: `https://github.com/${src.repo}/releases/latest/download/${name}`, name, digest: null, tag: null, repo: src.repo, hostApi: src.hostApi, unverified: true };
+  }
   throw new Error(`No ReLimiter build could be found (${tried.join('; ')})`);
+}
+
+function readJsonSafe(file) {
+  if (!file) return null;
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
 }
 
 // ReShade loads add-ons from AddonPath, which beside the exe is where this one goes. A ReShade.ini the

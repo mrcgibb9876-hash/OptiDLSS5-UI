@@ -549,3 +549,28 @@ test('AddonPath and the tutorial banner are set without disturbing an existing i
   assert.match(ini, /EffectSearchPaths=\.\\mine/, "the user's own keys are left alone");
   assert.match(ini, /AddonPath/);
 });
+
+test('a spent GitHub API allowance falls back to the remembered answer, then to the plain download link', async () => {
+  const dir = scratchDir('rl-ratelimit');
+  const memoFile = path.join(dir, 'resolved.json');
+  const ok = async () => ({ ok: true, status: 200, json: async () => ({ tag_name: 'v3.3.5', assets: [
+    { name: 'relimiter.addon64', browser_download_url: 'https://github.com/mrcgibb9876-hash/ReLimiter/releases/download/v3.3.5/relimiter.addon64', digest: `sha256:${'b'.repeat(64)}` },
+  ] }) });
+  const refused = async () => ({ ok: false, status: 403, json: async () => ({}) });
+
+  // No memory yet: the plain /latest/download link from the fork, unverified but still the fork.
+  const cold = await relimiter.resolveAddonAsset({}, { fetchImpl: refused, memoFile });
+  assert.equal(cold.repo, 'mrcgibb9876-hash/ReLimiter');
+  assert.match(cold.url, /\/releases\/latest\/download\/relimiter\.addon64$/);
+  assert.equal(cold.unverified, true);
+
+  // A good answer is remembered, and stands in -- digest and all -- when the next call is refused.
+  await relimiter.resolveAddonAsset({}, { fetchImpl: ok, memoFile });
+  const warm = await relimiter.resolveAddonAsset({}, { fetchImpl: refused, memoFile });
+  assert.equal(warm.fromMemo, true);
+  assert.equal(warm.tag, 'v3.3.5');
+  assert.equal(warm.digest, 'b'.repeat(64));
+
+  // A real failure that is not a refusal still says so.
+  await assert.rejects(relimiter.resolveAddonAsset({}, { fetchImpl: async () => ({ ok: false, status: 500 }), memoFile }), /No ReLimiter build/);
+});

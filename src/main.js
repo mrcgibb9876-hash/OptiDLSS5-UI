@@ -1082,7 +1082,9 @@ ipcMain.handle('relimiter:install', async (_evt, exePath) => {
     if (!relimiter.isAutomatic(api)) throw Object.assign(new Error('Vulkan needs ReShade’s own setup first'), { code: 'vulkan-layer' });
     const { optiHere, standalone } = await ensureReShadeAddonHost(dir, api, { addon: 'relimiter' });
 
-    const asset = await relimiter.resolveAddonAsset(GITHUB_HEADERS, { fetchImpl: netFetch });
+    // memoFile: the last answer per source, used when GitHub's hourly API allowance is spent (relimiter.js).
+    await fsp.mkdir(path.join(feederCacheDir(), 'relimiter'), { recursive: true }).catch(() => {});
+    const asset = await relimiter.resolveAddonAsset(GITHUB_HEADERS, { fetchImpl: netFetch, memoFile: path.join(feederCacheDir(), 'relimiter', 'resolved.json') });
     // Cached under its source and tag, so the fork's build and upstream's of the same name never
     // stand in for each other.
     const cacheName = `relimiter-${asset.repo.split('/')[0]}-${asset.tag || 'latest'}-${asset.name}`.replace(/[^\w.-]/g, '_');
