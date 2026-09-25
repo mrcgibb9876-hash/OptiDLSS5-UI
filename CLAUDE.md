@@ -23,6 +23,38 @@ pre-release) before pinning to it.
 The running app's engine updater (`update:check` in `main.js`, `engines.js`) follows the same pin: it
 offers `engineVersion`, and only *reports* a newer "latest" as untested with this app version.
 
+## Nothing upstream reaches our forks on its own
+
+Asked for 2026-09-25: a fork must stay constant when its source moves. It does now, but only one of
+the two was ever at risk, and it is worth knowing which.
+
+- **The engine fork was.** `sync-upstream.yml` ran at 06:00 daily and, whenever
+  `Dagherbou/OptiScaler_DLSSNR:dlss-neural-rendering` had moved, merged the refreshed mirror into
+  `dlss5-developer-controls-ui` and pushed it -- the branch every engine release is cut from, under a
+  pin naming a tag built the night before. It never fired, purely because upstream has not moved
+  since our mirror caught up. It would not have been one commit either: the mirror carries **144**
+  commits that branch has never had, because the branch forked at `4f17a05d`, before upstream's
+  DLSS-NR work landed, and re-implemented it differently. The schedule is gone. A dispatched run
+  refreshes the **mirror branch only** and opens a PR into the UI branch -- every time, not only on
+  conflict, because a clean merge of unread work is the thing being guarded against. Cherry-pick and
+  close it; it reopens next time upstream moves.
+- **The ReLimiter fork never was.** No sync workflow, 9 ahead / 0 behind, and upstream reaches it
+  only if someone presses GitHub's own "Sync fork". Worth not pressing it: its `release.yml` fires on
+  any push to `main`, and a release is what the app then hands every user. It skips itself when
+  `VERSION`'s tag already exists, so a sync that does not bump `VERSION` publishes nothing.
+
+**The forks being frozen does not freeze what users get**, and that is a separate hole:
+
+- `relimiter.js` resolves `releases/latest` on our fork, then RankFTW's -- a moving pointer, not a
+  pin like `engineVersion`. Publish on the fork and every client changes on its next deploy.
+- `addons.js` pins RenoDX to the tag `snapshot`, which is clshortfuse's own rolling build: the tag
+  name is fixed and its **assets are replaced in place**. The digest check catches a corrupted
+  download, not a different upstream build.
+
+Both are honest `vX.Y.Z` pins away from behaving like the engine does. Not done -- doing it means the
+app stops picking up a fork release by itself, which is a product decision, not a cleanup.
+
+
 ## Downloads are checked (src/integrity.js)
 
 Every file the app downloads and places is checked against a sha256 before use:
