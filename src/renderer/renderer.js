@@ -950,7 +950,7 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   const run = diag && diag.ok ? diag.run : await window.api.lastRun(game.exePath);
   if (!current()) return;
   const ran = run && run.ran;
-  const runBad = ran && ['duplicate-dlss', 'shutdown-fault', 'ue-crash', 'feed-stopped',
+  const runBad = ran && ['duplicate-dlss', 'shutdown-fault', 'ue-crash', 'feed-stopped', 'feed-host-gone',
     'feed-no-motion', 'feed-depth-flat', 'feed-agility-redist', 'no-dlss'].includes(run.verdict);
 
   // A run that worked is evidence, not a warning, so it belongs on the route line beside the
@@ -1292,6 +1292,9 @@ function helpWords(diag) {
     case 'vulkan-layer-missing': return t('On Vulkan, the DLSS5 Feeder runs inside ReShade, and ReShade only reaches a Vulkan game as a layer installed for the whole PC. None is installed, so the Feeder never loaded and nothing called DLSS. Run ReShade\'s own installer (the version with add-on support), pick this exe, choose Vulkan, then Install here again. Or switch the emulator to Direct3D 11, if it has it, and pick DX11 in Edit: that needs no layer. Not OpenGL: DLSS 5 cannot draw its panel there.');
     case 'vulkan-layer-no-addon': return t('ReShade is installed as a Vulkan layer on this PC, but a build without add-on support, so the DLSS5 Feeder (an add-on) cannot load and nothing called DLSS. Reinstall ReShade with add-on support (its installer: "Enable loading of add-ons"), then Install here again.');
     case 'host32-opti-dll-gone': return t('OptiScaler\'s own file is missing from the helper folder. This app put it there -- its install record lists host64\\winmm.dll -- and it is not on disk now, so something removed it after the install. That is almost always antivirus: a 64-bit winmm.dll appearing beside a game exe looks exactly like a DLL hijack. Everything else is fine, which is why the Feeder\'s own window opens and the DLSS 5 overlay is not in it. Add an exclusion for this game\'s folder -- Windows Security > Virus & threat protection > Manage settings > Exclusions -- and then press Install here again. Do the exclusion first: without it, Install just puts the file back for it to be taken again. Protection history may also offer Allow for the item, but a cloud detection (a name ending in !cl) is often deleted rather than held, so do not count on finding one.');
+    case 'host32-exe-gone': return t('The helper program is missing from the helper folder. This app put it there -- its install record lists host64\\dlss5-feed-host64.exe -- and it is not on disk now, so something removed it after the install. A 64-bit exe appearing beside a game is the same thing antivirus takes a 64-bit winmm.dll for. Without it there is no helper to start, so the game renders perfectly and DLSS 5 does nothing at all. Add an exclusion for this game\'s folder -- Windows Security > Virus & threat protection > Manage settings > Exclusions -- and then press Install here again. Do the exclusion first: without it, Install just puts the file back for it to be taken again.');
+    case 'feed-host-gone': return t('The DLSS work for a 32-bit game runs in a second program, a 64-bit helper beside the game, and this run it went away -- so the game kept rendering normally and DLSS 5 stopped. The Feeder\'s own words for why: {why}. The helper writes its own log, host64\\dlss5-feed-host.log beside the game, and that names the reason; this app cannot see inside another program, so that file is the next thing to read rather than anything to guess at. Save the bundle to share -- it now carries that log -- or ask the AI.');
+    case 'feed-host-startup': return t('The 64-bit helper that does the DLSS work for this game quit as it started: {why}. That is the add-on and the helper not being the same Feeder build, or a file missing from host64\\ -- both of which Install rebuilds from one download. Press Install here again, then launch.');
     case 'vulkan-layer-blacklisted': return t('{exe} refuses Vulkan layers. Its engine keeps a blacklist and ReShade is on it, so the layer is installed correctly, this exe is on its list, and it still never attaches -- nothing here is broken. Add {arg} to the game\'s launch arguments: in Steam, right-click the game > Properties > Launch Options; in a desktop shortcut, after the closing quote of the exe path. Then launch again.', { ...v, arg: '+r_allowBlackListedLayers 1' });
     case 'vulkan-layer-not-loaded': return t('ReShade\'s Vulkan layer with add-on support is installed, but it did not load in this program: the DLSS5 Feeder wrote no log at all. Run ReShade\'s installer once more for this exact exe and choose Vulkan (the layer only runs for programs it was set up for), check NVIDIA Smooth Motion is off for it, then launch again.');
     case 'vulkan-layer-app-not-listed': return t('ReShade\'s Vulkan layer with add-on support is installed, but {exe} is not on its app list (ReShadeApps.ini next to the layer), so the layer stays inert in this game: no overlay, no DLSS5 Feeder, no log. ReShade\'s own installer adds it -- run it, pick this exact exe, choose Vulkan and keep "Enable loading of add-ons" ticked -- then launch again.', v);
@@ -1337,6 +1340,7 @@ function helpWords(diag) {
       (v.smoothMotion ? ' ' + t('NVIDIA Smooth Motion was also on inside this process. Turn it off for this game in the NVIDIA app if the crash stays.') : '');
     case 'nr-model-crash': return t('The DLSS 5 model crashed on its very first frame, inside NVIDIA\'s own code ({stack}), and the Feeder stopped. The game carried on without it. No ini setting this app knows changes that. If the game has a Direct3D 11 mode, try it: the Feeder then runs DLSS on a device of its own. Otherwise save the bundle to share.', v) +
       (v.smoothMotion ? ' ' + t('NVIDIA Smooth Motion was also on inside this process. Turn it off for this game in the NVIDIA app if the crash stays.') : '');
+    case 'feed-host-gone': return t('The 64-bit helper that does the DLSS work for this 32-bit game went away during the last run, so the feed stopped and the game carried on rendering by itself. host64\\dlss5-feed-host.log, beside the game, is its own account of why.');
     case 'feed-stopped': return t('The Feeder gave up on the last run. Reconfigure rewrites its ReShade settings; if it stops again, dlss5-feed.log has its own diagnosis.');
     case 'smooth-motion-stacked': return t('Two frame generators are running on this game. The DLSS5 Feeder saw NVIDIA Smooth Motion active in the process on the last run, and this app has {generator} set up here as well. Smooth Motion is frame generation done by the driver itself, after the frame leaves the game, so it does not replace the other one -- the two interleave their generated frames, which costs latency and shows as doubled motion artefacts. Turn one of them off: Smooth Motion is per game in the NVIDIA app, under Graphics -- Program Settings -- Driver Settings. Nothing here can switch it for you; NVIDIA publishes no setting for it that a program can read or write.', v);
     case 'wrapper-crash-swap': return t('The game crashed as it started, inside dgVoodoo2\'s {dll} -- before the DLSS5 Feeder or OptiScaler had done anything. No dgVoodoo2 setting is known to get past this: where it was first seen, every setting tried hung or crashed the same way. But dgVoodoo2 is not the only way to present DirectX 8/9 to a modern pipeline -- DXVK does the same job by a different route, and on one report the same game crashed under dgVoodoo2 on one machine while running through DXVK on another. Worth trying before giving up. Whatever dgVoodoo2 displaced is handed back first, so this can be undone; run the game afterwards and check here again.', v);
@@ -1439,6 +1443,9 @@ function helpSteps(diag) {
     case 'vulkan-layer-app-not-listed': return [t('Run ReShade\'s installer for this exe, choosing Vulkan'), t('Keep "Enable loading of add-ons" ticked'), launch];
     case 'vulkan-layer-blacklisted': return [t('Add {arg} to the launch arguments', { arg: '+r_allowBlackListedLayers 1' }), t('Steam: Properties > Launch Options. A shortcut: after the exe path'), launch];
     case 'host32-opti-dll-gone': return [t('Windows Security > Exclusions: add this game\'s folder'), t('Press Install here again'), t('Protection history may also offer Allow -- but may show nothing')];
+    case 'host32-exe-gone': return [t('Windows Security > Exclusions: add this game\'s folder'), t('Press Install here again'), t('Protection history may also offer Allow -- but may show nothing')];
+    case 'feed-host-gone': return [t('Open host64\\dlss5-feed-host.log beside the game -- it names the reason'), t('Save the bundle to share: it carries that log')];
+    case 'feed-host-startup': return fixIt(t('Press Install (rebuilds the helper and the add-on together)'));
     case 'opti-proxy-name': return fixIt(t('Press Fix it (moves OptiScaler to {to})', v));
     case 'opti-not-routed': return fixIt(t('Press Fix it (restores the NGX redirect keys)'));
     case 'dxvk-blocked-game': return [t('Press Fix it -- dgVoodoo2 goes back in where DXVK was'), launch];
@@ -1514,6 +1521,7 @@ function helpShort(diag) {
     case 'emulator-renderer': return t('Set {name} to {renderer}', v);
     case 'emulator-renderer-mismatch': return t('{name} ran on {seen} -- set {renderer}', v);
     case 'nr-model-crash': return t('The DLSS 5 model crashed');
+    case 'feed-host-gone': return t('The 64-bit helper went away');
     case 'feed-stopped': return t('The Feeder gave up');
     case 'smooth-motion-stacked': return t('Two frame generators: Smooth Motion and {generator}', v);
     case 'wrapper-crash-swap': return t('dgVoodoo2 crashes this game -- DXVK is worth a try');
@@ -1553,6 +1561,9 @@ function helpShort(diag) {
     case 'fix-failed': return t('Fix did not help -- no known fix');
     case 'vulkan-layer-blacklisted': return t('{exe} blocks Vulkan layers -- add a launch argument', v);
     case 'host32-opti-dll-gone': return t('OptiScaler was removed from host64 -- check antivirus');
+    case 'host32-exe-gone': return t('The 64-bit helper was removed from host64 -- check antivirus');
+    case 'feed-host-gone': return t('The 64-bit helper went away -- its own log says why');
+    case 'feed-host-startup': return t('The 64-bit helper quit at startup -- Install rebuilds it');
     case 'dlss-no-nr': case 'init-no-feature': case 'no-hook': default: return t('Not working -- no known fix');
   }
 }
@@ -2695,6 +2706,7 @@ function describeRun(run) {
     case 'ue-crash': return t('crashed (Unreal crash report: {message})', { message: (run.detail || '').slice(0, 120) || t('see the report') });
     case 'driver-outdated': return run.detail ? t('the NVIDIA driver is too old for DLSS 5 (needs {min} or newer)', { min: run.detail }) : t('the NVIDIA driver is too old for DLSS 5');
     case 'nr-model-crash': return t('the DLSS 5 model crashed on its first frame and the Feeder stopped');
+    case 'feed-host-gone': return t('the 64-bit helper went away this run -- host64\\dlss5-feed-host.log says why');
     case 'feed-stopped': return t('the Feeder gave up this run -- see dlss5-feed.log for its own diagnosis');
     case 'feed-no-motion': return t('the feed ran but DLSS got no motion vectors -- sharp when still, smearing in motion; deploy the Feeder again');
     case 'feed-depth-flat': return t('the feed ran but depth read flat while the scene moved -- Generic Depth is on the wrong buffer');
@@ -2792,6 +2804,7 @@ async function openGameModal(game, opts = {}) {
   await loadEngineSection(game);
   await loadLayerSection(game);
   await loadApiSection(game);
+  await loadProxySection(game);
   await loadEngineProfileStatus(game);
   await loadFrameGenSection(game);
   await loadInjectorSection(game);
@@ -3349,6 +3362,79 @@ $('#game-layer-select').addEventListener('change', async (e) => {
   await loadLayerSection(game);
 });
 
+// The per-game proxy DLL name -- see game:setProxyName in main.js. Advanced-only, because the
+// automatic answer is right for nearly every game and a wrong choice here is a game where DLSS 5
+// silently does nothing. It exists for the handful where the user knows better than detection:
+// OptiScaler's wiki names a proxy for several games this app has no entry for, and until now there
+// was no way to act on that (#132 -- a reporter went through every section of Edit looking for it).
+async function loadProxySection(game) {
+  const section = $('#game-proxy-section');
+  const select = $('#game-proxy-select');
+  const status = $('#game-proxy-status');
+  if (!game || !game.exePath) {
+    section.classList.add('hidden');
+    return;
+  }
+  const info = await window.api.proxyInfo(game.exePath);
+  // The 32-bit route keeps OptiScaler in host64\ as winmm.dll, loaded by the helper: there is no
+  // proxy beside the exe to name, so the row is hidden rather than shown and refused.
+  if (!info.ok || !info.settable) {
+    section.classList.add('hidden');
+    return;
+  }
+  section.classList.remove('hidden');
+
+  select.innerHTML = '';
+  const auto = document.createElement('option');
+  auto.value = '';
+  auto.textContent = info.automatic
+    ? t('Automatic ({name})', { name: info.automatic })
+    : t('Automatic');
+  select.appendChild(auto);
+  for (const name of info.names || []) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    select.appendChild(opt);
+  }
+  select.value = info.chosen || '';
+
+  // What is actually in the folder is worth saying next to what is chosen: the two differ while an
+  // install is still to happen, and that difference is the whole question on a "no log at all" game.
+  const installed = info.installed;
+  status.className = `status-line ${info.chosen ? 'status-ok' : ''}`.trim();
+  status.textContent = info.chosen
+    ? t('Set by hand to {name}.', { name: info.chosen }) + (installed && installed.toLowerCase() !== info.chosen
+      ? ' ' + t('OptiScaler is currently installed as {installed} and moves on the next Install or Reconfigure.', { installed })
+      : '')
+    : installed
+      ? t('OptiScaler is installed as {installed}, chosen automatically.', { installed })
+      : '';
+}
+
+$('#game-proxy-select').addEventListener('change', async (e) => {
+  if (!editingGameId) return;
+  const game = games.find((x) => x.id === editingGameId);
+  const proxy = e.target.value || null;
+  const status = $('#game-proxy-status');
+  status.textContent = t('Applying…');
+  const res = await window.api.setProxyName(game.exePath, proxy);
+  if (!res.ok) {
+    toast(t('Could not set the proxy DLL name: {error}', { error: res.error }));
+  } else {
+    // A refused move is said, not swallowed: migrateProxyIfNeeded skips when the target name is
+    // somebody else's file, and a silent skip would read as "renamed" while nothing moved.
+    const moved = res.migration && res.migration.to && !res.migration.skipped
+      ? ' ' + t('Moved OptiScaler from {from} to {to}.', { from: res.migration.from, to: res.migration.to })
+      : res.migration && res.migration.skipped
+        ? ' ' + t('Did NOT move it: {why}.', { why: res.migration.skipped })
+        : '';
+    toast((proxy ? t('OptiScaler will load as {name} for this game.', { name: proxy }) : t('Back to the automatic proxy DLL name.')) + moved);
+  }
+  await loadProxySection(game);
+  await loadRouteStatus(game);
+});
+
 // The per-game graphics API choice -- see game:setApiOverride in main.js for what it drives.
 // Offered for every game with an exe (detection can be wrong on a single-API game too), and
 // called out when the game demonstrably ships more than one renderer.
@@ -3421,6 +3507,7 @@ $('#game-api-select').addEventListener('change', async (e) => {
   // Every section below the choice depends on it.
   await loadRouteStatus(game);
   await loadApiSection(game);
+  await loadProxySection(game);
   await loadInjectorSection(game);
   await loadFeederSection(game);
   await loadOptiFgSection(game);

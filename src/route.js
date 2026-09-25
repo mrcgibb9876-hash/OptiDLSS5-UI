@@ -481,6 +481,9 @@ function rulesRoute(dir, exePath, detected = {}, gpuVendor = 'unknown', opts = {
         // the helper and something took it away again. Carried out so Game Help can name that rather
         // than offer Install, which rewrites a file that is being removed (legacy.js status).
         hostOptiScalerDllGone: !!legacyStatus.hostOptiScalerDllGone,
+        // The helper exe itself, same reasoning -- and here `complete` is false without it, so
+        // saying nothing means Game Help offers Install for a file something is deleting.
+        hostExeGone: !!legacyStatus.hostExeGone,
       });
   }
 

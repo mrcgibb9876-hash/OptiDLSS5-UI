@@ -46,7 +46,7 @@ const rtxmfg = require('./rtxmfg');
 //     none, so it would keep answering as though the folder had been looked at and found clean.
 // 17: an ASI loader's plugins are read (asiPlugins). A stored detection carries none, and its
 // absence reads as "no ASI loader here" -- the exact wrong answer that has to be refreshed (#108).
-const DETECT_VERSION = 20;
+const DETECT_VERSION = 21;
 
 const MODERN_APIS = ['dx12', 'dx11', 'vulkan'];
 const API_DLL = { dx12: 'd3d12.dll', dx11: 'd3d11.dll', vulkan: 'vulkan-1.dll' };
@@ -505,7 +505,25 @@ function apiFromFileName(exePath) {
 // OptiScaler loading as winmm.dll was invisible to every check in this file -- which is how a
 // user's DOOM 3 BFG came to run somebody else's build, with no neural pass, while this app
 // reported the route complete (2026-09-13).
-const HOOK_DLLS = ['dxgi.dll', 'd3d12.dll', 'd3d11.dll', 'd3d9.dll', 'opengl32.dll', 'dinput8.dll', 'winmm.dll', 'version.dll'];
+// The names a Feeder game on Vulkan, OpenGL or DirectX 9 can be installed under: nothing loads a
+// dxgi.dll from the game's folder there, so OptiScaler goes in under a name the exe imports at
+// start (main.js picks the first of these the import table actually carries). It lives here, beside
+// the scan, because the two lists MUST agree -- see below.
+const EARLY_PROXY_CANDIDATES = ['winmm.dll', 'version.dll', 'dbghelp.dll', 'wininet.dll', 'winhttp.dll'];
+
+// Every proxy name this app reads a folder by. It has to be a superset of the names the app can
+// INSTALL under, and it was not: dbghelp.dll, wininet.dll and winhttp.dll were installable and
+// unreadable, so a Vulkan Feeder game whose exe imports dbghelp.dll but not winmm.dll or
+// version.dll got an OptiScaler the app then could not see. The folder read came back empty, the
+// route read as "not installed yet", and Install would write a second copy beside the first.
+// Building the list from the candidates rather than repeating them is the point: two hand-kept
+// lists had already drifted, and a third would drift again. Found from a No Man's Sky report
+// (#132, 2026-09-25) asking where to change the proxy name -- the answer was that the app can
+// install under a name it cannot read back.
+//
+// Widening it is safe because this scan is gated on CONTENT, not on the name: a game's own genuine
+// Microsoft dbghelp.dll carries none of HOOK_NEEDLES, so it is read and passed over.
+const HOOK_DLLS = [...new Set(['dxgi.dll', 'd3d12.dll', 'd3d11.dll', 'd3d9.dll', 'opengl32.dll', 'dinput8.dll', ...EARLY_PROXY_CANDIDATES])];
 const HOOK_NEEDLES = ['DXVK', 'vkd3d', 'vkGetInstanceProcAddr', 'ReShade', 'OptiScaler'].map((t) => makeNeedle(t, t, { exactCase: true }));
 
 // 'dxvk' when this app's translation manifest says it put DXVK in front of the game, else null.
@@ -1902,4 +1920,4 @@ async function planForeignRemoval(dir, { ours = false } = {}) {
   return { found, del: [...del].sort(), restore, notes };
 }
 
-module.exports = { DETECT_VERSION, peBuildFacts, apiVetoes, exeStamp, openPeResources, RT_ICON, RT_GROUP_ICON, RT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, inspectAsiPlugins, inspectGraphicsDebuggers, antiCheatPresent, oldShaderCompiler, apiFromFileName, pickModern, vulkanOverrideApplies, foreignToolchains, planForeignRemoval };
+module.exports = { DETECT_VERSION, EARLY_PROXY_CANDIDATES, HOOK_DLLS, peBuildFacts, apiVetoes, exeStamp, openPeResources, RT_ICON, RT_GROUP_ICON, RT_VERSION, detectGame, detectGameCached, invalidateDetection, peOriginalFilename, peVersionString, detectRenderApi, isDetectionStale, isReEngineGame, isUnityGame, agilityRedistRisk, antiCheatStub, peImports, peBitness, readFileVersion, scanFile, optiScalerRuntimeApi, resolveUnrealShippingExe, inspectHookDlls, inspectAsiPlugins, inspectGraphicsDebuggers, antiCheatPresent, oldShaderCompiler, apiFromFileName, pickModern, vulkanOverrideApplies, foreignToolchains, planForeignRemoval };

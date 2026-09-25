@@ -1624,7 +1624,57 @@ window.I18N.register("ru", {
   "OptiScaler's own file is missing from the helper folder. This app put it there -- its install record lists host64\\winmm.dll -- and it is not on disk now, so something removed it after the install. That is almost always antivirus: a 64-bit winmm.dll appearing beside a game exe looks exactly like a DLL hijack. Everything else is fine, which is why the Feeder's own window opens and the DLSS 5 overlay is not in it. Add an exclusion for this game's folder -- Windows Security > Virus & threat protection > Manage settings > Exclusions -- and then press Install here again. Do the exclusion first: without it, Install just puts the file back for it to be taken again. Protection history may also offer Allow for the item, but a cloud detection (a name ending in !cl) is often deleted rather than held, so do not count on finding one.": "Собственный файл OptiScaler отсутствует в папке помощника. Это приложение его туда положило — в журнале установки есть host64\\winmm.dll — а сейчас его на диске нет, значит после установки его что-то удалило. Почти всегда это антивирус: 64-битная winmm.dll рядом с exe игры выглядит ровно как подмена DLL. Всё остальное в порядке — поэтому окно Feeder открывается, а оверлея DLSS 5 в нём нет. Добавьте исключение для папки этой игры — «Безопасность Windows» > «Защита от вирусов и угроз» > «Управление настройками» > «Исключения» — и затем нажмите «Установить» здесь снова. Сначала исключение: без него «Установить» лишь вернёт файл, чтобы его забрали опять. В «Журнале защиты» для записи может быть «Разрешить», но облачное обнаружение (имя, оканчивающееся на !cl) чаще удаляют, чем хранят, так что не рассчитывайте её найти.",
   "Windows Security > Exclusions: add this game's folder": "Безопасность Windows > Исключения: добавить папку этой игры",
   "Protection history may also offer Allow -- but may show nothing": "В журнале защиты может быть «Разрешить» — а может не быть ничего",
+  "The helper program is missing from the helper folder. This app put it there -- its install record lists host64\\dlss5-feed-host64.exe -- and it is not on disk now, so something removed it after the install. A 64-bit exe appearing beside a game is the same thing antivirus takes a 64-bit winmm.dll for. Without it there is no helper to start, so the game renders perfectly and DLSS 5 does nothing at all. Add an exclusion for this game's folder -- Windows Security > Virus & threat protection > Manage settings > Exclusions -- and then press Install here again. Do the exclusion first: without it, Install just puts the file back for it to be taken again.":
+    "Вспомогательной программы нет в папке помощника. Это приложение её туда положило -- в записи установки указан host64\\dlss5-feed-host64.exe -- а на диске её сейчас нет, значит что-то удалило её уже после установки. 64-битный exe рядом с игрой антивирус принимает ровно за то же, что и 64-битную winmm.dll. Без него запускать нечего, поэтому игра рисуется безупречно, а DLSS 5 не делает вообще ничего. Добавьте папку этой игры в исключения -- Безопасность Windows > Защита от вирусов и угроз > Управление настройками > Исключения -- и затем снова нажмите здесь Установить. Сначала исключение: без него Установить просто вернёт файл, чтобы его снова удалили.",
+  "The DLSS work for a 32-bit game runs in a second program, a 64-bit helper beside the game, and this run it went away -- so the game kept rendering normally and DLSS 5 stopped. The Feeder's own words for why: {why}. The helper writes its own log, host64\\dlss5-feed-host.log beside the game, and that names the reason; this app cannot see inside another program, so that file is the next thing to read rather than anything to guess at. Save the bundle to share -- it now carries that log -- or ask the AI.":
+    "Работу DLSS для 32-битной игры выполняет отдельная программа -- 64-битный помощник рядом с игрой, -- и в этом запуске он пропал: игра продолжила рисоваться как обычно, а DLSS 5 остановился. Причина словами самого Feeder: {why}. Помощник ведёт собственный журнал, host64\\dlss5-feed-host.log рядом с игрой, и причина указана в нём; заглянуть внутрь чужой программы это приложение не может, поэтому читать нужно именно этот файл, а не строить догадки. Сохраните пакет для отправки -- теперь он содержит этот журнал -- или спросите ИИ.",
+  "The 64-bit helper that does the DLSS work for this game quit as it started: {why}. That is the add-on and the helper not being the same Feeder build, or a file missing from host64\\ -- both of which Install rebuilds from one download. Press Install here again, then launch.":
+    "64-битный помощник, выполняющий работу DLSS для этой игры, завершился при запуске: {why}. Это значит, что дополнение и помощник собраны из разных версий Feeder либо в host64\\ не хватает файла -- и то и другое Установить восстанавливает одной загрузкой. Нажмите здесь Установить ещё раз, затем запустите игру.",
+  "The 64-bit helper that does the DLSS work for this 32-bit game went away during the last run, so the feed stopped and the game carried on rendering by itself. host64\\dlss5-feed-host.log, beside the game, is its own account of why.":
+    "64-битный помощник, выполняющий работу DLSS для этой 32-битной игры, пропал во время последнего запуска, поэтому подача кадров прекратилась, а игра продолжила рисоваться сама. host64\\dlss5-feed-host.log рядом с игрой -- его собственный отчёт о причине.",
+  "Open host64\\dlss5-feed-host.log beside the game -- it names the reason":
+    "Откройте host64\\dlss5-feed-host.log рядом с игрой -- в нём указана причина",
+  "Save the bundle to share: it carries that log":
+    "Сохраните пакет для отправки: в нём есть этот журнал",
+  "Press Install (rebuilds the helper and the add-on together)":
+    "Нажмите Установить (пересобирает помощник и дополнение вместе)",
+  "The 64-bit helper went away":
+    "64-битный помощник пропал",
+  "The 64-bit helper was removed from host64 -- check antivirus":
+    "64-битный помощник удалён из host64 -- проверьте антивирус",
+  "The 64-bit helper went away -- its own log says why":
+    "64-битный помощник пропал -- причина в его собственном журнале",
+  "The 64-bit helper quit at startup -- Install rebuilds it":
+    "64-битный помощник завершился при запуске -- Установить пересоберёт его",
+  "the 64-bit helper went away this run -- host64\\dlss5-feed-host.log says why":
+    "в этом запуске 64-битный помощник пропал -- причина в host64\\dlss5-feed-host.log",
   "Adding frame pacing...": "Добавление выравнивания кадров...",
   "Could not add frame pacing: {error}": "Не удалось добавить выравнивание кадров: {error}",
   "This is upstream ReLimiter, which the in-game panel cannot drive -- use ReLimiter's own overlay in the game, or the target below.": "Это исходный ReLimiter, которым внутриигровая панель управлять не может -- используйте собственный оверлей ReLimiter в игре или цель ниже.",
+  "Automatic ({name})":
+    "Автоматически ({name})",
+  "Automatic":
+    "Автоматически",
+  "Set by hand to {name}.":
+    "Задано вручную: {name}.",
+  "OptiScaler is currently installed as {installed} and moves on the next Install or Reconfigure.":
+    "Сейчас OptiScaler установлен как {installed} и будет перемещён при следующей установке или перенастройке.",
+  "OptiScaler is installed as {installed}, chosen automatically.":
+    "OptiScaler установлен как {installed}, имя выбрано автоматически.",
+  "Could not set the proxy DLL name: {error}":
+    "Не удалось задать имя прокси-DLL: {error}",
+  "Moved OptiScaler from {from} to {to}.":
+    "OptiScaler перемещён из {from} в {to}.",
+  "Did NOT move it: {why}.":
+    "НЕ перемещён: {why}.",
+  "OptiScaler will load as {name} for this game.":
+    "Для этой игры OptiScaler будет загружаться как {name}.",
+  "Back to the automatic proxy DLL name.":
+    "Возврат к автоматическому имени прокси-DLL.",
+  "Proxy DLL name":
+    "Имя прокси-DLL",
+  "OptiScaler is loaded by taking the name of a DLL the game already loads at start. The app picks that name itself and is right almost always -- change this only if you know which DLL your game loads, for instance because OptiScaler's own wiki page for it names one. Choosing a name moves the installed file to it straight away.":
+    "OptiScaler загружается под именем DLL, которую игра и так загружает при старте. Приложение выбирает это имя само и почти всегда угадывает -- меняйте только если знаете, какую DLL загружает ваша игра, например потому что её называет страница вики OptiScaler для этой игры. При выборе имени установленный файл сразу переносится под него.",
+  "A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.":
+    "Неверное имя не опасно, просто бесполезно: игра никогда не загрузит этот файл, поэтому DLSS 5 ничего не делает и журнал не пишется. Чтобы отменить, верните значение «Автоматически».",
 });
