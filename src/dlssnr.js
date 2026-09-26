@@ -53,6 +53,10 @@ const EWA_LANCZOS = 1;
 // Every tuning row below is read by that one filter and by nothing else, so they all hide together
 // rather than each repeating the condition.
 const EWA_ONLY = { all: [{ key: 'WorkingScale', below: 1 }, { key: 'ScalingUpscaler', is: EWA_LANCZOS }] };
+// [DlssNr] CleanUpMode: 0 Off, 1 Auto, 2 Manual.
+const CLEANUP_MODES = [[0, 'Off'], [1, 'Auto'], [2, 'Manual']];
+const CLEANUP_AUTO = { key: 'CleanUpMode', is: 1 };
+const CLEANUP_MANUAL = { key: 'CleanUpMode', is: 2 };
 const REVERSIBLE = [[0, 'Off (soft knee)'], [1, 'Neutwo proxy + composed'], [2, 'Neutwo proxy + replace'], [3, 'Hybrid proxy + composed'], [4, 'Hybrid proxy + replace']];
 // The codes the engine writes for [DlssNr] Language, lower-cased, as its own panel writes them.
 const LANGUAGES = [
@@ -276,6 +280,28 @@ const FIELDS = [
     label: 'Silhouette guard',
     help: "A faint double image, or a pale outline, following characters and objects as they move?\n\nThis holds the model's edit back along an outline, using the DEPTH buffer to find it.\n\nIt is a different fault from the one Halo suppression fixes, which is why that control cannot touch it. Where a game makes no upscale call of its own, the pass has no engine motion vectors and has to estimate them -- and an estimate is at its worst exactly where one object ends and another begins. The model then draws on history from the wrong side of that edge, and what lands is a rim.\n\nThat edit is wrong in ORIGIN, not in size, so bounding how far it may go does nothing to it. Fading it out where the depth says an object ends does.\n\nDepth knows an outline even when brightness does not -- a dark coat against a dark wall is no contrast edge at all. 0% is off. Raise it until the rim goes; too far and outlines lose the detail the pass is adding everywhere else.\n\nD3D12 only, and only where the game's depth buffer can be read." },
 
+  // [DlssNr] CleanUp* -- Image Clean Up (engine feat/image-cleanup, 2026-09-26): the glow the model leaves
+  // around characters. Its own section on the Image page, after the tone trim, as in the in-game panel.
+  // Mode first; Auto makes only Max strength live (Auto picks the rest itself), Manual the four rows
+  // below it, Off neither. All read every frame by the engine, so no rebuild while dragging.
+  { key: 'CleanUpMode', type: 'enum', default: 0, options: CLEANUP_MODES, group: 'Picture', label: 'Mode',
+    help: "Holds back the glow the model leaves around characters and other strong edges. Near a silhouette -- where the depth jumps -- or a hard brightness edge, the finished picture may not stray far from the game's own frame nor past what the pixels around it hold, so light cannot bleed across the edge. The object's own pixels and flat areas are left alone, and the model's detail elsewhere is untouched.\n\nAuto measures the glow every frame and uses as much clean up as it needs, up to Max strength, easing rather than jumping. Manual uses the sliders below.\n\nSee what it touches with Inspect > Debug view > Image Clean Up mask." },
+  { key: 'CleanUpMaxStrength', type: 'float', default: 0.8, min: 0, max: 1, step: 0.01, group: 'Picture',
+    label: 'Max strength', dependsOn: CLEANUP_AUTO,
+    help: 'Auto only: the most clean up it may use. Lower it if Auto softens edges you want kept.' },
+  { key: 'CleanUpStrength', type: 'float', default: 0.6, min: 0, max: 1, step: 0.01, group: 'Picture',
+    label: 'Strength', dependsOn: CLEANUP_MANUAL,
+    help: 'How much of the way a glowing pixel is taken back, and how tightly it is held to what the pixels around it look like. 0 does nothing.' },
+  { key: 'CleanUpEdge', type: 'float', default: 1.5, min: 0.25, max: 4, step: 0.05, group: 'Picture',
+    label: 'Edge threshold', dependsOn: CLEANUP_MANUAL,
+    help: 'How hard a brightness edge has to be before it counts, in stops: lower cleans more of the picture. Silhouettes found from depth count whatever this is.' },
+  { key: 'CleanUpBalance', type: 'float', default: 0.5, min: 0, max: 1, step: 0.01, group: 'Picture',
+    label: 'Fine / wide', dependsOn: CLEANUP_MANUAL,
+    help: 'Where it looks: 0 only at the pixels right beside each one, for a thin rim; 1 about four pixels out, for a glow that sits a little off the edge; 0.5 both.' },
+  { key: 'CleanUpMotion', type: 'float', default: 0.5, min: 0, max: 1, step: 0.01, group: 'Picture',
+    label: 'Motion protection', dependsOn: CLEANUP_MANUAL,
+    help: "How far fast motion and newly uncovered areas hold the clean up back, so real motion blur stays soft. Needs the game's motion vectors (DX12); with none -- the Present route without optical flow -- it has nothing to go on and does nothing." },
+
   { key: 'ScanMeter', type: 'bool', default: false, group: 'Brightness & HDR', label: 'Show the light meter on screen',
     dependsOn: { key: 'WhitePointSource', is: 2 }, help: "A lamp in the corner: red for dark, green for full light, and the shades between, with the reading beside it.\n\nIt is how you see at a glance that the scan is TRACKING rather than merely running. Walk into shade and it should slide toward red; step out and it should go green. If it moves the wrong way, that is what \"the number runs the other way\" below is for.\n\nPurely a readout. It changes nothing." },
   { key: 'ScanTrim', type: 'float', default: 1.0, min: 0.25, max: 4, step: 0.01, log: true, group: 'Brightness & HDR',
@@ -317,9 +343,9 @@ const FIELDS = [
   { key: 'CompareSplit', type: 'float', default: 0.5, min: 0, max: 1, step: 0.01, group: 'Compare & inspect', label: 'Split',
     dependsOn: { key: 'Compare', is: 2 }, help: "Where the wipe sits across the frame." },
   { key: 'DebugView', type: 'enum', default: 0, group: 'Compare & inspect',
-    options: [[0, 'Off'], [1, 'Proxy (what the model sees)'], [2, 'Model output (raw)'], [3, 'Difference (amplified)']],
+    options: [[0, 'Off'], [1, 'Proxy (what the model sees)'], [2, 'Model output (raw)'], [3, 'Difference (amplified)'], [4, 'Image Clean Up mask']],
     label: 'Debug view',
-    help: "Proxy is the picture handed to the model. Difference shows what the model actually changed, amplified twenty times and centred on grey." },
+    help: "Proxy is the picture handed to the model. Difference shows what the model actually changed, amplified twenty times and centred on grey.\n\nImage Clean Up mask shows the frame in grey with red where the clean up may act, green where it actually moved a pixel and blue where motion held it back. It works with the clean up off too, so the edges can be checked before turning it on." },
 
 
   { key: 'VendorColours', type: 'bool', default: true, group: 'Panel appearance', label: 'Vendor colours',
@@ -386,6 +412,10 @@ const PAGES = [
     { caption: null, keys: ['Transfer', 'ScalingUpscaler', 'ScalingSharpness', 'ScalingAntiRinging',
                             'ScalingSigmoid', 'ScalingDither'] },
     { caption: 'How much of it lands', keys: ['TransferStrength', 'ColourStrength', 'Brightness', 'Contrast', 'HaloGuard', 'DepthEdge'] },
+    // cleanup: the read-only "what is it doing now" line under Mode, from OptiScaler.live.json -- drawn by
+    // the renderer, as the in-game panel draws it from the resolve's own reading.
+    { caption: 'Image Clean Up', cleanup: true, keys: ['CleanUpMode', 'CleanUpMaxStrength', 'CleanUpStrength', 'CleanUpEdge',
+                                                       'CleanUpBalance', 'CleanUpMotion'] },
     { caption: 'Colour', keys: ['ReversibleMode', 'WhitePointSource', 'WhitePointTrim', 'WhitePointScale', 'MaxRatio'] },
     { caption: 'Exposure scan', keys: ['ScanMeter', 'ScanTrim', 'ScanInverted'] },
   ] },
