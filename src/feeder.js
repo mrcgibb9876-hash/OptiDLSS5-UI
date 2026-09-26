@@ -567,11 +567,31 @@ async function fetchWithRetry(url, init = {}, { fetchImpl = netFetch, pauses = R
 // sha256: the digest the caller already has (a GitHub release asset's). Pinned URLs need none, and
 // a GitHub release URL without one is looked up (integrity.js). A cached copy is re-checked when
 // its hash is known without the network, so a file damaged in the cache is fetched again.
+//
+// A GitHub release asset with neither -- RenoDX's `snapshot`, the `test-ue-extended` pre-release, any
+// rolling tag whose assets are replaced in place -- used to be served from the cache by its FILE NAME
+// forever, so a new upload never arrived. Each such download now leaves a record beside the file
+// (<file>.release.json: repo, tag, name, updatedAt, digest), and a cached copy is reused only while
+// GitHub still describes the asset the same way and the file still hashes to its digest. Offline or
+// refused, the cached copy is used as before.
 async function downloadToCache(url, cacheDir, fileName, ghHeaders, { sha256: given = null, fetchImpl = netFetch } = {}) {
   const dest = path.join(cacheDir, fileName);
+  const release = integrity.parseReleaseUrl(url);
+  const recordFile = `${dest}.release.json`;
   if (fs.existsSync(dest)) {
     const known = integrity.pinFor(url) || given;
-    if (!known || integrity.sha256(fs.readFileSync(dest)) === String(known).toLowerCase()) return dest;
+    if (known) {
+      if (integrity.sha256(fs.readFileSync(dest)) === String(known).toLowerCase()) return dest;
+    } else if (!release) {
+      return dest;
+    } else {
+      const info = await integrity.releaseAssetInfo(url, { fetchImpl, headers: ghHeaders });
+      if (!info) return dest;
+      if (cachedReleaseAssetCurrent(dest, readReleaseRecord(recordFile), url, info)) {
+        writeReleaseRecord(recordFile, url, release, info);
+        return dest;
+      }
+    }
     await fsp.rm(dest, { force: true });
   }
   const res = await fetchWithRetry(url, { headers: ghHeaders }, { fetchImpl });
@@ -584,7 +604,40 @@ async function downloadToCache(url, cacheDir, fileName, ghHeaders, { sha256: giv
   const tmp = dest + '.part';
   await fsp.writeFile(tmp, buf);
   await fsp.rename(tmp, dest);
+  // Un-pinned release assets only: a pin never goes stale, and one the caller's digest covers is
+  // re-checked against that digest each time already.
+  if (release && !integrity.pinFor(url) && !given) {
+    const info = await integrity.releaseAssetInfo(url, { fetchImpl, headers: ghHeaders }).catch(() => null);
+    writeReleaseRecord(recordFile, url, release, { digest: expected || (info && info.digest) || null, updatedAt: (info && info.updatedAt) || null });
+  } else if (fs.existsSync(recordFile)) {
+    await fsp.rm(recordFile, { force: true });
+  }
   return dest;
+}
+
+function readReleaseRecord(file) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
+}
+
+function writeReleaseRecord(file, url, release, info) {
+  try {
+    fs.writeFileSync(file, JSON.stringify({ url, repo: `${release.owner}/${release.repo}`, tag: release.tag, name: release.name,
+      updatedAt: info.updatedAt || null, digest: info.digest || null }));
+  } catch {}
+}
+
+// Whether a cached un-pinned release asset is still what the release holds. With GitHub's digest the
+// file itself must hash to it (a record is not needed then: a copy from before records existed is kept
+// when it is the same bytes). Without one -- releases published before GitHub computed digests -- the
+// record's updatedAt has to match.
+function cachedReleaseAssetCurrent(dest, record, url, info) {
+  const sameRecord = !!(record && record.url === url);
+  if (sameRecord && record.updatedAt && info.updatedAt && record.updatedAt !== info.updatedAt) return false;
+  if (sameRecord && record.digest && info.digest && record.digest !== info.digest) return false;
+  if (info.digest) {
+    try { return integrity.sha256(fs.readFileSync(dest)) === info.digest; } catch { return false; }
+  }
+  return sameRecord && !!info.updatedAt && record.updatedAt === info.updatedAt;
 }
 
 function feederAssetFromRelease(release) {

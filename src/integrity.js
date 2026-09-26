@@ -173,9 +173,17 @@ function parseReleaseUrl(url) {
 }
 
 // The published digest of a GitHub release asset, or null (not a release URL, no digest, offline).
-// One API call per distinct release per app run; only made when something is actually downloaded.
+// One API call per distinct release per app run; only made when something is downloaded, or when an
+// un-pinned release asset is about to be reused from the cache (feeder.downloadToCache).
 const digestCache = new Map();
-async function releaseAssetDigest(url, { fetchImpl = netFetch, headers = {} } = {}) {
+async function releaseAssetDigest(url, opts = {}) {
+  const info = await releaseAssetInfo(url, opts);
+  return info ? info.digest : null;
+}
+
+// What GitHub says about a release asset now: { digest, updatedAt } (either may be null), or null when
+// it cannot be asked (not a release URL, offline, refused) or the release has no such asset.
+async function releaseAssetInfo(url, { fetchImpl = netFetch, headers = {} } = {}) {
   const parsed = parseReleaseUrl(url);
   if (!parsed) return null;
   const key = `${parsed.owner}/${parsed.repo}@${parsed.tag}`;
@@ -196,7 +204,9 @@ async function releaseAssetDigest(url, { fetchImpl = netFetch, headers = {} } = 
   }
   const assets = await digestCache.get(key);
   if (!assets) { digestCache.delete(key); return null; }
-  return digestFromAsset(assets.find((a) => a && a.name === parsed.name));
+  const asset = assets.find((a) => a && a.name === parsed.name);
+  if (!asset) return null;
+  return { digest: digestFromAsset(asset), updatedAt: asset.updated_at || null };
 }
 
 // What a download should hash to: the pin, else the digest the caller has, else GitHub's.
@@ -237,7 +247,7 @@ module.exports = {
   PINS, UNPINNED, URLS, GITHUB_HOSTS,
   RESHADE_SHADERS_COMMIT, LUMENITEFX_COMMIT, VORT_COMMIT, RENOFX_COMMIT, LILIUM_HDR_COMMIT,
   RENOFX_SHA256, LILIUM_HDR_SHA256, DH_SHADERS_COMMIT, DH_SHADERS_SHA256,
-  sha256, pinFor, digestFromAsset, parseReleaseUrl, releaseAssetDigest, expectedSha256,
+  sha256, pinFor, digestFromAsset, parseReleaseUrl, releaseAssetDigest, releaseAssetInfo, expectedSha256,
   verifyBuffer, checkFinalUrl, mismatchError,
   _resetDigestCache: () => digestCache.clear(),
 };

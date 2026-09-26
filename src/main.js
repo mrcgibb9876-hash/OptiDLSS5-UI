@@ -580,15 +580,10 @@ async function ueExtendedTableRefresh() {
   if (!ueExtendedTableMemo.has(key)) {
     ueExtendedTableMemo.set(key, ueextended.loadReleaseTable(source, {
       resolveRelease: (repo, tag) => addonCtx().resolveRelease(repo, tag),
-      // Always fresh when asked: the cached name is reused by downloadToCache, and a rolling release
-      // replaces this asset in place, so the old copy goes first.
+      // With the asset's digest, so a copy already in the cache is reused only while it is the same bytes.
       download: async (url, asset) => {
-        const name = 'ue-extended-games.download.json';
-        await fsp.rm(path.join(feederCacheDir(), name), { force: true });
-        const file = await feeder.downloadToCache(url, feederCacheDir(), name, GITHUB_HEADERS, { sha256: asset && asset.digest });
-        const buf = fs.readFileSync(file);
-        await fsp.rm(file, { force: true });
-        return buf;
+        const name = `ue-extended-games.${String(source && source.tag).replace(/[^A-Za-z0-9._-]/g, '_')}.download.json`;
+        return fs.readFileSync(await feeder.downloadToCache(url, feederCacheDir(), name, GITHUB_HEADERS, { sha256: asset && asset.digest }));
       },
       readCache: () => readJson(ueExtendedTableFile(), null),
       writeCache: (value) => writeJson(ueExtendedTableFile(), value),
