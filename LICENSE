@@ -26,8 +26,9 @@ Parts of the Software, and programs it downloads or bundles, are the work of oth
 under their own licences, listed in THIRD-PARTY-NOTICES.md. This licence does not restrict any
 right those licences grant. In particular: src/library.js is under the MIT licence; the
 OptiScaler_DLSSNR engine, which the Software downloads and ships beside itself as a separate
-program, is under the GNU General Public License v3.0, with its source at
-https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR.
+program, is under the GNU General Public License v3.0. Each engine release at
+https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR-releases/releases carries its complete
+corresponding source as OptiScaler_DLSSNR-<tag>-source.zip.
 
 No warranty
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT

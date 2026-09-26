@@ -2821,7 +2821,7 @@ ipcMain.handle('release:validate', (_evt, folder) => {
     return {
       valid: false,
       reason: 'This looks like standard OptiScaler, not the DLSS-NR fork -- OptiScaler.ini has no [DlssNr] section. ' +
-        'Use "Check for Updates" in Settings to fetch the right build from OptiScaler_DLSSNR rather than a manual download.'
+        'Use "Check for Updates" in Settings to fetch the right build from OptiScaler_DLSSNR-releases rather than a manual download.'
     };
   }
   return { valid: true };
@@ -8052,9 +8052,18 @@ ipcMain.handle('update:check', async (_evt, { engine } = {}) => {
       if (!r.ok) throw new Error(`GitHub API returned ${r.status}`);
       return r.json();
     };
-    const pinned = pin ? await getJson(engines.releaseByTagApi(id, pin)) : null;
+    // The public releases repository first; the source repository only when that has no answer
+    // (a release from before the releases repository, not yet back-filled). engines.js releaseRepos.
+    const getFirst = async (urls) => {
+      let lastError = null;
+      for (const url of urls) {
+        try { return await getJson(url); } catch (e) { lastError = e; }
+      }
+      throw lastError || new Error('no release source');
+    };
+    const pinned = pin ? await getFirst(engines.releaseByTagApis(id, pin)) : null;
     let latest = null;
-    try { latest = await getJson(engines.releasesApi(id)); } catch (e) { if (!pin) throw e; }
+    try { latest = await getFirst(engines.releasesApis(id)); } catch (e) { if (!pin) throw e; }
     const { offer: data, newerUntested } = engines.chooseEngineOffer({ pin, pinned, latest });
     if (!data) throw new Error('no engine release found');
     const { zip: zipAsset, sha256: shaAsset } = engines.pickAssets(data);

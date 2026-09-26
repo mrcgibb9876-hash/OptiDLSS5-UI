@@ -29,8 +29,10 @@ and Node.js. Their licence texts ship with the installed app (`LICENSE.electron.
 ### OptiScaler_DLSSNR -- GNU GPL v3.0
 
 The OptiScaler engine the app installs into games, bundled beside the app and kept current from
-its releases. It is a separate program under the GPL-3.0; its complete source is at
-https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR, built on
+its releases. It is a separate program under the GPL-3.0. Every release at
+https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR-releases/releases carries its complete
+corresponding source as `OptiScaler_DLSSNR-<tag>-source.zip` (the engine bundled with an app release
+is the one named by that release's `OptiScaler_DLSSNR-<tag>.zip` asset). It is built on
 [OptiScaler](https://github.com/optiscaler/OptiScaler).
 
 Its Present route and depth tracker (DLSS 5 on games with no DLSS call) follow the design of

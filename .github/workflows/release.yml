@@ -154,17 +154,34 @@ jobs:
           Write-Error "package.json engineVersion (or the engine_tag input) must be an exact engine tag like v1.0.41, got '$engineTag'."
           exit 1
         }
-        $uri = "https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/tags/$engineTag"
+        # Engine builds are published to the PUBLIC OptiScaler_DLSSNR-releases repository (the source
+        # repository is going private, and its releases with it). That repository is public, so the token
+        # above is only for the rate limit. TRANSITION: a release published before it existed and not yet
+        # back-filled is taken from the source repository while that is still public, with a warning.
+        # Every release there also carries the GPL source zip (OptiScaler_DLSSNR-<tag>-source.zip),
+        # which is never the thing bundled.
+        $uri = "https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR-releases/releases/tags/$engineTag"
+        $fallbackUri = "https://api.github.com/repos/mrcgibb9876-hash/OptiScaler_DLSSNR/releases/tags/$engineTag"
         Write-Output "Engine release: $uri"
 
         $asset = $null
         $release = $null
         for ($attempt = 1; $attempt -le 5; $attempt++) {
-          try {
-            $release = Invoke-RestMethod -Headers $headers -Uri $uri
-            $asset = $release.assets | Where-Object { $_.name -like '*.zip' } | Select-Object -First 1
-          } catch {
-            Write-Output "attempt $attempt failed: $($_.Exception.Message)"
+          foreach ($candidate in @($uri, $fallbackUri)) {
+            try {
+              $release = Invoke-RestMethod -Headers $headers -Uri $candidate
+              $asset = $release.assets | Where-Object { $_.name -like '*.zip' -and $_.name -notlike '*-source.zip' } | Select-Object -First 1
+            } catch {
+              Write-Output "attempt $attempt failed on $($candidate): $($_.Exception.Message)"
+              $release = $null
+              $asset = $null
+            }
+            if ($asset) {
+              if ($candidate -ne $uri) {
+                Write-Output "::warning::Engine $engineTag is not in OptiScaler_DLSSNR-releases yet; bundled it from the source repository. Run the engine's back-fill workflow before that repository goes private."
+              }
+              break
+            }
           }
           if ($asset) { break }
           Write-Output "attempt $($attempt): no .zip asset on engine $engineTag yet ($($release.tag_name)); waiting"
@@ -172,7 +189,7 @@ jobs:
         }
 
         if (-not $asset) {
-          Write-Error "No .zip asset found on OptiScaler_DLSSNR release $engineTag ($($release.tag_name)) after 5 attempts."
+          Write-Error "No .zip asset found on OptiScaler_DLSSNR-releases (or OptiScaler_DLSSNR) release $engineTag after 5 attempts."
           exit 1
         }
 
@@ -296,7 +313,9 @@ jobs:
           instead of the whole thing. Downloading either by hand does nothing.
 
           `OptiScaler_DLSSNR-*.zip` is the engine. It is already inside the installer and is set up for you on
-          first launch — it is here on its own only for anyone putting a game folder together by hand.
+          first launch — it is here on its own only for anyone putting a game folder together by hand. The
+          engine is GPL-3.0: its complete source is `OptiScaler_DLSSNR-<tag>-source.zip` on the release of the
+          same tag in [OptiScaler_DLSSNR-releases](https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR-releases/releases).
 
           </details>
         # latest.yml + the blockmap are what the Manager's own updater (electron-updater, GitHub

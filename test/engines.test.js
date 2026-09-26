@@ -27,6 +27,16 @@ test('release assets: the zip is the zip, its .sha256 file is the checksum, neve
   assert.equal(picked.zip.browser_download_url, 'https://x/zip');
   assert.equal(picked.sha256.browser_download_url, 'https://x/sha');
   assert.equal(engines.pickAssets({ assets: [{ name: 'OptiScaler_v1.0.16.zip' }] }).sha256, null);
+  // The releases repository puts the GPL source zip beside every build. Whatever order GitHub lists
+  // them in, the build is what gets installed.
+  const withSource = engines.pickAssets({ assets: [
+    { name: 'OptiScaler_DLSSNR-v2.2.16-source.zip', browser_download_url: 'https://x/src' },
+    { name: 'OptiScaler_v2.2.16.zip', browser_download_url: 'https://x/zip' },
+  ] });
+  assert.equal(withSource.zip.browser_download_url, 'https://x/zip');
+  assert.equal(engines.isSourceZip('OptiScaler_DLSSNR-v1.0.5.zip'), false, 'an old build named OptiScaler_DLSSNR-<tag>.zip is a build');
+  assert.equal(engines.pickAssets({ assets: [{ name: 'OptiScaler_DLSSNR-v1.0.5.zip' }] }).zip.name, 'OptiScaler_DLSSNR-v1.0.5.zip');
+  assert.equal(engines.pickAssets({ assets: [{ name: 'OptiScaler_DLSSNR-v2.2.16-source.zip' }] }).zip, null, 'a source zip alone is nothing to install');
   assert.equal(engines.parseSha256Text('4a315a3b3ee495631bd7cb1f562f609af577443602e507bfc7a7e6749c296258 *OptiScaler-DLSSNR-v0.7.7.zip'), '4a315a3b3ee495631bd7cb1f562f609af577443602e507bfc7a7e6749c296258');
   assert.equal(engines.parseSha256Text('not a hash'), null);
 });
@@ -38,7 +48,14 @@ test('both builds are real choices; an unknown id falls back; only explicit choi
   assert.equal(engines.normalizeEngine('presr'), 'presr', 'a choice again, not normalised away');
   assert.equal(engines.normalizeEngine('nonsense'), 'dlssnr');
   assert.equal(engines.normalizeEngine(undefined), 'dlssnr');
-  assert.match(engines.releasesApi('dlssnr'), /mrcgibb9876-hash\/OptiScaler_DLSSNR\/releases\/latest$/);
+  // Our builds come from the public releases repository, with the source repository only as the
+  // transition fallback, in that order. The other build has no fallback.
+  assert.match(engines.releasesApi('dlssnr'), /mrcgibb9876-hash\/OptiScaler_DLSSNR-releases\/releases\/latest$/);
+  assert.deepEqual(engines.releaseRepos('dlssnr'), ['mrcgibb9876-hash/OptiScaler_DLSSNR-releases', 'mrcgibb9876-hash/OptiScaler_DLSSNR']);
+  assert.deepEqual(engines.releaseRepos('presr'), ['wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass']);
+  assert.match(engines.releaseByTagApis('dlssnr', 'v2.2.16')[0], /OptiScaler_DLSSNR-releases\/releases\/tags\/v2\.2\.16$/);
+  assert.match(engines.releaseByTagApis('dlssnr', 'v2.2.16')[1], /OptiScaler_DLSSNR\/releases\/tags\/v2\.2\.16$/);
+  assert.match(engines.releasePageUrl('dlssnr'), /^https:\/\/github\.com\/mrcgibb9876-hash\/OptiScaler_DLSSNR-releases\/releases\/latest$/);
   assert.match(engines.releasesApi('presr'), /wilsjo2\/OptiScaler-DLSSNR-PreSR-Multipass\/releases\/latest$/);
   // The flag the rest of the app reads off a build: whether it draws an in-game panel at all. On the
   // build that does not, the break-away panel is what the UI must point at (route-explain.js).
@@ -295,7 +312,8 @@ test('update:check and update:install per engine, with the sha256 asset checked'
     const check = await invoke('update:check', {});
     assert.equal(check.ok, true, check.error);
     assert.equal(check.engine, 'dlssnr');
-    assert.match(seen[0], /mrcgibb9876-hash\/OptiScaler_DLSSNR/);
+    assert.match(seen[0], /mrcgibb9876-hash\/OptiScaler_DLSSNR-releases\//, 'the public releases repository is asked first');
+    assert.ok(!seen.some((u) => /mrcgibb9876-hash\/OptiScaler_DLSSNR\//.test(u)), 'the source repository is not asked when the releases repository answers');
     assert.equal(check.downloadUrl, 'https://dl/zip');
     assert.equal(check.sha256Url, 'https://dl/zip.sha256');
     assert.equal(check.tag, PIN, 'the pinned engine is offered, not "latest"');
@@ -321,6 +339,49 @@ test('update:check and update:install per engine, with the sha256 asset checked'
     assert.equal(good.engine, 'dlssnr');
     assert.equal(path.basename(good.folder), 'OptiScalerRelease', 'the managed folder');
     assert.ok(fs.existsSync(path.join(good.folder, 'setup_windows.bat')));
+  } finally {
+    global.fetch = realFetch;
+  }
+});
+
+// The move to a private source repository (2026-09-26): engine builds are read from the public
+// OptiScaler_DLSSNR-releases. A release published before that repository existed is only in the source
+// repository until the back-fill copies it, so a 404 there falls back to the source repository. The
+// source zip beside the build there is never what is offered.
+test('update:check reads the public releases repository, and falls back to the source repository for a tag it lacks', { skip: !onWindows }, async () => {
+  const { invoke } = loadMain();
+  const PIN = require('../package.json').engineVersion;
+  const seen = [];
+  const realFetch = global.fetch;
+  const notFound = { ok: false, status: 404, json: async () => ({ message: 'Not Found' }) };
+  global.fetch = async (url) => {
+    url = String(url);
+    seen.push(url);
+    if (url.includes('/OptiScaler_DLSSNR-releases/releases/tags/')) return notFound;
+    if (url.includes('/OptiScaler_DLSSNR-releases/releases/latest')) {
+      return { ok: true, status: 200, json: async () => ({ tag_name: 'v99.0.0', name: 'v99.0.0', published_at: 'x', assets: [
+        { name: 'OptiScaler_DLSSNR-v99.0.0-source.zip', browser_download_url: 'https://dl/src' },
+        { name: 'OptiScaler_v99.0.0.zip', browser_download_url: 'https://dl/newer-zip' },
+      ] }) };
+    }
+    if (url.endsWith(`/OptiScaler_DLSSNR/releases/tags/${encodeURIComponent(PIN)}`)) {
+      return { ok: true, status: 200, json: async () => ({ tag_name: PIN, name: PIN, published_at: 'x', assets: [
+        { name: `OptiScaler_${PIN}.zip`, browser_download_url: 'https://dl/old-zip' },
+      ] }) };
+    }
+    throw new Error('unexpected fetch ' + url);
+  };
+  try {
+    const check = await invoke('update:check', {});
+    assert.equal(check.ok, true, check.error);
+    assert.equal(check.tag, PIN);
+    assert.equal(check.downloadUrl, 'https://dl/old-zip', 'the pinned build from the source repository');
+    assert.equal(check.newerUntested, 'v99.0.0', '"latest" came from the releases repository');
+    const tagAsks = seen.filter((u) => u.includes('/releases/tags/'));
+    assert.match(tagAsks[0], /OptiScaler_DLSSNR-releases\//, 'the releases repository is asked first');
+    assert.match(tagAsks[1], /mrcgibb9876-hash\/OptiScaler_DLSSNR\//, 'then the source repository');
+    assert.ok(!seen.some((u) => /mrcgibb9876-hash\/OptiScaler_DLSSNR\/releases\/latest/.test(u)),
+      'the source repository\'s latest is not asked when the releases repository has one');
   } finally {
     global.fetch = realFetch;
   }

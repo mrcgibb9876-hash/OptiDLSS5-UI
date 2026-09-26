@@ -21,7 +21,15 @@ const ENGINES = {
   dlssnr: {
     id: 'dlssnr',
     label: 'OptiScaler_DLSSNR',
-    repo: 'mrcgibb9876-hash/OptiScaler_DLSSNR',
+    // Engine builds come from the PUBLIC releases repository. The source repository is going
+    // private, and a private repository's releases are private with it, so this is the one place
+    // installed copies can keep downloading from. Every release there also carries the GPL-3.0
+    // source of that build (OptiScaler_DLSSNR-<tag>-source.zip), which pickAssets never installs.
+    repo: 'mrcgibb9876-hash/OptiScaler_DLSSNR-releases',
+    // TRANSITION ONLY: asked when the releases repository has no answer, i.e. a release published
+    // before that repository existed and not yet back-filled into it. Once the source repository is
+    // private this answers 404 too; drop it then.
+    fallbackRepo: 'mrcgibb9876-hash/OptiScaler_DLSSNR',
     folderName: 'OptiScalerRelease',
     // Ships inside this app's installer (release.yml bundles it), then kept current from GitHub.
     bundled: true,
@@ -54,6 +62,20 @@ function releasesApi(id) {
 
 function releaseByTagApi(id, tag) {
   return `https://api.github.com/repos/${engine(id).repo}/releases/tags/${encodeURIComponent(tag)}`;
+}
+
+// Where a build's releases are asked for, in order: its repo, then its fallbackRepo if it has one.
+function releaseRepos(id) {
+  const e = engine(id);
+  return e.fallbackRepo ? [e.repo, e.fallbackRepo] : [e.repo];
+}
+
+function releasesApis(id) {
+  return releaseRepos(id).map((repo) => `https://api.github.com/repos/${repo}/releases/latest`);
+}
+
+function releaseByTagApis(id, tag) {
+  return releaseRepos(id).map((repo) => `https://api.github.com/repos/${repo}/releases/tags/${encodeURIComponent(tag)}`);
 }
 
 // The engine release this app version was built and tested with: package.json's engineVersion,
@@ -92,10 +114,15 @@ function releasePageUrl(id) {
 }
 
 // The zip to install and, when the release carries one, the .sha256 file to check it against.
-// A `.zip.sha256` asset must not be mistaken for the zip itself.
+// A `.zip.sha256` asset must not be mistaken for the zip itself, and neither must the GPL source
+// zip the releases repository puts beside every build (OptiScaler_DLSSNR-<tag>-source.zip).
+function isSourceZip(name) {
+  return /-source\.zip$/i.test(String(name || ''));
+}
+
 function pickAssets(release) {
   const assets = (release && release.assets) || [];
-  const zip = assets.find((a) => /\.zip$/i.test(a.name || ''));
+  const zip = assets.find((a) => /\.zip$/i.test(a.name || '') && !isSourceZip(a.name));
   const sha = zip ? assets.find((a) => (a.name || '').toLowerCase() === `${zip.name.toLowerCase()}.sha256`) : null;
   return { zip: zip || null, sha256: sha || null };
 }
@@ -144,7 +171,8 @@ function markerForInstall(prev, id) {
 
 module.exports = {
   DEFAULT_ENGINE, ENGINES, ENGINE_MARKER,
-  normalizeEngine, engine, releasesApi, releaseByTagApi, releasePageUrl, pickAssets, parseSha256Text,
+  normalizeEngine, engine, releasesApi, releaseByTagApi, releaseRepos, releasesApis, releaseByTagApis,
+  releasePageUrl, pickAssets, isSourceZip, parseSha256Text,
   pinnedEngineTag, compareEngineTags, chooseEngineOffer,
   readEngineMarker, writeEngineMarker, clampPasses, iniEditsFor, markerForInstall,
 };

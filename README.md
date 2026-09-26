@@ -21,7 +21,7 @@
 > per-game results, before/after screenshots, and every release announced as it lands.
 
 A Windows app that puts NVIDIA's DLSS 5 Neural Rendering into your games through the
-[OptiScaler_DLSSNR](https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR) build of OptiScaler. Add your
+[OptiScaler_DLSSNR](https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR-releases) build of OptiScaler. Add your
 games, press **Install**, play. The app works out what each game needs and sets it up.
 
 > Step-by-step setup for players: [README-END-USER.txt](README-END-USER.txt) (ships in the installer as `README.txt`).
@@ -199,7 +199,9 @@ folders, which is useful for screenshots or a second instance.
 
 **OptiDLSS5-UI is proprietary, all rights reserved** ([LICENSE](LICENSE), from v1.55.0). You may run the official
 releases and propose changes here, but not copy, modify or redistribute the app. The OptiScaler_DLSSNR engine is a
-separate program and stays GPL-3.0. Third-party notices: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+separate program and stays GPL-3.0: every engine release in
+[OptiScaler_DLSSNR-releases](https://github.com/mrcgibb9876-hash/OptiScaler_DLSSNR-releases/releases) carries its
+complete source as `OptiScaler_DLSSNR-<tag>-source.zip`. Third-party notices: [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 `src/library.js` is from [DLSS5-Swapper](https://github.com/rakanki911/DLSS5-Swapper) (MIT, Rakan Alkhaldi;
 licence in `third_party/`).
 

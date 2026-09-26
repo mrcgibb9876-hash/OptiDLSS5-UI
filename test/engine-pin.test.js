@@ -22,6 +22,8 @@ test('package.json pins the bundled engine to an exact release tag', () => {
 test('release.yml bundles the pinned engine and never the latest release', () => {
   const wf = fs.readFileSync(path.join(REPO, '.github', 'workflows', 'release.yml'), 'utf8');
   assert.ok(wf.includes('.engineVersion'), 'the engine step reads package.json engineVersion');
-  assert.ok(!/OptiScaler_DLSSNR\/releases\/latest/.test(wf), 'no fallback to the engine\'s /releases/latest');
-  assert.ok(/OptiScaler_DLSSNR\/releases\/tags\/\$engineTag/.test(wf), 'the engine is fetched by its exact tag');
+  assert.ok(!/OptiScaler_DLSSNR(-releases)?\/releases\/latest/.test(wf), 'no fallback to the engine\'s /releases/latest');
+  assert.ok(/OptiScaler_DLSSNR-releases\/releases\/tags\/\$engineTag/.test(wf), 'the engine is fetched by its exact tag, from the public releases repository');
+  // The GPL source zip sits beside the build on every release there; it must never be what is bundled.
+  assert.ok(/-source\.zip/.test(wf), 'the engine step skips the source zip');
 });
