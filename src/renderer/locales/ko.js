@@ -1677,4 +1677,10 @@ window.I18N.register("ko", {
     "OptiScaler는 게임이 시작할 때 이미 로드하는 DLL의 이름을 가져와 로드됩니다. 앱이 그 이름을 스스로 고르며 거의 항상 맞습니다. 게임이 어떤 DLL을 로드하는지 알 때만 바꾸세요. 예를 들어 OptiScaler 위키의 해당 게임 문서에 이름이 적혀 있는 경우입니다. 이름을 고르면 설치된 파일이 즉시 그 이름으로 옮겨집니다.",
   "A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.":
     "이름이 틀려도 위험하지는 않고 아무 일도 하지 않을 뿐입니다. 게임이 그 파일을 절대 로드하지 않으므로 DLSS 5도 동작하지 않고 로그도 남지 않습니다. 되돌리려면 자동으로 다시 설정하세요.",
+  "The game crashed inside NVIDIA's own present code ({module}), on the frame it first tried to show. That module is only in the way when NVIDIA Smooth Motion is on for this game, and it does not survive having DLSS 5 loaded underneath it. Turn Smooth Motion off for this game in the NVIDIA App, then run it again. Nothing here needs changing.":
+    "게임이 첫 화면을 표시하려는 순간 NVIDIA 자체 프레젠트 코드({module}) 안에서 충돌했습니다. 이 모듈은 이 게임에 NVIDIA Smooth Motion이 켜져 있을 때만 경로에 끼어들며, 그 아래에 DLSS 5가 로드된 상태를 견디지 못합니다. NVIDIA App에서 이 게임의 Smooth Motion을 끄고 다시 실행하세요. 여기서는 바꿀 것이 없습니다.",
+  "Crashed -- turn NVIDIA Smooth Motion off":
+    "충돌 -- NVIDIA Smooth Motion을 끄세요",
+  "crashed inside NVIDIA's present code ({module})":
+    "NVIDIA 프레젠트 코드 안에서 충돌({module})",
 });

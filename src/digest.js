@@ -66,6 +66,9 @@ function parseDigest(text) {
     runtimeApi: firstWord(runtimeLine),
     bitness: num(one('bitness')),
     neuralPasses: num(one('neural passes')),
+    // "neural passes: ran (this engine logs no frame count)": the pass ran, and there is no number to
+    // read (runlog.reportDigest will not turn a log-line count into one). Worth as much as a count > 0.
+    neuralRan: (num(one('neural passes')) || 0) > 0 || /^ran\b/i.test(one('neural passes') || ''),
     fps: num(one('fps')),
     neuralMs: costMs,
     modelMs,
@@ -75,6 +78,11 @@ function parseDigest(text) {
     wrapper,
     mvProvider: one('mv provider') ? one('mv provider').split(' -- ')[0] : null,
     smoothMotion: !!one('smooth motion'),
+    // The crashing thread's modules, innermost first, as runlog.reportDigest writes them. Lets a
+    // triage read decide whose crash it is from the issue body: nvPresent means NVIDIA's present
+    // module was in the way, which only happens with Smooth Motion on.
+    crashStack: one('crash stack') ? one('crash stack').split(' < ').map((m) => m.trim()).filter(Boolean) : [],
+    nvPresent: /\bnvpresent/i.test(one('crash stack') || ''),
     at: one('at'),
   };
 }

@@ -1677,4 +1677,10 @@ window.I18N.register("zh-CN", {
     "OptiScaler 借用游戏启动时本就会加载的某个 DLL 的名字来加载自己。这个名字由程序自行选择，几乎总是对的 —— 只有在你确实知道自己的游戏加载哪个 DLL 时才改它，例如 OptiScaler 维基中该游戏的页面点名了某一个。选定名称后，已安装的文件会立即移动过去。",
   "A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.":
     "名字选错并不危险，只是不起作用：游戏永远不会加载那个文件，所以 DLSS 5 什么都不做，也不会写日志。改回“自动”即可撤销。",
+  "The game crashed inside NVIDIA's own present code ({module}), on the frame it first tried to show. That module is only in the way when NVIDIA Smooth Motion is on for this game, and it does not survive having DLSS 5 loaded underneath it. Turn Smooth Motion off for this game in the NVIDIA App, then run it again. Nothing here needs changing.":
+    "游戏在 NVIDIA 自己的呈现代码（{module}）中崩溃，就在它试图显示第一帧的时候。只有为这个游戏启用了 NVIDIA Smooth Motion 时该模块才会介入，而它无法承受下面加载着 DLSS 5。请在 NVIDIA App 中为这个游戏关闭 Smooth Motion，然后重新运行。这里不需要做任何改动。",
+  "Crashed -- turn NVIDIA Smooth Motion off":
+    "崩溃——请关闭 NVIDIA Smooth Motion",
+  "crashed inside NVIDIA's present code ({module})":
+    "在 NVIDIA 的呈现代码中崩溃（{module}）",
 });
