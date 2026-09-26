@@ -1,0 +1,120 @@
+{
+  "_about": "Image Clean Up strings translated for the pop-out (OptiDLSS5-UI), for pasting into the engine's OptiScaler/dlssnr/DlssNr_I18n_Tables.cpp so the in-game panel matches. Keys are the English source strings exactly as Tr() spells them in DlssNr_Menu.cpp at b45eced6 (line breaks included); _appKey is the pop-out's key where it differs (the same text, one line). Language order is the engine's kLanguageCodes. Generated from src/renderer/locales, which stay the source of truth.",
+  "engineCommit": "b45eced6",
+  "languages": [
+    "pt-BR",
+    "ru",
+    "ko",
+    "zh-CN",
+    "es",
+    "de",
+    "fr"
+  ],
+  "strings": {
+    "Bleed": {
+      "pt-BR": "Vazamento",
+      "ru": "Засветка",
+      "ko": "번짐",
+      "zh-CN": "溢光",
+      "es": "Sangrado",
+      "de": "Überstrahlen",
+      "fr": "Débordement"
+    },
+    "How much of the light the model spills across a character's outline is taken back.\n0 leaves the model's edges as they are.": {
+      "pt-BR": "Quanto da luz que o modelo derrama sobre o contorno de um personagem é retirado. 0 deixa as bordas do modelo como estão.",
+      "ru": "Какая часть света, который модель проливает за контур персонажа, убирается. 0 оставляет края модели как есть.",
+      "ko": "모델이 캐릭터 윤곽선 너머로 흘린 빛을 얼마나 되돌릴지입니다. 0이면 모델의 가장자리를 그대로 둡니다.",
+      "zh-CN": "模型溢出到角色轮廓外的光被收回多少。0 保持模型的边缘不变。",
+      "es": "Cuánta de la luz que el modelo derrama sobre el contorno de un personaje se retira. 0 deja los bordes del modelo como están.",
+      "de": "Wie viel des Lichts, das das Modell über die Umrisslinie einer Figur streut, zurückgenommen wird. 0 lässt die Kanten des Modells, wie sie sind.",
+      "fr": "La part de la lumière que le modèle répand au-delà du contour d’un personnage qui est reprise. 0 laisse les bords du modèle tels quels.",
+      "_appKey": "How much of the light the model spills across a character's outline is taken back. 0 leaves the model's edges as they are."
+    },
+    "Inner bleed": {
+      "pt-BR": "Vazamento interno",
+      "ru": "Засветка внутри",
+      "ko": "안쪽 번짐",
+      "zh-CN": "内侧溢光",
+      "es": "Sangrado interior",
+      "de": "Überstrahlen innen",
+      "fr": "Débordement intérieur"
+    },
+    "The light band just inside a character's outline, on the character.": {
+      "pt-BR": "A faixa de luz logo dentro do contorno de um personagem, sobre o personagem.",
+      "ru": "Светлая полоса сразу внутри контура персонажа, на самом персонаже.",
+      "ko": "캐릭터 윤곽선 바로 안쪽, 캐릭터 위의 밝은 띠입니다.",
+      "zh-CN": "角色轮廓内侧、角色身上的那条亮带。",
+      "es": "La banda de luz justo dentro del contorno de un personaje, sobre el personaje.",
+      "de": "Das helle Band direkt innerhalb der Umrisslinie einer Figur, auf der Figur.",
+      "fr": "La bande de lumière juste à l’intérieur du contour d’un personnage, sur le personnage."
+    },
+    "Outer bleed": {
+      "pt-BR": "Vazamento externo",
+      "ru": "Засветка снаружи",
+      "ko": "바깥쪽 번짐",
+      "zh-CN": "外侧溢光",
+      "es": "Sangrado exterior",
+      "de": "Überstrahlen außen",
+      "fr": "Débordement extérieur"
+    },
+    "The glow just outside a character's outline, on the background.": {
+      "pt-BR": "O brilho logo fora do contorno de um personagem, sobre o fundo.",
+      "ru": "Свечение сразу за контуром персонажа, на фоне.",
+      "ko": "캐릭터 윤곽선 바로 바깥쪽, 배경 위의 빛 번짐입니다.",
+      "zh-CN": "角色轮廓外侧、背景上的光晕。",
+      "es": "El halo justo fuera del contorno de un personaje, sobre el fondo.",
+      "de": "Das Glühen direkt außerhalb der Umrisslinie einer Figur, auf dem Hintergrund.",
+      "fr": "Le halo juste à l’extérieur du contour d’un personnage, sur l’arrière-plan."
+    },
+    "Dodge": {
+      "pt-BR": "Clarear",
+      "ru": "Осветление",
+      "ko": "닷지",
+      "zh-CN": "减淡",
+      "es": "Sobreexponer",
+      "de": "Abwedeln",
+      "fr": "Éclaircir"
+    },
+    "Limits how far the model may lighten an area the game's picture gives it no\ndetail to lighten, in stops. 0 allows none.": {
+      "pt-BR": "Limita o quanto o modelo pode clarear uma área que a imagem do jogo não lhe dá detalhe para clarear, em stops. 0 não permite nada.",
+      "ru": "Ограничивает, насколько модель может осветлить область, для которой в картинке игры нет деталей, в ступенях. 0 не разрешает ничего.",
+      "ko": "게임 화면에 밝힐 디테일이 없는 영역을 모델이 얼마나 밝게 할 수 있는지 제한합니다(스톱 단위). 0이면 허용하지 않습니다.",
+      "zh-CN": "限制模型可以把游戏画面没有细节可提亮的区域提亮多少，单位为档。0 表示不允许。",
+      "es": "Limita cuánto puede aclarar el modelo una zona que la imagen del juego no le da detalle para aclarar, en pasos. 0 no permite nada.",
+      "de": "Begrenzt, wie weit das Modell einen Bereich aufhellen darf, für den das Bild des Spiels keine Details zum Aufhellen liefert, in Blendenstufen. 0 erlaubt nichts.",
+      "fr": "Limite à quel point le modèle peut éclaircir une zone où l’image du jeu ne lui donne aucun détail à éclaircir, en IL. 0 n’autorise rien.",
+      "_appKey": "Limits how far the model may lighten an area the game's picture gives it no detail to lighten, in stops. 0 allows none."
+    },
+    "Burn": {
+      "pt-BR": "Escurecer",
+      "ru": "Затемнение",
+      "ko": "번",
+      "zh-CN": "加深",
+      "es": "Subexponer",
+      "de": "Nachbelichten",
+      "fr": "Assombrir"
+    },
+    "Limits how far the model may darken an area beyond its surroundings, so no dark\nring is left behind, in stops.": {
+      "pt-BR": "Limita o quanto o modelo pode escurecer uma área além do seu entorno, para não deixar um anel escuro, em stops.",
+      "ru": "Ограничивает, насколько модель может затемнить область сильнее окружения, чтобы не оставалось тёмного кольца, в ступенях.",
+      "ko": "어두운 테두리가 남지 않도록 모델이 주변보다 영역을 얼마나 어둡게 할 수 있는지 제한합니다(스톱 단위).",
+      "zh-CN": "限制模型可以把某个区域压暗到比周围暗多少，以免留下暗圈，单位为档。",
+      "es": "Limita cuánto puede oscurecer el modelo una zona más allá de su entorno, para que no quede un anillo oscuro, en pasos.",
+      "de": "Begrenzt, wie weit das Modell einen Bereich über seine Umgebung hinaus abdunkeln darf, damit kein dunkler Ring zurückbleibt, in Blendenstufen.",
+      "fr": "Limite à quel point le modèle peut assombrir une zone au-delà de son entourage, pour ne laisser aucun anneau sombre, en IL.",
+      "_appKey": "Limits how far the model may darken an area beyond its surroundings, so no dark ring is left behind, in stops."
+    }
+  },
+  "alsoNew": {
+    "How far out it looks: 0 only the pixels right beside each one, for a thin rim; 0.5\nout to about 5 pixels; 1 out to about 12, for a glow that spreads well off the edge.": {
+      "pt-BR": "Até onde ela olha: 0 só os pixels logo ao lado de cada um, para uma borda fina; 0,5 até cerca de 5 pixels; 1 até cerca de 12, para um brilho que se espalha bem além da borda.",
+      "ru": "Как далеко она ищет: 0 -- только соседние пиксели, для тонкой каймы; 0,5 -- примерно до 5 пикселей; 1 -- примерно до 12, для свечения, далеко расходящегося от края.",
+      "ko": "얼마나 바깥까지 살펴보는지: 0은 바로 옆 픽셀만 보아 얇은 테두리용, 0.5는 약 5픽셀까지, 1은 약 12픽셀까지 보아 가장자리에서 멀리 퍼지는 번짐용입니다.",
+      "zh-CN": "向外查找的范围：0 只看紧邻的像素，针对细边；0.5 向外约 5 个像素；1 向外约 12 个像素，针对远离边缘扩散的光晕。",
+      "es": "Hasta dónde mira: 0 solo los píxeles justo al lado de cada uno, para un borde fino; 0,5 hasta unos 5 píxeles; 1 hasta unos 12, para un halo que se extiende bastante más allá del borde.",
+      "de": "Wie weit es hinaussucht: 0 nur die Pixel direkt neben jedem, für einen dünnen Rand; 0,5 bis etwa 5 Pixel; 1 bis etwa 12, für ein Glühen, das weit über die Kante hinausreicht.",
+      "fr": "Jusqu’où il regarde : 0 seulement les pixels juste à côté de chacun, pour un liseré fin ; 0,5 jusqu’à environ 5 pixels ; 1 jusqu’à environ 12, pour un halo qui s’étend loin du contour.",
+      "_appKey": "How far out it looks: 0 only the pixels right beside each one, for a thin rim; 0.5 out to about 5 pixels; 1 out to about 12, for a glow that spreads well off the edge."
+    }
+  }
+}

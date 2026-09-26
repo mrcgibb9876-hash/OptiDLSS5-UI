@@ -304,7 +304,7 @@ const FIELDS = [
     help: 'How hard a brightness edge has to be before it counts, in stops: lower cleans more of the picture. Silhouettes found from depth count whatever this is.' },
   { key: 'CleanUpBalance', type: 'float', default: 0.5, min: 0, max: 1, step: 0.01, group: 'Picture',
     label: 'Fine / wide', dependsOn: CLEANUP_MANUAL,
-    help: 'Where it looks: 0 only at the pixels right beside each one, for a thin rim; 1 about four pixels out, for a glow that sits a little off the edge; 0.5 both.' },
+    help: 'How far out it looks: 0 only the pixels right beside each one, for a thin rim; 0.5 out to about 5 pixels; 1 out to about 12, for a glow that spreads well off the edge.' },
   { key: 'CleanUpMotion', type: 'float', default: 0.5, min: 0, max: 1, step: 0.01, group: 'Picture',
     label: 'Motion protection', dependsOn: CLEANUP_MANUAL,
     help: "How far fast motion and newly uncovered areas hold the clean up back, so real motion blur stays soft. Needs the game's motion vectors (DX12); with none -- the Present route without optical flow -- it has nothing to go on and does nothing." },

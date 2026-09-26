@@ -1048,7 +1048,7 @@ window.I18N.register("zh-CN", {
   "Auto only: the most clean up it may use. Lower it if Auto softens edges you want kept.": "仅自动：它可使用的最大清理量。如果自动把你想保留的边缘变软，就调低。",
   "How much of the way a glowing pixel is taken back, and how tightly it is held to what the pixels around it look like. 0 does nothing.": "发光像素被拉回多少，以及它被多紧地约束到周围像素的样子。0 不做任何事。",
   "How hard a brightness edge has to be before it counts, in stops: lower cleans more of the picture. Silhouettes found from depth count whatever this is.": "亮度边缘要多明显才算数，单位为档：越低清理的画面越多。通过深度找到的轮廓无论此值多少都算数。",
-  "Where it looks: 0 only at the pixels right beside each one, for a thin rim; 1 about four pixels out, for a glow that sits a little off the edge; 0.5 both.": "查找范围：0 只看紧邻的像素，针对细边；1 约向外四个像素，针对稍微离开边缘的光晕；0.5 两者兼顾。",
+  "How far out it looks: 0 only the pixels right beside each one, for a thin rim; 0.5 out to about 5 pixels; 1 out to about 12, for a glow that spreads well off the edge.": "向外查找的范围：0 只看紧邻的像素，针对细边；0.5 向外约 5 个像素；1 向外约 12 个像素，针对远离边缘扩散的光晕。",
   "How far fast motion and newly uncovered areas hold the clean up back, so real motion blur stays soft. Needs the game's motion vectors (DX12); with none -- the Present route without optical flow -- it has nothing to go on and does nothing.": "快速运动和新露出的区域对清理的抑制程度，让真实的运动模糊保持柔和。需要游戏的运动矢量（DX12）；没有的话 -- 没有光流的 Present 路径 -- 它无从判断，什么也不做。",
   "Glow {before} stops from the model": "光晕：模型 {before} 档",
   "Strength {strength} -- glow {before} stops from the model": "强度 {strength} -- 光晕：模型 {before} 档",

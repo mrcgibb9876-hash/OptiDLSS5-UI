@@ -1048,7 +1048,7 @@ window.I18N.register("ko", {
   "Auto only: the most clean up it may use. Lower it if Auto softens edges you want kept.": "자동 전용: 사용할 수 있는 최대 정리 강도입니다. 자동이 유지하고 싶은 가장자리를 부드럽게 만들면 낮추세요.",
   "How much of the way a glowing pixel is taken back, and how tightly it is held to what the pixels around it look like. 0 does nothing.": "번지는 픽셀을 얼마나 되돌릴지, 그리고 주변 픽셀의 모습에 얼마나 단단히 맞출지입니다. 0은 아무것도 하지 않습니다.",
   "How hard a brightness edge has to be before it counts, in stops: lower cleans more of the picture. Silhouettes found from depth count whatever this is.": "밝기 가장자리가 인정되려면 얼마나 강해야 하는지(스톱 단위)입니다. 낮을수록 화면의 더 많은 부분을 정리합니다. 깊이로 찾은 실루엣은 이 값과 관계없이 인정됩니다.",
-  "Where it looks: 0 only at the pixels right beside each one, for a thin rim; 1 about four pixels out, for a glow that sits a little off the edge; 0.5 both.": "살펴보는 범위: 0은 바로 옆 픽셀만 보아 얇은 테두리용, 1은 약 4픽셀 바깥까지 보아 가장자리에서 조금 떨어진 번짐용, 0.5는 둘 다입니다.",
+  "How far out it looks: 0 only the pixels right beside each one, for a thin rim; 0.5 out to about 5 pixels; 1 out to about 12, for a glow that spreads well off the edge.": "얼마나 바깥까지 살펴보는지: 0은 바로 옆 픽셀만 보아 얇은 테두리용, 0.5는 약 5픽셀까지, 1은 약 12픽셀까지 보아 가장자리에서 멀리 퍼지는 번짐용입니다.",
   "How far fast motion and newly uncovered areas hold the clean up back, so real motion blur stays soft. Needs the game's motion vectors (DX12); with none -- the Present route without optical flow -- it has nothing to go on and does nothing.": "빠른 움직임과 새로 드러난 영역이 정리를 얼마나 억제할지입니다. 실제 모션 블러는 부드럽게 유지됩니다. 게임의 모션 벡터(DX12)가 필요하며, 없으면 -- 광학 흐름 없는 Present 경로 -- 근거가 없어 아무것도 하지 않습니다.",
   "Glow {before} stops from the model": "번짐: 모델에서 {before} 스톱",
   "Strength {strength} -- glow {before} stops from the model": "강도 {strength} -- 번짐: 모델에서 {before} 스톱",

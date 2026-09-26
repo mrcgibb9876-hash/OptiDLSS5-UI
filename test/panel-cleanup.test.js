@@ -272,3 +272,39 @@ test('outside Manual a row shows Auto\'s value from live.json; in Manual its own
   assert.match(fnSource('fieldRow'), /cleanupAuto \? cleanUpLiveValue\(field\)/);
   assert.match(fnSource('renderCleanUpStatus'), /data-cleanup-for/);
 });
+
+test('Fine / wide carries the engine\'s b45eced6 wording, in every language', () => {
+  const help = 'How far out it looks: 0 only the pixels right beside each one, for a thin rim; 0.5 out to about 5 pixels; 1 out to about 12, for a glow that spreads well off the edge.';
+  assert.equal(field('CleanUpBalance').help, help);
+  for (const lang of ['de', 'es', 'fr', 'ko', 'pt-BR', 'ru', 'zh-CN']) {
+    const text = fs.readFileSync(path.join(REPO, 'src', 'renderer', 'locales', `${lang}.js`), 'utf8');
+    assert.ok(text.includes(JSON.stringify(help) + ':'), `${lang} has the new wording`);
+    assert.ok(!text.includes('"Where it looks: 0 only at the pixels'), `${lang} dropped the old wording`);
+  }
+});
+
+// tools/cleanup-i18n-for-engine.json hands these translations to the engine's own tables. Keyed by the
+// engine's source strings (its line breaks included); it must say what the pop-out says.
+test('the translations handed to the engine match the pop-out\'s locales', () => {
+  const doc = JSON.parse(fs.readFileSync(path.join(REPO, 'tools', 'cleanup-i18n-for-engine.json'), 'utf8'));
+  assert.deepEqual(doc.languages, ['pt-BR', 'ru', 'ko', 'zh-CN', 'es', 'de', 'fr'], 'the engine\'s kLanguageCodes order');
+  assert.equal(Object.keys(doc.strings).length, 10);
+  const dicts = {};
+  for (const lang of doc.languages) {
+    let obj = null;
+    const sandbox = { window: { I18N: { register(_c, o) { obj = o; } } } };
+    new Function('window', fs.readFileSync(path.join(REPO, 'src', 'renderer', 'locales', `${lang}.js`), 'utf8'))(sandbox.window);
+    dicts[lang] = obj;
+  }
+  const labels = ['CleanUpBleed', 'CleanUpBleedInner', 'CleanUpBleedOuter', 'CleanUpDodge', 'CleanUpBurn'];
+  const expectKeys = labels.flatMap((k) => [field(k).label, field(k).help]);
+  const all = { ...doc.strings, ...doc.alsoNew };
+  const appKeys = Object.entries(doc.strings).map(([k, row]) => row._appKey || k);
+  assert.deepEqual(appKeys, expectKeys, 'the ten new strings, label then tooltip');
+  for (const [engineKey, row] of Object.entries(all)) {
+    const appKey = row._appKey || engineKey;
+    assert.equal(engineKey.replace(/\n/g, ' '), appKey, 'the same text, one line in the pop-out');
+    for (const lang of doc.languages) assert.equal(row[lang], dicts[lang][appKey], `${lang}: ${appKey.slice(0, 30)}`);
+  }
+  assert.ok(Object.values(doc.alsoNew).some((row) => row._appKey === field('CleanUpBalance').help), 'and the new Fine / wide tooltip');
+});
