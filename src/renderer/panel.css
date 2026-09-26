@@ -161,6 +161,7 @@ html, body { margin: 0; height: 100%; }
 
 .p-note { margin: 5px 0; color: var(--dim); font-size: 12px; }
 .p-note.is-accent { color: var(--accent); }
+.p-cleanup-status { font-variant-numeric: tabular-nums; }
 
 /* The frame-time readout. Wraps rather than clipping, because the panel can be dragged narrow.
  *

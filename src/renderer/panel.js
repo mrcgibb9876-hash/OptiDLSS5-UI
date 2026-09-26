@@ -495,6 +495,13 @@ function renderFields() {
         continue;
       }
       host.appendChild(fieldRow(field));
+      // Image Clean Up's reading, right under its Mode, where the in-game panel puts it.
+      if (section.cleanup && key === 'CleanUpMode') {
+        const note = document.createElement('div');
+        note.className = 'p-note p-cleanup-status';
+        host.appendChild(note);
+        renderCleanUpStatus();
+      }
     }
 
     // Frame Generation is the game's own DLSS-G rather than a list of ini rows, so it draws itself.
@@ -682,6 +689,39 @@ function renderAutoTone() {
   }
 }
 
+// Image Clean Up's read-out (OptiScaler.live.json cleanup), the in-game panel's "Strength x -- glow a
+// stops from the model, b after": the strength actually applied (Auto's own choice in Auto) and the
+// glow measured before and after. `mode` is the ini's, as the in-game panel reads its own config. Off
+// says nothing; no reading at all (no game, an engine without the block) says nothing either, rather
+// than "measuring" forever. A number the engine has not got yet (null) is left out, not shown as 0.
+function cleanUpStatus(mode, cleanup) {
+  if (!Number(mode) || !cleanup || typeof cleanup !== 'object') return '';
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const strength = num(cleanup.strength);
+  const before = num(cleanup.haloBefore);
+  const after = num(cleanup.haloAfter);
+  if (before === null) return t('Measuring the glow...');
+  const b = before.toFixed(3);
+  if (after === null) {
+    return strength === null
+      ? t('Glow {before} stops from the model', { before: b })
+      : t('Strength {strength} -- glow {before} stops from the model', { strength: strength.toFixed(2), before: b });
+  }
+  const a = Math.max(after, 0).toFixed(3);
+  return strength === null
+    ? t('Glow {before} stops from the model, {after} after', { before: b, after: a })
+    : t('Strength {strength} -- glow {before} stops from the model, {after} after', { strength: strength.toFixed(2), before: b, after: a });
+}
+
+// Updates the read-out in place with each live reading, without redrawing the page under the cursor.
+function renderCleanUpStatus() {
+  const text = cleanUpStatus(valueOf('CleanUpMode'), lastLive && lastLive.cleanup);
+  for (const el of document.querySelectorAll('.p-cleanup-status')) {
+    el.textContent = text;
+    el.hidden = !text;
+  }
+}
+
 // Brightness, Contrast and their Auto switches: hidden while RenoDX runs (OptiScaler.live.json
 // renodxActive), as the in-game panel hides them.
 const TONE_TRIM_KEYS = ['Brightness', 'Contrast', 'AutoBrightness', 'AutoContrast'];
@@ -713,6 +753,7 @@ async function refreshLive() {
   renderBadge();
   renderFrameGenStatus();
   renderAutoTone();
+  renderCleanUpStatus();
   await refreshHosted();
 }
 
