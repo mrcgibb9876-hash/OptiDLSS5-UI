@@ -13,11 +13,12 @@
 // HDR output instead of upgrading an SDR swap chain, so Unreal's HDR has to be switched on in the
 // game's Engine.ini -- which the add-on does not do. ueini.js does it (see there).
 //
-// THE TABLE IS CACHED, NOT READ AT RUN TIME. ue-extended-games.json is generated from the fork's
-// addon.cpp by tools/gen-ue-extended-table.js and shipped with the app, so the card tag (asked on
-// every grid render through game:status) is a Map lookup: no network, no folder scan, no exe read.
-// Re-run the generator when the fork's ue-extended build changes (the file records the ref and
-// commit it was made from).
+// THE TABLE IS CACHED, NOT READ AT RUN TIME. The release UE-Extended installs from ships its own
+// ue-extended-games.json (loadReleaseTable below); main.js fetches that once per session in the
+// background and caches it beside the add-on. Until then, and whenever it cannot be had, the copy
+// shipped with the app is used -- generated from the fork's addon.cpp by tools/gen-ue-extended-table.js
+// (the file records the ref and commit it was made from). Either way the card tag (asked on every grid
+// render through game:status) is a Map lookup: no network, no folder scan, no exe read.
 //
 // WHERE THE ADD-ON COMES FROM. The fork's `snapshot` release once it carries
 // renodx-ue-extended.addon64 (main.js checks the release's asset list, memoised). Until UE-Extended
@@ -71,9 +72,89 @@ function bundledTable() {
   return bundled;
 }
 
+// ── The release's own table ─────────────────────────────────────────────────────────────────────
+//
+// The fork's UE-Extended release ships ue-extended-games.json beside the add-on: the same shape as the
+// bundled file (source, generated, count, games{key:{nativeHdr}}) plus, per game, matchBy / defaults /
+// additionalSettings / customShaders, and source.commit / author / hostApiVersion. Taken from the SAME
+// release the add-on installs from, so the blue tag and the Engine.ini HDR step describe the build that
+// is actually going in, not the one the app was shipped beside. The bundled file stays the fallback:
+// offline on first run, a release without the asset, or an asset that does not parse.
+//
+// Cached next to the add-on (main.js feeder-cache) with a small record of which asset it was. The
+// release JSON comes through ghapi's cached GET, and the file itself is fetched again only when the
+// asset's updated_at moves (a new upload) or the release is a different one; a re-upload whose
+// source.commit is unchanged is recognised as the same table. Once per session, never per game.
+const UE_EXTENDED_TABLE_ASSET = 'ue-extended-games.json';
+
+// The release table as ueExtendedEntry reads it, or null when it is not one. Extras are kept; a game
+// without nativeHdr gets it from its defaults (Set_Path 0 is the native-HDR path, as parseGameSettings
+// reads it out of addon.cpp).
+function normaliseTable(json) {
+  if (!json || typeof json !== 'object' || !json.games || typeof json.games !== 'object' || Array.isArray(json.games)) return null;
+  const games = {};
+  for (const [key, g] of Object.entries(json.games)) {
+    if (!key || !g || typeof g !== 'object') continue;
+    const setPath = g.defaults && typeof g.defaults === 'object' ? g.defaults.Set_Path : undefined;
+    games[key] = { ...g, nativeHdr: typeof g.nativeHdr === 'boolean' ? g.nativeHdr : setPath !== undefined && setPath !== null && Number(setPath) === 0 };
+  }
+  if (Object.keys(games).length === 0) return null;
+  return { ...json, games };
+}
+
+// The table asset on a release (the GitHub release JSON), or null.
+function tableAsset(release) {
+  const a = ((release && release.assets) || []).find((x) => x && x.name === UE_EXTENDED_TABLE_ASSET);
+  if (!a || !a.browser_download_url) return null;
+  // GitHub's published digest ("sha256:<hex>"), so the download is checked without a second API call.
+  const digest = typeof a.digest === 'string' && /^sha256:[0-9a-f]{64}$/i.test(a.digest) ? a.digest.slice(7).toLowerCase() : null;
+  return { url: a.browser_download_url, updatedAt: a.updated_at || null, digest };
+}
+
+// Whether the cached copy (its record, `meta`) is still the asset on `source`'s release.
+function tableIsCurrent(meta, asset, source) {
+  if (!meta || !asset || !source) return false;
+  return meta.repo === source.repo && meta.tag === source.tag && !!asset.updatedAt && meta.updatedAt === asset.updatedAt;
+}
+
+// The table to use for `source`, with everything that touches the network or disk injected:
+//   resolveRelease(repo, tag) -> release JSON (ghapi-cached)
+//   download(url, asset)      -> Buffer of the asset (asset.digest to check it against)
+//   readCache()               -> { table, meta } | null     writeCache({ table, meta })
+// Returns { table, meta, from: 'cache' | 'release' | 'bundled' }. Never throws: any failure falls back
+// to the cached copy for this release, then the bundled file.
+async function loadReleaseTable(source, { resolveRelease, download, readCache, writeCache }) {
+  let cached = null;
+  try { cached = readCache ? readCache() : null; } catch { cached = null; }
+  const cachedTable = cached && normaliseTable(cached.table);
+  const sameRelease = !!(cachedTable && source && cached.meta && cached.meta.repo === source.repo && cached.meta.tag === source.tag);
+  const fallback = () => (sameRelease ? { table: cachedTable, meta: cached.meta, from: 'cache' } : { table: bundledTable(), meta: null, from: 'bundled' });
+  if (!source) return { table: bundledTable(), meta: null, from: 'bundled' };
+  try {
+    const asset = tableAsset(await resolveRelease(source.repo, source.tag));
+    if (!asset) return { table: bundledTable(), meta: null, from: 'bundled' };
+    if (sameRelease && tableIsCurrent(cached.meta, asset, source)) return { table: cachedTable, meta: cached.meta, from: 'cache' };
+    const table = normaliseTable(JSON.parse(Buffer.from(await download(asset.url, asset)).toString('utf8')));
+    if (!table) return fallback();
+    const commit = (table.source && table.source.commit) || null;
+    const meta = { repo: source.repo, tag: source.tag, updatedAt: asset.updatedAt, digest: asset.digest, commit };
+    // Re-uploaded with the same source commit: the same table, so only the record moves.
+    const unchanged = sameRelease && commit && cached.meta.commit === commit;
+    try { if (writeCache) writeCache({ table: unchanged ? cachedTable : table, meta }); } catch {}
+    return { table: unchanged ? cachedTable : table, meta, from: unchanged ? 'cache' : 'release' };
+  } catch {
+    return fallback();
+  }
+}
+
+// The table lookups read: the release's once main.js has loaded it, the bundled one until then.
+let active = null;
+function setActiveTable(table) { active = normaliseTable(table); }
+function activeTable() { return active || bundledTable(); }
+
 // The table entry for a game, or null: exe file name first, then product name -- the add-on's own
 // order (FindGameSettings), exact and case-sensitive like its std::unordered_map.
-function ueExtendedEntry({ exeName = null, productName = null } = {}, table = bundledTable()) {
+function ueExtendedEntry({ exeName = null, productName = null } = {}, table = activeTable()) {
   const games = (table && table.games) || {};
   const own = (k) => Object.prototype.hasOwnProperty.call(games, k);
   const name = exeName ? path.basename(String(exeName)) : null;
@@ -142,6 +223,8 @@ function renodxTagClass(picked, { engineId = null, entry = null } = {}) {
 module.exports = {
   UE_EXTENDED_ARTIFACT, UE_EXTENDED_MOD_ID, UE_EXTENDED_TITLE,
   UE_EXTENDED_RELEASE, UE_EXTENDED_TEST_RELEASE,
+  UE_EXTENDED_TABLE_ASSET,
   parseGameSettings, bundledTable, ueExtendedEntry,
+  normaliseTable, tableAsset, tableIsCurrent, loadReleaseTable, setActiveTable, activeTable,
   testOverrideEnabled, ueExtendedSource, applyUeExtended, renodxTagClass,
 };

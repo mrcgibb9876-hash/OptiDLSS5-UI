@@ -566,8 +566,43 @@ async function ueExtendedSourceNow() {
   return ueextended.ueExtendedSource({ snapshotAssets: await ueExtendedSnapshotAssets(), testOverride });
 }
 
+// UE-Extended's games table from the release the add-on itself comes from (ueextended.loadReleaseTable),
+// cached beside the add-on in feeder-cache with a record of which asset it was. Once per session per
+// release: the release JSON is ghapi's cached GET, and the file is downloaded again only when its asset
+// changed. Until it answers -- and offline on a first run -- lookups read the table shipped with the app.
+const ueExtendedTableFile = () => path.join(feederCacheDir(), 'ue-extended-games.cache.json');
+const ueExtendedTableMemo = new Map(); // `${repo}@${tag}` -> Promise<{ table, meta, from }>
+let ueExtendedTableStarted = false;
+async function ueExtendedTableRefresh() {
+  ueExtendedTableStarted = true;
+  const source = await ueExtendedSourceNow().catch(() => null);
+  const key = source ? `${source.repo}@${source.tag}` : 'none';
+  if (!ueExtendedTableMemo.has(key)) {
+    ueExtendedTableMemo.set(key, ueextended.loadReleaseTable(source, {
+      resolveRelease: (repo, tag) => addonCtx().resolveRelease(repo, tag),
+      // Always fresh when asked: the cached name is reused by downloadToCache, and a rolling release
+      // replaces this asset in place, so the old copy goes first.
+      download: async (url, asset) => {
+        const name = 'ue-extended-games.download.json';
+        await fsp.rm(path.join(feederCacheDir(), name), { force: true });
+        const file = await feeder.downloadToCache(url, feederCacheDir(), name, GITHUB_HEADERS, { sha256: asset && asset.digest });
+        const buf = fs.readFileSync(file);
+        await fsp.rm(file, { force: true });
+        return buf;
+      },
+      readCache: () => readJson(ueExtendedTableFile(), null),
+      writeCache: (value) => writeJson(ueExtendedTableFile(), value),
+    }).then((res) => {
+      ueextended.setActiveTable(res.table);
+      return res;
+    }));
+  }
+  return ueExtendedTableMemo.get(key);
+}
+
 // UE-Extended's settings table entry for this game (exe file name, then the stored product name), or
-// null. The table is the shipped JSON, so this is a lookup -- safe on every card render.
+// null. The table is held in memory (the release's, else the shipped JSON), so this is a lookup -- safe
+// on every card render.
 function ueExtendedEntryFor(exePath, detected) {
   return ueextended.ueExtendedEntry({ exeName: path.basename(String(exePath || '')), productName: (detected && detected.productName) || null });
 }
@@ -581,6 +616,9 @@ async function renodxMatchFor(exePath, dir, detected) {
   const params = renodxParams(exePath, dir, detected, library.steamManifestFor(exePath));
   const picked = addons.pickRenodxMatch(primary, upstream, params);
   if (params.engineId !== 'unreal') return picked;
+  // The release's own table, so the tuned entry (and its native-HDR Engine.ini step) matches the build
+  // being installed. Memoised: only the first Unreal game of the session waits for it.
+  await ueExtendedTableRefresh().catch(() => null);
   return ueextended.applyUeExtended(picked, {
     engineId: params.engineId, bitness: params.bitness, title: params.title,
     source: await ueExtendedSourceNow(), entry: ueExtendedEntryFor(exePath, detected),
@@ -3914,6 +3952,9 @@ function renodxCapability(exePath, dir) {
     return null;
   }
   if (!renodxUpstreamMemo) renodxUpstreamIndex().catch(() => {});
+  // The release's UE-Extended table, started once in the background; the tag reads whatever table is
+  // in memory now (the shipped one until it lands).
+  if (!ueExtendedTableStarted) ueExtendedTableRefresh().catch(() => {});
   try {
     const detected = storedDetectionFor(exePath) || {};
     const picked = addons.pickRenodxMatch(renodxIndexMemo, renodxUpstreamMemo, renodxParams(exePath, dir, detected, library.steamManifestFor(exePath)));
