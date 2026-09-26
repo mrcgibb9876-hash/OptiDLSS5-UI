@@ -252,7 +252,10 @@ function fieldRow(field, set = apply) {
       // Auto in charge (dlssnr.js autoKey): the slider shows what Auto is applying, from the live
       // readings, the way the in-game panel does -- and updates with them (renderAutoTone).
       const autoOn = !!(field.autoKey && valueOf(field.autoKey));
-      const autoNow = autoOn ? autoToneValue(field) : null;
+      // Image Clean Up outside Manual: the row shows what Auto is running with (live.json cleanup), read-only
+      // -- greyed by its own Manual-only condition -- and follows each reading (renderCleanUpStatus).
+      const cleanupAuto = isCleanUpAutoRow(field);
+      const autoNow = autoOn ? autoToneValue(field) : cleanupAuto ? cleanUpLiveValue(field) : null;
       const drawn = autoNow !== null ? autoNow : Number(shown);
       slider.value = String(Math.round(toSlider(field, drawn) * 1000));
       slider.style.setProperty('--fill', `${(Number(slider.value) / 10).toFixed(1)}%`);
@@ -260,6 +263,10 @@ function fieldRow(field, set = apply) {
       if (field.autoKey) {
         slider.dataset.autoFor = field.key;
         value.dataset.autoFor = field.key;
+      }
+      if (cleanupAuto) {
+        slider.dataset.cleanupFor = field.key;
+        value.dataset.cleanupFor = field.key;
       }
 
       const live = () => {
@@ -780,12 +787,42 @@ function cleanUpManualRow() {
   return fieldRow(field, (_k, on) => apply('CleanUpMode', on ? CLEANUP_MANUAL : CLEANUP_AUTO));
 }
 
-// Updates the read-out in place with each live reading, without redrawing the page under the cursor.
+// A Clean Up row that shows Auto's own value rather than its ini one: it has a live.json reading
+// (dlssnr.js cleanupLive) and Clean Up is not on Manual -- the in-game panel's "in Auto (and Off) they
+// show what Auto is running with".
+function isCleanUpAutoRow(field) {
+  return !!field.cleanupLive && Number(valueOf('CleanUpMode')) !== CLEANUP_MANUAL;
+}
+
+// Auto's value for that row now, or null before the engine has one (the row then shows its own).
+function cleanUpLiveValue(field) {
+  const c = lastLive && lastLive.cleanup;
+  const v = c && field.cleanupLive ? c[field.cleanupLive] : null;
+  if (typeof v !== 'number' || !Number.isFinite(v)) return null;
+  // The engine's sliders run from 0: a Burn below 0 (darkening off) is drawn at 0, as in game.
+  return Math.min(field.max, Math.max(field.min, v));
+}
+
+// Updates the read-out, and the Auto-driven rows, in place with each live reading, without redrawing
+// the page under the cursor.
 function renderCleanUpStatus() {
   const text = cleanUpStatus(valueOf('CleanUpMode'), lastLive && lastLive.cleanup);
   for (const el of document.querySelectorAll('.p-cleanup-status')) {
     el.textContent = text;
     el.hidden = !text;
+  }
+  for (const field of fields) {
+    if (!isCleanUpAutoRow(field)) continue;
+    const v = cleanUpLiveValue(field);
+    if (v === null) continue;
+    for (const el of document.querySelectorAll(`[data-cleanup-for="${field.key}"]`)) {
+      if (el.tagName === 'INPUT') {
+        el.value = String(Math.round(toSlider(field, v) * 1000));
+        el.style.setProperty('--fill', `${(Number(el.value) / 10).toFixed(1)}%`);
+      } else {
+        el.textContent = formatNumber(field, v);
+      }
+    }
   }
 }
 

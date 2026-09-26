@@ -57,6 +57,9 @@ const EWA_ONLY = { all: [{ key: 'WorkingScale', below: 1 }, { key: 'ScalingUpsca
 const CLEANUP_MODES = [[0, 'Off'], [1, 'Auto'], [2, 'Manual']];
 const CLEANUP_AUTO = { key: 'CleanUpMode', is: 1 };
 const CLEANUP_MANUAL = { key: 'CleanUpMode', is: 2 };
+// Image Clean Up's rows under the pop-out's Advanced fold, in the in-game panel's order.
+const CLEANUP_ADVANCED = ['CleanUpMaxStrength', 'CleanUpStrength', 'CleanUpEdge', 'CleanUpBalance', 'CleanUpMotion',
+  'CleanUpBleed', 'CleanUpBleedInner', 'CleanUpBleedOuter', 'CleanUpDodge', 'CleanUpBurn'];
 const REVERSIBLE = [[0, 'Off (soft knee)'], [1, 'Neutwo proxy + composed'], [2, 'Neutwo proxy + replace'], [3, 'Hybrid proxy + composed'], [4, 'Hybrid proxy + replace']];
 // The codes the engine writes for [DlssNr] Language, lower-cased, as its own panel writes them.
 const LANGUAGES = [
@@ -282,15 +285,19 @@ const FIELDS = [
 
   // [DlssNr] CleanUp* -- Image Clean Up (engine feat/image-cleanup, 2026-09-26): the glow the model leaves
   // around characters. Its own section on the Image page, after the tone trim, as in the in-game panel.
-  // Mode first; Auto makes only Max strength live (Auto picks the rest itself), Manual the four rows
-  // below it, Off neither. All read every frame by the engine, so no rebuild while dragging.
-  { key: 'CleanUpMode', type: 'enum', default: 0, options: CLEANUP_MODES, group: 'Picture', label: 'Mode',
+  // Mode first; Auto makes only Max strength live (Auto picks the rest itself), Manual the rows below it,
+  // Off neither. All read every frame by the engine, so no rebuild while dragging. Auto is the engine's
+  // default since b45eced6, so an ini left on "auto" is Auto.
+  //
+  // cleanupLive: the rows the engine reports Auto's own value for in OptiScaler.live.json's cleanup block.
+  // Outside Manual they show that value, read-only, as the in-game panel does.
+  { key: 'CleanUpMode', type: 'enum', default: 1, options: CLEANUP_MODES, group: 'Picture', label: 'Mode',
     help: "Holds back the glow the model leaves around characters and other strong edges. Near a silhouette -- where the depth jumps -- or a hard brightness edge, the finished picture may not stray far from the game's own frame nor past what the pixels around it hold, so light cannot bleed across the edge. The object's own pixels and flat areas are left alone, and the model's detail elsewhere is untouched.\n\nAuto measures the glow every frame and uses as much clean up as it needs, up to Max strength, easing rather than jumping. Manual uses the sliders below.\n\nSee what it touches with Inspect > Debug view > Image Clean Up mask." },
   { key: 'CleanUpMaxStrength', type: 'float', default: 0.8, min: 0, max: 1, step: 0.01, group: 'Picture',
     label: 'Max strength', dependsOn: CLEANUP_AUTO,
     help: 'Auto only: the most clean up it may use. Lower it if Auto softens edges you want kept.' },
   { key: 'CleanUpStrength', type: 'float', default: 0.6, min: 0, max: 1, step: 0.01, group: 'Picture',
-    label: 'Strength', dependsOn: CLEANUP_MANUAL,
+    label: 'Strength', dependsOn: CLEANUP_MANUAL, cleanupLive: 'strength',
     help: 'How much of the way a glowing pixel is taken back, and how tightly it is held to what the pixels around it look like. 0 does nothing.' },
   { key: 'CleanUpEdge', type: 'float', default: 1.5, min: 0.25, max: 4, step: 0.05, group: 'Picture',
     label: 'Edge threshold', dependsOn: CLEANUP_MANUAL,
@@ -301,6 +308,24 @@ const FIELDS = [
   { key: 'CleanUpMotion', type: 'float', default: 0.5, min: 0, max: 1, step: 0.01, group: 'Picture',
     label: 'Motion protection', dependsOn: CLEANUP_MANUAL,
     help: "How far fast motion and newly uncovered areas hold the clean up back, so real motion blur stays soft. Needs the game's motion vectors (DX12); with none -- the Present route without optical flow -- it has nothing to go on and does nothing." },
+  // The edge treatment along silhouettes (engine b45eced6). Dodge and Burn are in stops, 0 to 0.5 as the
+  // in-game sliders run; a Burn below 0 written by hand turns darkening off, and is left as it is unless
+  // the row is moved.
+  { key: 'CleanUpBleed', type: 'float', default: 1.0, min: 0, max: 1, step: 0.01, group: 'Picture',
+    label: 'Bleed', dependsOn: CLEANUP_MANUAL, cleanupLive: 'bleed',
+    help: "How much of the light the model spills across a character's outline is taken back. 0 leaves the model's edges as they are." },
+  { key: 'CleanUpBleedInner', type: 'float', default: 0.5, min: 0, max: 1, step: 0.01, group: 'Picture',
+    label: 'Inner bleed', dependsOn: CLEANUP_MANUAL, cleanupLive: 'bleedInner',
+    help: "The light band just inside a character's outline, on the character." },
+  { key: 'CleanUpBleedOuter', type: 'float', default: 1.0, min: 0, max: 1, step: 0.01, group: 'Picture',
+    label: 'Outer bleed', dependsOn: CLEANUP_MANUAL, cleanupLive: 'bleedOuter',
+    help: "The glow just outside a character's outline, on the background." },
+  { key: 'CleanUpDodge', type: 'float', default: 0.0, min: 0, max: 0.5, step: 0.01, group: 'Picture',
+    label: 'Dodge', dependsOn: CLEANUP_MANUAL, cleanupLive: 'dodge',
+    help: "Limits how far the model may lighten an area the game's picture gives it no detail to lighten, in stops. 0 allows none." },
+  { key: 'CleanUpBurn', type: 'float', default: 0.1, min: 0, max: 0.5, step: 0.01, group: 'Picture',
+    label: 'Burn', dependsOn: CLEANUP_MANUAL, cleanupLive: 'burn',
+    help: 'Limits how far the model may darken an area beyond its surroundings, so no dark ring is left behind, in stops.' },
 
   { key: 'ScanMeter', type: 'bool', default: false, group: 'Brightness & HDR', label: 'Show the light meter on screen',
     dependsOn: { key: 'WhitePointSource', is: 2 }, help: "A lamp in the corner: red for dark, green for full light, and the shades between, with the reading beside it.\n\nIt is how you see at a glance that the scan is TRACKING rather than merely running. Walk into shade and it should slide toward red; step out and it should go green. If it moves the wrong way, that is what \"the number runs the other way\" below is for.\n\nPurely a readout. It changes nothing." },
@@ -418,12 +443,8 @@ const PAGES = [
     // advanced: the keys the pop-out folds under an "Advanced" caption, closed by default -- the page itself
     // shows only Off / Auto and the read-out, since Auto is what almost everyone wants. Manual is drawn
     // there too, as a switch of its own. The engine's next Clean Up keys go in this list when it has them,
-    // not before (Bleed, Inner bleed, Outer bleed, Dodge, Burn, Grain, Print, Plate): CleanUpBleed,
-    // CleanUpBleedInner, CleanUpBleedOuter, CleanUpDodge, CleanUpBurn, CleanUpGrain, CleanUpPrint,
-    // CleanUpPlate.
-    { caption: 'Image Clean Up', cleanup: true, keys: ['CleanUpMode', 'CleanUpMaxStrength', 'CleanUpStrength', 'CleanUpEdge',
-                                                       'CleanUpBalance', 'CleanUpMotion'],
-      advanced: ['CleanUpMaxStrength', 'CleanUpStrength', 'CleanUpEdge', 'CleanUpBalance', 'CleanUpMotion'] },
+    // not before (Grain, Print, Plate): CleanUpGrain, CleanUpPrint, CleanUpPlate.
+    { caption: 'Image Clean Up', cleanup: true, keys: ['CleanUpMode', ...CLEANUP_ADVANCED], advanced: CLEANUP_ADVANCED },
     { caption: 'Colour', keys: ['ReversibleMode', 'WhitePointSource', 'WhitePointTrim', 'WhitePointScale', 'MaxRatio'] },
     { caption: 'Exposure scan', keys: ['ScanMeter', 'ScanTrim', 'ScanInverted'] },
   ] },
@@ -543,6 +564,8 @@ function readSettings(iniPath) {
     // The Auto switch drawn in this slider's row, and the live reading shown while it is on.
     autoKey: f.autoKey || null,
     autoLive: f.autoLive || null,
+    // Image Clean Up: the live.json cleanup reading this row shows outside Manual.
+    cleanupLive: f.cleanupLive || null,
   }));
 }
 

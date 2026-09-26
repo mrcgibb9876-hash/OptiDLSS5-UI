@@ -40,12 +40,13 @@ function dependencyMetWith(values) {
 
 const cleanUpStatus = new Function('t', `${fnSource('cleanUpStatus')}\nreturn cleanUpStatus;`)(t);
 
-const MANUAL_KEYS = ['CleanUpStrength', 'CleanUpEdge', 'CleanUpBalance', 'CleanUpMotion'];
+const MANUAL_KEYS = ['CleanUpStrength', 'CleanUpEdge', 'CleanUpBalance', 'CleanUpMotion',
+  'CleanUpBleed', 'CleanUpBleedInner', 'CleanUpBleedOuter', 'CleanUpDodge', 'CleanUpBurn'];
 
 test('the Image Clean Up keys match the engine contract', () => {
   const mode = field('CleanUpMode');
   assert.equal(mode.type, 'enum');
-  assert.equal(mode.default, 0);
+  assert.equal(mode.default, 1, 'Auto is the engine\'s default (b45eced6), so "auto" in the ini is Auto');
   assert.deepEqual(mode.options, [[0, 'Off'], [1, 'Auto'], [2, 'Manual']]);
   assert.equal(mode.label, 'Mode');
 
@@ -55,6 +56,11 @@ test('the Image Clean Up keys match the engine contract', () => {
     CleanUpEdge: { min: 0.25, max: 4, default: 1.5, label: 'Edge threshold' },
     CleanUpBalance: { min: 0, max: 1, default: 0.5, label: 'Fine / wide' },
     CleanUpMotion: { min: 0, max: 1, default: 0.5, label: 'Motion protection' },
+    CleanUpBleed: { min: 0, max: 1, default: 1.0, label: 'Bleed', cleanupLive: 'bleed' },
+    CleanUpBleedInner: { min: 0, max: 1, default: 0.5, label: 'Inner bleed', cleanupLive: 'bleedInner' },
+    CleanUpBleedOuter: { min: 0, max: 1, default: 1.0, label: 'Outer bleed', cleanupLive: 'bleedOuter' },
+    CleanUpDodge: { min: 0, max: 0.5, default: 0.0, label: 'Dodge', cleanupLive: 'dodge' },
+    CleanUpBurn: { min: 0, max: 0.5, default: 0.1, label: 'Burn', cleanupLive: 'burn' },
   };
   for (const [key, want] of Object.entries(expect)) {
     const f = field(key);
@@ -95,7 +101,8 @@ test('Off greys everything below Mode; Auto only Max strength live; Manual only 
     // The mode itself is never greyed -- it is what turns the rest on.
     assert.equal(met(field('CleanUpMode')), true);
   }
-  // Left on default (null in the ini) is Off.
+  // Left on default (null in the ini) is Auto: Max strength live, the Manual rows not.
+  assert.equal(dependencyMetWith({})(field('CleanUpMaxStrength')), true);
   assert.equal(dependencyMetWith({})(field('CleanUpStrength')), false);
 });
 
@@ -117,7 +124,7 @@ test('the Clean Up keys read back from the ini, clamped to the engine range', ()
 test('the read-out: nothing when Off or with no reading, "Measuring" until the glow is measured', () => {
   const reading = { mode: 1, strength: 0.42, haloBefore: 0.1234, haloAfter: 0.0456, composeMs: 0.1 };
   assert.equal(cleanUpStatus(0, reading), '', 'Off says nothing');
-  assert.equal(cleanUpStatus(null, reading), '', 'default (Off) says nothing');
+  assert.equal(cleanUpStatus(null, reading), '', 'no mode given says nothing');
   assert.equal(cleanUpStatus(1, null), '', 'no live reading (no game) says nothing');
   assert.equal(cleanUpStatus(1, undefined), '', 'an engine without the block says nothing');
   for (const mode of [1, 2]) {
@@ -152,7 +159,7 @@ test('Advanced holds every Clean Up slider, and only keys the section already dr
   for (const key of section.advanced) assert.ok(section.keys.includes(key), `${key} is in the section`);
   assert.ok(!section.advanced.includes('CleanUpMode'), 'the mode stays on the page');
   // The engine's next keys are named in a comment only, until it has them.
-  for (const key of ['CleanUpBleed', 'CleanUpDodge', 'CleanUpBurn', 'CleanUpGrain', 'CleanUpPrint', 'CleanUpPlate']) {
+  for (const key of ['CleanUpGrain', 'CleanUpPrint', 'CleanUpPlate']) {
     assert.ok(!field(key), `${key} is not a field yet`);
   }
 });
@@ -207,4 +214,61 @@ test('the read-out follows each live poll, drawn under the Mode row', () => {
   assert.match(render, /cleanUpModeRow\(field\)/);
   // A folded Advanced draws its caption and none of its rows.
   assert.match(render, /if \(!advanced\.open\) continue;/);
+});
+
+// Engine b45eced6: Bleed, Inner bleed, Outer bleed, Dodge and Burn, the engine's own words, and the
+// rows showing Auto's own values from live.json outside Manual, read-only.
+test('the edge-treatment rows carry the engine\'s exact English', () => {
+  const words = {
+    CleanUpBleed: "How much of the light the model spills across a character's outline is taken back. 0 leaves the model's edges as they are.",
+    CleanUpBleedInner: "The light band just inside a character's outline, on the character.",
+    CleanUpBleedOuter: "The glow just outside a character's outline, on the background.",
+    CleanUpDodge: "Limits how far the model may lighten an area the game's picture gives it no detail to lighten, in stops. 0 allows none.",
+    CleanUpBurn: 'Limits how far the model may darken an area beyond its surroundings, so no dark ring is left behind, in stops.',
+  };
+  for (const [key, help] of Object.entries(words)) {
+    assert.equal(field(key).help, help, key);
+    assert.deepEqual(field(key).dependsOn, { key: 'CleanUpMode', is: 2 }, `${key} takes effect only in Manual`);
+    // Each label and tooltip is in every language.
+    for (const lang of ['de', 'es', 'fr', 'ko', 'pt-BR', 'ru', 'zh-CN']) {
+      const text = fs.readFileSync(path.join(REPO, 'src', 'renderer', 'locales', `${lang}.js`), 'utf8');
+      assert.ok(text.includes(JSON.stringify(help) + ':'), `${lang}: ${key} help`);
+      assert.ok(text.includes(JSON.stringify(field(key).label) + ':'), `${lang}: ${key} label`);
+    }
+  }
+  // "auto" in the ini reads as the default; a hand-set Burn below 0 is drawn at the slider's 0.
+  assert.equal(dlssnr.parseValue(field('CleanUpBurn'), 'auto'), null);
+  assert.equal(dlssnr.parseValue(field('CleanUpBurn'), '-1'), 0);
+  // The renderer is handed which live reading each row shows.
+  const rows = dlssnr.readSettings(path.join(REPO, 'no-such-ini'));
+  assert.equal(rows.find((r) => r.key === 'CleanUpBleedInner').cleanupLive, 'bleedInner');
+  assert.equal(rows.find((r) => r.key === 'CleanUpEdge').cleanupLive, null, 'live.json has no reading for Edge');
+});
+
+test('outside Manual a row shows Auto\'s value from live.json; in Manual its own', () => {
+  const byKey = (key) => ({ ...field(key) });
+  const make = (mode, live) => {
+    const isAuto = fromPanel('isCleanUpAutoRow', ['valueOf'], () => mode);
+    const value = new Function('lastLive', `${fnSource('cleanUpLiveValue')}\nreturn cleanUpLiveValue;`)(live);
+    return { isAuto, value };
+  };
+  const live = { cleanup: { mode: 1, strength: 0.42, bleed: 1, bleedInner: 0.35, bleedOuter: 0.9, dodge: 0.05, burn: -1 } };
+  for (const mode of [0, 1]) {
+    const { isAuto, value } = make(mode, live);
+    assert.equal(isAuto(byKey('CleanUpBleedInner')), true, `mode ${mode}`);
+    assert.equal(value(byKey('CleanUpBleedInner')), 0.35);
+    assert.equal(value(byKey('CleanUpDodge')), 0.05);
+    assert.equal(value(byKey('CleanUpStrength')), 0.42);
+    assert.equal(value(byKey('CleanUpBurn')), 0, 'darkening off (below 0) is drawn at 0, as in game');
+    assert.equal(isAuto(byKey('CleanUpEdge')), false, 'no live reading: the row keeps its own value');
+  }
+  const manual = make(2, live);
+  assert.equal(manual.isAuto(byKey('CleanUpBleedInner')), false, 'Manual: the ini value, editable');
+  // Before the engine reports a reading, the row shows its own value.
+  const early = make(1, { cleanup: { mode: 1, bleedInner: null } });
+  assert.equal(early.value(byKey('CleanUpBleedInner')), null);
+  assert.equal(make(1, null).value(byKey('CleanUpBleedInner')), null);
+  // Drawn from, and kept up to date with, each live poll.
+  assert.match(fnSource('fieldRow'), /cleanupAuto \? cleanUpLiveValue\(field\)/);
+  assert.match(fnSource('renderCleanUpStatus'), /data-cleanup-for/);
 });
