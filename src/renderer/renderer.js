@@ -798,7 +798,7 @@ async function applyRecommendation(game, card, backends, generation = renderGene
   const run = diag && diag.ok ? diag.run : await window.api.lastRun(game.exePath);
   if (!current()) return;
   const ran = run && run.ran;
-  const runBad = ran && ['duplicate-dlss', 'shutdown-fault', 'ue-crash', 'feed-stopped', 'feed-host-gone',
+  const runBad = ran && ['duplicate-dlss', 'shutdown-fault', 'ue-crash', 'nvpresent-crash', 'feed-stopped', 'feed-host-gone',
     'feed-no-motion', 'feed-depth-flat', 'feed-agility-redist', 'no-dlss'].includes(run.verdict);
   // Kept on the card so a launch that closes early later (setLaunchIssue) can be judged the same way.
   card._failCtx = { route, diag, run };
@@ -1204,7 +1204,7 @@ async function toggleAddonFromMenu(card, game, kind) {
 // asked for DLSS on that run, which is nearly always DLSS switched off in the game's own settings -- DOOM:
 // The Dark Ages read as failed while working (2026-09-25). Nor the Feeder's motion/depth quality
 // verdicts: the game ran, it just looks rougher. Those keep their own hint rows.
-const FAILED_RUN_VERDICTS = ['duplicate-dlss', 'shutdown-fault', 'ue-crash', 'wrapper-crash', 'feed-stopped', 'feed-host-gone',
+const FAILED_RUN_VERDICTS = ['duplicate-dlss', 'shutdown-fault', 'ue-crash', 'nvpresent-crash', 'wrapper-crash', 'feed-stopped', 'feed-host-gone',
   'feed-agility-redist', 'dlss-no-nr', 'nr-model-crash'];
 // Game Help codes that are the same "DLSS was never switched on" as above, whatever status they carry.
 const DLSS_NOT_ASKED = ['init-no-feature', 'no-dlss', 'no-hook'];
@@ -1547,6 +1547,7 @@ function helpWords(diag) {
     case 'no-hook': return t('Nothing called DLSS on the last run, so nothing was hooked. Check the game\'s own graphics settings have DLSS or DLAA selected. If they do, this is not a known case: press Report issue on the card, or ask the AI.');
     case 'ue-crash-luma': return t('The game crashed (Unreal crash report: {message}) with Luma UE deployed, and Luma is not verified on this game. Remove Luma UE and try the Feeder route.', { message: (v.message || '').slice(0, 120) });
     case 'ue-crash-feeder': return t('The game crashed (Unreal crash report: {message}) with the Feeder deployed. Remove the Feeder and check whether it runs clean.', { message: (v.message || '').slice(0, 120) });
+    case 'nvpresent-crash': return t('The game crashed inside NVIDIA\'s own present code ({module}), on the frame it first tried to show. That module is only in the way when NVIDIA Smooth Motion is on for this game, and it does not survive having DLSS 5 loaded underneath it. Turn Smooth Motion off for this game in the NVIDIA App, then run it again. Nothing here needs changing.', { module: v.module || 'NvPresent64' });
     case 'ue-crash': return t('The game crashed (Unreal crash report: {message}). No rule covers this. Report it with Report issue on the card (it sends the logs), or ask the AI.', { message: (v.message || '').slice(0, 120) });
     case 'luma-available': return t('The DLSS5 Feeder is running this game, but Luma-Framework has a mod for it that adds real DLSS with the game\'s own motion vectors -- sharper in motion than the Feeder\'s estimate. Switching removes the Feeder and sets up Luma (after you confirm its licence). Luma runs on DirectX 11.');
     case 'luma-needs-dx11': return t('Luma is set up here, but the game last ran on DirectX 12, where Luma does not load. Switch the game to DirectX 11 in its own graphics settings, then launch again.');
@@ -1729,6 +1730,7 @@ function helpShort(diag) {
     case 'luma-select-dlss': return t('Select DLSS in Luma\'s overlay (Home)');
     case 'ue-crash-luma': return t('Crashed with Luma UE');
     case 'ue-crash-feeder': return t('Crashed with the Feeder');
+    case 'nvpresent-crash': return t('Crashed -- turn NVIDIA Smooth Motion off');
     case 'ue-crash': return t('Crashed -- no known fix');
     case 'driver-outdated': return v.min ? t('Update the NVIDIA driver ({min} or newer)', v) : t('Update the NVIDIA driver');
     case 'luma-available': return t('Luma has a better mod for this game');
@@ -2715,6 +2717,7 @@ function describeRun(run) {
     case 'no-dlss': return t('nothing called DLSS -- nothing was hooked{api}', { api: api ? ' (' + api + ')' : '' });
     case 'duplicate-dlss': return t('crashed: two DLSS DLLs loaded (a Feeder on a game that ships DLSS) -- remove the Feeder');
     case 'shutdown-fault': return t('crashed on the way out inside NVIDIA\'s NGX shutdown (a Feeder on a game that ships DLSS) -- remove the Feeder');
+    case 'nvpresent-crash': return t('crashed inside NVIDIA\'s present code ({module})', { module: run.detail || 'NvPresent64' });
     case 'ue-crash': return t('crashed (Unreal crash report: {message})', { message: (run.detail || '').slice(0, 120) || t('see the report') });
     case 'driver-outdated': return run.detail ? t('the NVIDIA driver is too old for DLSS 5 (needs {min} or newer)', { min: run.detail }) : t('the NVIDIA driver is too old for DLSS 5');
     case 'nr-model-crash': return t('the DLSS 5 model crashed on its first frame and the Feeder stopped');

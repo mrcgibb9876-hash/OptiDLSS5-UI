@@ -7,6 +7,8 @@
 //   shutdown-fault     NVIDIA's own Shutdown1 faulted while the Feeder's private session was
 //                      live (same folders, on the way down)
 //   ue-crash           Unreal's crash reporter wrote a report within minutes of the run
+//   nvpresent-crash    that report's crashing thread has NVIDIA's NvPresent64 on it, which is
+//                      in the present path only while Smooth Motion is on
 //   driver-outdated    the NVIDIA driver reports DLSS 5 (feature 18) as OutOfDate; the Feeder names
 //                      the minimum version (DOOM 3 BFG on 610.88, needs 616.56)
 //   nr-model-crash     the neural model crashed inside the Feeder's evaluate, which then stopped
@@ -229,12 +231,50 @@ function unrealCrashNear(dir, whenMs) {
   }
   if (!best) return null;
   let message = null;
+  let modules = [];
   try {
     const xml = fs.readFileSync(path.join(best.path, 'CrashContext.runtime-xml'), 'latin1');
     const m = /<ErrorMessage>([^<]{0,300})/.exec(xml);
     if (m) message = m[1].trim();
+    modules = crashModules(xml);
   } catch {}
-  return { path: best.path, at: new Date(best.mtimeMs).toISOString(), message };
+  return {
+    path: best.path,
+    at: new Date(best.mtimeMs).toISOString(),
+    message,
+    modules,
+    // The frame that faulted. Not the same question as which module is to blame -- a null handed in
+    // by the frame below faults in whoever dereferences it -- so both are kept.
+    faultModule: modules[0] || null,
+    nvPresent: modules.some((mod) => /^nvpresent/i.test(mod)),
+  };
+}
+
+// The modules on the crashing thread's stack, innermost first, deduplicated.
+//
+// Only <ErrorMessage> was read from this file before, which threw away the one thing that names who
+// faulted. Silent Hill: Townfall (2026-09-26) died reading 0x18 with five NvPresent64 frames under
+// FD3D12Viewport::PresentInternal, and the bundle had said so all along.
+//
+// The FIRST <CallStack> is the crashing thread's; the ones after it are inside <Threads> and belong
+// to threads that did not fault. <PCallStack> is the same stack unsymbolised (module + offset) and
+// is the fallback, because a build without a .pdb gets only that one.
+//
+// A frame is either a bare module ("NvPresent64"), a module!symbol with a source path
+// ("Townfall_Win64_Shipping!FD3D12Viewport::Present() [C:\...]"), or module + offset. All three
+// start with the module, so the leading token is what is read; any .dll/.exe suffix is dropped so
+// one name is reported however the frame was written.
+function crashModules(xml) {
+  const block = /<CallStack>([\s\S]*?)<\/CallStack>/.exec(xml) || /<PCallStack>([\s\S]*?)<\/PCallStack>/.exec(xml);
+  if (!block) return [];
+  const out = [];
+  for (const line of block[1].split(/\r?\n/)) {
+    const name = (/^\s*([A-Za-z0-9_.+-]+)/.exec(line) || [])[1];
+    if (!name) continue;
+    const mod = name.replace(/\.(dll|exe)$/i, '');
+    if (mod && !out.includes(mod)) out.push(mod);
+  }
+  return out;
 }
 
 // The Feeder records the first access violation in the process with the module it happened in:
@@ -325,7 +365,22 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   // "DLSS-NR Vulkan: running natively at WxH". Without it every native-Vulkan run read as init-no-feature --
   // No Man's Sky, #132, whose log showed the pass up at 2560x1440 for ten minutes. Newer engines also write
   // the D3D12-format heartbeat (", native Vulkan" after the "|"), which nrFrames below picks up.
-  const nrDispatch = count(opti, /DlssNr_(?:Dx12|Vk)::Dispatch DLSS-NR (?:running|composition)|DLSS-NR Vulkan: running natively at/g);
+  // Matched on the MESSAGE, not on the C++ function that wrote it. The prefix in a log line comes
+  // from __FUNCTION__ at runtime, so requiring "DlssNr_Dx12::Dispatch " coupled this to one build's
+  // internal structure: wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass moved the same work into a State
+  // class, so its lines read State::Run and State::MakeResolveConstants and counted zero -- Max
+  // Payne 3 (2026-09-25) reported dlss-no-nr with the pass demonstrably running 2 passes at
+  // 2316x1302 and 23 ms of model time. A verdict of "no neural pass" on a run that had one sends
+  // someone to fix nothing.
+  //
+  // All four messages are written inside DlssNr_Dx12::Dispatch (or the Vulkan feature's own run),
+  // checked against the engine source rather than assumed -- an init-time line counted here would
+  // turn this false negative into the worse false positive of claiming a pass that never dispatched.
+  //
+  // The `running` arm is deliberately bare rather than anchored on the " SR:" that follows it in
+  // the current engine: an older build logs "DLSS-NR running" with nothing after, and requiring
+  // the rest narrowed this while widening the others. The suite caught it.
+  const nrDispatch = count(opti, /DLSS-NR running|DLSS-NR composition:|DLSS-NR model passes:|DLSS-NR Vulkan: running natively at/g);
   const nrComposition = count(opti, /DLSS-NR composition:/g);
   // "CreateFeature1 ... Creating new DLSS upscaler" is how the current engine words it; the older
   // "CreateFeature ... Creating new DLSS feature" stays for logs from older engines. The name in the
@@ -466,7 +521,15 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   //   depthFlat      The depth probe read flat. Flat while the vectors show the scene moving is a
   //                  real diagnosis (Generic Depth is bound to the wrong buffer -- the usual
   //                  Unity failure); flat on its own can just be a menu.
-  const feedInvalidRedist = /D3D12_ERROR_INVALID_REDIST|0x887E0003/i.test(feed);
+  // Read from BOTH logs, not the Feeder's alone. The error is the game's own Agility SDK redist
+  // refusing every device create, which has nothing to do with the Feeder being there -- but this
+  // only ever tested `feed`, so on the Present route (no Feeder, so no feed log at all) the identical
+  // line in OptiScaler.log was invisible and the run fell through to no-dlss with no explanation.
+  // Exactly the shape of the Smooth Motion blind spot: a finding wired to one route's log.
+  //
+  // The name keeps its feed prefix because it is what the digest and gamehelp already call it, and
+  // renaming a verdict is a worse trade than a slightly wrong variable name.
+  const feedInvalidRedist = /D3D12_ERROR_INVALID_REDIST|0x887E0003/i.test(feed) || /D3D12_ERROR_INVALID_REDIST|0x887E0003/i.test(opti);
   const feedMvProblem = (/\[feed\] ((?:DLSS5_Feed\.fx is compiled for motion-vector provider|motion-vector provider )[^\r\n]+)/.exec(feed) || [])[1] || null;
   // Both annotations are written the moment a single probe reads low, and the Feeder takes its
   // first probe at frame 600 -- which in almost every game is the main menu, where nothing moves
@@ -546,6 +609,17 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   else if (feedDriverOutdated !== null) { verdict = 'driver-outdated'; detail = feedDriverOutdated || null; }
   else if (feedCreateFault && feedTwoCopies) verdict = 'duplicate-dlss';
   else if (shutdownFault) verdict = 'shutdown-fault';
+  // A crash inside NVIDIA's own present module, ahead of the generic ue-crash because it names a
+  // cause and a fix where ue-crash can only hand over a bundle. NvPresent64 joins the swapchain and
+  // present path when NVIDIA Smooth Motion is on, and it is documented to fault beneath a
+  // process-wide hook chain -- which is what OptiScaler under a proxy DLL name is. Silent Hill:
+  // Townfall (2026-09-26): five NvPresent64 frames under FD3D12Viewport::PresentInternal, reading
+  // 0x18, on the first Present of the run, with OptiScaler nowhere on the stack.
+  //
+  // The verdict is named for the module because that is what the crash report proves. Smooth Motion
+  // being the thing to turn off is an inference from it, and it belongs in the message rather than
+  // in the name -- the same reason wrapper-crash names the wrapper and not the wrapper's bug.
+  else if (crash && !cleanExit && crash.nvPresent) { verdict = 'nvpresent-crash'; detail = crash.faultModule; }
   else if (crash && !cleanExit) { verdict = 'ue-crash'; detail = crash.message; }
   // Before feed-stopped and before nr-ran: a session that never opened for this reason, and a
   // neural pass running on empty guides, both otherwise read as "no DLSS" or as a clean run.
@@ -772,6 +846,10 @@ function reportDigest(run, { mvProvider = null, vulkanFeeder = null, detected = 
     if (run.feedSmoothMotion) add('smooth motion', 'active in this process');
     if (run.wrapperCrash) add('wrapper crash', `${run.wrapperCrash}, as the game started`);
     if (run.crash && run.crash.message) add('unreal crash', String(run.crash.message).slice(0, 200));
+    // The modules on the crashing thread, innermost first. This is the line that answers "whose
+    // fault" from an issue body alone: a stack naming NvPresent64 or a game-folder wrapper says it
+    // in three words, and without it a crash report can only be handed back as "send the bundle".
+    if (run.crash && (run.crash.modules || []).length) add('crash stack', run.crash.modules.slice(0, 8).join(' < '));
     if (run.vkViewport) {
       const v = run.vkViewport;
       add('vulkan viewport', [
@@ -985,4 +1063,4 @@ async function collectSupportBundle(dir, { zipPath, extra = {}, execFileAsync, o
   return { zipPath, files: copied, run };
 }
 
-module.exports = { analyzeRun, ngxResultName, wrapperLogs, collectSupportBundle, gatherSupportFiles, reportDigest, withDigest, DIGEST_MARKER, unrealCrashNear, nrTiming, dlssRuntimeStubBytes, DLSS_RUNTIME_MIN_BYTES };
+module.exports = { analyzeRun, ngxResultName, wrapperLogs, collectSupportBundle, gatherSupportFiles, reportDigest, withDigest, DIGEST_MARKER, unrealCrashNear, crashModules, nrTiming, dlssRuntimeStubBytes, DLSS_RUNTIME_MIN_BYTES };

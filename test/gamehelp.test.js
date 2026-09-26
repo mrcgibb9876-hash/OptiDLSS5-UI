@@ -100,6 +100,15 @@ const rows = [
   ['Feeder technique missing: Install again', base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'init-no-feature', detail: 'feeder-technique-missing' } }), { status: 'fix', fix: 'install' }],
   ['two DLSS DLLs crashed it: remove the Feeder', base({ route: { route: 'feeder', feederDeployed: true }, run: { ran: true, verdict: 'duplicate-dlss' } }), { status: 'fix', fix: 'remove-feeder' }],
   ['UE crash with unverified Luma: remove Luma', base({ route: { route: 'lumaue', lumaDeployed: true }, run: { ran: true, verdict: 'ue-crash', detail: 'Assertion failed' } }), { status: 'fix', fix: 'remove-luma' }],
+  // NVIDIA's present module on the crashing stack. A step, not a fix: Smooth Motion is a per-game
+  // setting in the NVIDIA App and nothing this app installs or removes changes it. This is also the
+  // only Smooth Motion finding that reaches a non-Feeder route -- every other one reads
+  // run.feedSmoothMotion, which exists only where the Feeder wrote a log (Silent Hill: Townfall,
+  // 2026-09-26, was the Present route and got no warning at all).
+  ['crashed inside NvPresent64: turn Smooth Motion off', base({ run: { ran: true, verdict: 'nvpresent-crash', detail: 'D3D12Core' } }), { status: 'step', code: 'nvpresent-crash' }],
+  // It outranks the generic ue-crash even with Luma or the Feeder deployed: the stack already names
+  // who faulted, so telling someone to strip their stack instead would be a worse answer.
+  ['NvPresent64 crash still wins with Luma deployed', base({ route: { route: 'lumaue', lumaDeployed: true }, run: { ran: true, verdict: 'nvpresent-crash', detail: 'D3D12Core' } }), { status: 'step', code: 'nvpresent-crash' }],
   // Two frame generators. Smooth Motion is the driver's own, invisible to everything here except
   // the Feeder's log line, so this is reported and never acted on. It has to reach a WORKING run --
   // a game that "works" while quietly running two generators is the whole point -- without ever
