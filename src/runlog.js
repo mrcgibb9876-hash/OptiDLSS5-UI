@@ -365,7 +365,22 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   // "DLSS-NR Vulkan: running natively at WxH". Without it every native-Vulkan run read as init-no-feature --
   // No Man's Sky, #132, whose log showed the pass up at 2560x1440 for ten minutes. Newer engines also write
   // the D3D12-format heartbeat (", native Vulkan" after the "|"), which nrFrames below picks up.
-  const nrDispatch = count(opti, /DlssNr_(?:Dx12|Vk)::Dispatch DLSS-NR (?:running|composition)|DLSS-NR Vulkan: running natively at/g);
+  // Matched on the MESSAGE, not on the C++ function that wrote it. The prefix in a log line comes
+  // from __FUNCTION__ at runtime, so requiring "DlssNr_Dx12::Dispatch " coupled this to one build's
+  // internal structure: wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass moved the same work into a State
+  // class, so its lines read State::Run and State::MakeResolveConstants and counted zero -- Max
+  // Payne 3 (2026-09-25) reported dlss-no-nr with the pass demonstrably running 2 passes at
+  // 2316x1302 and 23 ms of model time. A verdict of "no neural pass" on a run that had one sends
+  // someone to fix nothing.
+  //
+  // All four messages are written inside DlssNr_Dx12::Dispatch (or the Vulkan feature's own run),
+  // checked against the engine source rather than assumed -- an init-time line counted here would
+  // turn this false negative into the worse false positive of claiming a pass that never dispatched.
+  //
+  // The `running` arm is deliberately bare rather than anchored on the " SR:" that follows it in
+  // the current engine: an older build logs "DLSS-NR running" with nothing after, and requiring
+  // the rest narrowed this while widening the others. The suite caught it.
+  const nrDispatch = count(opti, /DLSS-NR running|DLSS-NR composition:|DLSS-NR model passes:|DLSS-NR Vulkan: running natively at/g);
   const nrComposition = count(opti, /DLSS-NR composition:/g);
   // "CreateFeature1 ... Creating new DLSS upscaler" is how the current engine words it; the older
   // "CreateFeature ... Creating new DLSS feature" stays for logs from older engines. The name in the
@@ -506,7 +521,15 @@ async function analyzeRun(dir, { optiDir = dir } = {}) {
   //   depthFlat      The depth probe read flat. Flat while the vectors show the scene moving is a
   //                  real diagnosis (Generic Depth is bound to the wrong buffer -- the usual
   //                  Unity failure); flat on its own can just be a menu.
-  const feedInvalidRedist = /D3D12_ERROR_INVALID_REDIST|0x887E0003/i.test(feed);
+  // Read from BOTH logs, not the Feeder's alone. The error is the game's own Agility SDK redist
+  // refusing every device create, which has nothing to do with the Feeder being there -- but this
+  // only ever tested `feed`, so on the Present route (no Feeder, so no feed log at all) the identical
+  // line in OptiScaler.log was invisible and the run fell through to no-dlss with no explanation.
+  // Exactly the shape of the Smooth Motion blind spot: a finding wired to one route's log.
+  //
+  // The name keeps its feed prefix because it is what the digest and gamehelp already call it, and
+  // renaming a verdict is a worse trade than a slightly wrong variable name.
+  const feedInvalidRedist = /D3D12_ERROR_INVALID_REDIST|0x887E0003/i.test(feed) || /D3D12_ERROR_INVALID_REDIST|0x887E0003/i.test(opti);
   const feedMvProblem = (/\[feed\] ((?:DLSS5_Feed\.fx is compiled for motion-vector provider|motion-vector provider )[^\r\n]+)/.exec(feed) || [])[1] || null;
   // Both annotations are written the moment a single probe reads low, and the Feeder takes its
   // first probe at frame 600 -- which in almost every game is the main menu, where nothing moves
