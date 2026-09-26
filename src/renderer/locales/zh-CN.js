@@ -1807,4 +1807,10 @@ window.I18N.register("zh-CN", {
     "预设",
   "{label} -- set this in ReShade's overlay (Home)":
     "{label}——请在 ReShade 的叠加界面中设置（Home）",
+  "The game crashed inside NVIDIA's own present code ({module}), on the frame it first tried to show. That module is only in the way when NVIDIA Smooth Motion is on for this game, and it does not survive having DLSS 5 loaded underneath it. Turn Smooth Motion off for this game in the NVIDIA App, then run it again. Nothing here needs changing.":
+    "游戏在 NVIDIA 自己的呈现代码（{module}）中崩溃，就在它试图显示第一帧的时候。只有为这个游戏启用了 NVIDIA Smooth Motion 时该模块才会介入，而它无法承受下面加载着 DLSS 5。请在 NVIDIA App 中为这个游戏关闭 Smooth Motion，然后重新运行。这里不需要做任何改动。",
+  "Crashed -- turn NVIDIA Smooth Motion off":
+    "崩溃——请关闭 NVIDIA Smooth Motion",
+  "crashed inside NVIDIA's present code ({module})":
+    "在 NVIDIA 的呈现代码中崩溃（{module}）",
 });

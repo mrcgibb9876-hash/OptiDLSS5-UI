@@ -1808,4 +1808,10 @@ window.I18N.register('pt-BR', {
     "Predefinição",
   "{label} -- set this in ReShade's overlay (Home)":
     "{label} -- ajuste isto na sobreposição do ReShade (Home)",
+  "The game crashed inside NVIDIA's own present code ({module}), on the frame it first tried to show. That module is only in the way when NVIDIA Smooth Motion is on for this game, and it does not survive having DLSS 5 loaded underneath it. Turn Smooth Motion off for this game in the NVIDIA App, then run it again. Nothing here needs changing.":
+    "O jogo travou dentro do próprio código de apresentação da NVIDIA ({module}), no primeiro quadro que tentou exibir. Esse módulo só entra no caminho quando o NVIDIA Smooth Motion está ligado para este jogo, e ele não suporta ter o DLSS 5 por baixo. Desligue o Smooth Motion para este jogo no NVIDIA App e rode de novo. Nada precisa mudar aqui.",
+  "Crashed -- turn NVIDIA Smooth Motion off":
+    "Travou -- desligue o NVIDIA Smooth Motion",
+  "crashed inside NVIDIA's present code ({module})":
+    "travou dentro do código de apresentação da NVIDIA ({module})",
 });
