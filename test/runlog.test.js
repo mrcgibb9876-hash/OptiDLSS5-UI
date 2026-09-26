@@ -71,3 +71,55 @@ test('the digest carries the crash stack, and the triage parser reads it back', 
   assert.equal(other.nvPresent, false);
   assert.deepEqual(other.crashStack, ['UnrealEditor-Core', 'Game']);
 });
+
+// ── findings that were wired to one route's log ────────────────────────────────────────────────
+
+test('the Agility redist error is read from OptiScaler.log, not only the Feeder\'s', async () => {
+  // D3D12_ERROR_INVALID_REDIST is the GAME's own Agility SDK refusing every device create. It has
+  // nothing to do with the Feeder being present, but only `feed` was ever tested -- so on the
+  // Present route, where there is no feed log at all, the identical line was invisible and the run
+  // fell through to no-dlss with no explanation. Same shape as the Smooth Motion blind spot.
+  const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'redist-'));
+  fs.writeFileSync(path.join(dir, 'OptiScaler.log'),
+    '[00:00:01.000] [W] OptiScaler v2.1.0 loaded\n'
+    + '[00:00:02.000] [E] D3D12CreateDevice failed: 0x887E0003 D3D12_ERROR_INVALID_REDIST\n');
+  const run = await runlog.analyzeRun(dir);
+  assert.equal(run.feedInvalidRedist, true, 'seen with no Feeder log in the folder');
+  assert.equal(run.verdict, 'feed-agility-redist');
+});
+
+test('the neural pass is counted by its message, not by the function that logged it', async () => {
+  // The prefix in a log line is __FUNCTION__ at runtime, so requiring "DlssNr_Dx12::Dispatch "
+  // coupled this to one build's internal structure. wilsjo2/OptiScaler-DLSSNR-PreSR-Multipass moved
+  // the same work into a State class, and Max Payne 3 (2026-09-25) reported dlss-no-nr with the pass
+  // running 2 passes at 2316x1302 and 23 ms of model time.
+  const dir = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'nrmsg-'));
+  fs.writeFileSync(path.join(dir, 'OptiScaler.log'),
+    '[00:00:01.000] [W] OptiScaler v2.1.0 loaded\n'
+    + '[00:00:02.000] [I] DlssNr_Dx12::State::Run DLSS-NR model passes: configured 2, effective 2\n'
+    + '[00:00:03.000] [I] DlssNr_Dx12::State::MakeResolveConstants DLSS-NR composition: paper white 1.00x\n');
+  const run = await runlog.analyzeRun(dir);
+  assert.ok(run.nrDispatch > 0, 'a fork that renamed the function still reports its pass');
+  assert.equal(run.verdict, 'nr-ran');
+});
+
+test('our own engine\'s wording still counts, and an idle log still does not', async () => {
+  const os = require('node:os');
+  const ours = fs.mkdtempSync(path.join(os.tmpdir(), 'nrours-'));
+  fs.writeFileSync(path.join(ours, 'OptiScaler.log'),
+    '[00:00:01.000] [W] OptiScaler v2.1.0 loaded\n'
+    + '[00:00:02.000] [I] DlssNr_Dx12::Dispatch DLSS-NR running native SR: target 2560x1440, model 2560x1440\n');
+  assert.equal((await runlog.analyzeRun(ours)).verdict, 'nr-ran');
+
+  // The regexes must not fire on a log that merely mentions the feature. A false "the pass ran" is
+  // worse than the false negative this replaced: it closes a real report as working.
+  const idle = fs.mkdtempSync(path.join(os.tmpdir(), 'nridle-'));
+  fs.writeFileSync(path.join(idle, 'OptiScaler.log'),
+    '[00:00:01.000] [W] OptiScaler v2.1.0 loaded\n'
+    + '[00:00:02.000] [I] DLSS-NR proxy probe: feature 18 -> 0x1 (ok)\n'
+    + '[00:00:03.000] [I] DlssNr::ExposureScan::NoteResource DLSS-NR scan near-miss #6: UAV dim 1\n'
+    + '[00:00:04.000] [I] MenuHdrCheck Output HDR: false\n');
+  const run = await runlog.analyzeRun(idle);
+  assert.equal(run.nrDispatch, 0, 'probes and scan near-misses are not a dispatched pass');
+  assert.notEqual(run.verdict, 'nr-ran');
+});
