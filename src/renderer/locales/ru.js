@@ -1677,4 +1677,10 @@ window.I18N.register("ru", {
     "OptiScaler загружается под именем DLL, которую игра и так загружает при старте. Приложение выбирает это имя само и почти всегда угадывает -- меняйте только если знаете, какую DLL загружает ваша игра, например потому что её называет страница вики OptiScaler для этой игры. При выборе имени установленный файл сразу переносится под него.",
   "A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.":
     "Неверное имя не опасно, просто бесполезно: игра никогда не загрузит этот файл, поэтому DLSS 5 ничего не делает и журнал не пишется. Чтобы отменить, верните значение «Автоматически».",
+  "The game crashed inside NVIDIA's own present code ({module}), on the frame it first tried to show. That module is only in the way when NVIDIA Smooth Motion is on for this game, and it does not survive having DLSS 5 loaded underneath it. Turn Smooth Motion off for this game in the NVIDIA App, then run it again. Nothing here needs changing.":
+    "Игра упала внутри собственного кода вывода кадров NVIDIA ({module}), на первом же кадре, который пыталась показать. Этот модуль встаёт в путь только когда для игры включён NVIDIA Smooth Motion, и он не выдерживает загруженного под ним DLSS 5. Отключите Smooth Motion для этой игры в NVIDIA App и запустите снова. Здесь менять ничего не нужно.",
+  "Crashed -- turn NVIDIA Smooth Motion off":
+    "Падение -- отключите NVIDIA Smooth Motion",
+  "crashed inside NVIDIA's present code ({module})":
+    "падение внутри кода вывода кадров NVIDIA ({module})",
 });

@@ -1687,4 +1687,10 @@ window.I18N.register("fr", {
     "OptiScaler se charge en prenant le nom d'une DLL que le jeu charge déjà au démarrage. L'application choisit ce nom elle-même et a presque toujours raison -- ne le changez que si vous savez quelle DLL votre jeu charge, par exemple parce que la page du wiki d'OptiScaler pour ce jeu en nomme une. Choisir un nom déplace aussitôt le fichier installé.",
   "A wrong name is not dangerous, just inert: the game never loads that file, so DLSS 5 does nothing and no log is written. Set it back to Automatic to undo.":
     "Un mauvais nom n'est pas dangereux, seulement inerte : le jeu ne charge jamais ce fichier, donc DLSS 5 ne fait rien et aucun journal n'est écrit. Remettez sur Automatique pour annuler.",
+  "The game crashed inside NVIDIA's own present code ({module}), on the frame it first tried to show. That module is only in the way when NVIDIA Smooth Motion is on for this game, and it does not survive having DLSS 5 loaded underneath it. Turn Smooth Motion off for this game in the NVIDIA App, then run it again. Nothing here needs changing.":
+    "Le jeu a planté dans le code de présentation de NVIDIA lui-même ({module}), à la première image qu'il a tenté d'afficher. Ce module ne s'interpose que lorsque NVIDIA Smooth Motion est activé pour ce jeu, et il ne supporte pas d'avoir DLSS 5 en dessous. Désactive Smooth Motion pour ce jeu dans la NVIDIA App, puis relance. Rien à changer ici.",
+  "Crashed -- turn NVIDIA Smooth Motion off":
+    "Planté -- désactive NVIDIA Smooth Motion",
+  "crashed inside NVIDIA's present code ({module})":
+    "planté dans le code de présentation de NVIDIA ({module})",
 });

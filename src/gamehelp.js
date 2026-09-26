@@ -435,6 +435,14 @@ function diagnose(ctx) {
       if (route.route === 'feeder' && route.feederDeployed) return noHook();
       if (route.route === 'lumaue') return out('step', 'luma-missing');
       return noHook();
+    // NVIDIA's own present module faulted. Smooth Motion is the only reason NvPresent64 is in the
+    // present path, so it is a per-game setting to turn off in the NVIDIA App -- nothing this app
+    // installs or removes can fix it, which is why this is a step and not a fix. It is also the one
+    // Smooth Motion finding that does not need the Feeder: every other place we warn about Smooth
+    // Motion reads run.feedSmoothMotion, which only exists on a Feeder route, so a Present-route
+    // game like Silent Hill: Townfall (2026-09-26) got no warning at all before this.
+    case 'nvpresent-crash':
+      return out('step', 'nvpresent-crash', { module: run.detail || 'NvPresent64' });
     case 'ue-crash':
       if (route.lumaDeployed && !(route.verified && route.verified.route === 'lumaue')) return fix('ue-crash-luma', 'remove-luma', { message: run.detail || '' });
       if (route.feederDeployed && !(route.verified && route.verified.route === 'feeder')) return fix('ue-crash-feeder', 'remove-feeder', { message: run.detail || '' });

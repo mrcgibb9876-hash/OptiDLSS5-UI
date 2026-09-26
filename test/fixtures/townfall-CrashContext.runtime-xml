@@ -1,0 +1,776 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FGenericCrashContext>
+	<RuntimeProperties>
+		<CrashVersion>3</CrashVersion>
+		<ExecutionGuid>00000000000000000000000000000000</ExecutionGuid>
+		<CrashGUID>UECC-Windows-00000000000000000000000000000000_0000</CrashGUID>
+		<IsEnsure>false</IsEnsure>
+		<IsStall>false</IsStall>
+		<IsAssert>false</IsAssert>
+		<CrashType>Crash</CrashType>
+		<ErrorMessage>Unhandled Exception: EXCEPTION_ACCESS_VIOLATION reading address 0x0000000000000018</ErrorMessage>
+		<CrashReporterMessage />
+		<CrashReporterMessage>Attended</CrashReporterMessage>
+		<ProcessId>36212</ProcessId>
+		<SecondsSinceStart>0</SecondsSinceStart>
+		<IsInternalBuild>false</IsInternalBuild>
+		<IsPerforceBuild>false</IsPerforceBuild>
+		<IsWithDebugInfo>true</IsWithDebugInfo>
+		<IsSourceDistribution>false</IsSourceDistribution>
+		<GameName>UE-Townfall</GameName>
+		<ExecutableName>Townfall-Win64-Shipping</ExecutableName>
+		<BuildConfiguration>Shipping</BuildConfiguration>
+		<GameSessionID />
+		<PlatformName>Windows</PlatformName>
+		<PlatformFullName>Win64 [Windows 10 (22H2) [10.0.19045.7725]  64b]</PlatformFullName>
+		<PlatformNameIni>Windows</PlatformNameIni>
+		<EngineMode>Game</EngineMode>
+		<EngineModeEx>Unset</EngineModeEx>
+		<DeploymentName />
+		<EngineVersion>5.6.1-0+UE5</EngineVersion>
+		<EngineCompatibleVersion>5.6.1-0+UE5</EngineCompatibleVersion>
+		<CommandLine />
+		<LanguageLCID>9</LanguageLCID>
+		<AppDefaultLocale>en-US</AppDefaultLocale>
+		<BuildVersion>UE5-CL-0</BuildVersion>
+		<Symbols>UE5-CL-0-Win64-Shipping</Symbols>
+		<IsUERelease>true</IsUERelease>
+		<IsRequestingExit>false</IsRequestingExit>
+		<UserName />
+		<BaseDir>D:/Games/SILENT HILL - Townfall/Townfall/Binaries/Win64/</BaseDir>
+		<RootDir>D:/Games/SILENT HILL - Townfall/</RootDir>
+		<MachineId>00000000000000000000000000000000</MachineId>
+		<LoginId>00000000000000000000000000000000</LoginId>
+		<EpicAccountId>00000000000000000000000000000000</EpicAccountId>
+		<SourceContext />
+		<UserDescription />
+		<UserActivityHint />
+		<CrashDumpMode>0</CrashDumpMode>
+		<GameStateName />
+		<Misc.NumberOfCores>12</Misc.NumberOfCores>
+		<Misc.NumberOfCoresIncludingHyperthreads>24</Misc.NumberOfCoresIncludingHyperthreads>
+		<Misc.Is64bitOperatingSystem>1</Misc.Is64bitOperatingSystem>
+		<Misc.CPUVendor>AuthenticAMD</Misc.CPUVendor>
+		<Misc.CPUBrand>AMD Ryzen 9 9900X 12-Core Processor</Misc.CPUBrand>
+		<Misc.PrimaryGPUBrand>NVIDIA GeForce RTX 5090</Misc.PrimaryGPUBrand>
+		<Misc.OSVersionMajor>Windows 10 (22H2) [10.0.19045.7725]</Misc.OSVersionMajor>
+		<Misc.OSVersionMinor />
+		<Misc.AnticheatProvider />
+		<MemoryStats.TotalPhysical>66184187904</MemoryStats.TotalPhysical>
+		<MemoryStats.TotalVirtual>91775836160</MemoryStats.TotalVirtual>
+		<MemoryStats.PageSize>4096</MemoryStats.PageSize>
+		<MemoryStats.TotalPhysicalGB>62</MemoryStats.TotalPhysicalGB>
+		<MemoryStats.AvailablePhysical>0</MemoryStats.AvailablePhysical>
+		<MemoryStats.AvailableVirtual>0</MemoryStats.AvailableVirtual>
+		<MemoryStats.UsedPhysical>0</MemoryStats.UsedPhysical>
+		<MemoryStats.PeakUsedPhysical>0</MemoryStats.PeakUsedPhysical>
+		<MemoryStats.UsedVirtual>0</MemoryStats.UsedVirtual>
+		<MemoryStats.PeakUsedVirtual>0</MemoryStats.PeakUsedVirtual>
+		<MemoryStats.bIsOOM>0</MemoryStats.bIsOOM>
+		<MemoryStats.OOMAllocationSize>0</MemoryStats.OOMAllocationSize>
+		<MemoryStats.OOMAllocationAlignment>0</MemoryStats.OOMAllocationAlignment>
+		<NumMinidumpFramesToIgnore>0</NumMinidumpFramesToIgnore>
+		<CallStack>D3D12Core
+D3D12Core
+NvPresent64
+NvPresent64
+NvPresent64
+NvPresent64
+NvPresent64
+Townfall_Win64_Shipping!FD3D12Viewport::PresentInternal() [C:\Jenkins\jobs\Townfall\workspace\Engine\Source\Runtime\D3D12RHI\Private\Windows\WindowsD3D12Viewport.cpp:380]
+Townfall_Win64_Shipping!FD3D12Viewport::PresentChecked() [C:\Jenkins\jobs\Townfall\workspace\Engine\Source\Runtime\D3D12RHI\Private\D3D12Viewport.cpp:544]
+Townfall_Win64_Shipping!FD3D12Viewport::Present() [C:\Jenkins\jobs\Townfall\workspace\Engine\Source\Runtime\D3D12RHI\Private\D3D12Viewport.cpp:604]
+Townfall_Win64_Shipping!FD3D12CommandContextBase::RHIEndDrawingViewport() [C:\Jenkins\jobs\Townfall\workspace\Engine\Source\Runtime\D3D12RHI\Private\D3D12Viewport.cpp:797]
+Townfall_Win64_Shipping!FRHICommandListExecutor::FTranslateState::Translate() [C:\Jenkins\jobs\Townfall\workspace\Engine\Source\Runtime\RHI\Private\RHICommandList.cpp:1077]
+Townfall_Win64_Shipping!FRHICommandListExecutor::FTaskPipe::Execute() [C:\Jenkins\jobs\Townfall\workspace\Engine\Source\Runtime\RHI\Private\RHICommandList.cpp:726]
+Townfall_Win64_Shipping!UE::Tasks::Private::FTaskBase::TryExecuteTask() [C:\Jenkins\jobs\Townfall\workspace\Engine\Source\Runtime\Core\Public\Tasks\TaskPrivate.h:527]
+Townfall_Win64_Shipping!FNamedTaskThread::ProcessTasksNamedThread() [C:\Jenkins\jobs\Townfall\workspace\Engine\Source\Runtime\Core\Private\Async\TaskGraph.cpp:779]
+Townfall_Win64_Shipping!FNamedTaskThread::ProcessTasksUntilQuit() [C:\Jenkins\jobs\Townfall\workspace\Engine\Source\Runtime\Core\Private\Async\TaskGraph.cpp:668]
+Townfall_Win64_Shipping!FRHIThread::Run() [C:\Jenkins\jobs\Townfall\workspace\Engine\Source\Runtime\RenderCore\Private\RenderingThread.cpp:271]
+Townfall_Win64_Shipping!FRunnableThreadWin::Run() [C:\Jenkins\jobs\Townfall\workspace\Engine\Source\Runtime\Core\Private\Windows\WindowsRunnableThread.cpp:159]</CallStack>
+		<PCallStack>
+
+D3D12Core 0x00007ff91df60000 + 10194 
+D3D12Core 0x00007ff91df60000 + fc9c 
+NvPresent64 0x00007ff9097f0000 + 47f60 
+NvPresent64 0x00007ff9097f0000 + 32cc8 
+NvPresent64 0x00007ff9097f0000 + 342c4 
+NvPresent64 0x00007ff9097f0000 + 11ffa 
+NvPresent64 0x00007ff9097f0000 + 4a64f 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 116d48c 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 116d3a7 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 116be55 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 116bb33 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 110c2df 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f6125 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 1103087 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f709e 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 147d46d 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131c112 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</PCallStack>
+		<PCallStackHash>430B85A32A053F43E451C16CBC80C31C871F3D91</PCallStackHash>
+		<Threads>
+			<Thread>
+				<CallStack>Townfall-Win64-Shipping 0x00007ff6ebca0000 + 11b78c8 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10e45fe 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 11b19cd 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 15e661f 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 15e6271 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 33a3a7a 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 27a79e3 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 14d3813 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 343c4ab 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 33a9476 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 1dece59 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 1825d74 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 2727e72 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 1c71ab7 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131bbbe 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131b3cf 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131bbdb 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 330a13a 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>46728</ThreadID>
+				<ThreadName>GameThread</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 121336f 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>17492</ThreadID>
+				<ThreadName>BackgroundThreadPool #0</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 121336f 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>23952</ThreadID>
+				<ThreadName>BackgroundThreadPool #1</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 3e28964 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f7153 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f795b 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131d431 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 334d7e0 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fff4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>31328</ThreadID>
+				<ThreadName>Foreground Worker #0</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 3e28964 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f7153 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f795b 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131d431 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 334d7e0 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fff4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>33692</ThreadID>
+				<ThreadName>Background Worker #0</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9dd54 
+KERNELBASE 0x00007ff999830000 + 28c45 
+dxgi 0x00007ff90a020000 + 86d2d 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 15ebbde 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 4ad68bb 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 1319386 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 34b0cd4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 274aac6 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 1643be2 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 11031d2 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 110595f 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 3e28556 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f71bf 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f780b 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131d431 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 334d7e0 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fff4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>23332</ThreadID>
+				<ThreadName>Foreground Worker #1</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 3e28964 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131e4d4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131e412 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131d43c 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 334d7e0 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fff4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>34760</ThreadID>
+				<ThreadName>Foreground Worker (Standby #0)</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 3e28964 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f7153 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f795b 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131d431 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 334d7e0 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fff4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>35220</ThreadID>
+				<ThreadName>Background Worker #1</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 3e28964 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f7153 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f795b 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131d431 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 334d7e0 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fff4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>16636</ThreadID>
+				<ThreadName>Background Worker #2</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9dc34 
+KERNELBASE 0x00007ff999830000 + 462de 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 40f41e3 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>2588</ThreadID>
+				<ThreadName>FHeartBeatThread</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9e104 
+KERNELBASE 0x00007ff999830000 + 50d10 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 2e03094 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 2e010fd 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 11c9a4a 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 11c8d31 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 11c8c6d 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 2901f81 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>28024</ThreadID>
+				<ThreadName>HttpManagerThread</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 1a43fb0 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>31792</ThreadID>
+				<ThreadName>OnlineAsyncTaskThreadSteam DefaultInstance</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + a0fe4 
+ntdll 0x00007ff99bcb0000 + 64d7d 
+ntdll 0x00007ff99bcb0000 + 64c32 
+ntdll 0x00007ff99bcb0000 + 64943 
+KERNELBASE 0x00007ff999830000 + 6ee3f 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 1179933 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 11795ac 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 11786a4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 1d45e77 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 1d45563 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fff4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>43184</ThreadID>
+				<ThreadName>OutputDeviceRedirector</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 121336f 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>1000</ThreadID>
+				<ThreadName>IOThreadPool #0</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 121336f 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>13560</ThreadID>
+				<ThreadName>IOThreadPool #1</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 121336f 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>20376</ThreadID>
+				<ThreadName>IOThreadPool #2</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 121336f 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>31180</ThreadID>
+				<ThreadName>IOThreadPool #3</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 4aeb175 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>21568</ThreadID>
+				<ThreadName>IoService</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 111f3c4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>37012</ThreadID>
+				<ThreadName>IoDispatcher</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f16cc 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>19880</ThreadID>
+				<ThreadName>RHIInterruptThread</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f16cc 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>40420</ThreadID>
+				<ThreadName>RHISubmissionThread</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 3e28964 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f7153 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f795b 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131d431 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 334d7e0 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fff4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>32000</ThreadID>
+				<ThreadName>Background Worker #3</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 4175b98 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 3d36dc8 
+VCRUNTIME140 0x00007ff978490000 + 1a9c0 
+ntdll 0x00007ff99bcb0000 + a297f 
+ntdll 0x00007ff99bcb0000 + 52554 
+ntdll 0x00007ff99bcb0000 + a148e 
+D3D12Core 0x00007ff91df60000 + 10194 
+D3D12Core 0x00007ff91df60000 + fc9c 
+NvPresent64 0x00007ff9097f0000 + 47f60 
+NvPresent64 0x00007ff9097f0000 + 32cc8 
+NvPresent64 0x00007ff9097f0000 + 342c4 
+NvPresent64 0x00007ff9097f0000 + 11ffa 
+NvPresent64 0x00007ff9097f0000 + 4a64f 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 116d48c 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 116d3a7 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 116be55 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 116bb33 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 110c2df 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f6125 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 1103087 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f709e 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 147d46d 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131c112 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>true</IsCrashed>
+				<Registers />
+				<ThreadID>33680</ThreadID>
+				<ThreadName>RHIThread</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f6ff0 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 147d46d 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131c22b 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131b4c9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>27364</ThreadID>
+				<ThreadName>RenderThread 0</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9dc34 
+KERNELBASE 0x00007ff999830000 + 462de 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 135f817 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>16992</ThreadID>
+				<ThreadName>RTHeartBeat 0</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 3e28964 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f7153 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f795b 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131d431 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 334d7e0 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fff4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>25468</ThreadID>
+				<ThreadName>Background Worker #4</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 3e28964 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f7153 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f795b 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131d431 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 334d7e0 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fff4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>15452</ThreadID>
+				<ThreadName>Background Worker #5</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 3e28964 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f7153 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f795b 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131d431 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 334d7e0 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fff4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>36456</ThreadID>
+				<ThreadName>Background Worker #6</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 3e28964 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f7153 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f795b 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131d431 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 334d7e0 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fff4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>14848</ThreadID>
+				<ThreadName>Background Worker #7</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 3e28964 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f7153 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f795b 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131d431 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 334d7e0 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fff4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>13776</ThreadID>
+				<ThreadName>Background Worker #8</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 3e28964 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f7153 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f795b 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131d431 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 334d7e0 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fff4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>20356</ThreadID>
+				<ThreadName>Background Worker #9</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 3e28964 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f7153 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f795b 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131d431 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 334d7e0 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fff4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>44904</ThreadID>
+				<ThreadName>Background Worker #10</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 3e28964 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f7153 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f795b 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131d431 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 334d7e0 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fff4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>23616</ThreadID>
+				<ThreadName>Background Worker #11</ThreadName>
+			</Thread>
+			<Thread>
+				<CallStack>ntdll 0x00007ff99bcb0000 + 9d634 
+KERNELBASE 0x00007ff999830000 + 1b6ae 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10fb5d9 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 3e28964 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f7153 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 10f795b 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 131d431 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 334d7e0 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fff4 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151fa52 
+Townfall-Win64-Shipping 0x00007ff6ebca0000 + 151f90c 
+KERNEL32 0x00007ff99b410000 + 17384 
+</CallStack>
+				<IsCrashed>false</IsCrashed>
+				<Registers />
+				<ThreadID>47484</ThreadID>
+				<ThreadName>Background Worker #12</ThreadName>
+			</Thread>
+		</Threads>
+		<TimeOfCrash>639260017702670000</TimeOfCrash>
+		<bAllowToBeContacted>1</bAllowToBeContacted>
+		<CPUBrand>AMD Ryzen 9 9900X 12-Core Processor</CPUBrand>
+		<CrashReportClientVersion>1.0</CrashReportClientVersion>
+		<Modules>D:\Games\SILENT HILL - Townfall\Townfall\Binaries\Win64\Townfall-Win64-Shipping.exe
+D:\Games\SILENT HILL - Townfall\Engine\Plugins\Runtime\OpenCV\Binaries\ThirdParty\Win64\opencv_world455.dll
+D:\Games\SILENT HILL - Townfall\Engine\Binaries\Win64\EOSSDK-Win64-Shipping.dll
+D:\Games\SILENT HILL - Townfall\Townfall\Binaries\Win64\OptiScaler\libxess_fg.dll
+D:\Games\SILENT HILL - Townfall\Townfall\Binaries\Win64\OptiScaler\libxess.dll
+D:\Games\SILENT HILL - Townfall\Townfall\Binaries\Win64\OptiScaler\amd_fidelityfx_framegeneration_dx12.dll
+D:\Games\SILENT HILL - Townfall\Townfall\Binaries\Win64\OptiScaler\amd_fidelityfx_upscaler_dx12.dll
+D:\Games\SILENT HILL - Townfall\Townfall\Binaries\Win64\dxgi.dll
+D:\Games\SILENT HILL - Townfall\Engine\Binaries\ThirdParty\NVIDIA\NVaftermath\Win64\GFSDK_Aftermath_Lib.x64.dll
+D:\Games\SILENT HILL - Townfall\Townfall\Binaries\Win64\D3D12\x64\D3D12Core.dll
+D:\Games\SILENT HILL - Townfall\Engine\Binaries\ThirdParty\Steamworks\Steamv157\Win64\steam_api64.dll
+D:\Games\SILENT HILL - Townfall\Engine\Binaries\ThirdParty\Vorbis\Win64\VS2015\libvorbis_64.dll
+D:\Games\SILENT HILL - Townfall\Engine\Binaries\ThirdParty\DbgHelp\dbghelp.dll
+D:\Games\SILENT HILL - Townfall\Townfall\Binaries\Win64\OptiScaler\libxell.dll
+D:\Games\SILENT HILL - Townfall\Engine\Binaries\ThirdParty\Ogg\Win64\VS2015\libogg_64.dll
+D:\Games\SILENT HILL - Townfall\Townfall\Binaries\Win64\OptiScaler\libxess_dx11.dll
+D:\Games\SILENT HILL - Townfall\Engine\Binaries\ThirdParty\Vorbis\Win64\VS2015\libvorbisfile_64.dll
+D:\Games\SILENT HILL - Townfall\Townfall\Binaries\Win64\OptiScaler\amd_fidelityfx_loader_dx12.dll</Modules>
+	</RuntimeProperties>
+	<PlatformProperties>
+		<PlatformIsRunningWindows>1</PlatformIsRunningWindows>
+		<PlatformIsRunningWine>false</PlatformIsRunningWine>
+		<PlatformSupportsWindows11>false</PlatformSupportsWindows11>
+		<IsRunningOnBattery>false</IsRunningOnBattery>
+		<IsUsingBatterySaver>false</IsUsingBatterySaver>
+		<PlatformCallbackResult>0</PlatformCallbackResult>
+		<CrashTrigger>0</CrashTrigger>
+	</PlatformProperties>
+	<EngineData>
+		<MatchingDPStatus>WindowsNo errors</MatchingDPStatus>
+		<RHI.IntegratedGPU>false</RHI.IntegratedGPU>
+		<RHI.DriverDenylisted>false</RHI.DriverDenylisted>
+		<RHI.D3DDebug>false</RHI.D3DDebug>
+		<RHI.DRED>false</RHI.DRED>
+		<RHI.DREDMarkersOnly>false</RHI.DREDMarkersOnly>
+		<RHI.DREDContext>false</RHI.DREDContext>
+		<RHI.Aftermath>true</RHI.Aftermath>
+		<RHI.RHIName>D3D12</RHI.RHIName>
+		<RHI.AdapterName>NVIDIA GeForce RTX 5090</RHI.AdapterName>
+		<RHI.UserDriverVersion>616.92</RHI.UserDriverVersion>
+		<RHI.InternalDriverVersion>32.0.16.1692</RHI.InternalDriverVersion>
+		<RHI.DriverDate>9-4-2026</RHI.DriverDate>
+		<RHI.FeatureLevel>SM6</RHI.FeatureLevel>
+		<RHI.GPUVendor>NVIDIA</RHI.GPUVendor>
+		<RHI.DeviceId>2B85</RHI.DeviceId>
+	</EngineData>
+	<GameData>
+</GameData>
+</FGenericCrashContext>

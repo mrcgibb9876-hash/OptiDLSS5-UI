@@ -78,6 +78,11 @@ function parseDigest(text) {
     wrapper,
     mvProvider: one('mv provider') ? one('mv provider').split(' -- ')[0] : null,
     smoothMotion: !!one('smooth motion'),
+    // The crashing thread's modules, innermost first, as runlog.reportDigest writes them. Lets a
+    // triage read decide whose crash it is from the issue body: nvPresent means NVIDIA's present
+    // module was in the way, which only happens with Smooth Motion on.
+    crashStack: one('crash stack') ? one('crash stack').split(' < ').map((m) => m.trim()).filter(Boolean) : [],
+    nvPresent: /\bnvpresent/i.test(one('crash stack') || ''),
     at: one('at'),
   };
 }
