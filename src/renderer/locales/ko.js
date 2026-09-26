@@ -1054,6 +1054,8 @@ window.I18N.register("ko", {
   "Strength {strength} -- glow {before} stops from the model": "강도 {strength} -- 번짐: 모델에서 {before} 스톱",
   "Glow {before} stops from the model, {after} after": "번짐: 모델에서 {before} 스톱, 정리 후 {after}",
   "Strength {strength} -- glow {before} stops from the model, {after} after": "강도 {strength} -- 번짐: 모델에서 {before} 스톱, 정리 후 {after}",
+  "{ms} ms": "{ms} ms",
+  "Set Image Clean Up by hand with the sliders below, instead of Auto choosing how much to use each frame. Switch it off to go back to Auto.": "아래 슬라이더로 이미지 정리를 직접 설정합니다. 매 프레임 얼마나 쓸지 자동 모드가 고르는 대신입니다. 끄면 자동으로 돌아갑니다.",
   "Proxy is the picture handed to the model. Difference shows what the model actually changed, amplified twenty times and centred on grey.\n\nImage Clean Up mask shows the frame in grey with red where the clean up may act, green where it actually moved a pixel and blue where motion held it back. It works with the clean up off too, so the edges can be checked before turning it on.": "프록시는 모델에 넘겨지는 그림입니다. 차이는 모델이 실제로 바꾼 것을 20배 증폭해 회색을 중심으로 보여줍니다.\n\n이미지 정리 마스크는 프레임을 회색으로 보여주며, 정리가 작동할 수 있는 곳은 빨강, 실제로 픽셀을 움직인 곳은 초록, 움직임 때문에 억제된 곳은 파랑으로 표시합니다. 정리를 꺼도 작동하므로 켜기 전에 가장자리를 확인할 수 있습니다.",
   "Proxy (what the model sees)": "프록시(모델이 보는 것)",
   "Model output (raw)": "모델 출력(원시)",

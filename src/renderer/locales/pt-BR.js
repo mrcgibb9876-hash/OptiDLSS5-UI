@@ -1054,6 +1054,8 @@ window.I18N.register('pt-BR', {
   "Strength {strength} -- glow {before} stops from the model": "Força {strength} -- brilho de {before} stops do modelo",
   "Glow {before} stops from the model, {after} after": "Brilho de {before} stops do modelo, {after} depois",
   "Strength {strength} -- glow {before} stops from the model, {after} after": "Força {strength} -- brilho de {before} stops do modelo, {after} depois",
+  "{ms} ms": "{ms} ms",
+  "Set Image Clean Up by hand with the sliders below, instead of Auto choosing how much to use each frame. Switch it off to go back to Auto.": "Ajuste a limpeza da imagem à mão com os controles abaixo, em vez de o Auto escolher quanto usar a cada quadro. Desligue para voltar ao Auto.",
   "Proxy is the picture handed to the model. Difference shows what the model actually changed, amplified twenty times and centred on grey.\n\nImage Clean Up mask shows the frame in grey with red where the clean up may act, green where it actually moved a pixel and blue where motion held it back. It works with the clean up off too, so the edges can be checked before turning it on.": "Proxy é a imagem entregue ao modelo. Diferença mostra o que o modelo realmente mudou, amplificado vinte vezes e centrado no cinza.\n\nA máscara da limpeza da imagem mostra o quadro em cinza, com vermelho onde a limpeza pode agir, verde onde ela realmente moveu um pixel e azul onde o movimento a segurou. Funciona também com a limpeza desligada, para conferir as bordas antes de ligá-la.",
   "Proxy (what the model sees)": "Proxy (o que o modelo vê)",
   "Model output (raw)": "Saída do modelo (crua)",

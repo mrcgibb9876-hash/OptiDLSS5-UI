@@ -1053,6 +1053,8 @@ window.I18N.register("ru", {
   "Strength {strength} -- glow {before} stops from the model": "Сила {strength} -- свечение {before} ступ. от модели",
   "Glow {before} stops from the model, {after} after": "Свечение {before} ступ. от модели, {after} после",
   "Strength {strength} -- glow {before} stops from the model, {after} after": "Сила {strength} -- свечение {before} ступ. от модели, {after} после",
+  "{ms} ms": "{ms} мс",
+  "Set Image Clean Up by hand with the sliders below, instead of Auto choosing how much to use each frame. Switch it off to go back to Auto.": "Настраивать очистку изображения вручную ползунками ниже, а не доверять режиму Авто выбирать силу в каждом кадре. Выключите, чтобы вернуться к Авто.",
   "Proxy is the picture handed to the model. Difference shows what the model actually changed, amplified twenty times and centred on grey.\n\nImage Clean Up mask shows the frame in grey with red where the clean up may act, green where it actually moved a pixel and blue where motion held it back. It works with the clean up off too, so the edges can be checked before turning it on.": "Прокси -- картинка, переданная модели. Разница показывает, что модель на самом деле изменила, усиленное в двадцать раз и центрированное на сером.\n\nМаска очистки изображения показывает кадр в сером: красным -- где очистка может действовать, зелёным -- где она действительно сдвинула пиксель, синим -- где её сдержало движение. Работает и при выключенной очистке, так что края можно проверить до включения.",
   "Proxy (what the model sees)": "Прокси (что видит модель)",
   "Model output (raw)": "Выход модели (сырой)",

@@ -479,6 +479,7 @@ function renderFields() {
     if (section.hosted) renderHosted(host, section.hosted);
 
     let toneNote = false;
+    let advanced = null;
     for (const key of section.keys) {
       const field = fields.find((f) => f.key === key);
       if (!field) continue;
@@ -494,14 +495,21 @@ function renderFields() {
         }
         continue;
       }
-      host.appendChild(fieldRow(field));
-      // Image Clean Up's reading, right under its Mode, where the in-game panel puts it.
+      // Image Clean Up's Mode as Off / Auto, and its reading right under it, where the in-game panel puts it.
       if (section.cleanup && key === 'CleanUpMode') {
+        host.appendChild(cleanUpModeRow(field));
         const note = document.createElement('div');
         note.className = 'p-note p-cleanup-status';
         host.appendChild(note);
         renderCleanUpStatus();
+        continue;
       }
+      // The rest of the section folds under Advanced (dlssnr.js PAGES `advanced`), closed by default.
+      if (section.advanced && section.advanced.includes(key)) {
+        if (!advanced) advanced = renderAdvanced(host, section);
+        if (!advanced.open) continue;
+      }
+      host.appendChild(fieldRow(field));
     }
 
     // Frame Generation is the game's own DLSS-G rather than a list of ini rows, so it draws itself.
@@ -694,23 +702,82 @@ function renderAutoTone() {
 // glow measured before and after. `mode` is the ini's, as the in-game panel reads its own config. Off
 // says nothing; no reading at all (no game, an engine without the block) says nothing either, rather
 // than "measuring" forever. A number the engine has not got yet (null) is left out, not shown as 0.
+//
+// It leads with the mode actually running -- the engine's own (cleanup.mode) once it has picked up the
+// ini, which is what says Auto is in charge -- and ends with what the clean up costs (composeMs), since
+// with the sliders folded away this line is all the page says about it.
 function cleanUpStatus(mode, cleanup) {
   if (!Number(mode) || !cleanup || typeof cleanup !== 'object') return '';
   const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const running = num(cleanup.mode) === 1 || num(cleanup.mode) === 2 ? num(cleanup.mode) : Number(mode);
+  const word = running === 2 ? t('Manual') : t('Auto');
   const strength = num(cleanup.strength);
   const before = num(cleanup.haloBefore);
   const after = num(cleanup.haloAfter);
-  if (before === null) return t('Measuring the glow...');
+  const ms = num(cleanup.composeMs);
+  if (before === null) return `${word}  ·  ${t('Measuring the glow...')}`;
   const b = before.toFixed(3);
+  let glow;
   if (after === null) {
-    return strength === null
+    glow = strength === null
       ? t('Glow {before} stops from the model', { before: b })
       : t('Strength {strength} -- glow {before} stops from the model', { strength: strength.toFixed(2), before: b });
+  } else {
+    const a = Math.max(after, 0).toFixed(3);
+    glow = strength === null
+      ? t('Glow {before} stops from the model, {after} after', { before: b, after: a })
+      : t('Strength {strength} -- glow {before} stops from the model, {after} after', { strength: strength.toFixed(2), before: b, after: a });
   }
-  const a = Math.max(after, 0).toFixed(3);
-  return strength === null
-    ? t('Glow {before} stops from the model, {after} after', { before: b, after: a })
-    : t('Strength {strength} -- glow {before} stops from the model, {after} after', { strength: strength.toFixed(2), before: b, after: a });
+  const parts = [word, glow];
+  if (ms !== null) parts.push(t('{ms} ms', { ms: ms.toFixed(2) }));
+  return parts.join('  ·  ');
+}
+
+// [DlssNr] CleanUpMode's values (dlssnr.js CLEANUP_MODES).
+const CLEANUP_AUTO = 1;
+const CLEANUP_MANUAL = 2;
+
+// Image Clean Up's Mode on the page itself: Off / Auto only. Manual is a switch under Advanced, beside
+// the sliders it hands control to -- so in Manual neither box here is ringed, and pressing Auto is the
+// way back. Still the one CleanUpMode key through apply(), so Off (the default) is written as auto.
+function cleanUpModeRow(field) {
+  return fieldRow({ ...field, options: (field.options || []).filter(([v]) => v !== CLEANUP_MANUAL) });
+}
+
+// Whether a section's Advanced fold is open, by caption. It lasts as long as the window, like the page
+// and the HDR page's own folds: where you are, not a setting. Until it is clicked it opens only when
+// Clean Up is on Manual, whose sliders would otherwise be out of sight while they are the ones in use.
+const advancedOpen = new Map();
+
+function isAdvancedOpen(section) {
+  if (advancedOpen.has(section.caption)) return advancedOpen.get(section.caption);
+  return !!section.cleanup && Number(valueOf('CleanUpMode')) === CLEANUP_MANUAL;
+}
+
+// The Advanced caption, a fold like the HDR page's sections, and -- for Image Clean Up -- the Manual
+// switch first inside it. Returns whether it is open, so the caller draws the rows or skips them.
+function renderAdvanced(host, section) {
+  const open = isAdvancedOpen(section);
+  const cap = document.createElement('button');
+  cap.className = `p-caption p-hdr-section p-advanced${open ? ' is-open' : ''}`;
+  cap.textContent = `${open ? '▾' : '▸'} ${t('Advanced')}`;
+  cap.setAttribute('aria-expanded', open ? 'true' : 'false');
+  cap.addEventListener('click', () => { advancedOpen.set(section.caption, !open); renderFields(); });
+  host.appendChild(cap);
+  if (open && section.cleanup) host.appendChild(cleanUpManualRow());
+  return { open };
+}
+
+// Manual as a switch: on hands Clean Up to the sliders below, off gives it back to Auto. Drawn from the
+// same CleanUpMode key, already translated (raw), since it is not a row of the ini table itself.
+function cleanUpManualRow() {
+  const manual = Number(valueOf('CleanUpMode')) === CLEANUP_MANUAL;
+  const field = {
+    key: 'CleanUpMode', type: 'bool', raw: true, value: manual, default: false,
+    label: t('Manual'),
+    help: t('Set Image Clean Up by hand with the sliders below, instead of Auto choosing how much to use each frame. Switch it off to go back to Auto.'),
+  };
+  return fieldRow(field, (_k, on) => apply('CleanUpMode', on ? CLEANUP_MANUAL : CLEANUP_AUTO));
 }
 
 // Updates the read-out in place with each live reading, without redrawing the page under the cursor.

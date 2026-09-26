@@ -1054,6 +1054,8 @@ window.I18N.register("zh-CN", {
   "Strength {strength} -- glow {before} stops from the model": "强度 {strength} -- 光晕：模型 {before} 档",
   "Glow {before} stops from the model, {after} after": "光晕：模型 {before} 档，清理后 {after}",
   "Strength {strength} -- glow {before} stops from the model, {after} after": "强度 {strength} -- 光晕：模型 {before} 档，清理后 {after}",
+  "{ms} ms": "{ms} 毫秒",
+  "Set Image Clean Up by hand with the sliders below, instead of Auto choosing how much to use each frame. Switch it off to go back to Auto.": "用下方滑块手动设置图像清理，而不是由自动模式每帧决定用多少。关闭即回到自动。",
   "Proxy is the picture handed to the model. Difference shows what the model actually changed, amplified twenty times and centred on grey.\n\nImage Clean Up mask shows the frame in grey with red where the clean up may act, green where it actually moved a pixel and blue where motion held it back. It works with the clean up off too, so the edges can be checked before turning it on.": "代理是交给模型的画面。差异显示模型实际改变了什么，放大二十倍并以灰色为中心。\n\n图像清理遮罩以灰色显示画面，红色为清理可能作用的地方，绿色为它实际移动了像素的地方，蓝色为运动抑制了它的地方。清理关闭时也能用，因此可以在开启前检查边缘。",
   "Proxy (what the model sees)": "代理（模型看到的）",
   "Model output (raw)": "模型输出（原始）",

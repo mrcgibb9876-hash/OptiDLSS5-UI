@@ -121,26 +121,90 @@ test('the read-out: nothing when Off or with no reading, "Measuring" until the g
   assert.equal(cleanUpStatus(1, null), '', 'no live reading (no game) says nothing');
   assert.equal(cleanUpStatus(1, undefined), '', 'an engine without the block says nothing');
   for (const mode of [1, 2]) {
-    assert.equal(cleanUpStatus(mode, { mode, strength: null, haloBefore: null, haloAfter: null, composeMs: null }), 'Measuring the glow...');
-    assert.equal(cleanUpStatus(mode, { mode, strength: 0.6, haloBefore: null, haloAfter: 0.01, composeMs: null }), 'Measuring the glow...');
+    const word = mode === 2 ? 'Manual' : 'Auto';
+    assert.equal(cleanUpStatus(mode, { mode, strength: null, haloBefore: null, haloAfter: null, composeMs: null }), `${word}  ·  Measuring the glow...`);
+    assert.equal(cleanUpStatus(mode, { mode, strength: 0.6, haloBefore: null, haloAfter: 0.01, composeMs: null }), `${word}  ·  Measuring the glow...`);
   }
 });
 
-test('the read-out: the engine\'s numbers, and a null one left out rather than shown as 0', () => {
+test('the read-out: mode, the engine\'s numbers and the cost, a null one left out rather than shown as 0', () => {
   assert.equal(cleanUpStatus(1, { mode: 1, strength: 0.42, haloBefore: 0.1234, haloAfter: 0.0456, composeMs: 0.1 }),
-    'Strength 0.42 -- glow 0.123 stops from the model, 0.046 after');
+    'Auto  ·  Strength 0.42 -- glow 0.123 stops from the model, 0.046 after  ·  0.10 ms');
   // A tiny negative "after" is drawn as 0, as the in-game panel does.
   assert.equal(cleanUpStatus(2, { mode: 2, strength: 0.6, haloBefore: 0.2, haloAfter: -0.001 }),
-    'Strength 0.60 -- glow 0.200 stops from the model, 0.000 after');
-  assert.equal(cleanUpStatus(1, { mode: 1, strength: null, haloBefore: 0.2, haloAfter: 0.05 }),
-    'Glow 0.200 stops from the model, 0.050 after');
+    'Manual  ·  Strength 0.60 -- glow 0.200 stops from the model, 0.000 after');
+  assert.equal(cleanUpStatus(1, { mode: 1, strength: null, haloBefore: 0.2, haloAfter: 0.05, composeMs: null }),
+    'Auto  ·  Glow 0.200 stops from the model, 0.050 after');
   assert.equal(cleanUpStatus(1, { mode: 1, strength: 0.5, haloBefore: 0.2, haloAfter: null }),
-    'Strength 0.50 -- glow 0.200 stops from the model');
+    'Auto  ·  Strength 0.50 -- glow 0.200 stops from the model');
   assert.equal(cleanUpStatus(1, { mode: 1, strength: null, haloBefore: 0.2, haloAfter: null }),
-    'Glow 0.200 stops from the model');
+    'Auto  ·  Glow 0.200 stops from the model');
+  // The mode is the engine's once it reports one; before it has picked up the ini, the ini's.
+  assert.match(cleanUpStatus(2, { mode: 1, strength: 0.5, haloBefore: 0.2, haloAfter: 0.1 }), /^Auto  ·  /);
+  assert.match(cleanUpStatus(2, { strength: 0.5, haloBefore: 0.2, haloAfter: 0.1 }), /^Manual  ·  /);
+});
+
+// Auto + Advanced (2026-09-26): the page shows Off / Auto and the read-out; Manual and every slider fold
+// under an Advanced caption that starts closed.
+test('Advanced holds every Clean Up slider, and only keys the section already draws', () => {
+  const section = dlssnr.PAGES.find((p) => p.page === 'Image').sections.find((s) => s.cleanup);
+  assert.deepEqual(section.advanced, ['CleanUpMaxStrength', ...MANUAL_KEYS]);
+  for (const key of section.advanced) assert.ok(section.keys.includes(key), `${key} is in the section`);
+  assert.ok(!section.advanced.includes('CleanUpMode'), 'the mode stays on the page');
+  // The engine's next keys are named in a comment only, until it has them.
+  for (const key of ['CleanUpBleed', 'CleanUpDodge', 'CleanUpBurn', 'CleanUpGrain', 'CleanUpPrint', 'CleanUpPlate']) {
+    assert.ok(!field(key), `${key} is not a field yet`);
+  }
+});
+
+const CLEANUP_CONSTS = 'const CLEANUP_AUTO = 1; const CLEANUP_MANUAL = 2;';
+const fromPanel = (name, args, ...values) =>
+  new Function(...args, `${CLEANUP_CONSTS}\n${fnSource(name)}\nreturn ${name};`)(...values);
+
+test('the page\'s Mode row offers Off and Auto only, still writing the one CleanUpMode key', () => {
+  const drawn = [];
+  const cleanUpModeRow = fromPanel('cleanUpModeRow', ['fieldRow'], (f, set) => { drawn.push({ f, set }); return f; });
+  const mode = { ...field('CleanUpMode'), value: null };
+  const row = cleanUpModeRow(mode);
+  assert.deepEqual(row.options, [[0, 'Off'], [1, 'Auto']]);
+  assert.equal(row.key, 'CleanUpMode');
+  assert.equal(drawn[0].set, undefined, 'through apply(), so Off (the default) is written as auto');
+  assert.deepEqual(mode.options, [[0, 'Off'], [1, 'Auto'], [2, 'Manual']], 'the field itself is untouched');
+});
+
+test('Advanced starts closed, opens by itself only on Manual, and a click wins for the window\'s life', () => {
+  const section = { caption: 'Image Clean Up', cleanup: true };
+  for (const [mode, open] of [[0, false], [1, false], [2, true]]) {
+    const isAdvancedOpen = fromPanel('isAdvancedOpen', ['valueOf', 'advancedOpen'], () => mode, new Map());
+    assert.equal(isAdvancedOpen(section), open, `mode ${mode}`);
+  }
+  const clicked = new Map([['Image Clean Up', false]]);
+  const isAdvancedOpen = fromPanel('isAdvancedOpen', ['valueOf', 'advancedOpen'], () => 2, clicked);
+  assert.equal(isAdvancedOpen(section), false, 'closed by hand stays closed on Manual');
+  // In memory only, as the page and the HDR page's folds are: nothing written anywhere.
+  assert.doesNotMatch(fnSource('renderAdvanced'), /localStorage|window\.api/);
+});
+
+test('the Manual switch: on is Manual, off is back to Auto', () => {
+  const writes = [];
+  for (const mode of [0, 1, 2]) {
+    let drawn = null;
+    const cleanUpManualRow = fromPanel('cleanUpManualRow', ['valueOf', 'fieldRow', 'apply', 't'],
+      () => mode, (f, set) => { drawn = { f, set }; return f; }, (k, v) => writes.push([k, v]), t);
+    cleanUpManualRow();
+    assert.equal(drawn.f.type, 'bool');
+    assert.equal(drawn.f.value, mode === 2, `mode ${mode}`);
+    assert.equal(drawn.f.label, 'Manual');
+    drawn.set('CleanUpMode', !drawn.f.value);
+  }
+  assert.deepEqual(writes, [['CleanUpMode', 2], ['CleanUpMode', 2], ['CleanUpMode', 1]]);
 });
 
 test('the read-out follows each live poll, drawn under the Mode row', () => {
   assert.match(fnSource('refreshLive'), /renderCleanUpStatus\(\)/);
-  assert.match(fnSource('renderFields'), /section\.cleanup && key === 'CleanUpMode'/);
+  const render = fnSource('renderFields');
+  assert.match(render, /section\.cleanup && key === 'CleanUpMode'/);
+  assert.match(render, /cleanUpModeRow\(field\)/);
+  // A folded Advanced draws its caption and none of its rows.
+  assert.match(render, /if \(!advanced\.open\) continue;/);
 });

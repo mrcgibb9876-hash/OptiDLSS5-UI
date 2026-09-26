@@ -1053,6 +1053,8 @@ window.I18N.register("de", {
   "Strength {strength} -- glow {before} stops from the model": "Stärke {strength} -- Glühen: {before} Blendenstufen vom Modell",
   "Glow {before} stops from the model, {after} after": "Glühen: {before} Blendenstufen vom Modell, {after} danach",
   "Strength {strength} -- glow {before} stops from the model, {after} after": "Stärke {strength} -- Glühen: {before} Blendenstufen vom Modell, {after} danach",
+  "{ms} ms": "{ms} ms",
+  "Set Image Clean Up by hand with the sliders below, instead of Auto choosing how much to use each frame. Switch it off to go back to Auto.": "Die Bildbereinigung von Hand mit den Reglern unten einstellen, statt Auto jedes Bild selbst wählen zu lassen, wie viel es nutzt. Ausschalten, um zu Auto zurückzukehren.",
   "Proxy is the picture handed to the model. Difference shows what the model actually changed, amplified twenty times and centred on grey.\n\nImage Clean Up mask shows the frame in grey with red where the clean up may act, green where it actually moved a pixel and blue where motion held it back. It works with the clean up off too, so the edges can be checked before turning it on.": "Proxy ist das Bild, das dem Modell übergeben wird. Differenz zeigt, was das Modell tatsächlich geändert hat, zwanzigfach verstärkt und auf Grau zentriert.\n\nDie Maske der Bildbereinigung zeigt den Frame in Grau, mit Rot, wo die Bereinigung wirken darf, Grün, wo sie tatsächlich ein Pixel verschoben hat, und Blau, wo Bewegung sie zurückgehalten hat. Sie funktioniert auch bei ausgeschalteter Bereinigung, sodass sich die Kanten vor dem Einschalten prüfen lassen.",
   "Proxy (what the model sees)": "Proxy (was das Modell sieht)",
   "Model output (raw)": "Modellausgabe (roh)",

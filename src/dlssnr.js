@@ -414,8 +414,16 @@ const PAGES = [
     { caption: 'How much of it lands', keys: ['TransferStrength', 'ColourStrength', 'Brightness', 'Contrast', 'HaloGuard', 'DepthEdge'] },
     // cleanup: the read-only "what is it doing now" line under Mode, from OptiScaler.live.json -- drawn by
     // the renderer, as the in-game panel draws it from the resolve's own reading.
+    //
+    // advanced: the keys the pop-out folds under an "Advanced" caption, closed by default -- the page itself
+    // shows only Off / Auto and the read-out, since Auto is what almost everyone wants. Manual is drawn
+    // there too, as a switch of its own. The engine's next Clean Up keys go in this list when it has them,
+    // not before (Bleed, Inner bleed, Outer bleed, Dodge, Burn, Grain, Print, Plate): CleanUpBleed,
+    // CleanUpBleedInner, CleanUpBleedOuter, CleanUpDodge, CleanUpBurn, CleanUpGrain, CleanUpPrint,
+    // CleanUpPlate.
     { caption: 'Image Clean Up', cleanup: true, keys: ['CleanUpMode', 'CleanUpMaxStrength', 'CleanUpStrength', 'CleanUpEdge',
-                                                       'CleanUpBalance', 'CleanUpMotion'] },
+                                                       'CleanUpBalance', 'CleanUpMotion'],
+      advanced: ['CleanUpMaxStrength', 'CleanUpStrength', 'CleanUpEdge', 'CleanUpBalance', 'CleanUpMotion'] },
     { caption: 'Colour', keys: ['ReversibleMode', 'WhitePointSource', 'WhitePointTrim', 'WhitePointScale', 'MaxRatio'] },
     { caption: 'Exposure scan', keys: ['ScanMeter', 'ScanTrim', 'ScanInverted'] },
   ] },
