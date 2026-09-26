@@ -373,6 +373,17 @@ async function pollRunningGames() {
 const syncRetry = new Map();
 let resyncInFlight = false;
 
+// One game's sync pass, right before Launch. Quiet: a failure (a DLL still locked, no valid engine
+// folder) leaves the game as it was, and pollRunningGames retries after the game closes.
+async function syncBeforeLaunch(game) {
+  try {
+    const folder = engineFolder(engineOf(game));
+    if (!folder || !(await window.api.validateRelease(folder)).valid) return;
+    const res = await window.api.syncGameIfStale({ exePath: game.exePath, releaseFolder: folder, nrDllPath: settings.nrDllPath });
+    if (res && !res.ok) syncRetry.set(game.exePath, Date.now());
+  } catch {}
+}
+
 async function resyncGames(due) {
   resyncInFlight = true;
   try { await runResync(due); } finally { resyncInFlight = false; }
@@ -656,6 +667,9 @@ async function renderGrid() {
     // what went wrong and what to try next (flipToFailure), and its problem row's Help / Show me button
     // still opens Game Help where there is more to read. Analyse and Verify are gone altogether.
     card.querySelector('.btn-launch').addEventListener('click', async () => {
+      // Sync first: a build dropped into the engine folder mid-session otherwise reaches the game only
+      // after the manager restarts or the game closes once (RE2, 2026-09-26: a test ran the old build).
+      await syncBeforeLaunch(game);
       const res = await window.api.launchGame(game.exePath, game.launcher);
       if (!res.ok) { toast(t('Could not launch {name}: {error}', { name: game.name, error: res.error })); return; }
       if (res.cancelled) { toast(t('Not launched.')); return; }
